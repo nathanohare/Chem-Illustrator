@@ -97,7 +97,7 @@ export class SlideList {
       const add = document.createElement('button');
       add.className = 'sl-add';
       add.type = 'button';
-      add.textContent = '+ New slide';
+      add.textContent = '+ New Slide';
       add.addEventListener('click', () => hooks.add());
       el.replaceChildren(this.list, add);
     }

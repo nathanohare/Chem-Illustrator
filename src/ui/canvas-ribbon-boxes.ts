@@ -130,8 +130,12 @@ export class AnalysisBox extends DropBox {
     this.float.show(this.button);
   }
 
-  /** Show what was analysed: a formula (HTML, with subscripts), its weight and exact mass, or nothing. */
-  set(formulaHtml: string | null, mw: string | null, exact: string | null = null): void {
+  /**
+   * Show what was analysed: a formula (HTML, with subscripts), its weight and exact mass, or nothing.
+   * `partial`: only some atoms of a structure are selected, so the last line says so instead of the
+   * exact mass (one carbon picked out of a molecule otherwise reads as CH4).
+   */
+  set(formulaHtml: string | null, mw: string | null, exact: string | null = null, partial = false): void {
     const f = this.button.querySelector<HTMLElement>('.cr-an-f')!;
     f.classList.toggle('muted', !formulaHtml);
     f.innerHTML = formulaHtml ?? 'No structure';
@@ -145,7 +149,11 @@ export class AnalysisBox extends DropBox {
       el.append(k, v);
     };
     line('.cr-an-mw', 'MW', mw);
-    line('.cr-an-ex', 'Exact', exact);
+    line('.cr-an-ex', 'Exact', partial ? null : exact);
+    const ex = this.button.querySelector<HTMLElement>('.cr-an-ex')!;
+    if (partial && formulaHtml) ex.textContent = 'Selected atoms only';
+    ex.classList.toggle('cr-an-part', partial && !!formulaHtml);
+    this.button.classList.toggle('partial', partial && !!formulaHtml);
   }
 }
 

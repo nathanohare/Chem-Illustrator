@@ -1754,9 +1754,10 @@ export class Editor {
   fit(): void {
     const raw = this.fitArea ? this.fitArea() : this.doc.bounds();
     if (!raw) {
-      // an empty drawing: show its first page whole, so its size shows
+      // an empty drawing: its first page at 100% with the top of the page in view, as ChemDraw
+      // opens, so what is drawn or pasted first is readable (Nate, UX audit M1, 2026-11-05)
       const page = this.emptyArea?.();
-      if (page) this.fitTo(page, Math.min(page.x2 - page.x1, page.y2 - page.y1) * 0.04);
+      if (page) this.showPageTop(page);
       return;
     }
     // room for atom labels, which reach past the atoms themselves (H3N, Re)
@@ -1777,6 +1778,17 @@ export class Editor {
     this.r.view.oy = this.r.height / 2 - ((raw.y1 + raw.y2) / 2) * s;
     this.requestScene();
     return true;
+  }
+
+  /** 100% (96/72 px a point), the page centered across the window (or its left edge in view) and its top edge just below the top. */
+  showPageTop(page: Rect): void {
+    const s = 96 / 72, v = this.r.view, gap = 16;
+    v.scale = s;
+    const w = (page.x2 - page.x1) * s;
+    v.ox = w + 2 * gap <= this.r.width ? (this.r.width - w) / 2 - page.x1 * s : gap - page.x1 * s;
+    v.oy = gap - page.y1 * s;
+    this.fitted = { ...v };
+    this.requestScene();
   }
 
   /** Zoom and scroll so a box (in points, with a margin round it) fits the window. */

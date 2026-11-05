@@ -646,9 +646,9 @@
     <div id="chemistry-menu" class="menu" role="menu" data-item-modes="drawing slides design" hidden>
     <button role="menuitem" data-cmd="clean-up">Clean Up Structure</button>
     <button role="menuitem" data-cmd="clean-up-reaction">Clean Up Reaction</button>
-    <button role="menuitem" data-cmd="clean-up-reaction-orient" title="Turn every structure so the part it shares with the starting material lies the same way around (configuration kept), then tidy the scheme">Clean Up Reaction, Orienting Like the Start</button>
+    <button role="menuitem" data-cmd="clean-up-reaction-orient" title="Turn every structure so the part it shares with the starting material lies the same way around (configuration kept), then tidy the scheme">Clean Up and Orient Reaction</button>
     <button role="menuitem" data-cmd="orient-like" title="Turn each selected structure so the part it shares with the first one (top left) lies the same way around; structures turned over have their wedges swapped, so configuration is kept">Orient Like First</button>
-    <button role="menuitem" data-cmd="check-structure">Check Structure (next warning)</button>
+    <button role="menuitem" data-cmd="check-structure" title="Go to the next structure warning (valence, charge, stereo)">Check Structure</button>
     <button role="menuitem" data-cmd="join">Join</button>
     <button role="menuitem" data-cmd="expand-label" title="Draw the selected labels out as atoms and bonds: abbreviations (OMe, Boc, CO2Et), ligands drawn the usual way (BINAP keeps its PPh2 groups) and ligands on a metal (PPh3, dppe, Cp*, COD)">Expand Label</button>
     <button role="menuitem" data-cmd="expand-label-full" title="Draw the selected labels out completely: as Expand Label, then the labels that brings in (PPh2, P(t-Bu)2, CHPh2) drawn out too, down to every atom">Expand Label Fully</button>
@@ -808,7 +808,7 @@
     <div class="menu-wrap">
       <button id="btn-help" aria-haspopup="menu" aria-expanded="false" aria-controls="help-menu" title="Hotkeys, the user guide, and sending feedback" aria-keyshortcuts="Alt+H"><span class="mn">H</span>elp</button>
       <div id="help-menu" class="menu" role="menu" hidden>
-        <button role="menuitem" data-cmd="help" title="The most used hotkeys and tips, with a button to change any key">Hotkeys and Tips</button>
+        <button role="menuitem" data-cmd="help" title="The most used keyboard shortcuts and tips, with a button to change any key">Keyboard Shortcuts and Tips</button>
         <button role="menuitem" data-cmd="user-guide" title="How to use the program (built in: works without a connection)">User Guide</button>
         <button role="menuitem" data-cmd="help-here" title="The part of the User Guide about the tool or mode in use">Help on This Tool or Mode</button>
         <hr />
@@ -3054,12 +3054,12 @@
   <footer id="status"><span id="hint"></span><div id="doc-statusbar" class="doc-only" hidden><span id="doc-status"></span><button type="button" class="doc-viewbtn" data-doc="view-read" aria-pressed="false" title="Read Mode">📖</button><button type="button" class="doc-viewbtn" data-doc="view-print" aria-pressed="true" title="Print Layout">▯</button><button type="button" class="doc-viewbtn" data-doc="view-web" aria-pressed="false" title="Web Layout">🌐</button><button type="button" data-doc="zoom-out" title="Zoom out">−</button><span id="doc-zoom">100%</span><button type="button" data-doc="zoom-in" title="Zoom in">+</button><button type="button" data-doc="zoom-fit" title="Fit the page width in the window">Page Width</button></div><button type="button" id="status-notes" class="slides-only" data-cmd="view-notes" aria-pressed="true" title="Show or hide the speaker notes under the slide" hidden>✎ Notes</button><label class="zoom-pick canvas-only" title="Zoom (Ctrl+= and Ctrl+− also zoom; F6 fits the window)"><span class="sr-only">Zoom</span><select id="zoom-pick">
     <option value="fit">Fit</option><option value="actual">Actual size</option><option disabled>──</option>
     <option value="25">25%</option><option value="50">50%</option><option value="75">75%</option><option value="100">100%</option><option value="150">150%</option><option value="200">200%</option><option value="300">300%</option><option value="400">400%</option><option value="800">800%</option>
-    <option value="now" hidden></option></select></label><span id="go-buttons" class="go-buttons canvas-only"><button type="button" id="go-fit" title="Fit the whole drawing in the window (F6)">Fit</button><button type="button" id="go-sel" title="Go to Selection: bring what is selected into view (Shift+F6)">Go to Selection</button></span><button type="button" id="status-side" data-cmd="fold-side" aria-pressed="true" title="Side panel: show or close it (Ctrl+Alt+B)" aria-label="Side panel"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5" fill="none" stroke="currentColor"/><path d="M10 2.5v11" stroke="currentColor"/><rect class="sp-fill" x="10.5" y="3" width="3.5" height="10" fill="currentColor" opacity=".35"/></svg></button></footer>
+    <option value="now" hidden></option></select></label><span id="go-buttons" class="go-buttons canvas-only"><button type="button" id="go-fit" title="Fit the whole drawing in the window (F6)">Fit</button><button type="button" id="go-sel" title="Go to Selection: bring what is selected into view (Shift+F6). Select something first." disabled>Go to Selection</button></span><button type="button" id="status-side" data-cmd="fold-side" aria-pressed="true" title="Side panel: show or close it (Ctrl+Alt+B)" aria-label="Side panel"><svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true"><rect x="1.5" y="2.5" width="13" height="11" rx="1.5" fill="none" stroke="currentColor"/><path d="M10 2.5v11" stroke="currentColor"/><rect class="sp-fill" x="10.5" y="3" width="3.5" height="10" fill="currentColor" opacity=".35"/></svg></button></footer>
   <div id="flash" role="status" aria-live="polite"></div>
   <div id="sr-say" class="sr-only" aria-live="polite"></div>
 
   <dialog id="help">
-    <h2>Hotkeys and Tips</h2>
+    <h2>Keyboard Shortcuts and Tips</h2>
     <p class="muted"><span id="app-version"></span>. Free software under the GNU General Public License, version 3 or later.</p>
     <p class="muted">Hotkeys work like ChemDraw: point at an atom or bond (it highlights blue) and press a key. A key that grows something moves the highlight to the new atom, so you can keep typing (<kbd>8</kbd> then <kbd>1</kbd> makes an E double bond). <kbd>1</kbd> and <kbd>0</kbd> keep the highlight under the mouse, so pressing 1 three times adds three bonds; after a click or another key they move it, so 1 1 1 draws a chain. Every key can be changed.</p>
     <p><button id="help-hotkeys" type="button">Show and change all keyboard shortcuts…</button></p>

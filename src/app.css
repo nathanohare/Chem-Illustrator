@@ -466,6 +466,7 @@ body.slides-mode #canvas-host, body.design-mode #canvas-host { background: var(-
 #status-notes:hover { color: var(--text); border-color: var(--line); }
 #status-notes[aria-pressed="true"] { color: var(--text); background: var(--accent-soft); }
 .go-buttons button { font: var(--fs-sm) var(--ui-font); color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-control); padding: 0 6px; line-height: 18px; }
+.go-buttons button:disabled { color: var(--muted); opacity: 0.6; cursor: default; }
 #overlay { cursor: crosshair; touch-action: none; }
 .label-input {
   position: absolute;
@@ -1761,6 +1762,11 @@ body.mode-window .cr-warnings .cr-ok { color: #7ddc9a; }
 .canvas-ribbon.cr-classic .cr-analysis .cr-chev { grid-row: 1 / 4; grid-column: 2; align-self: center; }
 /* Simplified: one line, formula and weight */
 .canvas-ribbon.cr-simple .cr-analysis .cr-an-ex, .canvas-ribbon.cr-simple .cr-analysis .cr-an-k { display: none; }
+.cr-analysis .cr-an-ex.cr-an-part { font-family: var(--ui-font, inherit); font-style: italic; }
+/* the Simplified ribbon has room for one line: say "part" after the weight there */
+.canvas-ribbon.cr-simple .cr-analysis.partial .cr-an-mw::after { content: ' · part'; font-family: var(--ui-font, inherit); }
+/* a narrow window: the Classic box slims so it stays inside the ribbon (it was cut off at 1024 px) */
+@media (max-width: 1150px) { .canvas-ribbon.cr-classic button.cr-analysis { width: 136px; } }
 .cr-chev { margin-left: auto; color: var(--muted); display: inline-flex; }
 /* their drop-downs: the side panel's own section, lent */
 .cr-pop { position: fixed; z-index: 60; width: 340px; overflow: auto; padding: 2px 10px 8px; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: var(--r-control); box-shadow: 0 6px 18px rgb(0 0 0 / 0.18); font-size: var(--fs-sm); }
@@ -2704,7 +2710,8 @@ dialog.diagram-dialog { width: min(96vw, 1060px); max-height: 94vh; }
 .ask-row.ask-check + .ask-help { padding-left: 24px; }
 
 /* The Settings window: a list of pages on the left; each page is a settings window shown inside it */
-dialog.settings-window { width: min(920px, calc(100vw - 32px)); height: min(680px, calc(100vh - 48px)); padding: 0; display: none; flex-direction: column; overflow: hidden; }
+/* one width for every page (it used to widen for pages with a preview, so the page list jumped) */
+dialog.settings-window { width: min(1180px, calc(100vw - 32px)); height: min(680px, calc(100vh - 48px)); padding: 0; display: none; flex-direction: column; overflow: hidden; }
 dialog.settings-window[open] { display: flex; }
 dialog.settings-window.with-preview { width: min(1180px, calc(100vw - 32px)); max-width: none; }
 dialog.settings-window { max-width: none; }
@@ -2731,6 +2738,9 @@ dialog.settings-window { max-width: none; }
 .sw-foot .sw-note { margin-right: auto; font-size: var(--fs-sm, 0.85em); }
 .sw-foot.sw-actions .sw-default, .sw-foot.sw-actions .sw-apply { display: none; }
 .sw-pane .sw-hidden { display: none !important; }
+/* labels on one line where the window has room; the pane scrolls as a whole (no inner scroll box with empty room under it) */
+.sw-pane .ask-row:not(.ask-check):not(.ask-wide) { grid-template-columns: minmax(9em, 18em) 1fr auto; }
+.sw-pane .ds-list { max-height: none; overflow: visible; padding-right: 0; }
 .sw-pane > dialog.embedded { position: static; display: block; inset: auto; margin: 0; padding: 0; border: 0; box-shadow: none; background: none; color: inherit;
   width: auto; height: auto; max-width: none; max-height: none; min-width: 0; overflow: visible; }
 .sw-pane > dialog.embedded > form > h2:first-child, .sw-pane > dialog.embedded > h2:first-child { margin-top: 8px; }
