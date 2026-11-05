@@ -110,7 +110,8 @@ export function notesParts(s: Sheet, sheetNo: number, persons: Persons): { comme
         'Comment:', `    ${n.text}`, ...(n.replies ?? []).flatMap((rep) => ['Reply:', `    ${rep.author ? rep.author + ': ' : ''}${rep.text}`])].join('\n');
       comments.push(`<comment ref="${ref}" authorId="${authorNo(`tc=${id}`)}"><text><r>${plain}${tText(body)}</r></text></comment>`);
     } else {
-      const head = n.author ? `<r>${bold}${tText(n.author + ':')}</r><r>${plain}${tText('\n' + noteText(n))}</r>` : `<r>${plain}${tText(noteText(n))}</r>`;
+      // the author's name in bold first, as Excel starts a note, unless the note didn't have it
+      const head = n.author && !n.noAuthorLine ? `<r>${bold}${tText(n.author + ':')}</r><r>${plain}${tText('\n' + noteText(n))}</r>` : `<r>${plain}${tText(noteText(n))}</r>`;
       comments.push(`<comment ref="${ref}" authorId="${authorNo(n.author)}"><text>${head}</text></comment>`);
     }
     // the box, beside the cell, a little up (as Excel places a new note)
@@ -196,8 +197,9 @@ export function readNotes(comments: Document | null, shown: Set<number>, threade
       if (out.has(key) || author.startsWith('tc=')) continue;
       let text = richText(kid(c, 'text')).replace(/\r\n?/g, '\n');
       // Excel starts a note with its author's name in bold: that is the note's author, not its text
-      if (author && text.startsWith(author + ':')) text = text.slice(author.length + 1).replace(/^\n/, '');
-      out.set(key, { kind: 'note', author, date: '', text, ...(shown.has(key) ? { shown: true } : {}) });
+      const authorLine = !!author && text.startsWith(author + ':');
+      if (authorLine) text = text.slice(author.length + 1).replace(/^\n/, '');
+      out.set(key, { kind: 'note', author, date: '', text, ...(shown.has(key) ? { shown: true } : {}), ...(author && !authorLine ? { noAuthorLine: true as const } : {}) });
     }
   }
   return out;

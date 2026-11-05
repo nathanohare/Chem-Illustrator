@@ -344,3 +344,26 @@ describe('chart anchors', () => {
     expect(await editAsOf(file(' editAs="absolute"'))).toBe('absolute');
   });
 });
+
+describe('notes', () => {
+  const file = (text: string) => excelFile('<sheetData><row r="1"><c r="A1"><v>1</v></c></row></sheetData>', {
+    parts: { 'xl/comments1.xml': `<comments xmlns="${MAIN}"><authors><author>Ada Lovelace</author></authors><commentList><comment ref="A1" authorId="0"><text>${text}</text></comment></commentList></comments>` },
+    sheetRels: [[`${R}/comments`, '../comments1.xml']],
+  });
+
+  it("doesn't add an author line to a note that didn't have one", async () => {
+    const { book } = await readXlsx(file('<r><t>Dried over MgSO4</t></r>'));
+    expect(book.sheet.noteAt(0, 0)).toMatchObject({ author: 'Ada Lovelace', text: 'Dried over MgSO4' });
+    const xml = part(await writeXlsx(book, pictures), 'xl/comments1.xml');
+    expect(xml).not.toContain('Ada Lovelace:');
+    expect(xml).toContain('Dried over MgSO4');
+  });
+
+  it('keeps the author line of a note that had one, and gives one to a note made here', async () => {
+    const { book } = await readXlsx(file('<r><rPr><b/></rPr><t>Ada Lovelace:</t></r><r><t xml:space="preserve">\nDried over MgSO4</t></r>'));
+    expect(book.sheet.noteAt(0, 0)?.text).toBe('Dried over MgSO4');
+    book.edit('note', () => book.sheet.setNote(2, 0, { kind: 'note', author: 'Ada Lovelace', date: '', text: 'new' }));
+    const xml = part(await writeXlsx(book, pictures), 'xl/comments1.xml');
+    expect(xml.match(/Ada Lovelace:/g)).toHaveLength(2);
+  });
+});
