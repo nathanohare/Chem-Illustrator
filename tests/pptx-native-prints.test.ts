@@ -176,7 +176,7 @@ describe('charts changed in PowerPoint', () => {
 });
 
 describe('a deck saved by a program that drops every tag (LibreOffice)', () => {
-  it('says its structures came in as pictures', async () => {
+  it('reads its structures from their pictures, and says so', async () => {
     const drawing: PptxOptions = {
       ...opts,
       async picture() { return { svg: '<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"/>', png: PNG, box: { x1: 90, y1: 90, x2: 210, y2: 210 } }; },
@@ -198,8 +198,15 @@ describe('a deck saved by a program that drops every tag (LibreOffice)', () => {
       lost[k] = /\.xml$/.test(k) ? new Uint8Array(strToU8(strFromU8(v).replace(/<p:custDataLst>[\s\S]*?<\/p:custDataLst>/g, ''))) : v;
     }
     expect(strFromU8(lost[SLIDE2])).toMatch(/name="Structure \d+"/);
+    // the drawing rides inside each structure's SVG: the structures come back
     const back = readPptx(rezip(lost));
-    expect(back.slides[1].contents.atoms).toHaveLength(0);
-    expect(back.warnings.join(' ')).toMatch(/leaves out Chem Illustrator's own data/);
+    expect(back.slides[1].contents.atoms).toHaveLength(6);
+    expect(back.warnings.join(' ')).toMatch(/leaves out Chem Illustrator's own data.*structures were read from their pictures/);
+    // a deck saved by an older version has no drawing in its SVGs: the structures stay pictures
+    const older: Parts = {};
+    for (const [k, v] of Object.entries(lost)) older[k] = /\.svg$/.test(k) ? new Uint8Array(strToU8(strFromU8(v).replace(/<metadata>[\s\S]*?<\/metadata>/, ''))) : v;
+    const old = readPptx(rezip(older));
+    expect(old.slides[1].contents.atoms).toHaveLength(0);
+    expect(old.warnings.join(' ')).toMatch(/leaves out Chem Illustrator's own data.*structures came in as pictures/);
   });
 });

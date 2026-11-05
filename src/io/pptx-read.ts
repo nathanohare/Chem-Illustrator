@@ -9,7 +9,7 @@
 // lines, arrows and tables. What has no place here yet (charts, rotated things) is noted in
 // warnings, never refused.
 
-import { mergeDrawing, olePrint, type KeptOle } from './ole-kept';
+import { drawingInSvg, mergeDrawing, olePrint, picturePrint, type KeptOle, type KeptPicture } from './ole-kept';
 import type { Selection } from '../editor/arrange';
 import { fillFrameMembers } from '../editor/frames';
 import { restoreSteps } from './step-tag';
@@ -98,6 +98,8 @@ export interface PptxRead {
   kept?: KeptParts;
   /** ChemDraw objects as the file has them (by OleMark id), to save back while they stay unchanged. */
   oleKept?: Map<number, KeptOle>;
+  /** Structure pictures saved here, as the file has them (by picturePrint), to save back while their structures stay unchanged. */
+  picKept?: Map<string, KeptPicture>;
 }
 
 /** A plain box or oval that needs a design shape to keep its look: a picture or gradient fill, or effects past a shadow. */
@@ -401,13 +403,18 @@ class Reader {
     const guides = readSlideGuides(root);
     if (guides) view = { ...(view ?? { showGuides: false, snapToGrid: true, grid: 7.2 }), guides };
     const kept = readKeptParts(this.r, { main });
-    if (!ours && this.tagsLost()) this.warnings.add('This file was saved by a program that leaves out Chem Illustrator\'s own data (LibreOffice, for one): its structures came in as pictures, and some text and shapes may look a little different.');
+    if (!ours && this.tagsLost()) {
+      this.warnings.add(this.recovered
+        ? 'This file was saved by a program that leaves out Chem Illustrator\'s own data (LibreOffice, for one): its structures were read from their pictures, and some text and shapes may look a little different.'
+        : 'This file was saved by a program that leaves out Chem Illustrator\'s own data (LibreOffice, for one): its structures came in as pictures, and some text and shapes may look a little different.');
+    }
     const settings: DeckSettings = { ...(show ? { show } : {}), ...(customShows.length ? { customShows } : {}), ...(view ? { view } : {}), ...(this.refs?.list.length ? { refs: this.refs } : {}) };
     return {
       size: this.size, master: this.masterOut, slides, warnings: [...this.warnings], design: this.design, ...(sections ? { sections } : {}), ...(Object.keys(settings).length ? { settings } : {}),
       ...(joined.edited ? { canvasEdited: joined.edited } : {}),
       ...(kept ? { kept } : {}),
       ...(this.oleKept.size ? { oleKept: this.oleKept } : {}),
+      ...(this.picKept.size ? { picKept: this.picKept } : {}),
     };
   }
 
@@ -880,6 +887,15 @@ class Reader {
     }
     // what its ChemDraw objects read as, with the slide finished
     for (const [id, k] of this.oleKept) if (!k.print) Object.assign(k, olePrint(doc, oleItems(doc, id)));
+    // and its structure pictures, by what they show
+    for (const p of this.picPending.splice(0)) {
+      const sel = {
+        atoms: new Set([...p.sel.atoms].filter((id) => doc.atoms.has(id))), bonds: new Set([...p.sel.bonds].filter((id) => doc.bonds.has(id))),
+        captions: new Set([...p.sel.captions].filter((id) => doc.captions.has(id))), arrows: new Set([...p.sel.arrows].filter((id) => doc.arrows.has(id))), shapes: new Set([...p.sel.shapes].filter((id) => doc.shapes.has(id))),
+      };
+      const got = picturePrint(doc, sel);
+      this.picKept.set(got.print, { svg: p.svg, png: p.png, x: got.x, y: got.y, frame: p.frame });
+    }
     return {
       ...refs,
       layout: lay, contents: doc.contents(), ...this.notes(path),
@@ -1257,6 +1273,11 @@ class Reader {
   }
   private oleCount = 0;
   private oleKept = new Map<number, KeptOle>();
+  private picKept = new Map<string, KeptPicture>();
+  /** This slide's structure pictures to keep, with what came from each (printed once the slide is read). */
+  private picPending: { sel: Selection; svg: Uint8Array; png: Uint8Array; frame: Rect }[] = [];
+  /** Structures brought back from inside their pictures, the file's tags being gone. */
+  private recovered = 0;
 
   /** The picture PowerPoint shows for an object, as its file has it. */
   private olePreview(from: string, el: Element): Pick<KeptOle, 'picture' | 'pictureExt' | 'svg' | 'crop'> | null {
@@ -1377,9 +1398,21 @@ class Reader {
         if (this.drawing(tags[TAG.cdxml], tags[TAG.box], box, doc)) {
           poseNew(doc, mark, box);
           if (pictureStyled(el)) this.warnings.add('Cropping, recoloring, borders and effects PowerPoint put on structures were left off: they came in as structures.');
+          else this.keepPicture(s.path, el, doc, mark, box);
           return;
         }
       } else this.warnings.add('Structures whose picture was changed in PowerPoint came in as that picture.');
+    } else {
+      // a structure whose tags another program's save dropped (LibreOffice's): the drawing rides inside its SVG too
+      const svg = this.svgBytes(s.path, el);
+      const inside = svg ? drawingInSvg(svg) : null;
+      const mark = doc.idMark;
+      if (inside && this.drawing(inside.cdxml, inside.box, box, doc)) {
+        poseNew(doc, mark, box);
+        this.recovered++;
+        if (!pictureStyled(el)) this.keepPicture(s.path, el, doc, mark, box);
+        return;
+      }
     }
     // a picture pasted into PowerPoint from Chem Illustrator: the drawing rides inside it
     const inside = this.emfDrawing(s.path, el);
@@ -1528,6 +1561,28 @@ class Reader {
    * Whether a structure's picture is still the one written with its drawing: its SVG or its PNG
    * has the print kept with it (files from before the prints were kept are taken as they are).
    */
+  /** A picture's SVG (PowerPoint 2016's svgBlip), if it has one. */
+  private svgBytes(from: string, pic: Element): Uint8Array | null {
+    const blip = kid(pic, 'blipFill', 'blip');
+    const svg = blip?.getElementsByTagNameNS('http://schemas.microsoft.com/office/drawing/2016/SVG/main', 'svgBlip')[0];
+    const target = svg ? this.r.rels(from).get(rAttr(svg, 'embed') ?? '')?.target : undefined;
+    return target ? this.r.bytes(target) : null;
+  }
+
+  /**
+   * A structure picture as the file has it, kept to save back while its structure stays as read
+   * (not when PowerPoint turned or flipped it: the structure is turned here, and drawn again).
+   */
+  private keepPicture(from: string, pic: Element, doc: Doc, mark: number, box: Rect & { rot: number; flipH: boolean; flipV: boolean }): void {
+    if (box.flipH || box.flipV || Math.abs(normDegrees(box.rot)) > 1e-6) return;
+    const svg = this.svgBytes(from, pic);
+    const target = this.r.rels(from).get(rAttr(kid(pic, 'blipFill', 'blip'), 'embed') ?? '')?.target;
+    const png = target && /\.png$/i.test(target) ? this.r.bytes(target) : null;
+    if (!svg || !png) return;
+    const ids = <T extends { id: number }>(m: Map<number, T>) => new Set([...m.values()].filter((x) => x.id >= mark).map((x) => x.id));
+    this.picPending.push({ sel: { atoms: ids(doc.atoms), bonds: ids(doc.bonds), captions: ids(doc.captions), arrows: ids(doc.arrows), shapes: ids(doc.shapes) }, svg, png, frame: { x1: box.x1, y1: box.y1, x2: box.x2, y2: box.y2 } });
+  }
+
   private showsOurPicture(from: string, pic: Element, print: string | undefined): boolean {
     if (!print) return true;
     const prints = new Set(print.split(' '));

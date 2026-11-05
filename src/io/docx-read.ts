@@ -32,8 +32,8 @@ import { arialWidth } from '../text-metrics';
 import { documentMeasure } from '../text/font-measure';
 import {
   OBJECT_CHAR, defaultCharStyles, defaultHeaderFooter, defaultPage, defaultStyles,
-  COL_GAP, FLOAT_GAP, columnsOf, lookExtent, usedObjects,
-  type BreakKind, type CharStyle, type DocObject, type DocText, type Embedded, type PageBorder, type Watermark, type FigureLook, type Float, type HeaderFooter, type HfBody, type HfZones, type LineNumbers, type NamedStyle, type NoteFormat, type NoteFormats, type NumberPlace, type PageNumFormat, type PageSetup, type SectionBreak,
+  COL_GAP, FLOAT_GAP, columnsOf, contentsPrint, lookExtent, usedObjects,
+  type WordLook, type BreakKind, type CharStyle, type DocObject, type DocText, type Embedded, type PageBorder, type Watermark, type FigureLook, type Float, type HeaderFooter, type HfBody, type HfZones, type LineNumbers, type NamedStyle, type NoteFormat, type NoteFormats, type NumberPlace, type PageNumFormat, type PageSetup, type SectionBreak,
 } from '../document/document';
 import { parseFieldInstr, type DocProps } from '../document/fields';
 import { shownSize } from '../document/doc-layout';
@@ -129,7 +129,7 @@ const WARN = {
   hfPictures: 'Pictures and tables in the header and footer were left out.',
   pictureWatermark: 'A picture watermark was left out (text watermarks are kept).',
   drawingChanged: 'Some structures were changed in Word (Change Picture) or copied in from another file, so they came in as pictures.',
-  drawingCrop: 'Cropping and color changes made in Word to some structures were left off (the structures stay editable).',
+  drawingCrop: 'Cropping and color changes made in Word to some structures aren\'t shown here (the structures stay editable). They are saved back to Word while those structures are unchanged.',
   macros: 'This document has macros (VBA). They are never run here, and they are left out when it is saved.',
   fields: 'Some fields were kept as the text they showed.',
   hidden: 'Hidden text is kept and saved back to Word, but isn\'t shown here.',
@@ -2168,19 +2168,21 @@ class DocxReader {
     // one of ours by its name whose picture is no longer the one written: Word's picture
     if (m?.contents && !mineNow) this.warn('drawingChanged');
     if (m?.contents && mineNow) {
-      // cropped or recoloured in Word: the structure, without them
-      const blipNow = kid(pic, 'blipFill', 'blip');
-      const sr = kid(pic, 'blipFill', 'srcRect');
-      if (['l', 't', 'r', 'b'].some((k) => Number(sr?.getAttribute(k) ?? 0)) || kids(blipNow).some((k) => k.localName !== 'extLst')) this.warn('drawingCrop');
+      // cropped or recoloured in Word: the structure (whole, and in its colors), with them kept to save back to Word
+      const wordLook = this.wordLookOf(pic, m);
+      if (wordLook) this.warn('drawingCrop');
+      // (the size it is shown at, uncropped)
+      const c = wordLook?.crop;
+      const fullW = c ? shown.w / Math.max(0.01, 1 - c.l - c.r) : shown.w;
       const natural = shownSize({ w: m.w, h: m.h }, 1, this.textW);
-      const scale = Math.abs(natural.w - shown.w) < 0.75 || m.w <= 0 ? undefined : round(shown.w / m.w, 1e4);
+      const scale = Math.abs(natural.w - fullW) < 0.75 || m.w <= 0 ? undefined : round(fullW / m.w, 1e4);
       // a diagram's shapes may have been typed into in Word: their words go back into its text
       const contents = group ? retypedDiagram(structuredClone(m.contents), groupTexts(group)) : structuredClone(m.contents);
       // turned and flipped as a whole (Arrange > Rotate), on the picture or on the group of shapes
       const xf = kid(pic ? kid(pic, 'spPr') : kid(group!, 'grpSpPr'), 'xfrm');
       const rot = (((Number(xf?.getAttribute('rot') ?? 0) / 60000 || 0) % 360) + 360) % 360;
       const turn = { ...(rot ? { rot: round(rot) } : {}), ...(yes(xf?.getAttribute('flipH') ?? null) ? { flipH: true } : {}), ...(yes(xf?.getAttribute('flipV') ?? null) ? { flipV: true } : {}) };
-      this.emitObject(ctx, { kind: 'drawing', contents, scale, ...(m.frame ? { frame: structuredClone(m.frame) } : {}), ...(look ? { look } : {}), ...(float ? { float } : {}), ...(contentsAlt(contents) ? {} : alt), ...turn, ...(m.ole ? { ole: m.ole } : {}) }, r);
+      this.emitObject(ctx, { kind: 'drawing', contents, scale, ...(m.frame ? { frame: structuredClone(m.frame) } : {}), ...(look ? { look } : {}), ...(float ? { float } : {}), ...(contentsAlt(contents) ? {} : alt), ...turn, ...(m.ole ? { ole: m.ole } : {}), ...(wordLook ? { wordLook: { ...wordLook, print: contentsPrint(contents) } } : {}) }, r);
       return;
     }
     if (!pic) { this.warn('shapes'); return; }
@@ -2215,6 +2217,19 @@ class DocxReader {
    * stored the picture afresh, its alt text (the structure's SMILES, unless typed) still does.
    * Files from before the fingerprints were kept are taken by the name.
    */
+  /** The cropping and color changes Word made to one of our structure's pictures, if any (those it shows live; not effects worked in). */
+  private wordLookOf(pic: Element | null, m: DocxModel['drawings'][number]): Omit<WordLook, 'print'> | null {
+    if (!pic) return null;
+    const sr = kid(pic, 'blipFill', 'srcRect');
+    const f = (k: string) => Math.max(0, Math.min(0.99, Number(sr?.getAttribute(k) ?? 0) / 100000 || 0));
+    const crop = { l: f('l'), t: f('t'), r: f('r'), b: f('b') };
+    const cropped = crop.l + crop.r < 0.99 && crop.t + crop.b < 0.99 && (crop.l || crop.t || crop.r || crop.b);
+    const got = readPictureFx(kid(pic, 'blipFill', 'blip'), null).fx;
+    const fx = got ? tidyFx({ ...(got.bright ? { bright: got.bright } : {}), ...(got.contrast ? { contrast: got.contrast } : {}), ...(got.recolor ? { recolor: got.recolor } : {}), ...(got.alpha ? { alpha: got.alpha } : {}), ...(got.clear ? { clear: got.clear } : {}) }) : undefined;
+    if (!cropped && !fx) return null;
+    return { ...(cropped ? { crop } : {}), ...(fx ? { fx } : {}), w: m.w, h: m.h };
+  }
+
   private isOurDrawing(m: DocxModel['drawings'][number], pic: Element | null, descr: string): boolean {
     if (m.png === undefined && m.alt === undefined && m.svg === undefined) return true;
     const blip = kid(pic, 'blipFill', 'blip');
