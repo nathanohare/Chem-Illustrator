@@ -19,15 +19,16 @@
   --text: #1d2330;
   --muted: #677084;
   --line: #d6dae1;
-  /* the accent follows the mode (View > Mode Colours sets --mode-*; see src/ui/mode-colours.ts) */
-  --accent: var(--mode-accent, #2f6fdf);
-  --accent-soft: var(--mode-soft, #e3ecfc);
-  --bar: var(--mode-bar, #2f6fdf);
+  /* the accent follows the mode (View > Mode Colours sets --mode-*; see src/ui/mode-colours.ts); until
+     it does, the Canvas teal's */
+  --accent: var(--mode-accent, #0e7c93);
+  --accent-soft: var(--mode-soft, #ddedf0);
+  --bar: var(--mode-bar, #0e7c93);
   --ok: #18794e;
   --slow: #b4232a;
   --warn: #9a5b00;
   --page-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
-  --tab-drawing: var(--mode-drawing, #2f6fdf);
+  --tab-drawing: var(--mode-drawing, #0e7c93);
   --tab-slides: var(--mode-slides, #c8572a);
   --tab-sheet: var(--mode-sheet, #1e8a50);
   --tab-document: var(--mode-document, #2647a8);
@@ -48,10 +49,10 @@
     --text: #e6e9ef;
     --muted: #9aa3b5;
     --line: #3a414d;
-    --accent: var(--mode-accent-dark, #7aa7ff);
+    --accent: var(--mode-accent-dark, #4ea9bc);
     --on-accent: var(--mode-on-accent-dark, #14171c);
-    --accent-soft: var(--mode-soft-dark, #2c3b57);
-    --bar: var(--mode-bar-dark, #264b8b);
+    --accent-soft: var(--mode-soft-dark, #1f414d);
+    --bar: var(--mode-bar-dark, #145261);
     --ok: #5fd39a;
     --slow: #ff7b81;
     --danger: #ff7b81;
@@ -67,10 +68,10 @@
   --text: #e6e9ef;
   --muted: #9aa3b5;
   --line: #3a414d;
-  --accent: var(--mode-accent-dark, #7aa7ff);
+  --accent: var(--mode-accent-dark, #4ea9bc);
   --on-accent: var(--mode-on-accent-dark, #14171c);
-  --accent-soft: var(--mode-soft-dark, #2c3b57);
-  --bar: var(--mode-bar-dark, #264b8b);
+  --accent-soft: var(--mode-soft-dark, #1f414d);
+  --bar: var(--mode-bar-dark, #145261);
   --ok: #5fd39a;
   --slow: #ff7b81;
   --danger: #ff7b81;
