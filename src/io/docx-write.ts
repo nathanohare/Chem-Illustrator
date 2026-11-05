@@ -336,7 +336,7 @@ class DocxWriter {
         // Word joins two tables with nothing between them into one: an empty paragraph keeps them
         // apart. Two floating tables are placed apart and stay two tables, as Word writes them (a label sheet's).
         if (lastWasTable && !(lastFloats && only.table.float)) out.push('<w:p><w:pPr><w:spacing w:before="0" w:after="0"/></w:pPr></w:p>');
-        out.push(await this.docTable(main, only.table, ps.align ?? styleOf(t, ps).align));
+        out.push(this.cmtRound(runs[0], await this.docTable(main, only.table, ps.align ?? styleOf(t, ps).align)));
         lastWasTable = true;
         lastFloats = !!only.table.float;
         close();
@@ -462,6 +462,17 @@ class DocxWriter {
       if (left <= 0 && this.cmtOpen.has(id)) out += this.cmtEnd(id);
     }
     return out;
+  }
+
+  /** A table's Word XML with the comments on the whole table round its text: from its first paragraph to its last. */
+  private cmtRound(r: TextRun, tbl: string): string {
+    const start = this.cmtBefore(r), end = this.cmtAfter(r);
+    if (!start && !end) return tbl;
+    const first = /<w:p(?=[ >])[^>]*>(?:<w:pPr>[\s\S]*?<\/w:pPr>)?/.exec(tbl);
+    const last = tbl.lastIndexOf('</w:p>');
+    if (!first || last < 0) return tbl;
+    const at = first.index + first[0].length;
+    return tbl.slice(0, at) + start + tbl.slice(at, last) + end + tbl.slice(last);
   }
 
   private cmtEnd(id: number): string {

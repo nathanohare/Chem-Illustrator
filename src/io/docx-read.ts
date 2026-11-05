@@ -111,6 +111,7 @@ const WARN = {
   links: 'Links were kept as plain text.',
   cellMarks: 'Index entries and marked citations inside table cells were left out.',
   notes: 'Footnotes and endnotes inside table cells were left out.',
+  cmtWhole: 'Comments on text in a table or a footnote were kept on the whole table or on the note\'s number.',
   equations: 'Equations in table cells were kept as plain text.',
   shapes: 'SmartArt and drawn shapes were left out.',
   chartParts: 'Some charts mix chart types (a line over columns, a second axis): they show as one type.',
@@ -997,6 +998,7 @@ class DocxReader {
     this.part = this.pkg.relOfType(this.main, end ? DOCX_REL.endnotes : DOCX_REL.footnotes) ?? part;
     this.link = undefined;
     this.pendingMarks = [];
+    const met = new Set(this.cmtMet);
     const got = this.boxText(note);
     this.fields = fields;
     this.cmtOpen = cmt;
@@ -1023,6 +1025,8 @@ class DocxReader {
       runs.shift();
     }
     this.emitObject(ctx, { kind: 'note', ...(end ? { end: true } : {}), runs: rt.normalizeRuns(runs), paras: got.paras, ...(lead !== ' ' ? { lead } : {}) }, { ...r, pos: 'sup' }, true);
+    // comments on the note's text go on its number
+    this.cmtOnObject(met, this.piece(ctx).runs);
   }
 
   // ---------------------------------------------------------------- the text
@@ -1032,7 +1036,13 @@ class DocxReader {
     for (const el of els) {
       switch (el.localName) {
         case 'p': this.paragraph(el); break;
-        case 'tbl': this.table(el); break;
+        case 'tbl': {
+          // comments on text in its cells (which keep no comment marks here) go on the whole table
+          const met = new Set(this.cmtMet), n = this.out.length;
+          this.table(el);
+          if (!this.inCell && this.out.length > n) this.cmtOnObject(met, this.out[this.out.length - 1].runs);
+          break;
+        }
         case 'sdt': {
           if (this.sdtTag(el) === 'MENDELEY_BIBLIOGRAPHY') {
             const id = this.managedBibliography();
@@ -1448,11 +1458,27 @@ class DocxReader {
     if (el.localName === 'commentRangeStart') { this.cmtOpen.add(id); this.cmtMet.add(id); } else this.cmtOpen.delete(id);
   }
 
+  /**
+   * Comments met while reading a table's cells or a note's text, which keep no marks of their own
+   * here: put on the table's or the note's character in the text (`runs`, its last object run).
+   */
+  private cmtOnObject(before: Set<number>, runs: TextRun[]): void {
+    const inside = [...this.cmtMet].filter((id) => !before.has(id));
+    if (!inside.length) return;
+    let i = runs.length - 1;
+    while (i >= 0 && runs[i].obj === undefined) i--;
+    if (i < 0) return;
+    runs[i] = { ...runs[i], cmt: cmtString([...new Set([...cmtIds(runs[i].cmt), ...inside])]) };
+    this.warn('cmtWhole');
+  }
+
   /** A comment's mark in the text: one with no range of its own goes on the character before it. */
   private cmtPoint(el: Element, ctx: Ctx): void {
     const id = Number(this.a(el, 'id'));
-    if (!Number.isInteger(id) || id < 0 || this.cmtMet.has(id) || ctx.cell) return;
+    if (!Number.isInteger(id) || id < 0 || this.cmtMet.has(id)) return;
     this.cmtMet.add(id);
+    // (in a table cell: the comment goes on the whole table)
+    if (ctx.cell) return;
     const runs = this.piece(ctx).runs;
     const last = runs[runs.length - 1];
     if (!last?.text) return;
