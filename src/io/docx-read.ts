@@ -26,7 +26,7 @@ import * as rt from '../richtext';
 import { PackageReader, REL, bytesHash, kid, kids, rAttr, fromEmu } from './ooxml';
 import { dataUrl, imageSize, pictureMime } from '../render/images';
 import { drawingInEmf } from '../render/emf';
-import { BULLETS, BULLET_LIBRARY, LIST_SCHEMES, cleanPara } from '../text/paragraphs';
+import { BULLETS, BULLET_LIBRARY, LIST_SCHEMES, cleanPara, listInfo } from '../text/paragraphs';
 import { SINGLE, type Measure } from '../text/layout';
 import { arialWidth } from '../text-metrics';
 import { documentMeasure } from '../text/font-measure';
@@ -102,6 +102,9 @@ const JUSTIFY: Record<string, Justify> = { left: 'left', start: 'left', center: 
 /** VML (Word 2003's drawings, and the fallback Word writes for its newer shapes): the elements that draw something. */
 const VML_NS = 'urn:schemas-microsoft-com:vml';
 const VML_SHAPES = new Set(['shape', 'rect', 'roundrect', 'oval', 'line', 'polyline', 'arc', 'curve', 'image']);
+/** Word's building blocks kept in the file (Quick Parts: its glossary document), and the people who wrote its comments. */
+const GLOSSARY_REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/glossaryDocument';
+const PEOPLE_REL = 'http://schemas.microsoft.com/office/2011/relationships/people';
 const EXT_MIME: Record<string, string> = { wmf: 'image/x-wmf', emf: 'image/x-emf', tif: 'image/tiff', tiff: 'image/tiff' };
 
 const WARN = {
@@ -127,15 +130,20 @@ const WARN = {
   drawingChanged: 'Some structures were changed in Word (Change Picture) or copied in from another file, so they came in as pictures.',
   drawingCrop: 'Cropping and color changes made in Word to some structures were left off (the structures stay editable).',
   macros: 'This document has macros (VBA). They are never run here, and they are left out when it is saved.',
+  fields: 'Some fields were kept as the text they showed.',
+  hidden: 'Hidden text is kept and saved back to Word, but isn\'t shown here.',
+  hiddenCells: 'Hidden text in table cells and notes was left out.',
+  moves: 'Text moved while changes were tracked shows as a deletion and an insertion.',
+  propChanges: 'Tracked changes to paragraph, section and table formatting were accepted (changes to text and its formatting are kept).',
 };
 
 type Pos = 'base' | 'sub' | 'sup';
 /** Text formatting as a file gives it (only what it gives). `color` null is "automatic". */
-interface RProps { font?: string; size?: number; bold?: boolean; italic?: boolean; underline?: boolean; color?: string | null; highlight?: string | null; pos?: Pos; hidden?: boolean; formula?: boolean; strike?: boolean; smallCaps?: boolean; allCaps?: boolean; cstyle?: string; spacing?: number; noKern?: boolean; noFill?: boolean; transparency?: number; outline?: string; outlineW?: number; shadow?: boolean }
+interface RProps { lang?: string; noProof?: boolean; font?: string; size?: number; bold?: boolean; italic?: boolean; underline?: boolean; color?: string | null; highlight?: string | null; pos?: Pos; hidden?: boolean; formula?: boolean; strike?: boolean; smallCaps?: boolean; allCaps?: boolean; cstyle?: string; spacing?: number; noKern?: boolean; noFill?: boolean; transparency?: number; outline?: string; outlineW?: number; shadow?: boolean }
 /** Paragraph formatting as a file gives it, in points. */
 interface PProps {
   align?: Justify; before?: number; after?: number; line?: { v: number; rule: string };
-  left?: number; right?: number; first?: number; keepNext?: boolean; pageBreak?: boolean; outline?: number; noLineNumbers?: boolean; noHyphen?: boolean;
+  left?: number; right?: number; first?: number; keepNext?: boolean; keepLines?: boolean; /** Widow/Orphan control (on in Word unless a file turns it off). */ widow?: boolean; pageBreak?: boolean; outline?: number; noLineNumbers?: boolean; noHyphen?: boolean;
   numId?: string; ilvl?: number; contextual?: boolean;
   /** Paragraph borders (w:pBdr) and shading (w:shd's fill). */
   border?: ParaBorders; shade?: string | null;
@@ -165,11 +173,12 @@ function finalTabs(p: PProps): TabStop[] | undefined {
 /** What a table's style gives the paragraphs and text in its cells. */
 interface CellLook { p: PProps; r: RProps }
 interface WStyle { id: string; type: string; name: string; basedOn?: string; next?: string; isDefault: boolean; p: PProps; r: RProps; el: Element }
-interface Level { fmt: string; text: string; p: PProps }
+/** A list level: its number format and text, its indents, its start value and the level after which it starts again (lvlRestart, 1-based; 0 never). */
+interface Level { fmt: string; text: string; p: PProps; start: number; restart?: number }
 interface Piece { runs: TextRun[]; pageBreak: boolean; soft: boolean; colBreak?: boolean; /** Index entries and marked citations in it (XE and TA fields). */ xe?: IndexMark[]; ta?: AuthorityMark[] }
 interface Ctx { base: RProps; pieces: Piece[]; cell: boolean }
-interface Field { instr: string; phase: 'instr' | 'result'; swallow: boolean; /** The field's own data (w:fldData, base64): EndNote's citations. */ data?: string; text: string; props: RProps; /** How its result's first text looks, which is what Word shows (EndNote sets superscript only there). */ shown?: RProps; done: boolean; ref?: { id: number; mark: string; text: string; above?: boolean; page?: boolean }; toc?: boolean; /** A form field's settings (w:ffData), and the form field made of it. */ ff?: Element; form?: number; /** A HYPERLINK field: the link open before it, put back at its end. */ before?: { link: string | undefined }; /** A manager's citation (its object) whose shown text is kept; a manager's bibliography (its object) whose entries are kept. */ cite?: number; bib?: number }
-interface OutPara { ps: ParaStyle; runs: TextRun[]; mark: rt.RunStyle; style: string; contextual: boolean; table?: boolean; bib?: string; markRev?: string }
+interface Field { instr: string; phase: 'instr' | 'result'; swallow: boolean; /** The field's own data (w:fldData, base64): EndNote's citations. */ data?: string; text: string; props: RProps; /** How its result's first text looks, which is what Word shows (EndNote sets superscript only there). */ shown?: RProps; done: boolean; ref?: { id: number; mark: string; text: string; above?: boolean; page?: boolean }; toc?: boolean; /** A form field's settings (w:ffData), and the form field made of it. */ ff?: Element; form?: number; /** A HYPERLINK field: the link open before it, put back at its end. */ before?: { link: string | undefined }; /** A manager's citation (its object) whose shown text is kept; a manager's bibliography (its object) whose entries are kept. */ cite?: number; bib?: number; /** Its separator (where its result starts). */ sep?: Element; /** Another field inside its instruction. */ inner?: boolean; /** A field kept as Word had it: the object made of it (its result is gathered into it). */ kept?: number }
+interface OutPara { ps: ParaStyle; runs: TextRun[]; mark: rt.RunStyle; style: string; contextual: boolean; table?: boolean; bib?: string; markRev?: string; /** A list item: Word's list (numId), the levels it uses (abstractNumId) and its level. */ num?: { id: string; abs: string; ilvl: number } }
 
 /** Open a Word file. Throws only when the file is not a Word file at all. */
 export async function readDocx(bytes: Uint8Array, deps: DocxReadDeps = {}): Promise<{ doc: DocText; warnings: string[] }> {
@@ -202,6 +211,8 @@ class DocxReader {
   private used = new Set<string>();
   private abstracts = new Map<string, Level[]>();
   private nums = new Map<string, string>();
+  /** Each list's own changes to its levels (w:lvlOverride): numbers it starts again from, and levels it defines afresh. */
+  private numOverrides = new Map<string, { starts: Map<number, number>; levels: Map<number, Level> }>();
   private model: DocxModel | null = null;
   private objects: Record<number, DocObject> = {};
   private nextId = 1;
@@ -316,6 +327,7 @@ class DocxReader {
     const hf = this.readHeaderFooter(first).hf;
     this.lastHf = hf;
     this.blocks(kids(body));
+    this.trackedOthers(root);
     this.resolveRefs();
     this.joinBibliographies();
     const out = this.assemble(hf, first);
@@ -391,6 +403,13 @@ class DocxReader {
     return p;
   }
 
+  /** Tracked changes kept only in part: moves (as a deletion and an insertion), and formatting changes other than to text (accepted). */
+  private trackedOthers(root: Element): void {
+    const has = (name: string) => root.getElementsByTagNameNS(this.W, name).length > 0;
+    if (has('moveFrom') || has('moveTo')) this.warn('moves');
+    if (['pPrChange', 'sectPrChange', 'tblPrChange', 'trPrChange', 'tcPrChange', 'tblGridChange', 'numberingChange', 'tblPrExChange'].some(has)) this.warn('propChanges');
+  }
+
   private warn(k: keyof typeof WARN): void {
     this.warnings.add(WARN[k]);
   }
@@ -449,6 +468,9 @@ class DocxReader {
         }
         case 'vertAlign': { const v = this.a(c); out.pos = v === 'subscript' ? 'sub' : v === 'superscript' ? 'sup' : 'base'; break; }
         case 'vanish': out.hidden = this.on(c); break;
+        // the proofing language (its Latin text's), and text marked not to be checked
+        case 'lang': { const v = this.a(c); if (v) out.lang = v; break; }
+        case 'noProof': out.noProof = this.on(c); break;
         case 'rStyle': {
           const id = this.a(c) ?? '';
           Object.assign(out, this.charStyle(id));
@@ -520,6 +542,8 @@ class DocxReader {
           break;
         }
         case 'keepNext': out.keepNext = this.on(c); break;
+        case 'keepLines': out.keepLines = this.on(c); break;
+        case 'widowControl': out.widow = this.on(c); break;
         case 'pageBreakBefore': out.pageBreak = this.on(c); break;
         case 'suppressLineNumbers': out.noLineNumbers = this.on(c); break;
         case 'suppressAutoHyphens': out.noHyphen = this.on(c); break;
@@ -685,13 +709,27 @@ class DocxReader {
       const levels: Level[] = [];
       for (const l of kids(an, 'lvl')) {
         const i = Number(this.a(l, 'ilvl') ?? levels.length);
-        levels[i] = { fmt: this.a(kid(l, 'numFmt')) ?? 'decimal', text: this.a(kid(l, 'lvlText')) ?? '', p: this.readPPr(kid(l, 'pPr')) };
+        levels[i] = this.readLevel(l);
       }
       this.abstracts.set(id, levels);
       const link = this.a(kid(an, 'numStyleLink'));
       if (link) links.set(id, link);
     }
-    for (const n of kids(root, 'num')) this.nums.set(this.a(n, 'numId') ?? '', this.a(kid(n, 'abstractNumId')) ?? '');
+    for (const n of kids(root, 'num')) {
+      const numId = this.a(n, 'numId') ?? '';
+      this.nums.set(numId, this.a(kid(n, 'abstractNumId')) ?? '');
+      // a list's own start values (Restart Numbering, Set Numbering Value) and levels
+      const starts = new Map<number, number>(), own = new Map<number, Level>();
+      for (const o of kids(n, 'lvlOverride')) {
+        const i = Number(this.a(o, 'ilvl'));
+        if (!Number.isInteger(i) || i < 0 || i > 8) continue;
+        const so = Number(this.a(kid(o, 'startOverride')));
+        if (kid(o, 'startOverride') && Number.isFinite(so)) starts.set(i, Math.round(so));
+        const l = kid(o, 'lvl');
+        if (l) own.set(i, this.readLevel(l));
+      }
+      if (starts.size || own.size) this.numOverrides.set(numId, { starts, levels: own });
+    }
     // a list that takes its levels from a numbering style
     for (const [id, link] of links) {
       const numId = this.chain('numbering', link).p.numId;
@@ -700,9 +738,67 @@ class DocxReader {
     }
   }
 
+  /** A list level (w:lvl). Its start value is 0 when the file gives none, as the standard says. */
+  private readLevel(l: Element): Level {
+    const start = Number(this.a(kid(l, 'start')) ?? 0);
+    const restart = kid(l, 'lvlRestart') ? Number(this.a(kid(l, 'lvlRestart'))) : NaN;
+    return {
+      fmt: this.a(kid(l, 'numFmt')) ?? 'decimal', text: this.a(kid(l, 'lvlText')) ?? '', p: this.readPPr(kid(l, 'pPr')),
+      start: Number.isFinite(start) ? Math.round(start) : 0, ...(Number.isFinite(restart) ? { restart: Math.round(restart) } : {}),
+    };
+  }
+
+  /** The levels a list (numId) uses: those of its abstractNum, with any it defines afresh. */
+  private levelsOf(numId: string): Level[] | undefined {
+    const levels = this.abstracts.get(this.nums.get(numId) ?? '');
+    const own = this.numOverrides.get(numId)?.levels;
+    if (!levels || !own?.size) return levels;
+    const out = [...levels];
+    for (const [i, l] of own) out[i] = l;
+    return out;
+  }
+
+  /**
+   * Each numbered item's number as Word counts it (ECMA-376 §17.9): lists that share their levels
+   * (an abstractNum) count on together, a list's start override applies where it is first used,
+   * a level begins at its start value and starts again after a level above it is used (unless
+   * its lvlRestart says otherwise). An item whose number here would differ keeps Word's as its own.
+   */
+  private listNumbers(out: OutPara[]): void {
+    if (!out.some((p) => p.num)) return;
+    const counters = new Map<string, (number | undefined)[]>(), pending = new Map<string, (number | undefined)[]>();
+    const used = new Set<string>();
+    const word = out.map((p) => {
+      const nm = p.num;
+      if (!nm) return undefined;
+      const levels = this.levelsOf(nm.id) ?? [];
+      const c = counters.get(nm.abs) ?? [], pend = pending.get(nm.abs) ?? [];
+      counters.set(nm.abs, c);
+      pending.set(nm.abs, pend);
+      if (!used.has(nm.id)) { used.add(nm.id); for (const [l, v] of this.numOverrides.get(nm.id)?.starts ?? []) pend[l] = v; }
+      const L = nm.ilvl;
+      if (pend[L] !== undefined) { c[L] = pend[L]; pend[L] = undefined; } else c[L] = c[L] === undefined ? levels[L]?.start ?? 0 : c[L]! + 1;
+      for (let m = L + 1; m < 9; m++) {
+        const r = levels[m]?.restart;
+        const after = r === undefined || r > m ? m : r;
+        if (after > 0 && L < after) c[m] = undefined;
+      }
+      return c[L];
+    });
+    // (each change carries on to the items after it, so the numbers are counted again after each)
+    for (let from = 0, k = 0; k < 2000; k++) {
+      const info = listInfo(out.map((p) => p.ps));
+      const i = out.findIndex((p, j) => j >= from && p.ps.list === 'number' && !p.ps.cont && word[j] !== undefined && word[j]! >= 1 && info[j].n !== word[j]);
+      if (i < 0) return;
+      out[i].ps = cleanPara({ ...out[i].ps, startAt: word[i] });
+      from = i + 1;
+    }
+  }
+
   /** Other programs' data, kept as it is; Chem4Word's structures by their id. */
   private readKept(): void {
-    this.kept = readKeptParts(this.pkg, { main: this.main, ours: (root) => root.namespaceURI === MODEL_NS, ownProp: (name) => /^ZOTERO_PREF_\d+$/.test(name), theme: true });
+    // (with Word's building blocks stored in the file, and its list of the people who commented)
+    this.kept = readKeptParts(this.pkg, { main: this.main, ours: (root) => root.namespaceURI === MODEL_NS, ownProp: (name) => /^ZOTERO_PREF_\d+$/.test(name), theme: true, trees: [GLOSSARY_REL, PEOPLE_REL] });
     for (const x of this.kept?.xml ?? []) {
       const guid = cmlGuid(x.xml);
       if (guid) this.cml.set(guid, x.xml);
@@ -889,26 +985,39 @@ class DocxReader {
     const note = this.noteEl(end, this.a(el, 'id'));
     if (!note) return;
     // the note is read apart from the paragraph it is in (its own fields and comments)
-    const fields = this.fields, cmt = this.cmtOpen, math = this.displayMath, part = this.part, link = this.link;
+    // (bookmarks round the note's number stay with the paragraph it is in: a NOTEREF field points at them)
+    const fields = this.fields, cmt = this.cmtOpen, math = this.displayMath, part = this.part, link = this.link, marks = this.pendingMarks;
     this.fields = [];
     this.cmtOpen = new Set();
     this.part = this.pkg.relOfType(this.main, end ? DOCX_REL.endnotes : DOCX_REL.footnotes) ?? part;
     this.link = undefined;
+    this.pendingMarks = [];
     const got = this.boxText(note);
     this.fields = fields;
     this.cmtOpen = cmt;
     this.displayMath = math;
     this.part = part;
     this.link = link;
-    // text and citations (note styles put them in footnotes); captions and pictures in notes keep no place here
-    const runs = got.runs.filter((x) => x.obj === undefined || this.objects[x.obj]?.kind === 'cite').map(({ cmt: _c, ...x }) => x);
+    this.pendingMarks = marks;
+    // text and citations (note styles put them in footnotes); captions and pictures in notes keep no
+    // place here, fields kept from Word keep the text they showed, and hidden text is left out
+    const runs = got.runs.map((x) => {
+      const o = x.obj !== undefined ? this.objects[x.obj] : undefined;
+      if (o?.kind !== 'field' || (o.code !== 'word' && o.code !== 'hidden')) return x;
+      const { obj: _o, ...style } = x;
+      if (o.code === 'word') this.warn('fields');
+      else this.warn('hiddenCells');
+      return { ...style, text: o.code === 'word' ? o.text ?? '' : '' };
+    }).filter((x) => x.obj === undefined || this.objects[x.obj]?.kind === 'cite').map(({ cmt: _c, ...x }) => x);
+    // (what comes between the number and the text: kept when it isn't Word's one space)
+    const lead = /^[ \t]*/.exec(runs.map((x) => x.text).join(''))![0];
     while (runs.length && /^[ \t]/.test(runs[0].text)) {
       const text = runs[0].text.replace(/^[ \t]+/, '');
       if (text) { runs[0] = { ...runs[0], text }; break; }
       if (runs.length === 1) { runs[0] = { ...runs[0], text: '' }; break; }
       runs.shift();
     }
-    this.emitObject(ctx, { kind: 'note', ...(end ? { end: true } : {}), runs: rt.normalizeRuns(runs), paras: got.paras }, { ...r, pos: 'sup' }, true);
+    this.emitObject(ctx, { kind: 'note', ...(end ? { end: true } : {}), runs: rt.normalizeRuns(runs), paras: got.paras, ...(lead !== ' ' ? { lead } : {}) }, { ...r, pos: 'sup' }, true);
   }
 
   // ---------------------------------------------------------------- the text
@@ -1163,7 +1272,7 @@ class DocxReader {
     const size = mark.size ?? WORD_SIZE;
     // the numbering's indents come between the style's and the paragraph's own
     const numId = own.numId;
-    const levels = numId && numId !== '0' ? this.abstracts.get(this.nums.get(numId) ?? '') : undefined;
+    const levels = numId && numId !== '0' ? this.levelsOf(numId) : undefined;
     const ilvl = Math.max(0, Math.min(8, own.ilvl ?? 0));
     const level = levels?.[ilvl];
     const p = level ? mergeP(this.docDefaults.p, this.cellLook?.p, this.chain('paragraph', style).p, level.p, direct) : own;
@@ -1191,6 +1300,7 @@ class DocxReader {
       // spacing in points stays in points for the paragraph (its style takes the nearest multiple)
       ...(p.line && p.line.rule !== 'auto' ? { linePt: round(p.line.v / 20), lineRule: p.line.rule === 'exact' ? 'exact' as const : 'atLeast' as const } : { line: this.lineOf(p, size) }),
       indent: round(indent), indentRight: p.right ? round(Math.max(0, p.right)) : undefined, firstLine: list ? undefined : round(p.first ?? 0), keepNext: p.keepNext,
+      keepLines: p.keepLines || undefined, noWidow: p.widow === false || undefined,
       pageBreak: p.pageBreak, section: brk, list, level: list ? ilvl : undefined, noLineNumbers: p.noLineNumbers, noHyphen: p.noHyphen || undefined,
       tabs: finalTabs(p), scheme, bullet,
       border: cleanBorders(p.border), shade: p.shade && p.shade !== '#ffffff' ? p.shade : undefined,
@@ -1222,7 +1332,8 @@ class DocxReader {
       q = cleanPara(q);
       // the paragraph mark inserted or deleted while Word tracked changes (on the last piece: the real mark)
       const mr = i === ctx.pieces.length - 1 ? markRevOf : undefined;
-      this.out.push({ ps: q, runs: pc.runs, mark: markStyle, style: ours, contextual: !!p.contextual, bib, ...(mr ? { markRev: mr } : {}) });
+      const num = i === 0 && list && numId ? { id: numId, abs: this.nums.get(numId) ?? '', ilvl } : undefined;
+      this.out.push({ ps: q, runs: pc.runs, mark: markStyle, style: ours, contextual: !!p.contextual, bib, ...(mr ? { markRev: mr } : {}), ...(num ? { num } : {}) });
     });
     sectionBreak();
   }
@@ -1253,6 +1364,7 @@ class DocxReader {
       font: r.font ?? WORD_FONT, size: r.size ?? WORD_SIZE, bold: r.bold, italic: r.italic, underline: r.underline,
       strike: r.strike, smallCaps: r.smallCaps, allCaps: r.allCaps, cstyle: r.cstyle,
       spacing: r.spacing, noKern: r.noKern, noFill: r.noFill, transparency: r.transparency, outline: r.outline, outlineW: r.outlineW, shadow: r.shadow,
+      lang: r.lang && r.lang.toLowerCase() !== (this.docDefaults.r.lang ?? 'en-US').toLowerCase() ? r.lang : undefined, noProof: r.noProof,
       color: r.color ?? undefined, highlight: r.highlight ?? undefined, formula: formula || undefined,
       sub: (!formula && r.pos === 'sub') || undefined, sup: (!formula && r.pos === 'sup') || undefined,
     });
@@ -1270,10 +1382,9 @@ class DocxReader {
   }
 
   private emitText(ctx: Ctx, text: string, r: RProps): void {
-    if (!text || r.hidden) return;
+    if (!text) return;
     const top = this.fields[this.fields.length - 1];
-    if ((top?.ref || top?.form !== undefined || top?.cite !== undefined) && top.phase === 'result') top.text += text;
-    if (this.swallowing()) return;
+    if (!r.hidden && top?.cite !== undefined && top.phase === 'result') top.text += text;
     let props = r;
     if (r.font && /^symbol$/i.test(r.font)) {
       // text in the Symbol font: the Greek letters and signs it shows
@@ -1281,9 +1392,32 @@ class DocxReader {
       text = rt.fromSymbolFont(plain);
       props = { ...r, font: ctx.base.font };
     }
+    if (!r.hidden && (top?.ref || top?.form !== undefined || top?.kept !== undefined) && top.phase === 'result') top.text += text;
+    if (this.swallowing()) return;
+    // (hidden text in a manager's bibliography being gathered is left out, as before)
+    if (r.hidden) { if (!this.capture) this.hiddenText(ctx, text, props); return; }
     const run: TextRun = { ...this.runStyle(props), ...(this.rev ? { rev: this.rev } : {}), ...(this.fmt ? { fmt: this.fmt } : {}), ...this.cmtMark(ctx), ...(this.link ? { link: this.link } : {}), ...this.ccMark(ctx), text };
     if (this.capture) { this.capture.paras[this.capture.paras.length - 1]?.push(run); return; }
     this.piece(ctx).runs.push(run);
+  }
+
+  /** The hidden text met last (its object and look), which hidden text right after it joins. */
+  private lastHidden: { id: number; key: string } | null = null;
+
+  /**
+   * Hidden text (Word's Hidden font setting, w:vanish): not shown here, but kept in the text as
+   * a field of its own that shows nothing, so saving writes it back as hidden text.
+   */
+  private hiddenText(ctx: Ctx, text: string, r: RProps): void {
+    if (ctx.cell) { this.warn('hiddenCells'); return; }
+    const key = JSON.stringify([this.runStyle(r), this.rev, this.fmt, this.link, this.ccRun, [...this.cmtOpen]]);
+    const runs = this.piece(ctx).runs;
+    const last = runs[runs.length - 1];
+    const prev = this.lastHidden && last?.obj === this.lastHidden.id && this.lastHidden.key === key ? this.objects[last.obj] : undefined;
+    if (prev?.kind === 'field' && prev.code === 'hidden') { prev.text = (prev.text ?? '') + text; return; }
+    const id = this.emitObject(ctx, { kind: 'field', code: 'hidden', text }, r, true);
+    this.lastHidden = id === null ? null : { id, key };
+    this.warn('hidden');
   }
 
   /** Where a Word link goes: a web page or file (through the part's relationships), or a bookmark here. */
@@ -1337,7 +1471,8 @@ class DocxReader {
       const text = paras.map((p) => [...p.getElementsByTagNameNS(this.W, '*')]
         .map((e) => (e.localName === 't' ? e.textContent ?? '' : e.localName === 'tab' ? '\t' : e.localName === 'br' ? '\n' : '')).join('')).join('\n');
       const last = paras[paras.length - 1];
-      notes.set(id, { author: this.a(c, 'author') ?? '', date: fromWordDate(this.a(c, 'date') ?? ''), text, para: last?.getAttributeNS(W14_NS, 'paraId') ?? '' });
+      const kept = this.commentParas(c);
+      notes.set(id, { author: this.a(c, 'author') ?? '', date: fromWordDate(this.a(c, 'date') ?? ''), text, para: last?.getAttributeNS(W14_NS, 'paraId') ?? '', ...(kept ? { word: { paras: kept, text } } : {}) });
     }
     // Word 365 keeps each comment's time in UTC too, by a lasting id found from its paragraph id
     const part = (rel: string) => { const at = this.pkg.relOfType(this.main, rel); return at ? this.pkg.xml(at)?.documentElement ?? null : null; };
@@ -1347,6 +1482,9 @@ class DocxReader {
     for (const n of notes.values()) {
       const at = new Date(utc.get(durable.get(n.para) ?? '') ?? '');
       if (!isNaN(at.getTime())) n.date = at.toISOString();
+      // (its lasting id, which Word keeps from save to save)
+      const did = durable.get(n.para);
+      if (did && /^[0-9A-F]{8}$/i.test(did)) n.word = { ...n.word, id: did };
     }
     // which comment each reply answers, and which are resolved
     const parent = new Map<string, string>(), done = new Set<string>();
@@ -1364,7 +1502,7 @@ class DocxReader {
     const replies = new Set<number>();
     for (const [id, n] of notes) {
       if (n.para && parent.has(n.para) && byPara.has(parent.get(n.para)!)) { replies.add(id); continue; }
-      comments[id] = { author: n.author, date: n.date, text: n.text, ...(done.has(n.para) ? { done: true } : {}) };
+      comments[id] = { author: n.author, date: n.date, text: n.text, ...(n.word ? { word: n.word } : {}), ...(done.has(n.para) ? { done: true } : {}) };
     }
     for (const id of [...notes.keys()].sort((a, b) => a - b)) {
       if (!replies.has(id)) continue;
@@ -1373,9 +1511,32 @@ class DocxReader {
       let top = byPara.get(parent.get(n.para)!)!;
       for (let k = 0; replies.has(top) && k < 50; k++) top = byPara.get(parent.get(notes.get(top)!.para)!)!;
       const c = comments[top];
-      if (c) (c.replies ??= []).push({ author: n.author, date: n.date, text: n.text });
+      if (c) (c.replies ??= []).push({ author: n.author, date: n.date, text: n.text, ...(n.word ? { word: n.word } : {}) });
     }
     return { comments, replies };
+  }
+
+  /**
+   * A comment's paragraphs as Word wrote them (bold, italics, subscripts in it), less their
+   * paragraph ids (given afresh on saving); null when its text has no formatting, or it holds more
+   * than paragraphs, or anything that goes through the comments part's relationships (a link, a picture).
+   */
+  private commentParas(c: Element): string[] | null {
+    const blocks = kids(c);
+    if (!blocks.length || blocks.some((b) => b.localName !== 'p' || b.namespaceURI !== W_NS || b.prefix !== 'w')) return null;
+    // (only when its text has formatting: plain text is written as it is)
+    const looks = Array.from(c.getElementsByTagNameNS(W_NS, 'r')).some((r) => kid(r, 't') && kids(kid(r, 'rPr')).some((k) => k.localName !== 'rStyle'));
+    if (!looks) return null;
+    const out: string[] = [];
+    for (const b of blocks) {
+      const q = b.cloneNode(true) as Element;
+      q.removeAttributeNS(W14_NS, 'paraId');
+      q.removeAttributeNS(W14_NS, 'textId');
+      const x = elementXml(q).replaceAll(` xmlns:w="${W_NS}"`, '');
+      if (x.includes('officeDocument/2006/relationships') || !x.startsWith('<w:p')) return null;
+      out.push(x);
+    }
+    return out;
   }
 
   private emitObject(ctx: Ctx, o: DocObject, r: RProps, keepPos = false): number | null {
@@ -1498,8 +1659,14 @@ class DocxReader {
           const code = parseInt(this.a(c, 'char') ?? '', 16);
           if (!Number.isFinite(code)) break;
           const font = this.a(c, 'font') ?? '';
+          // a character of another symbol font (Wingdings' check mark): kept in that font, at the
+          // code it has there (U+F020 to U+F0FF, as Word keeps such characters)
+          if (font && !/^symbol$/i.test(font)) {
+            this.emitText(ctx, String.fromCharCode(code >= 0x20 && code <= 0xff ? code + 0xf000 : code), { ...r, font });
+            break;
+          }
           const ch = String.fromCharCode(code >= 0xf000 ? code - 0xf000 : code);
-          this.emitText(ctx, /^symbol$/i.test(font) ? rt.fromSymbolFont(ch) : ch, { ...r, font: ctx.base.font });
+          this.emitText(ctx, font ? rt.fromSymbolFont(ch) : ch, { ...r, font: ctx.base.font });
           break;
         }
         case 'fldChar': this.fieldChar(c, r, ctx); break;
@@ -1531,6 +1698,8 @@ class DocxReader {
     if (type === 'begin') {
       const data = kid(c, 'fldData')?.textContent?.trim();
       const ff = kid(c, 'ffData');
+      const outer = this.fields[this.fields.length - 1];
+      if (outer?.phase === 'instr') outer.inner = true;
       this.fields.push({ instr: '', phase: 'instr', swallow: false, text: '', props: r, done: false, ...(data ? { data } : {}), ...(ff ? { ff } : {}) });
     }
     else if (type === 'separate') {
@@ -1538,6 +1707,7 @@ class DocxReader {
       if (!f) return;
       f.phase = 'result';
       f.shown = this.resultLook(c, ctx);
+      f.sep = c;
       this.startField(f, ctx);
     } else if (type === 'end') {
       const f = this.fields.pop();
@@ -1551,6 +1721,7 @@ class DocxReader {
       if (f.before) this.link = f.before.link;
       if (f.cite !== undefined) this.keepCite(f.cite, f.text);
       if (f.bib !== undefined && this.capture?.id === f.bib) this.keepEntries();
+      this.keptEnded(f);
     }
   }
 
@@ -1560,6 +1731,37 @@ class DocxReader {
     if (o?.kind !== 'cite' || !o.live || !text.trim()) return;
     this.objects[id] = { ...o, live: { ...o.live, text, for: (o.refs ?? []).join(' ') } };
     this.keptCites.push(id);
+  }
+
+  /** A field kept as Word had it: what it showed is its result. */
+  private keptEnded(f: Field): void {
+    const o = f.kept !== undefined ? this.objects[f.kept] : undefined;
+    if (o?.kind === 'field' && o.code === 'word') o.text = f.text;
+  }
+
+  /**
+   * A field's result is text only, in the paragraph the field starts in (so it can be kept as a
+   * field showing that text): no pictures, line breaks, fields or tracked changes in it. A field
+   * with no result counts as plain.
+   */
+  private plainResult(f: Field, simple?: Element): boolean {
+    const RUN = new Set(['rPr', 't', 'tab', 'ptab', 'noBreakHyphen', 'softHyphen', 'sym', 'lastRenderedPageBreak']);
+    const BESIDE = new Set(['bookmarkStart', 'bookmarkEnd', 'proofErr', 'permStart', 'permEnd', 'commentRangeStart', 'commentRangeEnd']);
+    const runOk = (r: Element) => kids(r).every((k) => RUN.has(k.localName));
+    if (simple) return kids(simple).every((k) => (k.localName === 'r' ? runOk(k) : BESIDE.has(k.localName)));
+    const sep = f.sep;
+    const own = sep?.parentElement;
+    if (!sep || !own) return true;
+    for (let el: Element | null = own; el; el = el.nextElementSibling) {
+      if (el.localName !== 'r') { if (BESIDE.has(el.localName)) continue; return false; }
+      const ks = kids(el);
+      for (let i = el === own ? ks.indexOf(sep) + 1 : 0; i < ks.length; i++) {
+        const k = ks[i];
+        if (k.localName === 'fldChar') return this.a(k, 'fldCharType') === 'end';
+        if (!RUN.has(k.localName)) return false;
+      }
+    }
+    return false;
   }
 
   /** How a field's result looks: its first run of text after the separator, in the same paragraph. */
@@ -1579,15 +1781,16 @@ class DocxReader {
     const props = merge<RProps>(ctx.base, this.readRPr(kid(firstRun, 'rPr')));
     const f: Field = { instr: this.a(el, 'instr') ?? '', phase: 'result', swallow: false, text: '', props, done: false };
     this.fields.push(f);
-    this.startField(f, ctx);
+    this.startField(f, ctx, el);
     this.inline(kids(el), ctx);
     this.fields.pop();
     if (f.ref) f.ref.text = f.text;
     if (f.before) this.link = f.before.link;
+    this.keptEnded(f);
   }
 
   /** A field's instruction is known: caption numbers and references become ours; other fields keep the text Word showed. */
-  private startField(f: Field, ctx: Ctx): void {
+  private startField(f: Field, ctx: Ctx, simple?: Element): void {
     if (f.done) return;
     f.done = true;
     if (this.swallowing(true)) return;
@@ -1710,6 +1913,15 @@ class DocxReader {
       return;
     }
     if (/^ADDIN\s+(EN\.CITE|ZOTERO|CSL|Mendeley|RW)/i.test(ins) && !/^ADDIN\s+EN\.CITE\.DATA/i.test(ins)) this.warn('citations');
+    if (!ins || /^ADDIN\b/i.test(ins)) return;
+    // any other field (a note's number, a heading's text, a calculation): kept as Word had it,
+    // showing its last result, when that result is plain text; else its text is kept
+    if (!ctx.cell && !f.inner && this.plainResult(f, simple)) {
+      const note = /^NOTEREF\s+(\S+)/i.exec(ins)?.[1];
+      const id = this.emitObject(ctx, { kind: 'field', code: 'word', instr: f.instr, text: '', ...(note ? { target: note } : {}) }, f.shown ?? f.props);
+      if (id !== null) { f.kept = id; f.swallow = true; return; }
+    }
+    this.warn('fields');
   }
 
   /** A text form field's end: what it showed is its entry (Word's five spaces for none). */
@@ -2652,9 +2864,12 @@ class DocxReader {
                 const f = fields[fields.length - 1];
                 f.result = true;
                 if (/^PAGE\b/i.test(f.instr.trim())) pageHere();
+                // (a field kept as Word had it, such as a heading's text, needs the header as it is)
+                if (otherField(f.instr)) rich = true;
               } else if (t === 'end') {
                 const f = fields.pop();
                 if (f && !f.result && /^PAGE\b/i.test(f.instr.trim())) pageHere();
+                if (f && !f.result && otherField(f.instr)) rich = true;
               }
               break;
             }
@@ -2698,6 +2913,7 @@ class DocxReader {
       font: r.font ?? WORD_FONT, size, bold: !!r.bold, italic: !!r.italic, color: r.color ?? undefined,
       align: p.align ?? 'left', spaceBefore: round(p.before ?? 0), spaceAfter: round(p.after ?? 0), line: this.lineOf(p, size) ?? 1,
       indent: round(Math.max(0, p.left ?? 0)), firstLine: round(p.first ?? 0), keepNext: !!p.keepNext,
+      ...(p.keepLines ? { keepLines: true } : {}), ...(p.widow === false ? { noWidow: true } : {}),
       next: next && next !== ours ? next : ours === 'Normal' ? undefined : dflt?.next,
       outline: OUTLINE[ours] ?? (p.outline && p.outline <= 9 && ours !== 'Normal' ? p.outline : undefined),
     };
@@ -2752,6 +2968,7 @@ class DocxReader {
       if (a.contextual) a.ps = cleanPara({ ...a.ps, spaceAfter: 0 });
       if (b.contextual) b.ps = cleanPara({ ...b.ps, spaceBefore: 0 });
     }
+    this.listNumbers(out);
     // the standard styles (the file's, or ours where it has none) and the others the text uses
     const styles = defaultStyles();
     for (const [wordId, ours] of this.idMap) if (BUILT_IN_IDS[ours] || this.used.has(wordId)) styles[ours] = this.named(wordId, ours);
@@ -2796,6 +3013,7 @@ class DocxReader {
       hf,
       objects,
       drawingStyle: this.drawingStyle,
+      ...(this.docDefaults.r.lang && !/^en-US$/i.test(this.docDefaults.r.lang) ? { lang: this.docDefaults.r.lang } : {}),
       ...(this.trackOn() ? { track: true } : {}),
       ...(this.hyphenRead() ? { hyphen: this.hyphenRead()! } : {}),
       ...(this.protection() ? { protect: this.protection()! } : {}),
@@ -2884,6 +3102,15 @@ function keepUsedMarks(t: DocText): void {
     const { marks: _m, ...rest } = p;
     return marks.length ? { ...rest, marks } : rest;
   });
+}
+
+/**
+ * A field none of ours stands for (a note's number, a heading's text, a calculation), which is
+ * kept as Word had it; not a reference manager's (ADDIN), whose citations are read as such.
+ */
+function otherField(instr: string): boolean {
+  const s = instr.trim();
+  return !!s && !/^(SEQ|XE|TA|INDEX|TOA|TOC|FORMTEXT|FORMCHECKBOX|FORMDROPDOWN|HYPERLINK|ADDIN|REF|PAGEREF|PAGE)\b/i.test(s) && !s.startsWith(CITE_FIELD) && !parseFieldInstr(s);
 }
 
 /** A Word colour ("FF0000", "auto") as ours (null for automatic or none). */

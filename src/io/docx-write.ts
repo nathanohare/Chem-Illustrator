@@ -43,7 +43,7 @@ import { INDEX_INDENT, authorities, indexInstr, indexItems, taInstr, toaInstr, t
 import { ALG_SIDS, type Protection } from '../document/protect';
 import { parseFmt, parseRev } from '../document/revisions';
 import { officeTarget } from '../links';
-import { cmtIds, initials, placedComments, type CommentThread } from '../document/comments';
+import { cmtIds, initials, placedComments, type CommentNote, type CommentThread } from '../document/comments';
 import { toOmml } from '../document/math';
 import { documentMeasure } from '../text/font-measure';
 import { arialWidth } from '../text-metrics';
@@ -58,7 +58,7 @@ import type { ChartBox } from '../sheet/chart-box';
 import { appPropsXml, corePropsXml, writeKeptParts, type ContentControl } from './kept-parts';
 import { cmlGuid, contentsSig, writeCml } from './cml';
 import {
-  BIB_MARK, CHART_NAME, CITE_FIELD, DOCX_CT, W14_NS, W15_NS, DOCX_REL, DRAWING_NAME, FORMULA_STYLE, MODEL_NS, MC_NS, M_NS, PIC_NS, TABLE_MARK, W_NS, WORD_HIGHLIGHTS, WP_NS, WPS_NS, WPG_NS, twips, toWordDate, type DocxModel,
+  BIB_MARK, CHART_NAME, CITE_FIELD, DOCX_CT, W14_NS, W15_NS, W16CID_NS, W16CEX_NS, DOCX_REL, DRAWING_NAME, FORMULA_STYLE, MODEL_NS, MC_NS, M_NS, PIC_NS, TABLE_MARK, W_NS, WORD_HIGHLIGHTS, WP_NS, WPS_NS, WPG_NS, twips, toWordDate, type DocxModel,
 } from './docx-base';
 
 export interface DocxDeps {
@@ -152,24 +152,25 @@ class DocxWriter {
   private charStyles: Record<string, CharStyle>;
   /** Word's lists (numbering.xml): the levels of each kind of list (abstractNum), and each list using them (num, by numId from 1). */
   private abstractNums = new Map<string, number>();
-  private nums: { abs: number; restart: boolean }[] = [];
+  /** Each list's levels (abs), whether it counts from 1 (restart), and a level it starts again at a number of its own (at). */
+  private nums: { abs: number; restart: boolean; at?: { level: number; value: number } }[] = [];
   /** Each list's kind (its key), by numId − 1. */
   private numKeys: string[] = [];
   /** The one list each kind of bulleted list (and each numbered list in table cells) shares. */
   private sharedNums = new Map<string, number>();
 
   /** A Word list of a kind ('b' and its bullet, or 'n' and its scheme): its numId. */
-  private addNum(key: string, restart: boolean): number {
+  private addNum(key: string, restart: boolean, at?: { level: number; value: number }): number {
     let abs = this.abstractNums.get(key);
     if (abs === undefined) { abs = this.abstractNums.size; this.abstractNums.set(key, abs); }
-    this.nums.push({ abs, restart });
+    this.nums.push({ abs, restart, ...(at ? { at } : {}) });
     this.numKeys.push(key);
     return this.nums.length;
   }
 
-  /** A new numbered list, counting from 1. */
-  private newList(key: string): number {
-    return this.addNum(key, true);
+  /** A new numbered list, counting from 1 (or from its first item's own number). */
+  private newList(key: string, start?: number): number {
+    return this.addNum(key, true, start !== undefined ? { level: 0, value: start } : undefined);
   }
 
   private sharedNum(key: string): number {
@@ -344,7 +345,11 @@ class DocxWriter {
         continue;
       }
       // numbered lists: a new Word list where our numbers start again
-      if (ps.list === 'number' && lists[p].start) listNum = this.newList(`n${ps.scheme ?? ''}`);
+      if (ps.list === 'number' && lists[p].start) listNum = this.newList(`n${ps.scheme ?? ''}`, ps.startAt);
+      // an item further in with its own number: the list carries on in a Word list of the same levels that starts that level again from it
+      else if (ps.list === 'number' && !ps.cont && ps.startAt !== undefined && lists[p].n === ps.startAt && listNum > 0 && this.numKeys[listNum - 1] === `n${ps.scheme ?? ''}`) {
+        listNum = this.addNum(`n${ps.scheme ?? ''}`, false, { level: Math.max(0, Math.min(8, ps.level ?? 0)), value: ps.startAt });
+      }
       // a bibliography: its entries as paragraphs of their own, with any text round it in paragraphs before and after
       const isBib = (r: TextRun) => r.obj !== undefined && ['bib', 'toc', 'tof', 'index', 'toa'].includes(t.objects[r.obj]?.kind ?? '');
       if (runs.some(isBib)) {
@@ -433,15 +438,25 @@ class DocxWriter {
    */
   private commentParts(main: string): void {
     let para = 0x10000000;
-    const notes: string[] = [], ex: string[] = [];
-    const note = (id: number, c: { author: string; date: string; text: string }, parent: string | null, done: boolean): string => {
+    const notes: string[] = [], ex: string[] = [], cids: string[] = [], cex: string[] = [];
+    const note = (id: number, c: CommentNote, parent: string | null, done: boolean): string => {
+      // a comment from a Word file whose text wasn't changed here: its paragraphs as Word wrote them (with their formatting)
+      const kept = c.word?.paras?.length && c.word.text === c.text ? c.word.paras : null;
       const lines = c.text.split('\n');
-      const ids = lines.map(() => (para++).toString(16).toUpperCase());
-      const ps = lines.map((line, i) => `<w:p w14:paraId="${ids[i]}" w14:textId="77777777">${i === 0 ? '<w:r><w:annotationRef/></w:r>' : ''}${run('', line)}</w:p>`);
+      const ids = (kept ?? lines).map(() => (para++).toString(16).toUpperCase());
+      const ps = kept ? kept.map((p, i) => p.replace(/^<w:p\b/, `<w:p w14:paraId="${ids[i]}" w14:textId="77777777"`))
+        : lines.map((line, i) => `<w:p w14:paraId="${ids[i]}" w14:textId="77777777">${i === 0 ? '<w:r><w:annotationRef/></w:r>' : ''}${run('', line)}</w:p>`);
       const last = ids[ids.length - 1];
       const date = c.date ? ` w:date="${xml(toWordDate(c.date))}"` : '';
       notes.push(`<w:comment w:id="${id}" w:author="${xml(c.author || 'Author')}"${date} w:initials="${xml(initials(c.author) || 'A')}">${ps.join('')}</w:comment>`);
       ex.push(`<w15:commentEx w15:paraId="${last}"${parent ? ` w15:paraIdParent="${parent}"` : ''} w15:done="${done ? 1 : 0}"/>`);
+      // Word 365's lasting id for the comment, and its time in UTC
+      const did = c.word?.id && /^[0-9A-F]{8}$/i.test(c.word.id) ? c.word.id.toUpperCase() : null;
+      const utc = new Date(c.date);
+      if (did) {
+        cids.push(`<w16cid:commentId w16cid:paraId="${last}" w16cid:durableId="${did}"/>`);
+        if (!isNaN(utc.getTime())) cex.push(`<w16cex:commentExtensible w16cex:durableId="${did}" w16cex:dateUtc="${utc.toISOString().replace(/\.\d+Z$/, 'Z')}"/>`);
+      }
       return last;
     };
     for (const [id, { c, replies }] of this.cmts) {
@@ -453,6 +468,14 @@ class DocxWriter {
     this.pkg.add('word/comments.xml', `${HEAD}<w:comments xmlns:w="${W_NS}" xmlns:w14="${W14_NS}" xmlns:mc="${MC_NS}" mc:Ignorable="w14">${notes.join('')}</w:comments>`, DOCX_CT.comments);
     this.pkg.relate(main, DOCX_REL.commentsExtended, 'commentsExtended.xml');
     this.pkg.add('word/commentsExtended.xml', `${HEAD}<w15:commentsEx xmlns:w15="${W15_NS}" xmlns:mc="${MC_NS}">${ex.join('')}</w15:commentsEx>`, DOCX_CT.commentsExtended);
+    if (cids.length) {
+      this.pkg.relate(main, DOCX_REL.commentsIds, 'commentsIds.xml');
+      this.pkg.add('word/commentsIds.xml', `${HEAD}<w16cid:commentsIds xmlns:w16cid="${W16CID_NS}">${cids.join('')}</w16cid:commentsIds>`, DOCX_CT.commentsIds);
+    }
+    if (cex.length) {
+      this.pkg.relate(main, DOCX_REL.commentsExtensible, 'commentsExtensible.xml');
+      this.pkg.add('word/commentsExtensible.xml', `${HEAD}<w16cex:commentsExtensible xmlns:w16cex="${W16CEX_NS}">${cex.join('')}</w16cex:commentsExtensible>`, DOCX_CT.commentsExtensible);
+    }
   }
 
   private async paragraph(main: string, ps: ParaStyle, runs: TextRun[], listNum: number, index = -1, sectXml = ''): Promise<string> {
@@ -461,7 +484,9 @@ class DocxWriter {
     const pPr: string[] = [];
     if (st.id !== 'Normal') pPr.push(`<w:pStyle w:val="${xml(st.id)}"/>`);
     if (!!ps.keepNext !== st.keepNext) pPr.push(ps.keepNext ? '<w:keepNext/>' : '<w:keepNext w:val="0"/>');
+    if (!!ps.keepLines !== !!st.keepLines) pPr.push(ps.keepLines ? '<w:keepLines/>' : '<w:keepLines w:val="0"/>');
     if (ps.pageBreak) pPr.push('<w:pageBreakBefore/>');
+    if (!!ps.noWidow !== !!st.noWidow) pPr.push(ps.noWidow ? '<w:widowControl w:val="0"/>' : '<w:widowControl/>');
     // Word has no "start a new column" for a paragraph: a column break begins it
     const colBreak = ps.colBreak ? '<w:r><w:br w:type="column"/></w:r>' : '';
     const em = runs.find((r) => r.obj === undefined)?.size ?? st.size;
@@ -737,7 +762,8 @@ class DocxWriter {
           const pPr: string[] = [`<w:pStyle w:val="${style}"/>`];
           const align = p.align ?? 'left';
           if (align !== st.align) pPr.push(`<w:jc w:val="${JC[align]}"/>`);
-          const mark = i === 0 ? `<w:r><w:rPr><w:rStyle w:val="${ref}"/></w:rPr><w:${tag}Ref/></w:r><w:r><w:t xml:space="preserve"> </w:t></w:r>` : '';
+          // the note's number, and the space after it (or what the note had there in Word)
+          const mark = i === 0 ? `<w:r><w:rPr><w:rStyle w:val="${ref}"/></w:rPr><w:${tag}Ref/></w:r>${run('', o.lead ?? ' ')}` : '';
           // its text, and its citations (note styles put them in footnotes)
           const cite = (r: TextRun) => { const c = r.obj !== undefined ? t.objects[r.obj] : undefined; return c?.kind === 'cite' ? c : null; };
           const body = this.linkedRuns(`word/${tag}s.xml`, (runsOf[i] ?? []).filter((r) => r.obj === undefined || cite(r)), (r) => {
@@ -802,6 +828,9 @@ class DocxWriter {
       const name = /\s/.test(o.name) ? `"${o.name}"` : o.name;
       return field(rPr, ` SEQ ${xml(name)} \\* ARABIC \\* CHARFORMAT `, shown);
     }
+    // hidden text kept from a Word file, as it was; a field kept from Word with the result it showed (none: no result)
+    if (o.kind === 'field' && o.code === 'hidden') return run(runProps(r, st, { cs: this.charStyleOf(r), vanish: true }), o.text ?? '');
+    if (o.kind === 'field' && o.code === 'word' && !shown) return markField(fieldInstr(o), rPr);
     if (o.kind === 'field') return field(rPr, xml(fieldInstr(o)), shown);
     if (o.kind === 'ref') {
       const bm = this.bookmarks.get(o.target);
@@ -1231,7 +1260,8 @@ class DocxWriter {
     const L = sec.lines;
     const lines = L ? `<w:lnNumType w:countBy="${Math.max(1, Math.round(L.countBy))}"${L.start !== 1 ? ` w:start="${Math.max(0, Math.round(L.start) - 1)}"` : ''}${L.distance !== undefined ? ` w:distance="${twips(L.distance)}"` : ''} w:restart="${L.restart === 'page' ? 'newPage' : L.restart === 'section' ? 'newSection' : 'continuous'}"/>` : '';
     const numFmt = sec.format !== 'decimal' ? ` w:fmt="${sec.format}"` : '';
-    const start = sec.restart !== undefined ? ` w:start="${Math.round(sec.restart)}"` : '';
+    // (the first section's numbers start at 1 without saying so: a start there would restart them if the document is put inside another)
+    const start = sec.restart !== undefined && !(sec.index === 0 && Math.round(sec.restart) === 1) ? ` w:start="${Math.round(sec.restart)}"` : '';
     return `<w:sectPr>${refs.join('')}<w:pgSz w:w="${twips(pg.w)}" w:h="${twips(pg.h)}"${land ? ' w:orient="landscape"' : ''}/>` +
       `<w:pgMar w:top="${twips(pg.top)}" w:right="${twips(pg.right)}" w:bottom="${twips(pg.bottom)}" w:left="${twips(pg.left)}" w:header="${twips(pg.header)}" w:footer="${twips(pg.footer)}" w:gutter="0"/>` +
       `${t.pageBorder ? pageBordersXml(t.pageBorder) : ''}${lines}${numFmt || start ? `<w:pgNumType${numFmt}${start}/>` : ''}${colsXml(pg)}${titlePg ? '<w:titlePg/>' : ''}<w:docGrid w:linePitch="360"/></w:sectPr>`;
@@ -1308,8 +1338,8 @@ class DocxWriter {
     const t = this.t;
     const normal = styleOf(t, undefined);
     const out: string[] = [HEAD, `<w:styles xmlns:w="${W_NS}">`];
-    out.push(`<w:docDefaults><w:rPrDefault><w:rPr>${fontsXml(normal.font)}<w:sz w:val="${half(normal.size)}"/><w:szCs w:val="${half(normal.size)}"/><w:lang w:val="en-US" w:eastAsia="en-US" w:bidi="ar-SA"/></w:rPr></w:rPrDefault>` +
-      `<w:pPrDefault><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>`);
+    out.push(`<w:docDefaults><w:rPrDefault><w:rPr>${fontsXml(normal.font)}<w:sz w:val="${half(normal.size)}"/><w:szCs w:val="${half(normal.size)}"/><w:lang w:val="${xml(t.lang ?? 'en-US')}" w:eastAsia="en-US" w:bidi="ar-SA"/></w:rPr></w:rPrDefault>` +
+      `<w:pPrDefault><w:pPr><w:widowControl/><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>`);
     const ids = Object.keys(t.styles);
     for (const id of ['Normal', ...ids.filter((k) => k !== 'Normal')]) {
       const s = t.styles[id];
@@ -1383,7 +1413,8 @@ class DocxWriter {
     const out = [HEAD, `<w:numbering xmlns:w="${W_NS}">`];
     for (const [key, abs] of this.abstractNums) out.push(`<w:abstractNum w:abstractNumId="${abs}"><w:multiLevelType w:val="${key === 'b' || key === 'n' ? 'hybridMultilevel' : 'multilevel'}"/>${lvls(key)}</w:abstractNum>`);
     this.nums.forEach((n, k) => {
-      const restart = n.restart ? Array.from({ length: 9 }, (_, i) => `<w:lvlOverride w:ilvl="${i}"><w:startOverride w:val="1"/></w:lvlOverride>`).join('') : '';
+      const over = (i: number, v: number) => `<w:lvlOverride w:ilvl="${i}"><w:startOverride w:val="${v}"/></w:lvlOverride>`;
+      const restart = n.restart ? Array.from({ length: 9 }, (_, i) => over(i, n.at?.level === i ? n.at.value : 1)).join('') : n.at ? over(n.at.level, n.at.value) : '';
       out.push(`<w:num w:numId="${k + 1}"><w:abstractNumId w:val="${n.abs}"/>${restart}</w:num>`);
     });
     out.push('</w:numbering>');
@@ -1452,7 +1483,7 @@ export function highlightName(color: string): string | null {
  * A run's formatting where it differs from its paragraph's style (and its character style, when
  * it is in one: Word then gives it that style, so changing the style in Word changes it too).
  */
-function runProps(r: TextRun, st: NamedStyle, x: { formula?: boolean; pos?: 'base' | 'sub' | 'sup'; cs?: CharStyle }): string {
+function runProps(r: TextRun, st: NamedStyle, x: { formula?: boolean; pos?: 'base' | 'sub' | 'sup'; cs?: CharStyle; vanish?: boolean }): string {
   const out: string[] = [];
   // (a run has one character style in Word: a formula's mark wins)
   const cs = x.formula ? undefined : x.cs;
@@ -1467,6 +1498,8 @@ function runProps(r: TextRun, st: NamedStyle, x: { formula?: boolean; pos?: 'bas
   if (!!r.allCaps !== !!cs?.allCaps) out.push(r.allCaps ? '<w:caps/>' : '<w:caps w:val="0"/>');
   if (!!r.smallCaps !== !!cs?.smallCaps) out.push(r.smallCaps ? '<w:smallCaps/>' : '<w:smallCaps w:val="0"/>');
   if (!!r.strike !== !!cs?.strike) out.push(r.strike ? '<w:strike/>' : '<w:strike w:val="0"/>');
+  if (r.noProof) out.push('<w:noProof/>');
+  if (x.vanish) out.push('<w:vanish/>');
   const color = r.color ?? st.color;
   if ((color ?? '') !== (st.color ?? '')) out.push(`<w:color w:val="${color ? hex6(color) : 'auto'}"/>`);
   // character spacing (twentieths of a point) and kerning taken off
@@ -1481,6 +1514,7 @@ function runProps(r: TextRun, st: NamedStyle, x: { formula?: boolean; pos?: 'bas
   if (r.highlight && !hl) out.push(`<w:shd w:val="clear" w:color="auto" w:fill="${hex6(r.highlight)}"/>`);
   const pos = x.pos ?? (r.sub ? 'sub' : r.sup ? 'sup' : 'base');
   if (pos !== 'base') out.push(`<w:vertAlign w:val="${pos === 'sub' ? 'subscript' : 'superscript'}"/>`);
+  if (r.lang) out.push(`<w:lang w:val="${xml(r.lang)}"/>`);
   out.push(textEffects(r, color));
   return out.join('');
 }
@@ -1575,8 +1609,9 @@ export function paraBorderXml(ps: ParaStyle): string {
 }
 
 /** A field with no result (an index entry, a marked citation): Word keeps it as hidden text. */
-function markField(instr: string): string {
-  return `<w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve">${xml(instr)}</w:instrText></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r>`;
+function markField(instr: string, rPr = ''): string {
+  const pr = rPr ? `<w:rPr>${rPr}</w:rPr>` : '';
+  return `<w:r>${pr}<w:fldChar w:fldCharType="begin"/></w:r><w:r>${pr}<w:instrText xml:space="preserve">${xml(instr)}</w:instrText></w:r><w:r>${pr}<w:fldChar w:fldCharType="end"/></w:r>`;
 }
 
 /**
@@ -1692,7 +1727,9 @@ function styleXml(s: NamedStyle, ids: string[]): string {
       `${s.next && ids.includes(s.next) ? `<w:next w:val="${xml(s.next)}"/>` : ''}<w:uiPriority w:val="${PRIORITY[id] ?? 29}"/><w:qFormat/>`;
   const pPr: string[] = [];
   pPr.push(s.keepNext ? '<w:keepNext/>' : '<w:keepNext w:val="0"/>');
-  pPr.push('<w:widowControl/>');
+  // (widow and orphan control is on for every style, from the document's defaults, unless a style turns it off)
+  if (s.keepLines) pPr.push('<w:keepLines/>');
+  if (s.noWidow) pPr.push('<w:widowControl w:val="0"/>');
   pPr.push(`<w:spacing w:before="${twips(s.spaceBefore)}" w:after="${twips(s.spaceAfter)}" w:line="${Math.round(240 * s.line)}" w:lineRule="auto"/>`);
   pPr.push(`<w:ind w:left="${twips(s.indent)}" ${s.firstLine < 0 ? `w:hanging="${twips(-s.firstLine)}"` : `w:firstLine="${twips(s.firstLine)}"`}/>`);
   pPr.push(`<w:jc w:val="${JC[s.align]}"/>`);

@@ -53,6 +53,9 @@ export interface NamedStyle {
   firstLine: number;
   /** Kept on the page with the next paragraph (headings). */
   keepNext: boolean;
+  /** Its paragraphs' lines kept together on one page, and widow and orphan lines allowed (Word's settings, kept from its files). */
+  keepLines?: boolean;
+  noWidow?: boolean;
   /** The style a new paragraph gets after Enter at the end of one of these (Normal after a heading). */
   next?: string;
   /** A heading's level (1 to 9). */
@@ -395,7 +398,7 @@ export type DocObject =
    * A footnote (or, with `end`, an endnote): its number in the text, and its own text, typed into
    * in place at the bottom of the page (or at the end of the document), as in Word.
    */
-  | { kind: 'note'; end?: boolean; runs: TextRun[]; paras?: ParaStyle[] }
+  | { kind: 'note'; end?: boolean; runs: TextRun[]; paras?: ParaStyle[]; /** From a Word file: what came between its number and its text, when not the one space Word puts there ('' for nothing, a tab). */ lead?: string }
   /** An equation, typed as LaTeX and shown laid out as maths (see math.ts); a Word equation in .docx files. */
   | { kind: 'math'; tex: string }
   /** A field: the date, a document property, the file's name, a page number, a bookmark's text or page (see fields.ts). */
@@ -425,6 +428,8 @@ export type FormType = 'text' | 'check' | 'drop';
 
 export interface DocText extends RichText {
   styles: Record<string, NamedStyle>;
+  /** The language the text is spell-checked in (Word's default w:lang), when not US English. */
+  lang?: string;
   page: PageSetup;
   hf: HeaderFooter;
   objects: Record<number, DocObject>;
@@ -597,28 +602,28 @@ export function paraFromStyle(s: NamedStyle, keep: ParaStyle): ParaStyle {
     align: s.align === 'left' ? undefined : s.align,
     spaceBefore: s.spaceBefore, spaceAfter: s.spaceAfter,
     line: s.line === 1 ? undefined : s.line,
-    indent: s.indent, firstLine: s.firstLine, keepNext: s.keepNext,
+    indent: s.indent, firstLine: s.firstLine, keepNext: s.keepNext, keepLines: s.keepLines, noWidow: s.noWidow,
   });
 }
 
 /** A paragraph's own value of a style setting (as stored: missing means 0, left, single, off). */
-function paraValue(p: ParaStyle, k: 'align' | 'spaceBefore' | 'spaceAfter' | 'line' | 'indent' | 'firstLine' | 'keepNext'): unknown {
+function paraValue(p: ParaStyle, k: (typeof PARA_KEYS)[number]): unknown {
   switch (k) {
     case 'align': return p.align ?? 'left';
     case 'line': return p.line ?? 1;
-    case 'keepNext': return !!p.keepNext;
+    case 'keepNext': case 'keepLines': case 'noWidow': return !!p[k];
     default: return p[k] ?? 0;
   }
 }
 
-const PARA_KEYS = ['align', 'spaceBefore', 'spaceAfter', 'line', 'indent', 'firstLine', 'keepNext'] as const;
+const PARA_KEYS = ['align', 'spaceBefore', 'spaceAfter', 'line', 'indent', 'firstLine', 'keepNext', 'keepLines', 'noWidow'] as const;
 
 /** A paragraph after its style changed from `from` to `to`: what looked like `from` now looks like `to`. */
 export function restylePara(p: ParaStyle, from: NamedStyle, to: NamedStyle): ParaStyle {
   const want = paraFromStyle(to, p);
   const out: ParaStyle = { ...p, style: want.style };
   for (const k of PARA_KEYS) {
-    const fromV = k === 'align' ? from.align : k === 'keepNext' ? from.keepNext : from[k];
+    const fromV = k === 'keepLines' || k === 'noWidow' ? !!from[k] : from[k];
     if (paraValue(p, k) === fromV) (out as Record<string, unknown>)[k] = (want as Record<string, unknown>)[k];
   }
   return cleanPara(out);

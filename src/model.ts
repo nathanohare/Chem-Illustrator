@@ -350,7 +350,10 @@ export interface TextRun {
   spacing?: number;
   /** Slides: a PowerPoint field (slidenum, datetime1…) that PowerPoint fills in; this is the text it last showed. */
   field?: string;
-  /** The text's language (a tag such as de-DE), for spelling, when not US English: kept from PowerPoint. */
+  /**
+   * The text's language (a tag such as de-DE), for spelling, when not US English: kept from
+   * PowerPoint, and from Word (w:lang) where not the document's own language (DocText.lang).
+   */
   lang?: string;
   /** Small capitals: lower-case letters shown as smaller capitals (documents). */
   smallCaps?: boolean;
@@ -371,6 +374,8 @@ export interface TextRun {
   outlineW?: number;
   /** Text effects: a soft drop shadow, down and to the right. */
   shadow?: boolean;
+  /** Documents: not spell- or grammar-checked (Word's Do not check spelling or grammar: chemical names, citations). */
+  noProof?: boolean;
   /**
    * Which font a ChemDraw file had the run's signs in: true for its Symbol font (•, ° stay in it,
    * though Arial has them), false for an ordinary font (a − stays in Arial, though Symbol has it).
@@ -459,6 +464,10 @@ export interface ParaStyle {
   line?: number;
   /** Documents: kept on the same page as the paragraph after it (headings). */
   keepNext?: boolean;
+  /** Documents: its lines kept together on one page (Word's Keep lines together). */
+  keepLines?: boolean;
+  /** Documents: a single first or last line may be left on a page by itself (Word's Widow/Orphan control off). */
+  noWidow?: boolean;
   /** Documents: indent from the right margin, in points. */
   indentRight?: number;
   /** Documents: line spacing in points instead of a multiple: exactly this, or at least this. */
@@ -483,7 +492,11 @@ export interface ParaStyle {
   bullet?: string;
   /** Slides: a numbered item's numbering as PowerPoint's (its buAutoNum type, such as alphaUcParenR), in place of its level's. */
   numType?: string;
-  /** Slides: the number a numbered list starts at (PowerPoint's Start at), when not 1. */
+  /**
+   * The number a numbered list starts at (PowerPoint's Start at, Word's Set Numbering Value), when
+   * not 1. In a document it may also stand further on in a list, where Word's numbers start again
+   * (Restart Numbering): an item whose startAt the item before it at its level doesn't share.
+   */
   startAt?: number;
   /**
    * Documents: lines round the paragraph (Home > Borders), as Word's paragraph borders. Paragraphs
