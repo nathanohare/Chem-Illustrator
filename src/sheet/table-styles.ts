@@ -24,6 +24,13 @@ export interface TableDef {
   lastCol?: boolean;
   /** Our own colours over the style's. */
   custom?: { header?: string; headerText?: string; band?: string };
+  /**
+   * The columns as Excel's file named them (a table without a header row has its names only
+   * there), with each calculated column's formula as its element, kept to save back.
+   */
+  columns?: { name: string; calc?: string }[];
+  /** The sort Excel remembers for the table (its sortState element), kept to save back. */
+  sortState?: string;
 }
 
 /** The Office colours a style family is made in: none (black and greys), then accents 1 to 6. */
@@ -173,12 +180,13 @@ export function newTable(range: Range, existing: TableDef[], style = DEFAULT_TAB
 
 /**
  * Header names Excel accepts: every header filled and different (Excel requires both). Blank
- * ones become Column1, Column2…, repeats get a number added.
+ * ones become Column1, Column2…, repeats get a number added. Others stay exactly as they are
+ * (spaces and line breaks too), as formulas name them that way.
  */
 export function tableColumnNames(headers: string[]): string[] {
   const seen = new Set<string>();
   return headers.map((h, i) => {
-    let name = h.replace(/[\r\n]+/g, ' ').trim() || `Column${i + 1}`;
+    let name = h.trim() ? h : `Column${i + 1}`;
     if (seen.has(name.toLowerCase())) {
       let k = 2;
       while (seen.has(`${name}${k}`.toLowerCase())) k++;

@@ -126,3 +126,54 @@ describe('protection (X10)', () => {
     expect(part(again, 'xl/workbook.xml')).toContain('lockStructure="1"');
   });
 });
+
+describe('tables (X11)', () => {
+  const TABLE_CT = 'application/vnd.openxmlformats-officedocument.spreadsheetml.table+xml';
+  const file = () => excelBook([
+    ['Members', '<sheetData>' +
+      '<row r="1"><c r="A1" t="s"><v>0</v></c><c r="B1" t="s"><v>1</v></c><c r="C1" t="s"><v>2</v></c></row>' +
+      '<row r="2"><c r="A2" t="s"><v>3</v></c><c r="B2"><v>4</v></c><c r="C2" t="str"><f>Member_Data[[#This Row],[Gender ]]&amp;"!"</f><v>F!</v></c></row>' +
+      '<row r="5"><c r="E5"><v>99</v></c></row>' +
+      '</sheetData><tableParts count="2"><tablePart r:id="rId1"/><tablePart r:id="rId2"/></tableParts>'],
+  ], {
+    parts: [
+      { path: 'xl/sharedStrings.xml', xml: `<sst xmlns="${MAIN}"><si><t xml:space="preserve">Gender </t></si><si><t xml:space="preserve">Handle
+Bars</t></si><si><t>Shout</t></si><si><t>F</t></si></sst>`, rel: `${R}/sharedStrings` },
+      { path: 'xl/tables/table1.xml', type: TABLE_CT, from: 'xl/worksheets/sheet1.xml', rel: `${R}/table`,
+        xml: `<table xmlns="${MAIN}" id="1" name="Member_Data" displayName="Member_Data" ref="A1:C2" totalsRowShown="0"><autoFilter ref="A1:C2"/>` +
+          '<sortState ref="A2:C2"><sortCondition descending="1" ref="B2:B2"/></sortState>' +
+          '<tableColumns count="3"><tableColumn id="1" name="Gender "/><tableColumn id="2" name="Handle_x000a_Bars"/>' +
+          '<tableColumn id="3" name="Shout"><calculatedColumnFormula>Member_Data[[#This Row],[Gender ]]&amp;"!"</calculatedColumnFormula></tableColumn></tableColumns>' +
+          '<tableStyleInfo name="TableStyleMedium2" showFirstColumn="0" showLastColumn="0" showRowStripes="1" showColumnStripes="0"/></table>' },
+      { path: 'xl/tables/table2.xml', type: TABLE_CT, from: 'xl/worksheets/sheet1.xml', rel: `${R}/table`,
+        xml: `<table xmlns="${MAIN}" id="2" name="Single" displayName="Single" ref="E5" headerRowCount="0" totalsRowShown="0">` +
+          '<tableColumns count="1"><tableColumn id="1" name="Amount"/></tableColumns><tableStyleInfo name="TableStyleMedium2" showRowStripes="1"/></table>' },
+    ],
+  });
+
+  it('keeps a table without a header row as one, with its first row as data', async () => {
+    const { book } = await readXlsx(file());
+    expect(book.sheet.tables[1]).toMatchObject({ name: 'Single', header: false });
+    const saved = await writeXlsx(book, pictures);
+    const sheet = part(saved, 'xl/worksheets/sheet1.xml');
+    expect(cellXml(sheet, 'E5')).toBe('<c r="E5"><v>99</v></c>');
+    const t2 = part(saved, 'xl/tables/table2.xml');
+    expect(t2).toContain('ref="E5" headerRowCount="0" totalsRowShown="0">');
+    expect(t2).toContain('<tableColumn id="1" name="Amount"/>');
+    expect(t2).not.toContain('autoFilter');
+    expect((await readXlsx(saved)).book.sheet.tables[1].header).toBe(false);
+  });
+
+  it('names columns exactly as their header cells, and keeps calculated columns and the sort', async () => {
+    const { book } = await readXlsx(file());
+    const saved = await writeXlsx(book, pictures);
+    const t1 = part(saved, 'xl/tables/table1.xml');
+    expect(t1).toContain('<tableColumn id="1" name="Gender "/><tableColumn id="2" name="Handle_x000a_Bars"/>' +
+      '<tableColumn id="3" name="Shout"><calculatedColumnFormula>Member_Data[[#This Row],[Gender ]]&amp;&quot;!&quot;</calculatedColumnFormula></tableColumn>');
+    expect(t1).toContain('<autoFilter ref="A1:C2"></autoFilter><sortState ref="A2:C2"><sortCondition descending="1" ref="B2:B2"/></sortState><tableColumns');
+    // the header cells as they were
+    const strings = part(saved, 'xl/sharedStrings.xml');
+    expect(strings).toContain('<t xml:space="preserve">Gender </t>');
+    expect(strings).toContain('<t xml:space="preserve">Handle\nBars</t>');
+  });
+});

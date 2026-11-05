@@ -564,11 +564,12 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
     const headerName = new Map<number, string>();
     const tableNames = new Map<TableDef, string[]>();
     for (const t of s.tables) {
+      // (a table without a header row has its names only in its part: its first row is data)
       const heads: string[] = [];
-      for (let c = t.range.c1; c <= t.range.c2; c++) heads.push(s.shownText(t.range.r1, c));
+      for (let c = t.range.c1; c <= t.range.c2; c++) heads.push(t.header ? s.shownText(t.range.r1, c) : t.columns?.[c - t.range.c1]?.name ?? '');
       const names = tableColumnNames(heads);
       tableNames.set(t, names);
-      names.forEach((n, i) => headerName.set(keyOf(t.range.r1, t.range.c1 + i), n));
+      if (t.header) names.forEach((n, i) => headerName.set(keyOf(t.range.r1, t.range.c1 + i), n));
     }
     for (const [c, st] of s.colStyles) if (st.chem) ms.chemCols.push(c);
 
