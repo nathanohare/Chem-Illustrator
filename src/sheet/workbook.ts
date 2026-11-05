@@ -306,7 +306,7 @@ function patchStyleWith(s: CellStyle | undefined, patch: Partial<CellStyle>): Ce
 
 // ---------------------------------------------------------------- history
 
-type MapField = 'cells' | 'colWidths' | 'rowHeights' | 'colDefs' | 'colStyles' | 'hiddenRows' | 'hiddenCols' | 'notes' | 'rowLevels' | 'colLevels';
+type MapField = 'cells' | 'colWidths' | 'rowHeights' | 'fittedRows' | 'colDefs' | 'colStyles' | 'hiddenRows' | 'hiddenCols' | 'notes' | 'rowLevels' | 'colLevels';
 type ValueField = 'merges' | 'filter' | 'frozen' | 'split' | 'name' | 'condFormats' | 'tables' | 'charts' | 'dashboard' | 'validations' | 'objects' | 'pageSetup' | 'dataTables' | 'pivots'
   | 'sparklines' | 'viewOpts' | 'outline';
 const VALUE_FIELDS = new Set<string>(['merges', 'filter', 'frozen', 'split', 'name', 'condFormats', 'tables', 'charts', 'dashboard', 'validations', 'objects', 'pageSetup', 'dataTables', 'pivots', 'sparklines', 'viewOpts', 'outline']);
@@ -340,12 +340,21 @@ export class Sheet {
   codeName?: string;
   /** What an Excel file said about the sheet that only Excel uses (protection, its tab's colour…), kept to save back. */
   excel?: ExcelSheetKept;
-  /** The height in points an Excel file gave rows with none of their own (set by hand when `custom`), saved back with it. */
-  fileRowHeight?: { pt: number; custom?: true };
+  /**
+   * The height in points an Excel file gave rows with none of their own (set by hand when `custom`),
+   * saved back with it; `zero`: rows the file doesn't list are hidden (Excel's zeroHeight, for a sheet
+   * with everything below its table hidden).
+   */
+  fileRowHeight?: { pt: number; custom?: true; zero?: true };
   cells = new Map<number, Cell>();
   /** Column widths and row heights set by hand, in pixels at 100% zoom. */
   colWidths = new Map<number, number>();
   rowHeights = new Map<number, number>();
+  /**
+   * Heights Excel fitted rows to itself (a height without customHeight: wrapped text, a bigger font),
+   * in pixels, shown and saved back while nothing in the row changes and nothing here fits it.
+   */
+  fittedRows = new Map<number, number>();
   /** Formatting for whole columns (new cells in them start with it). */
   colStyles = new Map<number, CellStyle>();
   /** Property columns. */
@@ -597,6 +606,8 @@ export class Sheet {
     const next = isBlankCell(cell) && !plain ? undefined : cell;
     if (sameCell(this.cell(row, col), next)) return;
     this.put('cells', this.cells, keyOf(row, col), next);
+    // Excel's fit was for what the row held: from now on the row fits what it holds here
+    if (this.fittedRows.has(row)) this.put('fittedRows', this.fittedRows, row, undefined);
     // the used area grows straight away (recalc works it out exactly), so later steps of the same edit reach this cell
     if (next) { this.lastRow = Math.max(this.lastRow, row); this.lastCol = Math.max(this.lastCol, col); }
   }
@@ -687,6 +698,13 @@ export class Sheet {
 
   setRowHeight(row: number, px: number | undefined): void {
     this.put('rowHeights', this.rowHeights, row, px === undefined ? undefined : Math.max(0, Math.round(px)));
+    // a height set here (or AutoFit) takes the place of the one Excel fitted
+    if (this.fittedRows.has(row)) this.put('fittedRows', this.fittedRows, row, undefined);
+  }
+
+  /** A height Excel fitted the row to (pixels), from a file; undefined takes it off. */
+  setFittedRow(row: number, px: number | undefined): void {
+    this.put('fittedRows', this.fittedRows, row, px === undefined ? undefined : Math.max(0, Math.round(px)));
   }
 
   setColDef(col: number, def: ColumnDef | undefined): void {
@@ -996,6 +1014,7 @@ export class Sheet {
       }
     };
     shiftMap('rowHeights', this.rowHeights, axis === 'row');
+    shiftMap('fittedRows', this.fittedRows, axis === 'row');
     shiftMap('hiddenRows', this.hiddenRows, axis === 'row');
     shiftMap('colWidths', this.colWidths, axis === 'col');
     shiftMap('hiddenCols', this.hiddenCols, axis === 'col');
@@ -1259,7 +1278,7 @@ const READER_COLS = 1 << 15;
 const RUNNING_MAX = 4_000_000;
 
 /** Changes that leave every value as it was. */
-const NO_VALUES = new Set<string>(['colWidths', 'rowHeights', 'colStyles', 'hiddenRows', 'hiddenCols', 'merges', 'filter', 'frozen', 'split', 'condFormats', 'tables', 'charts', 'dashboard', 'notes', 'validations', 'objects', 'pageSetup', 'pivots',
+const NO_VALUES = new Set<string>(['colWidths', 'rowHeights', 'fittedRows', 'colStyles', 'hiddenRows', 'hiddenCols', 'merges', 'filter', 'frozen', 'split', 'condFormats', 'tables', 'charts', 'dashboard', 'notes', 'validations', 'objects', 'pageSetup', 'pivots',
   'rowLevels', 'colLevels', 'sparklines', 'viewOpts', 'outline', 'theme', 'customViews', 'queries', 'drawingStyle']);
 
 const isFormulaText = (t: string | undefined): boolean => !!t && t.startsWith('=') && t.length > 1;

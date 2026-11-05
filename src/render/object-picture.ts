@@ -75,7 +75,7 @@ export function cellsPicture(book: Workbook): ObjectPicture | null {
   const rows = Math.min(used.r2, MAX_ROWS - 1) + 1, cols = Math.min(used.c2, MAX_COLS - 1) + 1;
   const xs = [0], ys = [0];
   for (let c = 0; c < cols; c++) xs.push(xs[c] + (s.hiddenCols.has(c) ? 0 : s.colWidths.get(c) ?? COL_PX));
-  for (let r = 0; r < rows; r++) ys.push(ys[r] + (s.hiddenRows.has(r) ? 0 : s.rowHeights.get(r) ?? ROW_PX));
+  for (let r = 0; r < rows; r++) ys.push(ys[r] + (s.hiddenRows.has(r) ? 0 : s.rowHeights.get(r) ?? s.fittedRows.get(r) ?? ROW_PX));
   const W = xs[cols], H = ys[rows];
   if (W <= 0 || H <= 0) return null;
   const out: string[] = [`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}"><rect width="${W}" height="${H}" fill="#fff"/>`];
