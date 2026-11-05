@@ -23,6 +23,7 @@ import { fieldInstr } from '../document/fields';
 import type { DocStyle } from '../style';
 import * as rt from '../richtext';
 import { Package, REL, NS, xml, xmlAttr, hex6, emu, MediaFiles, bytesHash, structureAltText } from './ooxml';
+import { fragment, wordTablePrint } from './native-print';
 import { contentsAlt } from '../accessibility';
 import { THEMES, THEME_COLORS, THEME_FONTS, type DocDesign } from '../document/themes';
 import { DEFAULT_THEME, type WorkbookTheme } from '../sheet/themes';
@@ -882,8 +883,9 @@ class DocxWriter {
   private chartNo = 0;
   private async chart(main: string, id: number, o: Extract<DocObject, { kind: 'picture' }>, box: ChartBox, rPr: string): Promise<string> {
     const size = shownSize({ w: o.w, h: o.h }, o.scale ?? 1, this.textW);
-    const rid = await addChart(this.pkg, main, 'word', ++this.chartNo, box, size.w, size.h);
+    const { rid, print } = await addChart(this.pkg, main, 'word', ++this.chartNo, box, size.w, size.h);
     (this.model.charts ??= {})[id] = box;
+    if (print) (this.model.chartPrints ??= {})[id] = print;
     const n = this.docPr++;
     const ex = isChartEx(box.chart.kind);
     const uri = ex ? CX_NS : C_NS;
@@ -1047,7 +1049,8 @@ class DocxWriter {
     const style = this.t.drawingStyle;
     const size = tab.size ?? style.captionSize;
     const font = style.captionFont || 'Arial';
-    this.model.tables[id] = { table: tab, text: tableText(tab) };
+    const entry: DocxModel['tables'][number] = { table: tab, text: tableText(tab) };
+    this.model.tables[id] = entry;
     const lw = Math.max(2, Math.min(96, Math.round(style.lineWidth * 8)));
     const line = `w:val="single" w:sz="${lw}" w:space="0" w:color="000000"`;
     const none = 'w:val="nil"';
@@ -1088,7 +1091,11 @@ class DocxWriter {
     });
     const titlePara = tab.title?.length ? cellPara(tab.title, undefined, 'left') : '';
     const notesPara = tab.notes?.length ? cellPara(tab.notes, undefined, 'left', 0.8) : '';
-    return `${titlePara}<w:tbl>${tblPr}${grid}${rows.join('')}</w:tbl>${notesPara}`;
+    const tbl = `<w:tbl>${tblPr}${grid}${rows.join('')}</w:tbl>`;
+    // with a print of how its text looks as written, to tell whether Word changed it (native-print.ts)
+    const el = fragment(tbl);
+    if (el) entry.pr = wordTablePrint(el);
+    return `${titlePara}${tbl}${notesPara}`;
   }
 
   /**

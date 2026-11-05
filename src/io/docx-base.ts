@@ -113,8 +113,12 @@ export interface DocxModel {
   drawings: Record<number, { contents: Contents; w: number; h: number; png?: string; alt?: string; /** A figure's area (Insert > Figure): the picture is of all of it. */ frame?: FigureFrame }>;
   /** Each shape's library outline (Insert > Shapes in a document), by its id ("Shape 3"): Word keeps those without a preset as custom shapes. */
   geos?: Record<number, string>;
-  /** Each table by its id, with its text (used when the text is the same in the file). */
-  tables: Record<number, { table: TableData; text: string }>;
+  /**
+   * Each table by its id, with its text (used when the text is the same in the file) and the print
+   * of the table as written (native-print.ts: in files with one, used only while the text also
+   * looks the same).
+   */
+  tables: Record<number, { table: TableData; text: string; pr?: string }>;
   /** The document's references and citation style (citations are ADDIN fields naming them). */
   references?: Reference[];
   citeStyle?: CiteStyle;
@@ -125,6 +129,8 @@ export interface DocxModel {
   bibliographies?: Record<number, { text: string; ps: ParaStyle }>;
   /** Each chart by its id, as made here (used when Word's copy charts the same numbers). */
   charts?: Record<number, ChartBox>;
+  /** Each chart's print as written (native-print.ts): Word's copy is still ours while it has the same type and look. */
+  chartPrints?: Record<number, string>;
   /** How near a colour Remove Background takes, for each picture by its id ("Picture 4"), which Word has no place for. */
   pictureTol?: Record<number, number>;
   /** Design's theme, style set and paragraph spacing, by name. */

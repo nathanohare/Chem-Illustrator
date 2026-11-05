@@ -41,6 +41,7 @@ import { coveringCell, layoutTable } from '../table';
 import { chemdrawCdx, isChemDraw, readEmbedded } from './ole-object';
 import { cmtIds, cmtString, type CommentNote, type CommentThread } from '../document/comments';
 import { BIB_MARK, CHART_NAME, CITE_FIELD, WORD_HIGHLIGHTS, DOCX_REL, W14_NS, W15_NS, W16CID_NS, W16CEX_NS, fromWordDate, DRAWING_NAME, FORMULA_STYLE, MODEL_NS, TABLE_NAME, W_NS, type DocxModel } from './docx-base';
+import { wordTablePrint } from './native-print';
 import { citationNumbers, cleanRef, type Piece as BibPiece, type Reference } from '../document/references';
 import { bibFieldApp, placeRef, readCiteField, readMendeleyTag, styleFromCsl, zoteroStyleOf, MANAGERS, type CiteLive, type CiteManager, type ManagerCite } from '../document/live-cites';
 import { retypedDiagram } from '../design/diagrams';
@@ -1883,7 +1884,9 @@ class DocxReader {
       if (!got) { this.warn('shapes'); return; }
       const mine = new RegExp(`^${CHART_NAME} (\\d+)$`).exec(name);
       const kept = mine ? this.model?.charts?.[Number(mine[1])] : undefined;
-      const chosen = sizedBox(kept && sameBoxData(kept, got.box) ? freshBox(kept) : got.box, shown.w, shown.h);
+      // (and, in files with its print, still the same type with the same look: not changed in Word)
+      const print = mine ? this.model?.chartPrints?.[Number(mine[1])] : undefined;
+      const chosen = sizedBox(kept && sameBoxData(kept, got.box) && (typeof print !== 'string' || print === got.print) ? freshBox(kept) : got.box, shown.w, shown.h);
       if (chosen === got.box && got.partial) this.warn('chartParts');
       const float = box.localName === 'anchor' ? this.floatOf(box, null, shown.w) : null;
       this.emitObject(ctx, { kind: 'picture', src: chartBoxPng(chosen, shown.w, shown.h), w: round(shown.w), h: round(shown.h), px: { w: chosen.chart.w, h: chosen.chart.h }, chart: chosen, ...(float ? { float } : {}), ...alt }, r);
@@ -2046,7 +2049,7 @@ class DocxReader {
     const rows = kids(tbl, 'tr');
     let cols = kids(kid(tbl, 'tblGrid'), 'gridCol').map((g) => this.tw(g, 'w') ?? 0);
     // the cells, each with how many grid columns it spans
-    type Cell = { cell: TableCell; span: number; vmerge: boolean; borders: Element | null };
+    type Cell = { cell: TableCell; span: number; vmerge: boolean; borders: Element | null; fill?: string };
     const grid: Cell[][] = [];
     let head = 0, counting = true;
     for (const tr of rows) {
@@ -2062,7 +2065,8 @@ class DocxReader {
         const vm = kid(tcPr, 'vMerge');
         const vmerge = !!vm && this.a(vm) !== 'restart';
         if (vmerge) this.warn('vmerge');
-        row.push({ cell: vmerge ? { runs: [] } : this.cellText(tc), span, vmerge, borders: kid(tcPr, 'tcBorders') });
+        const shd = kid(tcPr, 'shd')?.getAttributeNS(W_NS, 'fill');
+        row.push({ cell: vmerge ? { runs: [] } : this.cellText(tc), span, vmerge, borders: kid(tcPr, 'tcBorders'), ...(shd && /^[0-9a-f]{6}$/i.test(shd) ? { fill: `#${shd.toLowerCase()}` } : {}) });
       }
       grid.push(row);
     }
@@ -2074,10 +2078,15 @@ class DocxReader {
     }
     cols = cols.map((w) => round(Math.max(6, w)));
     const table: TableData = { cols, rows: [], head: 0, lines: 'none' };
+    // each cell's shading, by its place (used only for our own tables shaded in Word)
+    const shades: (string | undefined)[][] = [];
     for (const row of grid) {
       const out: TableCell[] = [];
+      const shade: (string | undefined)[] = [];
+      shades.push(shade);
       for (const c of row) {
         if (out.length >= cols.length) break;
+        shade[out.length] = c.fill;
         out.push(c.span > 1 ? { ...c.cell, span: Math.min(c.span, cols.length - out.length) } : c.cell);
         for (let k = 1; k < c.span && out.length < cols.length; k++) out.push({ runs: [] });
       }
@@ -2129,6 +2138,22 @@ class DocxReader {
     let final = table;
     if (mine?.table && mine.text === tableText(table)) {
       final = structuredClone(mine.table);
+      // its text bolded, coloured, resized or shaded in Word (its words the same; files with a
+      // print only): Word's text and lines in our table
+      if (typeof mine.pr === 'string' && mine.pr !== wordTablePrint(tbl) && final.rows.length === table.rows.length && final.cols.length === table.cols.length) {
+        final.rows = final.rows.map((row, ri) => row.map((c, ci) => {
+          const theirs = table.rows[ri][ci];
+          const out: TableCell = { ...c, runs: theirs.runs };
+          if (theirs.paras) out.paras = theirs.paras; else delete out.paras;
+          const align = theirs.align ?? table.align?.[ci];
+          if (align && align !== (final.align?.[ci] ?? 'left')) out.align = align; else delete out.align;
+          const fill = shades[ri]?.[ci];
+          if (fill) out.fill = fill;
+          return out;
+        }));
+        final.size = table.size;
+        final.lines = table.lines;
+      }
       // its title was written just before it as a paragraph, and its notes just after
       const title = final.title?.length ? rt.plainText(final.title) : null;
       const prev = this.out[this.out.length - 1];

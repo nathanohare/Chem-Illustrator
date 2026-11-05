@@ -58,6 +58,8 @@ import { freshBox, sameBoxData, sizedBox, type ChartBox } from '../sheet/chart-b
 import { chartBoxPng } from '../render/chart-box-paint';
 import { canvasTag, readCanvasTag, withCameraMoves, type CanvasData } from '../deck/canvas';
 import { slidePrint, type CanvasKeep } from '../deck/canvas-export';
+import { textPrint, spPrPrint, slideTablePrint } from './native-print';
+import { applyStyle, sliceRuns } from '../richtext';
 import { cleanDeckRefs, cleanSlideRefs, type DeckRefs, type SlideRefs } from '../deck/slide-refs';
 
 /** PowerPoint's shapes that are shapes in the library, by PowerPoint's name. */
@@ -1243,7 +1245,10 @@ class Reader {
   }
   private oleCount = 0;
 
-  /** A chart: PowerPoint's own (its numbers from what PowerPoint cached), or ours when it charts the same numbers. */
+  /**
+   * A chart: PowerPoint's own (its numbers from what PowerPoint cached), or ours when it charts the
+   * same numbers and (in files with its print) is still the same type, with the same look.
+   */
   private chart(s: Part, el: Element, data: Element, t: Xf, doc: Doc): void {
     const box = boxOf(kid(el, 'xfrm'), t);
     const ref = kid(data, 'chart');
@@ -1252,12 +1257,15 @@ class Reader {
     const w = box.x2 - box.x1, h = box.y2 - box.y1;
     const got = readChart(this.r, path, w, h);
     if (!got) { this.warnings.add('Some charts could not be read and were left out.'); return; }
-    let kept: ChartBox | null = null;
+    let kept: (ChartBox & { pr?: unknown }) | null = null;
     try {
       const tag = this.tagsOf(s.path, kid(el, 'nvGraphicFramePr', 'nvPr'))[TAG.chart];
       kept = tag ? JSON.parse(tag) as ChartBox : null;
     } catch { kept = null; }
-    const chosen = sizedBox(kept?.chart && Array.isArray(kept.cells) && sameBoxData(kept, got.box) ? freshBox(kept) : got.box, w, h);
+    const pr = kept?.pr;
+    if (kept) delete kept.pr;
+    const ours = kept?.chart && Array.isArray(kept.cells) && sameBoxData(kept, got.box) && (typeof pr !== 'string' || pr === got.print);
+    const chosen = sizedBox(ours ? freshBox(kept!) : got.box, w, h);
     if (chosen === got.box && got.partial) this.warnings.add('Some charts mix chart types (a line over columns, a second axis): they show as one type.');
     const alt = kid(el, 'nvGraphicFramePr', 'cNvPr')?.getAttribute('descr')?.trim();
     doc.addShape({ kind: 'picture', x1: box.x1, y1: box.y1, x2: box.x2, y2: box.y2, src: chartBoxPng(chosen, w, h), px: { w: chosen.chart.w, h: chosen.chart.h }, chart: chosen, ...(alt ? { alt } : {}) });
@@ -1646,7 +1654,7 @@ class Reader {
     const vert = kid(sp, 'txBody', 'bodyPr')?.getAttribute('vert');
     const quarter = vert === 'vert' || vert === 'eaVert' ? 90 : vert === 'vert270' ? -90 : 0;
     const tbox = quarter ? { ...box, ...swapBox(box), rot: box.rot + quarter } : box;
-    let c = this.ourText(tags[TAG.text], sp, tbox) ?? turned(this.text(sp, tbox, ph, from), tbox);
+    let c = this.ourText(tags[TAG.text], sp, tbox, ph, from) ?? turned(this.text(sp, tbox, ph, from), tbox);
     if (c && quarter) c = { ...c, dir: quarter > 0 ? 'vert' : 'vert270' };
     // a table's title or footnotes, saved here as a text box beside it
     const part = (() => {
@@ -1676,11 +1684,21 @@ class Reader {
   private ourConnector(s: Part, el: Element, t: Xf, doc: Doc): boolean {
     const tag = this.tagsOf(s.path, kid(el, el.localName === 'sp' ? 'nvSpPr' : 'nvCxnSpPr', 'nvPr'))[TAG.connector];
     if (!tag) return false;
-    let saved: { a?: Omit<Arrow, 'id'> } | null;
+    let saved: { a?: Omit<Arrow, 'id'>; pr?: unknown } | null;
     try { saved = JSON.parse(tag); } catch { return false; }
     const a = saved?.a;
     if (!a || !a.tail || !a.head) return false;
     const arrow: Omit<Arrow, 'id'> = { ...a };
+    // its line recoloured, made thicker or dashed in PowerPoint (in files with a print of the line
+    // as written: native-print.ts): PowerPoint's colour, width and dashes
+    const spPr = kid(el, 'spPr');
+    if (typeof saved?.pr === 'string' && saved.pr !== spPrPrint(spPr, 'look')) {
+      const look = this.look(el, spPr);
+      if (look.line && look.line.toLowerCase() !== '#000000') arrow.color = look.line; else delete arrow.color;
+      if (Math.abs(look.width - doc.style.lineWidth) > 0.05) arrow.lineWidth = +look.width.toFixed(2); else delete arrow.lineWidth;
+      if (look.dashed || look.dotted) arrow.line = 'dashed';
+      else if (arrow.line === 'dashed') arrow.line = 'solid';
+    }
     // a straight one moved in PowerPoint goes where it is now
     const box = boxOf(kid(kid(el, 'spPr'), 'xfrm'), t);
     if (box && a.sweep && !a.elbow) {
@@ -1715,7 +1733,7 @@ class Reader {
   }
 
   private geoShape(sp: Element, spPr: Element | null, prst: string, box: Rect & { rot: number }, tag: string | undefined, doc: Doc, from: string): boolean {
-    let saved: { s: Partial<Shape>; plain: string } | null = null;
+    let saved: { s: Partial<Shape>; plain: string; sid?: unknown; pr?: { g?: unknown; l?: unknown; t?: unknown } } | null = null;
     try { saved = tag ? JSON.parse(tag) : null; } catch { saved = null; }
     const where = { x1: box.x1, y1: box.y1, x2: box.x2, y2: box.y2, rot: turn(box).rot };
     const now = this.plain(sp);
@@ -1733,54 +1751,82 @@ class Reader {
       const transparency = was?.transparency ?? (amt ? +(1 - Number(amt) / 100000).toFixed(3) : 0);
       return { src: pic.src, px: pic.px, ...(transparency ? { transparency } : {}) };
     };
+    // PowerPoint's own shape, from its markup (as `outline` when PowerPoint's isn't one of ours)
+    const native = (outline?: string): Omit<Shape, 'id'> | null => {
+      const geo = GEO_BY_PRST.get(prst) ?? outline;
+      if (!geo) return null;
+      const look = this.look(sp, spPr);
+      const sh: Omit<Shape, 'id'> = { kind: 'geo', geo, ...where, color: look.line ?? look.fill ?? '#000000' };
+      // an action button, or any shape with an action on a click
+      const click = this.hlinkOf(kid(sp, 'nvSpPr', 'cNvPr', 'hlinkClick'));
+      if (click) sh.link = click;
+      if (look.fill) { sh.filled = true; sh.fillColor = look.fill; }
+      const clear = look.fill ? fillClear(spPr) : 0;
+      if (clear) sh.transparency = clear;
+      const grad = kid(spPr, 'gradFill');
+      const stops = grad ? kids(kid(grad, 'gsLst'), 'gs').sort((a, b) => Number(a.getAttribute('pos') ?? 0) - Number(b.getAttribute('pos') ?? 0)) : [];
+      if (grad && stops.length >= 2) {
+        // a gradient: its first and last colours, across at its angle or out from the middle
+        sh.fill = 'gradient';
+        sh.fillColor = this.color(stops[0]) ?? sh.fillColor;
+        sh.fill2 = this.color(stops[stops.length - 1]) ?? '#ffffff';
+        const lin = kid(grad, 'lin');
+        if (kid(grad, 'path')) sh.gradRadial = true;
+        else sh.gradAngle = Math.round(Number(lin?.getAttribute('ang') ?? 5400000) / 60000) % 360;
+      } else if (look.shaded) sh.fill = 'shaded';
+      const pf = picFill();
+      if (pf) sh.picFill = pf;
+      Object.assign(sh, this.effects(spPr));
+      sh.lineWidth = look.line ? +look.width.toFixed(2) : 0;
+      if (look.dashed) sh.dashed = true;
+      const t = theirText();
+      if (t) {
+        sh.text = t;
+        const c = this.text(sp, box, null, []);
+        if (c?.justify && c.justify !== 'center') sh.textAlign = c.justify;
+        const anchor = kid(sp, 'txBody', 'bodyPr')?.getAttribute('anchor');
+        if (!anchor || anchor === 't') sh.textValign = 'top';
+        else if (anchor === 'b') sh.textValign = 'bottom';
+      }
+      return sh;
+    };
+    // a shape saved here, as saved, with what PowerPoint has changed (when the file has prints of
+    // it as written: see native-print.ts) taken from PowerPoint
     if (saved?.s && saved.s.kind === 'geo') {
-      const sh = { ...saved.s, ...where, kind: 'geo' } as Omit<Shape, 'id'>;
-      const pf = picFill(sh.picFill);
-      if (pf) sh.picFill = pf; else delete sh.picFill;
-      if (now !== saved.plain) {
-        const t = theirText();
-        if (t) sh.text = t; else delete sh.text;
+      const pr = saved.pr && typeof saved.pr === 'object' ? saved.pr : null;
+      const sid = saved.sid;
+      // changed to another shape in PowerPoint (Change Shape): PowerPoint's shape (a shape not in
+      // the library: read as PowerPoint's shapes are, with a warning)
+      const reshaped = typeof pr?.g === 'string' && pr.g !== spPrPrint(spPr, 'geom');
+      let sh: Omit<Shape, 'id'> | null = reshaped ? native() : null;
+      if (reshaped && !sh) return false;
+      if (!sh) {
+        sh = { ...saved.s, ...where, kind: 'geo' } as Omit<Shape, 'id'>;
+        // its fill, outline or effects changed in PowerPoint: PowerPoint's look, the rest as saved
+        const theirs = typeof pr?.l === 'string' && pr.l !== spPrPrint(spPr, 'look', kid(sp, 'style')) ? native(saved.s.geo) : null;
+        if (theirs) {
+          const out = sh as Record<string, unknown>, from = theirs as Record<string, unknown>;
+          for (const k of GEO_LOOK_KEYS) { delete out[k]; if (from[k] !== undefined) out[k] = from[k]; }
+        }
+        const pf = picFill(sh.picFill);
+        if (pf) sh.picFill = pf; else delete sh.picFill;
+        if (now !== saved.plain || (typeof pr?.t === 'string' && pr.t !== textPrint(kid(sp, 'txBody')))) {
+          const t = theirText();
+          if (t) sh.text = t; else delete sh.text;
+        }
+        // its link taken away or changed in PowerPoint (or to a slide deleted there), unless PowerPoint has no place for it
+        const was = this.asSaved(sh.link);
+        if (was === GONE || (pr && was !== null && (was ?? null) !== this.hlinkOf(kid(sp, 'nvSpPr', 'cNvPr', 'hlinkClick')))) {
+          const link = this.hlinkOf(kid(sp, 'nvSpPr', 'cNvPr', 'hlinkClick'));
+          if (link) sh.link = link; else delete sh.link;
+        }
       }
       const made = doc.addShape(sh);
-      const sid = (saved as { sid?: unknown }).sid;
       if (typeof sid === 'number') this.geoIds.set(sid, made.id);
       return true;
     }
-    const geo = GEO_BY_PRST.get(prst);
-    if (!geo) return false;
-    const look = this.look(sp, spPr);
-    const sh: Omit<Shape, 'id'> = { kind: 'geo', geo, ...where, color: look.line ?? look.fill ?? '#000000' };
-    // an action button, or any shape with an action on a click
-    const click = this.hlinkOf(kid(sp, 'nvSpPr', 'cNvPr', 'hlinkClick'));
-    if (click) sh.link = click;
-    if (look.fill) { sh.filled = true; sh.fillColor = look.fill; }
-    const clear = look.fill ? fillClear(spPr) : 0;
-    if (clear) sh.transparency = clear;
-    const grad = kid(spPr, 'gradFill');
-    const stops = grad ? kids(kid(grad, 'gsLst'), 'gs').sort((a, b) => Number(a.getAttribute('pos') ?? 0) - Number(b.getAttribute('pos') ?? 0)) : [];
-    if (grad && stops.length >= 2) {
-      // a gradient: its first and last colours, across at its angle or out from the middle
-      sh.fill = 'gradient';
-      sh.fillColor = this.color(stops[0]) ?? sh.fillColor;
-      sh.fill2 = this.color(stops[stops.length - 1]) ?? '#ffffff';
-      const lin = kid(grad, 'lin');
-      if (kid(grad, 'path')) sh.gradRadial = true;
-      else sh.gradAngle = Math.round(Number(lin?.getAttribute('ang') ?? 5400000) / 60000) % 360;
-    } else if (look.shaded) sh.fill = 'shaded';
-    const pf = picFill();
-    if (pf) sh.picFill = pf;
-    Object.assign(sh, this.effects(spPr));
-    sh.lineWidth = look.line ? +look.width.toFixed(2) : 0;
-    if (look.dashed) sh.dashed = true;
-    const t = theirText();
-    if (t) {
-      sh.text = t;
-      const c = this.text(sp, box, null, []);
-      if (c?.justify && c.justify !== 'center') sh.textAlign = c.justify;
-      const anchor = kid(sp, 'txBody', 'bodyPr')?.getAttribute('anchor');
-      if (!anchor || anchor === 't') sh.textValign = 'top';
-      else if (anchor === 'b') sh.textValign = 'bottom';
-    }
+    const sh = native();
+    if (!sh) return false;
     doc.addShape(sh);
     return true;
   }
@@ -1885,19 +1931,24 @@ class Reader {
     }
     // what was saved here, when the table still has its rows and columns (and its text, for its formatting)
     const tags = this.tagsOf(s.path, kid(el, 'nvGraphicFramePr', 'nvPr'));
-    let saved: { key: string; table: TableData; plain: string[][] } | null = null;
+    let saved: { key: string; table: TableData; plain: string[][]; pt?: unknown; pf?: unknown } | null = null;
     try { saved = tags[TAG.table] ? JSON.parse(tags[TAG.table]) : null; } catch { saved = null; }
+    // prints of the table as written (files from before them have none): its cells' text and how
+    // it looks, and its cells' lines and fills (native-print.ts)
+    const printNow = slideTablePrint(tbl);
     // a new style picked in PowerPoint, or a fill changed there: PowerPoint's table, with our key (title and footnotes)
     const lookNow = tableLookKey(style, ['firstRow', 'firstCol', 'lastCol', 'lastRow', 'bandRow', 'bandCol'].filter(flag), kids(tbl, 'tr').map((tr) => {
       const tcs = kids(tr, 'tc');
       return Array.from({ length: m }, (_, c) => this.color(kid(kid(tcs[c] ?? null, 'tcPr'), 'solidFill')) ?? undefined);
     }));
-    if (saved?.table && saved.table.rows.length === rows.length && saved.table.cols.length === m && lookNow !== savedTableLook(saved.table)) {
+    if (saved?.table && saved.table.rows.length === rows.length && saved.table.cols.length === m && (lookNow !== savedTableLook(saved.table) || (typeof saved.pf === 'string' && saved.pf !== printNow.frame))) {
       this.tables.push({ key: String(saved.key), table: read, frame, color });
       return;
     }
     if (saved?.table && saved.table.rows.length === rows.length && saved.table.cols.length === m) {
-      const same = JSON.stringify(rows.map((row) => row.map((c) => c.runs.map((r) => r.text).join('')))) === JSON.stringify(saved.plain);
+      // (text bolded, coloured or resized in PowerPoint, its words the same, is PowerPoint's)
+      const same = JSON.stringify(rows.map((row) => row.map((c) => c.runs.map((r) => r.text).join('')))) === JSON.stringify(saved.plain) &&
+        (typeof saved.pt !== 'string' || saved.pt === printNow.text);
       // columns PowerPoint has resized keep their new widths
       const widths = saved.table.cols.map((w, k) => (Math.abs(w - cols[k]) > 0.5 ? cols[k] : w));
       const own = same ? saved.table.rows : rows.map((row) => row.map((c) => ({ ...c, runs: c.runs.map((r) => { if (r.size !== (saved!.table.size ?? undefined)) return r; const { size: _, ...rest } = r; return rest; }) })));
@@ -2109,27 +2160,34 @@ class Reader {
   }
 
   /**
+   * One of our links as it was saved for PowerPoint: a slide by its place now, or the link itself;
+   * null when PowerPoint can't hold it (kept only in our tag); GONE when it went to a slide that is
+   * no longer in the file (deleted in PowerPoint, which took the link away with it).
+   */
+  private asSaved(link: string | undefined): string | null | undefined | typeof GONE {
+    if (!link) return undefined;
+    const id = slideOfLink(link);
+    if (id !== null) {
+      const i = this.slideById(id);
+      return i < 0 ? GONE : `#slide-n=${i}`;
+    }
+    if (SHOW_JUMPS.has(link)) return link;
+    return link.startsWith('#') ? null : linkFromTarget(officeTarget(link));
+  }
+
+  /**
    * Links added, changed or taken away in PowerPoint on text saved here (its words unchanged),
    * put on our copy of the text. Text whose words don't line up with PowerPoint's is left as saved.
    */
   private relink(runs: TextRun[], sp: Element, plain: string): TextRun[] {
     if (runs.map((r) => r.text).join('') !== plain) return runs;
     const theirs = this.linksIn(sp);
-    // our link as it was saved for PowerPoint (a slide by its place now); null: PowerPoint can't hold it
-    const asSaved = (link: string | undefined): string | null | undefined => {
-      if (!link) return undefined;
-      const id = slideOfLink(link);
-      if (id !== null) {
-        const i = this.slideById(id);
-        return i < 0 ? null : `#slide-n=${i}`;
-      }
-      if (SHOW_JUMPS.has(link)) return link;
-      return link.startsWith('#') ? null : linkFromTarget(officeTarget(link));
-    };
     const at = (i: number) => theirs.find((l) => l.from <= i && i < l.to);
     /** Whether PowerPoint left a run's link (from `from` to `to`) as it was saved. */
     const kept = (r: TextRun, from: number, to: number) => {
-      const was = asSaved(r.link);
+      const was = this.asSaved(r.link);
+      // a link to a slide deleted since: not kept (its slide's id may now be another slide's)
+      if (was === GONE) return false;
       for (let i = from; i < to; i++) {
         if (r.text[i - from] === '\n') continue;
         const l = at(i)?.link;
@@ -2164,9 +2222,30 @@ class Reader {
     return merge(out);
   }
 
-  private ourText(tag: string | undefined, sp: Element, box: Rect & { rot?: number }): Omit<Caption, 'id'> | null {
+  /**
+   * Links saved here that PowerPoint has no place for (kept only in our tag), put back on
+   * PowerPoint's runs of the same text where PowerPoint has no link of its own.
+   */
+  private ownLinks(runs: TextRun[], saved: TextRun[] | undefined): TextRun[] {
+    if (!Array.isArray(saved) || saved.map((r) => r.text).join('') !== runs.map((r) => r.text).join('')) return runs;
+    let out = runs, pos = 0;
+    for (const r of saved) {
+      const end = pos + r.text.length;
+      if (r.link && this.asSaved(r.link) === null && !sliceRuns(out, pos, end).some((x) => x.link)) out = applyStyle(out, pos, end, { link: r.link });
+      pos = end;
+    }
+    return out;
+  }
+
+  /**
+   * Text saved here, as it was made here while PowerPoint has not changed it: its words the same,
+   * and (in files with a print) how they look the same. Text whose words are the same but which was
+   * formatted in PowerPoint (bold, a colour, a size) is read as PowerPoint has it, keeping what
+   * PowerPoint has no place for. Null: read the text as PowerPoint's own.
+   */
+  private ourText(tag: string | undefined, sp: Element, box: Rect & { rot: number }, ph: PhInfo | null, from: Element[]): Omit<Caption, 'id'> | null {
     if (!tag) return null;
-    let saved: { c: Caption; plain: string; at?: number[]; o?: number[] };
+    let saved: { c: Caption; plain: string; at?: number[]; o?: number[]; pr?: string };
     try {
       saved = JSON.parse(tag);
     } catch {
@@ -2174,6 +2253,14 @@ class Reader {
     }
     const now = this.plain(sp);
     if (now !== saved.plain) return null;
+    if (typeof saved.pr === 'string' && saved.pr !== textPrint(kid(sp, 'txBody'))) {
+      const theirs = turned(this.text(sp, box, ph, from), box);
+      if (!theirs) return null;
+      // what PowerPoint has no place for: groups, order, steps, ties to structures, chemistry
+      const own: Partial<Caption> = {};
+      for (const k of OWN_CAPTION_KEYS) if (saved.c?.[k] !== undefined) (own as Record<string, unknown>)[k] = saved.c[k];
+      return { ...theirs, ...own, runs: this.ownLinks(theirs.runs, saved.c?.runs) };
+    }
     const c: Omit<Caption, 'id'> & { id?: number } = { ...saved.c };
     delete c.id;
     if (Array.isArray(c.runs)) c.runs = this.relink(c.runs, sp, now);
@@ -2502,6 +2589,12 @@ class Reader {
 const HLINK = '#0563C1';
 /** Our links PowerPoint keeps as show jumps. */
 const SHOW_JUMPS = new Set(['#first', '#last', '#next', '#prev', '#return', '#end']);
+/** A link saved here to a slide that is no longer in the file. */
+const GONE = Symbol('gone');
+/** A design shape's look: taken from PowerPoint when its fill, outline or effects were changed there. */
+const GEO_LOOK_KEYS = ['color', 'filled', 'fill', 'fillColor', 'fill2', 'gradAngle', 'gradRadial', 'pattern', 'patternColor', 'patternSize', 'patternTransparency', 'patternClear', 'fade', 'transparency', 'lineWidth', 'bold', 'dashed', 'dotted', 'hashSpacing', 'shadow', 'shadowBetween', 'shadowSize', 'shadowBlur', 'shadowAngle', 'shadowColor', 'shadowOpacity', 'glow', 'softEdge', 'reflection', 'bevel', 'picFill'] as const;
+/** A text box's settings PowerPoint has no place for, kept from our tag when PowerPoint's text is read. */
+const OWN_CAPTION_KEYS = ['piece', 'ole', 'grp', 'grpPath', 'stack', 'attach', 'ignoreWarnings', 'chem'] as const;
 
 const dropUndefined = (r: TextRun): Partial<TextRun> => Object.fromEntries(Object.entries(r).filter(([, v]) => v !== undefined));
 
