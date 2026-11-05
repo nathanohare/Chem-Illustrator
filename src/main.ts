@@ -5907,6 +5907,11 @@ const knowledgeBaseHost = {
     const t = q.trim();
     return pubchemSafetyRecord(isCasNumber(t) ? { cas: t } : looksLikeSmiles(t) ? { smiles: t } : { name: t });
   },
+  contains: async (q: string, smiles: string[]) => (chem.ready ? (await chem.substructureIn('knowledge-base', smiles, q)).results : null),
+  selected: async () => {
+    const got = await selectedForLibrary();
+    return typeof got === 'string' ? got : { smiles: got[0].smiles };
+  },
 } satisfies KnowledgeBaseHost;
 const knowledgeBase = madeLater(async (): Promise<KnowledgeBaseWindow> => new (await import('./ui/knowledge-base')).KnowledgeBaseWindow(knowledgeBaseHost));
 

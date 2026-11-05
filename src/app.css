@@ -1890,6 +1890,7 @@ dialog.kb-window { position: fixed; inset: 56px 0 auto 0; margin: 0 auto; z-inde
 .kb-sources { margin: 0; font-size: var(--fs-xs); }
 .kb-head { gap: 6px 8px; flex-wrap: nowrap; align-items: center; }
 .kb-head h2 { width: 160px; flex: none; }
+.kb-head > button { flex: none; white-space: nowrap; }
 .kb-top { flex: 1 1 auto; min-width: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
 .kb-top .kb-title { margin: 0; font-size: var(--fs-md, 14px); white-space: nowrap; }
 .kb-top .kb-filters { margin: 0; }
@@ -1937,6 +1938,8 @@ dialog.kb-window { position: fixed; inset: 56px 0 auto 0; margin: 0 auto; z-inde
 .kb-table td.prose { min-width: 26ch; max-width: 46ch; white-space: normal; line-height: 1.35; }
 .kb-window abbr[title] { text-decoration: underline dotted var(--muted); text-underline-offset: 2px; cursor: help; }
 .kb-empty { padding: 12px; margin: 0; }
+/* a structure search: "This compound" over the same one, "Containing it" over the rest */
+.kb-table tr.kb-group th { position: static; cursor: default; text-align: left; font-weight: 600; font-size: var(--fs-xs); color: var(--muted); background: var(--panel); padding: 4px 6px 2px; border-top: 1px solid var(--line); }
 /* Chemistry > Metals > Ligand Library: families on the left, the ligands' drawings, the one picked on the right */
 dialog.ligand-library { width: min(96vw, 1080px); max-width: min(96vw, 1080px); }
 .lig-body { height: min(60vh, 560px); }

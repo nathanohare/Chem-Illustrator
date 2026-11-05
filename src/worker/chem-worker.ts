@@ -5,7 +5,7 @@
 /// <reference lib="webworker" />
 import { formulaFromJson } from '../chem/formula';
 import { stereoTags, StereoTags } from '../chem/stereo';
-import { molProps, substructureMatches, panelProps, massFragments, type PanelProps, type MassFragment } from '../chem/props';
+import { molProps, substructureMatches, structureLibrary, libraryMatches, panelProps, massFragments, type PanelProps, type MassFragment, type StructureLibrary } from '../chem/props';
 import type { MolProps } from '../sheet/properties';
 import { namerGraph, type NamerGraph } from '../chem/namer-graph';
 import { hammettSites, type HammettResult } from '../chem/hammett-match';
@@ -22,6 +22,11 @@ export type ChemRequest =
   | { type: 'props'; id: number; mols: string[] }
   /** Which molecules (molfiles or SMILES) contain the query (a molfile): its atoms and bonds, with anything else attached. */
   | { type: 'substructure'; id: number; query: string; mols: string[] }
+  /**
+   * The same over a named set of SMILES kept here between searches (the Knowledge Base's): `mols`
+   * is sent the first time and whenever the set changes, and left out after.
+   */
+  | { type: 'substructureIn'; id: number; name: string; mols?: string[]; query: string }
   /** The Hammett groups at a core's marked (*) positions in each molecule (see src/chem/hammett-match.ts). */
   | { type: 'hammett'; id: number; core: string; mols: string[] }
   /** The pieces a molfile falls into when bonds (pairs of molfile atoms, 0-based) are broken. */
@@ -54,6 +59,8 @@ export type ChemResponse =
   | { type: 'molToSmiles'; id: number; smiles: string | null }
   | { type: 'props'; id: number; results: (MolProps | { error: string })[] }
   | { type: 'substructure'; id: number; results: (boolean | null)[]; error?: string }
+  /** The indexes of the set's structures containing the query; `missing`: the set must be sent again. */
+  | { type: 'substructureIn'; id: number; results: number[]; error?: string; missing?: boolean }
   | { type: 'hammett'; id: number; results: HammettResult[] }
   | { type: 'fragments'; id: number; results: MassFragment[] | { error: string } }
   | { type: 'common'; id: number; results: ([number, number][] | null)[] }
@@ -61,6 +68,8 @@ export type ChemResponse =
   | { type: 'canonical'; id: number; smiles: string | null };
 
 let RDKit: any = null;
+/** Sets of structures kept for substructure searches, by name (see substructureIn). */
+const libraries = new Map<string, StructureLibrary>();
 const post = (m: ChemResponse) => (self as unknown as DedicatedWorkerGlobalScope).postMessage(m);
 
 function analyzeOne(molblock: string): FragmentResult {
@@ -194,6 +203,10 @@ self.onmessage = async (e: MessageEvent<ChemRequest>) => {
       post({ type: 'props', id: m.id, results: m.mols.map((x) => molProps(RDKit, x)) });
     } else if (m.type === 'substructure') {
       post({ type: 'substructure', id: m.id, ...substructureMatches(RDKit, m.query, m.mols) });
+    } else if (m.type === 'substructureIn') {
+      if (m.mols) { libraries.get(m.name)?.lib.delete?.(); libraries.set(m.name, structureLibrary(RDKit, m.mols)); }
+      const L = libraries.get(m.name);
+      post(L ? { type: 'substructureIn', id: m.id, ...libraryMatches(RDKit, L, m.query) } : { type: 'substructureIn', id: m.id, results: [], missing: true });
     } else if (m.type === 'hammett') {
       post({ type: 'hammett', id: m.id, results: m.mols.map((x) => hammettSites(RDKit, x, m.core)) });
     } else if (m.type === 'fragments') {

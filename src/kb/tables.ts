@@ -50,6 +50,8 @@ export interface KbTable {
   canonicalSmiles?: boolean;
   /** The drawing shown in a `picture` column (a Hammett group with its attachment point). */
   picture?: (row: Record<string, Cell>) => Template | null;
+  /** How big those drawings are, in pixels (48 when not given): whole molecules need more room than groups. */
+  pictureSize?: number;
   /** The structure shown when the pointer rests on a row's name (a solvent's), when it has one. */
   structure?: (row: Record<string, Cell>) => Template | null;
   /**
@@ -134,6 +136,8 @@ export interface RowMatch {
   off?: number;
   /** For a shift search: which nucleus's peak matched. */
   nucleus?: '1H' | '13C';
+  /** For a structure search: the same compound (true) or one containing it (false). */
+  same?: boolean;
 }
 
 /**
