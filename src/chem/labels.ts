@@ -461,6 +461,20 @@ export function typedH(spec: LabelSpec): LabelSpec {
 }
 
 /**
+ * A label stacked above or below (Center alignment, or ChemDraw's Above and Below) goes on the
+ * side away from its bonds: once the structure is turned or flipped over (#520), or a file says
+ * Above for an NH whose bonds go up, the H would sit on the bonds, inside the ring.
+ */
+export function fitStacked<T extends { stacked?: 'up' | 'down' }>(spec: T, bondDirs: { x: number; y: number }[]): T {
+  if (!spec.stacked || bondDirs.length === 0) return spec;
+  let sy = 0;
+  for (const d of bondDirs) sy += d.y;
+  // y points down: bonds going up (sy < 0) leave room below, and the other way round
+  const toward = spec.stacked === 'up' ? -sy : sy;
+  return toward > 0.25 ? { ...spec, stacked: spec.stacked === 'up' ? 'down' : 'up' } : spec;
+}
+
+/**
  * Which way a label runs from its atom: to the right (OH), to the left (HO), or with the
  * H stacked above or below (the NH of a ring).
  *
@@ -472,6 +486,7 @@ export function typedH(spec: LabelSpec): LabelSpec {
  * goes on the first free side of right, left, above, below.
  */
 export function labelDir(spec: LabelSpec, bondDirs: { x: number; y: number }[], just: 'auto' | 'left' | 'right' = 'auto'): 'right' | 'left' | 'up' | 'down' {
+  spec = fitStacked(spec, bondDirs);
   if (spec.stacked) return spec.stacked;
   if (just === 'left') return 'left';
   if (just === 'right') return 'right';
@@ -517,7 +532,7 @@ function bracketUnits(tail: Token[]): Token[][] | null {
  * position, and the rest of the label runs away from the bonds (p. 46).
  */
 export function layoutLabel(spec: LabelSpec, bondDirs: LabelBond[], size: number, measure: Measure, just: 'auto' | 'left' | 'right' = 'auto'): LabelLayout {
-  spec = typedH(spec);
+  spec = fitStacked(typedH(spec), bondDirs);
   const head = spec.tokens[0];
   const tail = spec.tokens.slice(1);
   const hTok: Token | null = spec.hCount > 0 ? { kind: 'el', text: 'H', count: spec.hCount, charge: '' } : null;
