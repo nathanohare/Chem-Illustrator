@@ -802,6 +802,9 @@ class DocxWriter {
       const name = /\s/.test(o.name) ? `"${o.name}"` : o.name;
       return field(rPr, ` SEQ ${xml(name)} \\* ARABIC \\* CHARFORMAT `, shown);
     }
+    // hidden text kept from a Word file, as it was; a field kept from Word with the result it showed (none: no result)
+    if (o.kind === 'field' && o.code === 'hidden') return run(runProps(r, st, { cs: this.charStyleOf(r), vanish: true }), o.text ?? '');
+    if (o.kind === 'field' && o.code === 'word' && !shown) return markField(fieldInstr(o), rPr);
     if (o.kind === 'field') return field(rPr, xml(fieldInstr(o)), shown);
     if (o.kind === 'ref') {
       const bm = this.bookmarks.get(o.target);
@@ -1452,7 +1455,7 @@ export function highlightName(color: string): string | null {
  * A run's formatting where it differs from its paragraph's style (and its character style, when
  * it is in one: Word then gives it that style, so changing the style in Word changes it too).
  */
-function runProps(r: TextRun, st: NamedStyle, x: { formula?: boolean; pos?: 'base' | 'sub' | 'sup'; cs?: CharStyle }): string {
+function runProps(r: TextRun, st: NamedStyle, x: { formula?: boolean; pos?: 'base' | 'sub' | 'sup'; cs?: CharStyle; vanish?: boolean }): string {
   const out: string[] = [];
   // (a run has one character style in Word: a formula's mark wins)
   const cs = x.formula ? undefined : x.cs;
@@ -1467,6 +1470,7 @@ function runProps(r: TextRun, st: NamedStyle, x: { formula?: boolean; pos?: 'bas
   if (!!r.allCaps !== !!cs?.allCaps) out.push(r.allCaps ? '<w:caps/>' : '<w:caps w:val="0"/>');
   if (!!r.smallCaps !== !!cs?.smallCaps) out.push(r.smallCaps ? '<w:smallCaps/>' : '<w:smallCaps w:val="0"/>');
   if (!!r.strike !== !!cs?.strike) out.push(r.strike ? '<w:strike/>' : '<w:strike w:val="0"/>');
+  if (x.vanish) out.push('<w:vanish/>');
   const color = r.color ?? st.color;
   if ((color ?? '') !== (st.color ?? '')) out.push(`<w:color w:val="${color ? hex6(color) : 'auto'}"/>`);
   // character spacing (twentieths of a point) and kerning taken off
@@ -1575,8 +1579,9 @@ export function paraBorderXml(ps: ParaStyle): string {
 }
 
 /** A field with no result (an index entry, a marked citation): Word keeps it as hidden text. */
-function markField(instr: string): string {
-  return `<w:r><w:fldChar w:fldCharType="begin"/></w:r><w:r><w:instrText xml:space="preserve">${xml(instr)}</w:instrText></w:r><w:r><w:fldChar w:fldCharType="end"/></w:r>`;
+function markField(instr: string, rPr = ''): string {
+  const pr = rPr ? `<w:rPr>${rPr}</w:rPr>` : '';
+  return `<w:r>${pr}<w:fldChar w:fldCharType="begin"/></w:r><w:r>${pr}<w:instrText xml:space="preserve">${xml(instr)}</w:instrText></w:r><w:r>${pr}<w:fldChar w:fldCharType="end"/></w:r>`;
 }
 
 /**

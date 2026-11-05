@@ -127,6 +127,9 @@ const WARN = {
   drawingChanged: 'Some structures were changed in Word (Change Picture) or copied in from another file, so they came in as pictures.',
   drawingCrop: 'Cropping and color changes made in Word to some structures were left off (the structures stay editable).',
   macros: 'This document has macros (VBA). They are never run here, and they are left out when it is saved.',
+  fields: 'Some fields were kept as the text they showed.',
+  hidden: 'Hidden text is kept and saved back to Word, but isn\'t shown here.',
+  hiddenCells: 'Hidden text in table cells and notes was left out.',
 };
 
 type Pos = 'base' | 'sub' | 'sup';
@@ -168,7 +171,7 @@ interface WStyle { id: string; type: string; name: string; basedOn?: string; nex
 interface Level { fmt: string; text: string; p: PProps }
 interface Piece { runs: TextRun[]; pageBreak: boolean; soft: boolean; colBreak?: boolean; /** Index entries and marked citations in it (XE and TA fields). */ xe?: IndexMark[]; ta?: AuthorityMark[] }
 interface Ctx { base: RProps; pieces: Piece[]; cell: boolean }
-interface Field { instr: string; phase: 'instr' | 'result'; swallow: boolean; /** The field's own data (w:fldData, base64): EndNote's citations. */ data?: string; text: string; props: RProps; /** How its result's first text looks, which is what Word shows (EndNote sets superscript only there). */ shown?: RProps; done: boolean; ref?: { id: number; mark: string; text: string; above?: boolean; page?: boolean }; toc?: boolean; /** A form field's settings (w:ffData), and the form field made of it. */ ff?: Element; form?: number; /** A HYPERLINK field: the link open before it, put back at its end. */ before?: { link: string | undefined }; /** A manager's citation (its object) whose shown text is kept; a manager's bibliography (its object) whose entries are kept. */ cite?: number; bib?: number }
+interface Field { instr: string; phase: 'instr' | 'result'; swallow: boolean; /** The field's own data (w:fldData, base64): EndNote's citations. */ data?: string; text: string; props: RProps; /** How its result's first text looks, which is what Word shows (EndNote sets superscript only there). */ shown?: RProps; done: boolean; ref?: { id: number; mark: string; text: string; above?: boolean; page?: boolean }; toc?: boolean; /** A form field's settings (w:ffData), and the form field made of it. */ ff?: Element; form?: number; /** A HYPERLINK field: the link open before it, put back at its end. */ before?: { link: string | undefined }; /** A manager's citation (its object) whose shown text is kept; a manager's bibliography (its object) whose entries are kept. */ cite?: number; bib?: number; /** Its separator (where its result starts). */ sep?: Element; /** Another field inside its instruction. */ inner?: boolean; /** A field kept as Word had it: the object made of it (its result is gathered into it). */ kept?: number }
 interface OutPara { ps: ParaStyle; runs: TextRun[]; mark: rt.RunStyle; style: string; contextual: boolean; table?: boolean; bib?: string; markRev?: string }
 
 /** Open a Word file. Throws only when the file is not a Word file at all. */
@@ -889,19 +892,30 @@ class DocxReader {
     const note = this.noteEl(end, this.a(el, 'id'));
     if (!note) return;
     // the note is read apart from the paragraph it is in (its own fields and comments)
-    const fields = this.fields, cmt = this.cmtOpen, math = this.displayMath, part = this.part, link = this.link;
+    // (bookmarks round the note's number stay with the paragraph it is in: a NOTEREF field points at them)
+    const fields = this.fields, cmt = this.cmtOpen, math = this.displayMath, part = this.part, link = this.link, marks = this.pendingMarks;
     this.fields = [];
     this.cmtOpen = new Set();
     this.part = this.pkg.relOfType(this.main, end ? DOCX_REL.endnotes : DOCX_REL.footnotes) ?? part;
     this.link = undefined;
+    this.pendingMarks = [];
     const got = this.boxText(note);
     this.fields = fields;
     this.cmtOpen = cmt;
     this.displayMath = math;
     this.part = part;
     this.link = link;
-    // text and citations (note styles put them in footnotes); captions and pictures in notes keep no place here
-    const runs = got.runs.filter((x) => x.obj === undefined || this.objects[x.obj]?.kind === 'cite').map(({ cmt: _c, ...x }) => x);
+    this.pendingMarks = marks;
+    // text and citations (note styles put them in footnotes); captions and pictures in notes keep no
+    // place here, fields kept from Word keep the text they showed, and hidden text is left out
+    const runs = got.runs.map((x) => {
+      const o = x.obj !== undefined ? this.objects[x.obj] : undefined;
+      if (o?.kind !== 'field' || (o.code !== 'word' && o.code !== 'hidden')) return x;
+      const { obj: _o, ...style } = x;
+      if (o.code === 'word') this.warn('fields');
+      else this.warn('hiddenCells');
+      return { ...style, text: o.code === 'word' ? o.text ?? '' : '' };
+    }).filter((x) => x.obj === undefined || this.objects[x.obj]?.kind === 'cite').map(({ cmt: _c, ...x }) => x);
     while (runs.length && /^[ \t]/.test(runs[0].text)) {
       const text = runs[0].text.replace(/^[ \t]+/, '');
       if (text) { runs[0] = { ...runs[0], text }; break; }
@@ -1270,10 +1284,9 @@ class DocxReader {
   }
 
   private emitText(ctx: Ctx, text: string, r: RProps): void {
-    if (!text || r.hidden) return;
+    if (!text) return;
     const top = this.fields[this.fields.length - 1];
-    if ((top?.ref || top?.form !== undefined || top?.cite !== undefined) && top.phase === 'result') top.text += text;
-    if (this.swallowing()) return;
+    if (!r.hidden && top?.cite !== undefined && top.phase === 'result') top.text += text;
     let props = r;
     if (r.font && /^symbol$/i.test(r.font)) {
       // text in the Symbol font: the Greek letters and signs it shows
@@ -1281,9 +1294,32 @@ class DocxReader {
       text = rt.fromSymbolFont(plain);
       props = { ...r, font: ctx.base.font };
     }
+    if (!r.hidden && (top?.ref || top?.form !== undefined || top?.kept !== undefined) && top.phase === 'result') top.text += text;
+    if (this.swallowing()) return;
+    // (hidden text in a manager's bibliography being gathered is left out, as before)
+    if (r.hidden) { if (!this.capture) this.hiddenText(ctx, text, props); return; }
     const run: TextRun = { ...this.runStyle(props), ...(this.rev ? { rev: this.rev } : {}), ...(this.fmt ? { fmt: this.fmt } : {}), ...this.cmtMark(ctx), ...(this.link ? { link: this.link } : {}), ...this.ccMark(ctx), text };
     if (this.capture) { this.capture.paras[this.capture.paras.length - 1]?.push(run); return; }
     this.piece(ctx).runs.push(run);
+  }
+
+  /** The hidden text met last (its object and look), which hidden text right after it joins. */
+  private lastHidden: { id: number; key: string } | null = null;
+
+  /**
+   * Hidden text (Word's Hidden font setting, w:vanish): not shown here, but kept in the text as
+   * a field of its own that shows nothing, so saving writes it back as hidden text.
+   */
+  private hiddenText(ctx: Ctx, text: string, r: RProps): void {
+    if (ctx.cell) { this.warn('hiddenCells'); return; }
+    const key = JSON.stringify([this.runStyle(r), this.rev, this.fmt, this.link, this.ccRun, [...this.cmtOpen]]);
+    const runs = this.piece(ctx).runs;
+    const last = runs[runs.length - 1];
+    const prev = this.lastHidden && last?.obj === this.lastHidden.id && this.lastHidden.key === key ? this.objects[last.obj] : undefined;
+    if (prev?.kind === 'field' && prev.code === 'hidden') { prev.text = (prev.text ?? '') + text; return; }
+    const id = this.emitObject(ctx, { kind: 'field', code: 'hidden', text }, r, true);
+    this.lastHidden = id === null ? null : { id, key };
+    this.warn('hidden');
   }
 
   /** Where a Word link goes: a web page or file (through the part's relationships), or a bookmark here. */
@@ -1531,6 +1567,8 @@ class DocxReader {
     if (type === 'begin') {
       const data = kid(c, 'fldData')?.textContent?.trim();
       const ff = kid(c, 'ffData');
+      const outer = this.fields[this.fields.length - 1];
+      if (outer?.phase === 'instr') outer.inner = true;
       this.fields.push({ instr: '', phase: 'instr', swallow: false, text: '', props: r, done: false, ...(data ? { data } : {}), ...(ff ? { ff } : {}) });
     }
     else if (type === 'separate') {
@@ -1538,6 +1576,7 @@ class DocxReader {
       if (!f) return;
       f.phase = 'result';
       f.shown = this.resultLook(c, ctx);
+      f.sep = c;
       this.startField(f, ctx);
     } else if (type === 'end') {
       const f = this.fields.pop();
@@ -1551,6 +1590,7 @@ class DocxReader {
       if (f.before) this.link = f.before.link;
       if (f.cite !== undefined) this.keepCite(f.cite, f.text);
       if (f.bib !== undefined && this.capture?.id === f.bib) this.keepEntries();
+      this.keptEnded(f);
     }
   }
 
@@ -1560,6 +1600,37 @@ class DocxReader {
     if (o?.kind !== 'cite' || !o.live || !text.trim()) return;
     this.objects[id] = { ...o, live: { ...o.live, text, for: (o.refs ?? []).join(' ') } };
     this.keptCites.push(id);
+  }
+
+  /** A field kept as Word had it: what it showed is its result. */
+  private keptEnded(f: Field): void {
+    const o = f.kept !== undefined ? this.objects[f.kept] : undefined;
+    if (o?.kind === 'field' && o.code === 'word') o.text = f.text;
+  }
+
+  /**
+   * A field's result is text only, in the paragraph the field starts in (so it can be kept as a
+   * field showing that text): no pictures, line breaks, fields or tracked changes in it. A field
+   * with no result counts as plain.
+   */
+  private plainResult(f: Field, simple?: Element): boolean {
+    const RUN = new Set(['rPr', 't', 'tab', 'ptab', 'noBreakHyphen', 'softHyphen', 'sym', 'lastRenderedPageBreak']);
+    const BESIDE = new Set(['bookmarkStart', 'bookmarkEnd', 'proofErr', 'permStart', 'permEnd', 'commentRangeStart', 'commentRangeEnd']);
+    const runOk = (r: Element) => kids(r).every((k) => RUN.has(k.localName));
+    if (simple) return kids(simple).every((k) => (k.localName === 'r' ? runOk(k) : BESIDE.has(k.localName)));
+    const sep = f.sep;
+    const own = sep?.parentElement;
+    if (!sep || !own) return true;
+    for (let el: Element | null = own; el; el = el.nextElementSibling) {
+      if (el.localName !== 'r') { if (BESIDE.has(el.localName)) continue; return false; }
+      const ks = kids(el);
+      for (let i = el === own ? ks.indexOf(sep) + 1 : 0; i < ks.length; i++) {
+        const k = ks[i];
+        if (k.localName === 'fldChar') return this.a(k, 'fldCharType') === 'end';
+        if (!RUN.has(k.localName)) return false;
+      }
+    }
+    return false;
   }
 
   /** How a field's result looks: its first run of text after the separator, in the same paragraph. */
@@ -1579,15 +1650,16 @@ class DocxReader {
     const props = merge<RProps>(ctx.base, this.readRPr(kid(firstRun, 'rPr')));
     const f: Field = { instr: this.a(el, 'instr') ?? '', phase: 'result', swallow: false, text: '', props, done: false };
     this.fields.push(f);
-    this.startField(f, ctx);
+    this.startField(f, ctx, el);
     this.inline(kids(el), ctx);
     this.fields.pop();
     if (f.ref) f.ref.text = f.text;
     if (f.before) this.link = f.before.link;
+    this.keptEnded(f);
   }
 
   /** A field's instruction is known: caption numbers and references become ours; other fields keep the text Word showed. */
-  private startField(f: Field, ctx: Ctx): void {
+  private startField(f: Field, ctx: Ctx, simple?: Element): void {
     if (f.done) return;
     f.done = true;
     if (this.swallowing(true)) return;
@@ -1710,6 +1782,15 @@ class DocxReader {
       return;
     }
     if (/^ADDIN\s+(EN\.CITE|ZOTERO|CSL|Mendeley|RW)/i.test(ins) && !/^ADDIN\s+EN\.CITE\.DATA/i.test(ins)) this.warn('citations');
+    if (!ins || /^ADDIN\b/i.test(ins)) return;
+    // any other field (a note's number, a heading's text, a calculation): kept as Word had it,
+    // showing its last result, when that result is plain text; else its text is kept
+    if (!ctx.cell && !f.inner && this.plainResult(f, simple)) {
+      const note = /^NOTEREF\s+(\S+)/i.exec(ins)?.[1];
+      const id = this.emitObject(ctx, { kind: 'field', code: 'word', instr: f.instr, text: '', ...(note ? { target: note } : {}) }, f.shown ?? f.props);
+      if (id !== null) { f.kept = id; f.swallow = true; return; }
+    }
+    this.warn('fields');
   }
 
   /** A text form field's end: what it showed is its entry (Word's five spaces for none). */
@@ -2652,9 +2733,12 @@ class DocxReader {
                 const f = fields[fields.length - 1];
                 f.result = true;
                 if (/^PAGE\b/i.test(f.instr.trim())) pageHere();
+                // (a field kept as Word had it, such as a heading's text, needs the header as it is)
+                if (otherField(f.instr)) rich = true;
               } else if (t === 'end') {
                 const f = fields.pop();
                 if (f && !f.result && /^PAGE\b/i.test(f.instr.trim())) pageHere();
+                if (f && !f.result && otherField(f.instr)) rich = true;
               }
               break;
             }
@@ -2884,6 +2968,15 @@ function keepUsedMarks(t: DocText): void {
     const { marks: _m, ...rest } = p;
     return marks.length ? { ...rest, marks } : rest;
   });
+}
+
+/**
+ * A field none of ours stands for (a note's number, a heading's text, a calculation), which is
+ * kept as Word had it; not a reference manager's (ADDIN), whose citations are read as such.
+ */
+function otherField(instr: string): boolean {
+  const s = instr.trim();
+  return !!s && !/^(SEQ|XE|TA|INDEX|TOA|TOC|FORMTEXT|FORMCHECKBOX|FORMDROPDOWN|HYPERLINK|ADDIN|REF|PAGEREF|PAGE)\b/i.test(s) && !s.startsWith(CITE_FIELD) && !parseFieldInstr(s);
 }
 
 /** A Word colour ("FF0000", "auto") as ours (null for automatic or none). */
