@@ -381,8 +381,23 @@ body.cells-raised .tb-cells .tool.active { background: var(--accent-soft); borde
 .toolbox[data-id='main'].floating:not(.collapsed) { overflow: hidden; }
 .toolbox[data-id='main'] > .tb-body { min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
 .toolbox[data-id='main'].tb-scrolls > .tb-body { scrollbar-gutter: stable; }
+/* its scroll bar: on the left (the window's outer edge), a faint thumb with no track or arrows, a little
+   stronger while the mouse is over the box. rtl only moves the bar; the tools inside stay ltr.
+   Chromium and WebKit (every Tauri webview) draw it from the ::-webkit-scrollbar rules, which they use only
+   while scrollbar-width/-color are unset; other browsers get the standard properties. */
+.toolbox[data-id='main'] > .tb-body { direction: rtl; scrollbar-width: auto; scrollbar-color: auto; }
+.toolbox[data-id='main'] > .tb-body > * { direction: ltr; }
+@supports not selector(::-webkit-scrollbar) {
+  .toolbox[data-id='main'] > .tb-body { scrollbar-width: thin; scrollbar-color: color-mix(in srgb, var(--muted, currentColor) 35%, transparent) transparent; }
+  .toolbox[data-id='main']:hover > .tb-body { scrollbar-color: color-mix(in srgb, var(--muted, currentColor) 70%, transparent) transparent; }
+}
+.toolbox[data-id='main'] > .tb-body::-webkit-scrollbar { width: 6px; height: 6px; }
+.toolbox[data-id='main'] > .tb-body::-webkit-scrollbar-track { background: transparent; }
+.toolbox[data-id='main'] > .tb-body::-webkit-scrollbar-button { display: none; }
+.toolbox[data-id='main'] > .tb-body::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--muted, currentColor) 35%, transparent); border-radius: 3px; }
+.toolbox[data-id='main']:hover > .tb-body::-webkit-scrollbar-thumb { background: color-mix(in srgb, var(--muted, currentColor) 70%, transparent); }
 .dock-h > .toolbox[data-id='main'] { flex-shrink: 1; min-width: 0; }
-.dock-h > .toolbox[data-id='main'] > .tb-body { overflow: auto hidden; min-width: 0; }
+.dock-h > .toolbox[data-id='main'] > .tb-body { overflow: auto hidden; min-width: 0; direction: ltr; }
 /* more tools below: the dock fades out at its foot */
 .dock-v.more-below { -webkit-mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent); mask-image: linear-gradient(to bottom, #000 calc(100% - 28px), transparent); }
 .tool { width: 34px; height: 32px; padding: 0; display: grid; place-items: center; border-color: transparent; background: transparent; }
