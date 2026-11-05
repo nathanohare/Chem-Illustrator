@@ -183,12 +183,25 @@ const XLWS = new Set(['FILTER', 'SORT']);
  */
 const FILE_ERRORS = ['#NULL!', '#DIV/0!', '#VALUE!', '#REF!', '#NAME?', '#NUM!', '#N/A'];
 
-/** A formula (without its =) with Excel's prefixes on the newer functions, leaving text in quotes alone. */
-export function excelFunctionNames(f: string): string {
+/**
+ * A formula (without its =) with Excel's prefixes on the newer functions, leaving text in quotes
+ * alone. `kept` are the prefixes the workbook's file had on functions this program doesn't know.
+ */
+export function excelFunctionNames(f: string, kept?: ReadonlyMap<string, string>): string {
   return f.split(/("(?:[^"]|"")*")/).map((part, i) => (i % 2 ? part : part.replace(/(^|[^A-Za-z0-9_.])([A-Za-z][A-Za-z0-9.]*)(?=\()/g, (m, before: string, name: string) => {
     const up = name.toUpperCase();
-    return XLWS.has(up) ? `${before}_xlfn._xlws.${name}` : XLFN.has(up) ? `${before}_xlfn.${name}` : m;
+    const prefix = XLWS.has(up) ? '_xlfn._xlws.' : XLFN.has(up) ? '_xlfn.' : kept?.get(up);
+    return prefix ? `${before}${prefix}${name}` : m;
   }))).join('');
+}
+
+/** Notes the prefixes a formula from a file has on functions this program doesn't prefix by itself. */
+function notePrefixes(text: string, into: Map<string, string>): void {
+  if (!text.includes('_xlfn.')) return;
+  for (const m of text.replace(/"(?:[^"]|"")*"/g, '""').matchAll(/_xlfn\.(_xlws\.)?([A-Za-z][A-Za-z0-9.]*)\(/g)) {
+    const up = m[2].toUpperCase();
+    if (!XLFN.has(up) && !XLWS.has(up)) into.set(up, m[1] ? '_xlfn._xlws.' : '_xlfn.');
+  }
 }
 
 const KNOWN = new Set(FUNCTION_NAMES);
@@ -707,7 +720,7 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
           // a legacy array formula (Ctrl+Shift+Enter) goes back as one, over its block, unless something here is in its way
           const legacy = cell?.array && (cell.array.rows * cell.array.cols === 1 || sp) ? (sp ? rangeName(sp) : ref) : null;
           const dynamic = !legacy && (!!sp || s.spillWanted.has(k) || needsDynamic(input) || callsName(input, lambdaNames));
-          formula = excelFunctionNames(fileFormula(normalizeFormula(input, nameCase), dynamic));
+          formula = excelFunctionNames(fileFormula(normalizeFormula(input, nameCase), dynamic), book.excelPrefixes);
           if (legacy) legacyRef = legacy;
           else if (dynamic) { arrayRef = sp ? rangeName(sp) : ref; anyDynamic = true; }
         }
@@ -927,7 +940,7 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
       const vid = pkg.relate(sheetRels, NOTES_REL.vml, `../drawings/vmlDrawing${notesNo}.vml`);
       drawingXml += `<legacyDrawing r:id="${vid}"/>`;
     }
-    const dvXml = standIn ? '' : validationsXml(s.validations, excelFunctionNames, longList, book.date1904 ? DAYS_1900_TO_1904 : 0);
+    const dvXml = standIn ? '' : validationsXml(s.validations, (f) => excelFunctionNames(f, book.excelPrefixes), longList, book.date1904 ? DAYS_1900_TO_1904 : 0);
     // links (Insert > Link): a place in the workbook as Excel's location, anything else through a relationship
     const linkXml: string[] = [];
     for (const [k, c] of s.cells) {
@@ -1022,7 +1035,7 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
   const nameXml = book.liveNames().map((n) => {
     const local = n.sheet ? ` localSheetId="${book.sheets.indexOf(n.sheet)}"` : '';
     const f = n.formula.startsWith('=') ? n.formula : '=' + n.formula;
-    return `<definedName name="${xmlAttr(n.name)}"${local}${n.comment ? ` comment="${xmlAttr(n.comment)}"` : ''}${n.hidden ? ' hidden="1"' : ''}>${xml(excelFunctionNames(fileFormula(f, true)))}</definedName>`;
+    return `<definedName name="${xmlAttr(n.name)}"${local}${n.comment ? ` comment="${xmlAttr(n.comment)}"` : ''}${n.hidden ? ' hidden="1"' : ''}>${xml(excelFunctionNames(fileFormula(f, true), book.excelPrefixes))}</definedName>`;
   });
   const allNames = [...filterNames, ...printTitleNames, ...nameXml, ...gridNames];
   pkg.add('xl/workbook.xml',
@@ -1463,6 +1476,7 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
   /** Formulas reading other workbooks ([1]Sheet1!A1): kept for Excel, not worked out here. */
   let linkedFormulas = 0;
   const countFormula = (text: string) => {
+    notePrefixes(text, book.excelPrefixes);
     if (readsOtherWorkbook(text)) linkedFormulas++;
     else if (usesUnknownFunction(text, nameSet)) unknownFormulas++;
   };

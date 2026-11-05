@@ -1327,6 +1327,12 @@ export class Workbook {
    * first. Kept as they were and saved back in the same order, so Excel can still update them.
    */
   externalLinks: KeptTree[] = [];
+  /**
+   * Functions an Excel file wrote with a prefix (_xlfn., or _xlfn._xlws.) that this program
+   * doesn't add by itself (newer Excel functions it can't work out), by upper-case name, so a
+   * save writes them the way Excel needs them.
+   */
+  excelPrefixes = new Map<string, string>();
   /** What an Excel file said about the workbook that only Excel uses (its protection, calculation settings), kept to save back. */
   excel?: ExcelBookKept;
   /**
