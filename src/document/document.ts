@@ -53,6 +53,9 @@ export interface NamedStyle {
   firstLine: number;
   /** Kept on the page with the next paragraph (headings). */
   keepNext: boolean;
+  /** Its paragraphs' lines kept together on one page, and widow and orphan lines allowed (Word's settings, kept from its files). */
+  keepLines?: boolean;
+  noWidow?: boolean;
   /** The style a new paragraph gets after Enter at the end of one of these (Normal after a heading). */
   next?: string;
   /** A heading's level (1 to 9). */
@@ -597,28 +600,28 @@ export function paraFromStyle(s: NamedStyle, keep: ParaStyle): ParaStyle {
     align: s.align === 'left' ? undefined : s.align,
     spaceBefore: s.spaceBefore, spaceAfter: s.spaceAfter,
     line: s.line === 1 ? undefined : s.line,
-    indent: s.indent, firstLine: s.firstLine, keepNext: s.keepNext,
+    indent: s.indent, firstLine: s.firstLine, keepNext: s.keepNext, keepLines: s.keepLines, noWidow: s.noWidow,
   });
 }
 
 /** A paragraph's own value of a style setting (as stored: missing means 0, left, single, off). */
-function paraValue(p: ParaStyle, k: 'align' | 'spaceBefore' | 'spaceAfter' | 'line' | 'indent' | 'firstLine' | 'keepNext'): unknown {
+function paraValue(p: ParaStyle, k: (typeof PARA_KEYS)[number]): unknown {
   switch (k) {
     case 'align': return p.align ?? 'left';
     case 'line': return p.line ?? 1;
-    case 'keepNext': return !!p.keepNext;
+    case 'keepNext': case 'keepLines': case 'noWidow': return !!p[k];
     default: return p[k] ?? 0;
   }
 }
 
-const PARA_KEYS = ['align', 'spaceBefore', 'spaceAfter', 'line', 'indent', 'firstLine', 'keepNext'] as const;
+const PARA_KEYS = ['align', 'spaceBefore', 'spaceAfter', 'line', 'indent', 'firstLine', 'keepNext', 'keepLines', 'noWidow'] as const;
 
 /** A paragraph after its style changed from `from` to `to`: what looked like `from` now looks like `to`. */
 export function restylePara(p: ParaStyle, from: NamedStyle, to: NamedStyle): ParaStyle {
   const want = paraFromStyle(to, p);
   const out: ParaStyle = { ...p, style: want.style };
   for (const k of PARA_KEYS) {
-    const fromV = k === 'align' ? from.align : k === 'keepNext' ? from.keepNext : from[k];
+    const fromV = k === 'keepLines' || k === 'noWidow' ? !!from[k] : from[k];
     if (paraValue(p, k) === fromV) (out as Record<string, unknown>)[k] = (want as Record<string, unknown>)[k];
   }
   return cleanPara(out);

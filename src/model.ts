@@ -459,6 +459,10 @@ export interface ParaStyle {
   line?: number;
   /** Documents: kept on the same page as the paragraph after it (headings). */
   keepNext?: boolean;
+  /** Documents: its lines kept together on one page (Word's Keep lines together). */
+  keepLines?: boolean;
+  /** Documents: a single first or last line may be left on a page by itself (Word's Widow/Orphan control off). */
+  noWidow?: boolean;
   /** Documents: indent from the right margin, in points. */
   indentRight?: number;
   /** Documents: line spacing in points instead of a multiple: exactly this, or at least this. */

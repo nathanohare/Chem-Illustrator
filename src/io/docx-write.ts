@@ -484,7 +484,9 @@ class DocxWriter {
     const pPr: string[] = [];
     if (st.id !== 'Normal') pPr.push(`<w:pStyle w:val="${xml(st.id)}"/>`);
     if (!!ps.keepNext !== st.keepNext) pPr.push(ps.keepNext ? '<w:keepNext/>' : '<w:keepNext w:val="0"/>');
+    if (!!ps.keepLines !== !!st.keepLines) pPr.push(ps.keepLines ? '<w:keepLines/>' : '<w:keepLines w:val="0"/>');
     if (ps.pageBreak) pPr.push('<w:pageBreakBefore/>');
+    if (!!ps.noWidow !== !!st.noWidow) pPr.push(ps.noWidow ? '<w:widowControl w:val="0"/>' : '<w:widowControl/>');
     // Word has no "start a new column" for a paragraph: a column break begins it
     const colBreak = ps.colBreak ? '<w:r><w:br w:type="column"/></w:r>' : '';
     const em = runs.find((r) => r.obj === undefined)?.size ?? st.size;
@@ -1335,7 +1337,7 @@ class DocxWriter {
     const normal = styleOf(t, undefined);
     const out: string[] = [HEAD, `<w:styles xmlns:w="${W_NS}">`];
     out.push(`<w:docDefaults><w:rPrDefault><w:rPr>${fontsXml(normal.font)}<w:sz w:val="${half(normal.size)}"/><w:szCs w:val="${half(normal.size)}"/><w:lang w:val="en-US" w:eastAsia="en-US" w:bidi="ar-SA"/></w:rPr></w:rPrDefault>` +
-      `<w:pPrDefault><w:pPr><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>`);
+      `<w:pPrDefault><w:pPr><w:widowControl/><w:spacing w:after="0" w:line="240" w:lineRule="auto"/></w:pPr></w:pPrDefault></w:docDefaults>`);
     const ids = Object.keys(t.styles);
     for (const id of ['Normal', ...ids.filter((k) => k !== 'Normal')]) {
       const s = t.styles[id];
@@ -1721,7 +1723,9 @@ function styleXml(s: NamedStyle, ids: string[]): string {
       `${s.next && ids.includes(s.next) ? `<w:next w:val="${xml(s.next)}"/>` : ''}<w:uiPriority w:val="${PRIORITY[id] ?? 29}"/><w:qFormat/>`;
   const pPr: string[] = [];
   pPr.push(s.keepNext ? '<w:keepNext/>' : '<w:keepNext w:val="0"/>');
-  pPr.push('<w:widowControl/>');
+  // (widow and orphan control is on for every style, from the document's defaults, unless a style turns it off)
+  if (s.keepLines) pPr.push('<w:keepLines/>');
+  if (s.noWidow) pPr.push('<w:widowControl w:val="0"/>');
   pPr.push(`<w:spacing w:before="${twips(s.spaceBefore)}" w:after="${twips(s.spaceAfter)}" w:line="${Math.round(240 * s.line)}" w:lineRule="auto"/>`);
   pPr.push(`<w:ind w:left="${twips(s.indent)}" ${s.firstLine < 0 ? `w:hanging="${twips(-s.firstLine)}"` : `w:firstLine="${twips(s.firstLine)}"`}/>`);
   pPr.push(`<w:jc w:val="${JC[s.align]}"/>`);

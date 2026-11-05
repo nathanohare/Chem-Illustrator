@@ -141,7 +141,7 @@ interface RProps { font?: string; size?: number; bold?: boolean; italic?: boolea
 /** Paragraph formatting as a file gives it, in points. */
 interface PProps {
   align?: Justify; before?: number; after?: number; line?: { v: number; rule: string };
-  left?: number; right?: number; first?: number; keepNext?: boolean; pageBreak?: boolean; outline?: number; noLineNumbers?: boolean; noHyphen?: boolean;
+  left?: number; right?: number; first?: number; keepNext?: boolean; keepLines?: boolean; /** Widow/Orphan control (on in Word unless a file turns it off). */ widow?: boolean; pageBreak?: boolean; outline?: number; noLineNumbers?: boolean; noHyphen?: boolean;
   numId?: string; ilvl?: number; contextual?: boolean;
   /** Paragraph borders (w:pBdr) and shading (w:shd's fill). */
   border?: ParaBorders; shade?: string | null;
@@ -529,6 +529,8 @@ class DocxReader {
           break;
         }
         case 'keepNext': out.keepNext = this.on(c); break;
+        case 'keepLines': out.keepLines = this.on(c); break;
+        case 'widowControl': out.widow = this.on(c); break;
         case 'pageBreakBefore': out.pageBreak = this.on(c); break;
         case 'suppressLineNumbers': out.noLineNumbers = this.on(c); break;
         case 'suppressAutoHyphens': out.noHyphen = this.on(c); break;
@@ -1283,6 +1285,7 @@ class DocxReader {
       // spacing in points stays in points for the paragraph (its style takes the nearest multiple)
       ...(p.line && p.line.rule !== 'auto' ? { linePt: round(p.line.v / 20), lineRule: p.line.rule === 'exact' ? 'exact' as const : 'atLeast' as const } : { line: this.lineOf(p, size) }),
       indent: round(indent), indentRight: p.right ? round(Math.max(0, p.right)) : undefined, firstLine: list ? undefined : round(p.first ?? 0), keepNext: p.keepNext,
+      keepLines: p.keepLines || undefined, noWidow: p.widow === false || undefined,
       pageBreak: p.pageBreak, section: brk, list, level: list ? ilvl : undefined, noLineNumbers: p.noLineNumbers, noHyphen: p.noHyphen || undefined,
       tabs: finalTabs(p), scheme, bullet,
       border: cleanBorders(p.border), shade: p.shade && p.shade !== '#ffffff' ? p.shade : undefined,
@@ -2888,6 +2891,7 @@ class DocxReader {
       font: r.font ?? WORD_FONT, size, bold: !!r.bold, italic: !!r.italic, color: r.color ?? undefined,
       align: p.align ?? 'left', spaceBefore: round(p.before ?? 0), spaceAfter: round(p.after ?? 0), line: this.lineOf(p, size) ?? 1,
       indent: round(Math.max(0, p.left ?? 0)), firstLine: round(p.first ?? 0), keepNext: !!p.keepNext,
+      ...(p.keepLines ? { keepLines: true } : {}), ...(p.widow === false ? { noWidow: true } : {}),
       next: next && next !== ours ? next : ours === 'Normal' ? undefined : dflt?.next,
       outline: OUTLINE[ours] ?? (p.outline && p.outline <= 9 && ours !== 'Normal' ? p.outline : undefined),
     };
