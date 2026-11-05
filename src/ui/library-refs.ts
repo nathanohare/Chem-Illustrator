@@ -222,7 +222,7 @@ function libraryPanel(lib: Library, host: LibraryRefsHost, show: Show, ctx: Hold
 
   const openPdf = async () => {
     const [r] = picked();
-    if (!r?.pdf) { ctx.flash('The reference picked has no PDF: Attach PDF… keeps one with it.'); return; }
+    if (!r?.pdf) { ctx.flash('The selected reference has no PDF. Use Attach PDF… to add one.'); return; }
     const bytes = await lib.place.readFile(r.pdf);
     if (!bytes) { ctx.flash('The PDF isn\'t in your library\'s folder any more (moved or deleted?). Attach PDF… keeps it again.', 8000); return; }
     await host.openFile(r.pdf, bytes, await lib.place.filePath(r.pdf));

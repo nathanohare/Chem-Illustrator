@@ -134,9 +134,9 @@ export function readPushes(doc: Doc, m: Measure, arrows: Arrow[]): PushReading {
   const gaveTo = new Map<number, number[]>();
   for (const r of arrows) {
     const k = r.headStyle === 'full' ? 2 : 1;
-    if (r.tailStyle !== 'none') { say('warning', 'A double-headed curved arrow doesn\'t show which way electrons go, so it was left out.', { arrows: [r.id] }); continue; }
+    if (r.tailStyle !== 'none') { say('warning', 'A double-headed curved arrow doesn\'t show electron direction, so it was skipped.', { arrows: [r.id] }); continue; }
     const from = arrowEnd(doc, m, r, 'tail'), to = arrowEnd(doc, m, r, 'head');
-    if (from.kind === 'point') { say('error', 'This arrow doesn\'t start on a lone pair, a bond or an atom. Start it at the electrons that move.', { arrows: [r.id] }); continue; }
+    if (from.kind === 'point') { say('error', 'This arrow doesn\'t start from a lone pair, bond or an atom.', { arrows: [r.id] }); continue; }
     if (to.kind === 'point') { say('error', 'This arrow doesn\'t point at an atom, a bond or the gap where a new bond forms.', { arrows: [r.id] }); continue; }
     const src = from.kind === 'atom' ? [from.id] : pairOf(doc, from);
     // where the electrons go: onto an atom (as a lone pair), or into a bond (old or new)
@@ -157,7 +157,7 @@ export function readPushes(doc: Doc, m: Measure, arrows: Arrow[]): PushReading {
       if (!src.some((id) => pq.includes(id))) {
         say('error', to.kind === 'gap'
           ? 'This arrow makes a new bond between two atoms its electrons don\'t come from. The electrons for a new bond come from one of its two atoms (a lone pair) or a bond to one of them.'
-          : 'This arrow moves electrons into a bond they aren\'t next to. Point it at the atom they go to instead, or start it on that bond\'s atom or a bond beside it.', { arrows: [r.id], atoms: pq });
+          : 'This arrow moves electrons into a bond they aren\'t next to. Point it at the atom they go to, or start it on that bond\'s atom or an adjacent bond.', { arrows: [r.id], atoms: pq });
         continue;
       }
       dest = { bond: pq };
@@ -181,7 +181,7 @@ export function readPushes(doc: Doc, m: Measure, arrows: Arrow[]): PushReading {
     if (b && b.order === 1.5) { say('error', 'Arrows can\'t be read around an aromatic ring drawn with a circle or dashed bonds. Draw it with alternating single and double bonds.', about); continue; }
     if (b && (outsideValence(b) || b.display === 'dative')) { say('error', 'Arrows into or out of a partial, dative or hapto bond can\'t be read.', about); continue; }
     const after = (b?.order ?? 0) + d / 2;
-    if (!Number.isInteger(after)) say('error', 'A bond would be left with one electron. Each fishhook (half-headed) arrow moves one electron, so a bond made or broken that way needs two: one from each side.', about);
+    if (!Number.isInteger(after)) say('error', 'A bond would be left with one electron. Each fishhook arrow moves one electron, so a bond formed or broken this way needs two fishhooks, one from each side.', about);
     else if (after < 0) say('error', `This bond hasn't the electrons to give: ${(b?.order ?? 0) === 1 ? 'a single bond holds one pair' : `it has ${b?.order ?? 0} pairs`}, and the arrows take ${-d / 2}.`, about);
     else if (after > 3) say('error', 'This would make a bond of more than three pairs.', about);
   }

@@ -78,7 +78,7 @@ export function groupsOf(block: Value[][], byRows: boolean, labels: boolean): Gr
       if (v === null || v === '') values.push(null);
       else if (typeof v === 'number') values.push(v);
       else if (typeof v === 'boolean') values.push(v ? 1 : 0);
-      else return `The input holds ${isError(v) ? `an error (${v.code})` : `text ("${v}")`} where a number is needed${labels ? '' : ' (if its first row or column is labels, tick Labels)'}.`;
+      else return `The input holds ${isError(v) ? `an error (${v.code})` : `text ("${v}")`} where a number is needed${labels ? '' : '(if its first row or column is labels, check Labels)'}.`;
     }
     out.push({ label, values });
   }

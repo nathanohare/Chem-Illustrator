@@ -207,7 +207,7 @@ export function chooseReferences(t: DocText, chosen: string[], manage: () => Pro
     const ok = el('button', { type: 'submit', className: 'primary', textContent: 'Insert' });
     ok.disabled = !ticked.length;
     const form = el('form', {},
-      withInfo(el('h2', { textContent: 'Insert Citation' }), 'Check one or more references: they make one citation (3,5–7). References are numbered in order of first citation, and the numbers change by themselves when text moves. The number shown is the one each has now.'),
+      withInfo(el('h2', { textContent: 'Insert Citation' }), 'Check one or more references to cite them together (3,5–7). Numbers follow order of first citation and update automatically as text moves.'),
       search, list, empty,
       el('p', { className: 'ask-buttons' },
         button('Manage References…', 'Add, edit or import references', async () => {
@@ -526,7 +526,7 @@ export class ReferencesDialog {
     this.hint = el('p', { className: 'muted refs-hint' });
     this.extra = el('div', { className: 'refs-extra' });
     this.groupLabel = el('strong');
-    this.copyTo = el('select', { title: 'Copy the references picked into another open file (each file keeps its own copy)' });
+    this.copyTo = el('select', { title: 'Copy the selected references into another open file (each file keeps its own copy)' });
     this.copyTo.setAttribute('aria-label', 'Copy to');
     this.copyTo.addEventListener('change', () => { const to = this.copyTo.value; this.copyTo.value = ''; if (to) this.copyInto(to, this.pickedRefs()); });
     this.body = el('tbody');
@@ -567,7 +567,7 @@ export class ReferencesDialog {
       this.copyInto(tr.dataset.group, this.pickedRefs());
     });
     d.append(
-      el('div', { className: 'refs-head' }, withInfo(el('h2', { textContent: 'References' }), 'Your library (kept between sessions, with collections, tags and PDFs) and the references of every open file, each in its own group. A document cites them (References > Insert Citation); a presentation shows them at the foot of its slides (Insert > Presentation > References on Slide). Copy references between your library and files with Copy To, by dragging them onto a group\'s name, or with Ctrl+C and Ctrl+V: each file keeps its own copy.'), this.search),
+      el('div', { className: 'refs-head' }, withInfo(el('h2', { textContent: 'References' }), 'Your library (collections, tags, PDFs) plus the references in each open file, each in its own group. Documents cite them (References > Insert Citation); presentations show them on slides (Insert > References on Slide). Copy between library and files with Copy To, drag and drop, or Ctrl+C/Ctrl+V.'), this.search),
       this.hint,
       el('div', { className: 'ask-row refs-style' }, el('label', { htmlFor: 'refs-style', textContent: 'Citation style' }), this.styleSel,
         button('Style Options…', 'Change any detail of the style: authors, "and", et al., title, year, volume, issue, article numbers, DOI…', () => void this.styleOptions())),
@@ -898,7 +898,7 @@ export class ReferencesDialog {
   private async pasteText(): Promise<void> {
     if (!this.holder()) { this.host.flash('Open or make a document or a presentation to keep references in.'); return; }
     const text = await modal<string>('ref-paste', (d, done) => {
-      const area = el('textarea', { rows: 14, placeholder: '@article{key,\n  author = {Fulmer, Gregory R. and …},\n  …\n}\n\nor RIS:\nTY  - JOUR\nAU  - Fulmer, Gregory R.\n…\nER  -' });
+      const area = el('textarea', { rows: 14, placeholder: 'Paste BibTeX or RIS' });
       area.setAttribute('autofocus', '');
       area.spellcheck = false;
       const form = el('form', {},

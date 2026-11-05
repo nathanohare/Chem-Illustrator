@@ -222,7 +222,7 @@ export class Keeper {
           await this.changedOnDisk(tab, disk);
           return 'stop';
         }
-        const i = await choose('File Changed on Disk', `${name} has been changed since you opened or last saved it here (${when(disk.modified)}), by another program, someone else in a shared folder, or OneDrive bringing in changes. Saving now replaces those changes with yours.`,
+        const i = await choose('File Changed on Disk', `${name} was changed by another program or person since you opened or saved it (${when(disk.modified)}). Saving now overwrites those changes.`,
           ['Cancel', 'Save As…', 'Save Anyway'], 1);
         if (i === 1) return 'save-as';
         if (i !== 2) return 'stop';
@@ -292,7 +292,7 @@ export class Keeper {
       if (t.ref.kind !== 'path') return;
       // moved, renamed or deleted: said once; saving puts it back
       t.stamp = null;
-      notice(`disk-${t.id}`, `${t.name} isn’t there any more`, `${t.ref.path} has been moved, renamed or deleted (or its drive is offline). The tab still has everything: Save puts the file back, or Save As puts it somewhere else.`, [
+      notice(`disk-${t.id}`, `${t.name} isn’t there any more`, `${t.ref.path} was moved, renamed or deleted, or its drive is offline. Your work is still in this tab: Save recreates the file, or Save As saves it elsewhere.`, [
         { label: 'Save As…', run: () => void this.ws.saveAs(t), main: true },
         { label: 'OK', run: () => {} },
       ]);
@@ -314,7 +314,7 @@ export class Keeper {
     const keepMine = () => { t.stamp = disk; this.paused.delete(t.id); this.told.delete(t.id); };
     notice(`disk-${t.id}`, `${t.name} changed on disk`,
       `It was changed ${when(disk.modified)} outside Chem Illustrator: by another program, someone else in a shared folder, or OneDrive bringing in changes.` +
-      (t.dirty ? ' You have unsaved changes here too: Reload throws them away, Keep My Version saves over theirs next time, and Open Their Version shows their version in a new tab to compare.' : ' Reload shows their version; Keep My Version leaves the tab as it is.'), [
+      (t.dirty ? 'You also have unsaved changes. Reload discards them, Keep My Version overwrites theirs on the next save, and Open Their Version opens theirs in a new tab to compare.' : ' Reload shows their version; Keep My Version leaves the tab as it is.'), [
         { label: t.dirty ? 'Reload and Discard Mine' : 'Reload', run: () => void this.reload(t), main: !t.dirty },
         { label: 'Keep My Version', run: keepMine, main: t.dirty },
         { label: 'Open Their Version', run: () => { keepMine(); void this.openDiskCopy(t); } },

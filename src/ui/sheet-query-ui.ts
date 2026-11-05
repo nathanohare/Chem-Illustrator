@@ -88,7 +88,7 @@ async function readFile(file: string, types: FileType[]): Promise<Uint8Array> {
   const name = file.replace(/^.*[\\/]/, '');
   const have = picked.get(name);
   if (have) return have;
-  const ok = await ask('Find the file', [], { ok: 'Choose…', note: `The query reads ${name}. A browser can't open it again by itself: choose it to read it.` });
+  const ok = await ask('Find the file', [], { ok: 'Choose…', note: `The query reads ${name}. The browser can't reopen it automatically: choose it to read it.` });
   if (!ok) throw new Error(`${name} wasn't chosen.`);
   const got = await openBytesDialog('Data files', types);
   if (!got) throw new Error(`${name} wasn't chosen.`);

@@ -265,7 +265,7 @@ export class SmartPane {
     info.innerHTML = '<svg viewBox="0 0 14 14" width="13" height="13" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true"><circle cx="7" cy="7" r="5.9"/><path d="M7 6.2v3.9" stroke-width="1.5" stroke-linecap="round"/><circle cx="7" cy="4.1" r=".85" fill="currentColor" stroke="none"/></svg>';
     const help = data.layout === 'cycle'
       ? 'Each row is a species of the cycle, as it looks on the page; the T row under it is the text on the arrow to the next species: the step\'s name, what joins the cycle there and what leaves it. Type in the rows, drag a row by its dots to reorder, or drag a species on the page and its arrows follow. The + buttons on the page add a species there.'
-      : 'Each row is a species of the scheme, as it looks on the page; the T row under it is the text above and below the arrow to the next species. Type in the rows, drag a row by its dots to reorder, or drag a species on the page and its arrows follow. The + buttons on the page add a species there.';
+      : 'Each row is a species in the scheme; the T row below it is the text above and below the arrow to the next species. Type in the rows, drag a row\'s handle to reorder, or drag a species on the page. Use + on the page to add a species.';
     info.title = help;
     info.setAttribute('aria-label', help);
     head.append(info);

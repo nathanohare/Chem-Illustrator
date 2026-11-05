@@ -515,7 +515,7 @@ export async function loadSettings(notice: (msg: string) => void = () => {}, sto
   try {
     text = await store.read();
   } catch (e) {
-    notice(`Your settings could not be read (${e}), so the app is using its defaults until it is restarted. Changes to settings won't be saved, so the file isn't written over.`);
+    notice(`Your settings couldn't be read (${e}), so defaults are in use until you restart. Settings changes won't be saved, to protect the file.`);
     // (saving now would write over the file that couldn't be read)
     keepOff = true;
     return parseSettings(null);
@@ -531,10 +531,10 @@ export async function loadSettings(notice: (msg: string) => void = () => {}, sto
   try { backup = await store.readBackup(); } catch { /* none */ }
   const kept = where ? ` The damaged file was kept as ${where}.` : '';
   if (backup && settingsReadable(backup)) {
-    notice(`Your settings file was damaged, so the last good copy of your settings was put back.${kept}`);
+    notice(`Your settings file was damaged, so the last good copy was restored.${kept}`);
     return parseSettings(backup);
   }
-  notice(`Your settings file was damaged and there was no good copy to put back, so the app started with its defaults.${kept}`);
+  notice(`Your settings file was damaged and no backup was found, so default settings are in use.${kept}`);
   return parseSettings(null);
 }
 

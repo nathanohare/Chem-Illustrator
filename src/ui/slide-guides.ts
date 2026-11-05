@@ -180,7 +180,7 @@ export async function gridAndGuides(view: SlideView, shown: { grid: boolean; sma
     { name: 'clear', label: 'Clear All Guides', value: 'false', type: 'checkbox' },
     { name: 'units', label: 'Ruler units', value: prefs.units, options: [{ value: 'in', label: 'Inches' }, { value: 'cm', label: 'Centimeters' }] },
     { name: 'from', label: 'Rulers count from', value: prefs.from, options: [{ value: 'centre', label: 'The middle of the slide (as PowerPoint)' }, { value: 'corner', label: 'The top left corner' }] },
-  ], { ok: 'OK', note: 'Hold Alt while dragging to place things freely. Drag a guide off the slide to take it away; Ctrl+drag a guide for a copy.' });
+  ], { ok: 'OK', note: 'Hold Alt while dragging to move freely. Drag a guide off the slide to remove it; Ctrl+drag to copy it.' });
   if (!v) return null;
   const nextPrefs: RulerPrefs = { units: v.units === 'cm' ? 'cm' : 'in', from: v.from === 'corner' ? 'corner' : 'centre' };
   const spacing = v.spacing === 'custom' ? Number(v.custom) : Number(v.spacing);

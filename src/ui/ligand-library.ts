@@ -91,7 +91,7 @@ export class LigandLibraryWindow {
     });
     this.details = el('div', { className: 'lig-details' });
     this.count = el('span', { className: 'muted' });
-    this.useBtn = button('Use Template', 'Pick the ligand\'s drawing as the tool, then click a metal in the drawing to put it on (or click anywhere). Double-click a ligand, or press Enter, to do the same and close this window', () => this.use(false), true);
+    this.useBtn = button('Use Template', 'Choose a ligand, then click a metal in the drawing to attach it (or click anywhere). Double-click a ligand or press Enter to insert it and close', () => this.use(false), true);
     d.append(
       el('div', { className: 'refs-head' }, withInfo(el('h2', { textContent: 'Ligand Library' }), 'Each abbreviation also works typed as a label: type dppf, XPhos or salen on a metal\'s bond.'), this.search),
       el('div', { className: 'kb-body lig-body' }, this.families, this.grid, this.details),

@@ -229,7 +229,7 @@ export class SheetPivots {
     if (!wb) return { count: 0, problems: [] };
     const all = wb.sheets.flatMap((s) => s.pivots.map((pt) => ({ s, pt })));
     if (!all.length) {
-      if (!quiet) this.host.flash('There are no PivotTables or queries in this workbook to refresh (data tables recalculate by themselves).');
+      if (!quiet) this.host.flash('No PivotTables or queries to refresh (data tables recalculate automatically).');
       return { count: 0, problems: [] };
     }
     const problems: string[] = [];
@@ -415,7 +415,7 @@ export class SheetPivots {
     const items = fieldItems(src, field);
     const hid = new Set(c.pt.hidden[field] ?? []);
     if (items.length > 200) { this.host.flash(`${field} has ${items.length} different items: too many to list. Filter the source instead.`); return; }
-    const got = await ask(`Filter: ${field}`, items.map((it, k) => ({ name: `i${k}`, label: it.text, value: String(!hid.has(it.text)), type: 'checkbox' as const })), { ok: 'OK', note: 'Clear the items to leave out of the report.' });
+    const got = await ask(`Filter: ${field}`, items.map((it, k) => ({ name: `i${k}`, label: it.text, value: String(!hid.has(it.text)), type: 'checkbox' as const })), { ok: 'OK', note: 'Clear the items to exclude from the report.' });
     if (!got) return;
     const hidden = items.filter((_, k) => got[`i${k}`] !== 'true').map((it) => it.text);
     if (hidden.length === items.length) { this.host.flash('Keep at least one item checked.'); return; }

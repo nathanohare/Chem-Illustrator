@@ -126,7 +126,7 @@ export function editHeaderFooter(m: Master, slide: { layout: LayoutId; hf?: Slid
     const apply = el('button');
     apply.type = 'button';
     apply.textContent = 'Apply';
-    apply.title = picked > 1 ? `Only the ${picked} slides picked` : 'Only the slide being edited';
+    apply.title = picked > 1 ? `Only the ${picked} selected slides` : 'Only the slide being edited';
     const all = el('button', 'primary');
     all.type = 'submit';
     all.textContent = 'Apply to All';

@@ -479,7 +479,7 @@ A drawing is laid out on pages, as in ChemDraw, so you can see how it will print
 
 **Settings ▸ Page Grid** (also **View ▸ Navigation ▸ Page Grid Settings…**) changes how the pages look: the boundaries dashed, dotted or solid, their thickness, color and strength, how gray empty pages and the space around the pages are, whether the pages beyond are outlined, and the fixed edges: the line's width, and the hatching's gap, reach, stroke width and slant, and whether it continues around a corner where two fixed edges meet or leans the other way on the side edges so the two meet in a chevron. **View ▸ Navigation ▸ Page Grid** switches the pages off for an endless drawing with nothing fixed. None of this is printed.
 
-**Printing** a drawing on pages prints one sheet for each page, at actual size, as ChemDraw does; check **Leave out pages with nothing on them** to skip empty ones, or choose **The whole drawing on one sheet**.
+**Printing** a drawing on pages prints one sheet for each page, at actual size, as ChemDraw does; check **Skip blank pages**, or choose **The whole drawing on one sheet**.
 
 ## Reading Mode
 

@@ -213,6 +213,6 @@ describe('drawing the next intermediate from curved arrows', () => {
       headStyle: 'full', tailStyle: 'none', headType: 'solid', line: 'solid', noGo: false, equilibrium: false, headLength: 6, headWidth: 1.5,
     }));
     const { errors } = run(doc);
-    expect(errors[0].text).toMatch(/doesn't start on a lone pair/);
+    expect(errors[0].text).toMatch(/doesn't start from a lone pair/);
   });
 });

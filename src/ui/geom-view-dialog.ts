@@ -53,7 +53,7 @@ export function askGeomView(name: string, atoms: QmAtom[], bonds: QmBond[], view
           <div class="gv-turn">
             <button type="button" data-turn="best" title="Back to the side that spreads it out most">Best side</button>
             <button type="button" data-turn="cw" title="Rotate 90° clockwise in the page">↻ 90°</button>
-            <button type="button" data-turn="flip" title="Turn it around (180° about the vertical)">⇄ Flip</button>
+            <button type="button" data-turn="flip" title="Flip it (180° about the vertical axis)">⇄ Flip</button>
           </div>
         </div>
       </div>
@@ -101,7 +101,7 @@ export function askGeomView(name: string, atoms: QmAtom[], bonds: QmBond[], view
       const flat = styleOf() === '2d';
       $('.gv-note').textContent = flat
         ? 'Drawn as a 2-D structure by its level (shown here in lines). Hiding atoms works on it; fading and turning are for the 3-D looks.'
-        : 'Drag to turn it (Shift+drag turns it in the page; the arrow keys turn it too). The box is the space it has by its level.';
+        : 'Drag to rotate it (Shift+drag rotates in the page plane; arrow keys also rotate). The box shows the space available at its level.';
       ghosts = new Set(v.hidden);
       const pv: GeomView = { ...v, style: flat ? 'wire' : v.style ?? look, rot: rotation(), hidden: [], faded: [...new Set([...(v.faded ?? []), ...ghosts])] };
       const spec = geomSpec(atoms, bonds, pv, look);

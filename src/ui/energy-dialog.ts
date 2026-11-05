@@ -58,7 +58,7 @@ export async function flatFor(geom: QmAtom[], label: string, layout: LayoutFn): 
 }
 
 /** How the window works, behind the "i" by its title. */
-const HELP = 'How to fill it in: each row is a species along the reaction coordinate, and each pathway has its own name, energy and structure columns. Leave an energy empty where a pathway has nothing (so a one-step route can sit beside a two-step one). Name transition states with ‡ (TS1‡): the ‡ button adds one to the name box you were last in. Click a Structure cell to draw the structure (in the drawing box, with the usual tools), paste one, or type a name or SMILES. Position places a species along the bottom: type numbers in any units (only their spacing counts) and leave it empty to space species evenly. Drag a row by its dots to move it.';
+const HELP = 'Each row is a species along the reaction coordinate; each pathway has its own name, energy and structure columns. Leave an energy empty where a pathway has no species. Mark transition states with ‡ (TS1‡). Click a Structure cell to draw, paste, or type a name or SMILES. Position sets spacing along the axis (empty = even). Drag a row\'s handle to reorder.';
 
 /** Ask for a diagram: a new one (from a preset), or `editing` with its numbers to change. */
 export function askEnergy(editing: EnergyData | null, size: { w: number; h: number }, preview?: (d: EnergyData, canvas: HTMLCanvasElement) => void, layout?: LayoutFn, structure?: EnergyStructureHooks): Promise<EnergyData | null> {

@@ -23,7 +23,7 @@ export const ERR = {
   /** A calculation Excel can't finish: an empty array, or a LAMBDA left uncalled. */
   calc: (detail = 'The calculation gives nothing to show') => new CellError('#CALC!', detail),
   /** Still being worked out (structure properties come from the chemistry engine a moment later). */
-  busy: () => new CellError('#BUSY!', 'Being worked out'),
+  busy: () => new CellError('#BUSY!', 'Calculating…'),
   /** A field asked of something that isn't a data type (a compound), or that its card doesn't have. */
   field: (detail = 'No such field') => new CellError('#FIELD!', detail),
 };

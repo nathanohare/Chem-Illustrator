@@ -171,7 +171,7 @@ export function askLink(q: LinkAsk): Promise<LinkAnswer | null> {
     // a web page or a DOI
     const web = document.createElement('div');
     const addr = document.createElement('input');
-    addr.placeholder = 'https://… or a DOI, such as 10.1021/acs.orglett.5b00001';
+    addr.placeholder = 'URL or DOI (e.g. 10.1021/acs.orglett.5b00001)';
     addr.value = startKind === 'web' ? (doiOf(start) ?? start) : '';
     const webHelp = document.createElement('p');
     webHelp.className = 'ask-help muted';

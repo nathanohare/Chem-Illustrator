@@ -133,7 +133,7 @@ export class AnimationUI {
       b.className = 'rb-big';
       b.type = 'button';
       b.setAttribute('aria-pressed', 'false');
-      b.title = t.id === 'none' ? 'No transition: the slide just appears' : `${t.name}: ${t.id === 'fade' ? 'the new slide fades in over the old one' : t.id === 'push' ? 'the new slide pushes the old one off' : t.id === 'wipe' ? 'the new slide is uncovered across the old one' : t.id === 'morph' ? 'things on both slides glide, grow and shrink to their new places; the rest fade (give the next slide the same title, structures, shapes or pictures, moved or resized)' : 'the new slide slides in over the old one'}`;
+      b.title = t.id === 'none' ? 'No transition: the slide just appears' : `${t.name}: ${t.id === 'fade' ? 'the new slide fades in over the old one' : t.id === 'push' ? 'the new slide pushes the old one off' : t.id === 'wipe' ? 'the new slide is uncovered across the old one' : t.id === 'morph' ? 'objects on both slides move and resize to their new positions; others fade (use the same title, structures, shapes or pictures on the next slide)' : 'the new slide slides in over the old one'}`;
       b.innerHTML = `<span class="rb-icon">${TRANSITION_ICONS[t.id]}</span>${t.name}`;
       b.addEventListener('click', () => this.setTransition({ kind: t.id, ...(t.dirs ? { dir: this.transition()?.dir ?? 'left' } : {}) }));
       this.kinds.set(t.id, b);
@@ -171,7 +171,7 @@ export class AnimationUI {
       grow: 'the selected objects grow (or shrink) and stay that size; set the size in Effect Options',
       spin: 'the selected objects turn around; set how far in Effect Options',
       transparency: 'the selected objects become see-through and stay so; set how much in Effect Options',
-      colour: 'a shape\'s fill, or text\'s color, changes (a structure or picture is colored all over); pick the color in Effect Options. PowerPoint can\'t recolor a structure or picture',
+      colour: 'a shape\'s fill or text color changes (structures and pictures are recolored entirely); choose the color in Effect Options. PowerPoint can\'t recolor structures or pictures',
       turn3d: 'a structure turns smoothly in 3-D to each key view you set, one view per click (Key Views… in Effect Options). PowerPoint shows it still',
     };
     for (const exit of [false, true, null]) {
