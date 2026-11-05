@@ -13,7 +13,6 @@ Chem Illustrator is licensed under the GNU General Public License, version 3 or 
 | [TeaVM](https://teavm.org) 0.16.0 runtime and class library (part of the OPSIN build) | Runs OPSIN's Java code as JavaScript | Apache-2.0; includes code from Apache Harmony (Apache-2.0). Notice: "This product includes software developed by Alexey Andreev (http://teavm.org). This product includes software developed by The Apache Software Foundation (http://www.apache.org/)." |
 | StAX API 1.0.1 (`stax:stax-api`, interfaces only, part of the OPSIN build) | Lets OPSIN read its XML word lists | Apache-2.0 |
 | [cdxmorph](https://github.com/rshenvi/cdxmorph) 1.47.0 by Ryan Shenvi (Shenvi Lab), ported from Python to TypeScript (`src/morph/`), with its example schemes in `tests/morph/` | Chemistry ▸ Animate ▸ Animate Reaction: pairing the atoms of each step and drawing the frames between the structures | MIT (full text below). Used with the author's permission, which Ryan Shenvi gave Nathan O'Hare in October 2026. |
-| [Open-NMR](https://github.com/laurennicrodriguez/Open-NMR) (commit 2149d6a) by Lauren Rodriguez and contributors: its exact spin simulator (`nmrsuite.spin`), ported from Python to TypeScript (`src/chem/nmr/spin.ts`) | NMR panel: simulated 1H spectra from predicted shifts and couplings | BSD-3-Clause (full text below) |
 | [polygon-clipping](https://github.com/mfogel/polygon-clipping) 0.15.7 by Mike Fogel (forked from martinez by Alexander Milevski), with [splaytree](https://github.com/w8r/splay-tree) 3.2.3 by Alexander Milevski | Highlight effects (soft edges, shadows, glow, textures) and ring fill shadows in saved files and copied pictures: the exact shape of each step of a fade | MIT (full text below) |
 | [robust-predicates](https://github.com/mourner/robust-predicates) 3.0.3 by Vladimir Agafonkin (part of polygon-clipping) | Exact geometry tests for polygon-clipping | Unlicense (public domain; text below) |
 | [fflate](https://github.com/101arrowz/fflate) 0.8.2 | Packing and unpacking PowerPoint, Excel and Word files (.pptx, .xlsx, .docx), and compressing PDF pages | MIT (full text below) |
@@ -512,35 +511,3 @@ Agreement.
 
 Python in Pyodide is changed only to build it for WebAssembly (Pyodide's patches, in its source).
 
-## Open-NMR licence
-
-```
-BSD 3-Clause License
-
-Copyright (c) 2026, Open-NMR contributors
-
-Redistribution and use in source and binary forms, with or without
-modification, are permitted provided that the following conditions are met:
-
-1. Redistributions of source code must retain the above copyright notice, this
-   list of conditions and the following disclaimer.
-
-2. Redistributions in binary form must reproduce the above copyright notice,
-   this list of conditions and the following disclaimer in the documentation
-   and/or other materials provided with the distribution.
-
-3. Neither the name of the copyright holder nor the names of its
-   contributors may be used to endorse or promote products derived from
-   this software without specific prior written permission.
-
-THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS"
-AND ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
-IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
-DISCLAIMED. IN NO EVENT SHALL THE COPYRIGHT HOLDER OR CONTRIBUTORS BE LIABLE
-FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
-DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR
-SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER
-CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY,
-OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE
-OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-```
