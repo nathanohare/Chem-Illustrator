@@ -239,7 +239,7 @@ class DocxWriter {
     pkg.add('word/settings.xml', settings(false), DOCX_CT.settings);
     // our own part: each structure's drawing, and each table as made here
     pkg.relate(main, DOCX_REL.customXml, '../customXml/item1.xml');
-    pkg.add('customXml/item1.xml', `${HEAD}<chemIllustrator xmlns="${MODEL_NS}" version="1">${xml(JSON.stringify(this.model))}</chemIllustrator>`);
+    pkg.add('customXml/item1.xml', `${HEAD}<chemIllustrator xmlns="${MODEL_NS}" version="1">${xml(JSON.stringify(this.model, shortNumbers))}</chemIllustrator>`);
     pkg.relate('customXml/item1.xml', DOCX_REL.customXmlProps, 'itemProps1.xml');
     pkg.add('customXml/itemProps1.xml', `${HEAD}<ds:datastoreItem ds:itemID="{3B7E2C41-8F0A-4D6B-A9C2-5E1D7F3A2B90}" xmlns:ds="http://schemas.openxmlformats.org/officeDocument/2006/customXml"><ds:schemaRefs><ds:schemaRef ds:uri="${MODEL_NS}"/></ds:schemaRefs></ds:datastoreItem>`, DOCX_CT.itemProps);
     pkg.relate('', REL.officeDocument, main);
@@ -1506,6 +1506,15 @@ function textEffects(r: TextRun, color: string | undefined): string {
 function turnAttrs(o: DocObject): string {
   if (o.kind !== 'picture' && o.kind !== 'drawing') return '';
   return `${o.rot ? ` rot="${Math.round(o.rot * 60000)}"` : ''}${o.flipH ? ' flipH="1"' : ''}${o.flipV ? ' flipV="1"' : ''}`;
+}
+
+/**
+ * Numbers in our part to nine significant figures (a structure's coordinates are worked out to
+ * sixteen, 39.42107070546791): a millionth of a point and finer is never seen, and the part is
+ * a good deal smaller.
+ */
+function shortNumbers(_key: string, v: unknown): unknown {
+  return typeof v === 'number' && Number.isFinite(v) && !Number.isInteger(v) ? Number(v.toPrecision(9)) : v;
 }
 
 /** A table cell's run: its font and size always given (tables are set in the drawing's font). */

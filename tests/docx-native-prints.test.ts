@@ -144,3 +144,19 @@ describe('charts in Word', () => {
     expect(await kind(rezip({ ...p, [path]: new Uint8Array(strToU8(line)) }))).toBe('line');
   });
 });
+
+describe('our part of a Word file', () => {
+  it('keeps numbers to nine significant figures', async () => {
+    const atoms = [{ id: 1, x: 39.42107070546791, y: 12.000000000000002, el: 'C' }, { id: 2, x: 64.42107070546791, y: 26.433756729740646, el: 'O' }];
+    const contents = { ...DRAWING, captions: [], atoms, bonds: [{ id: 3, a: 1, b: 2, order: 1 }] } as unknown as Contents;
+    const p = unzipSync(await writeDocx(docOf({ kind: 'drawing', contents }), deps));
+    const part = Object.keys(p).filter((n) => /^customXml\/item\d+\.xml$/.test(n)).map((n) => strFromU8(p[n])).find((x) => x.includes('chemIllustrator'))!;
+    expect(part).toContain('39.4210707');
+    expect(part).not.toMatch(/\d\.\d{10,}/);
+    const { doc } = await readDocx(rezip(p));
+    const o = Object.values(doc.objects)[0];
+    const back = o.kind === 'drawing' ? o.contents.atoms : [];
+    expect(back.map((a) => a.x)).toEqual([39.4210707, 64.4210707]);
+    expect(Math.abs(back[1].y - 26.433756729740646)).toBeLessThan(1e-6);
+  });
+});
