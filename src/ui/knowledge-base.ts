@@ -486,7 +486,7 @@ export class KnowledgeBaseWindow {
       if (this.queryCanon && next === rows.length && this.lookingInside) body.append(this.groupRow(span, 'Looking for compounds containing it…'));
     };
     this.moreRows(FIRST_ROWS);
-    const table = el('table', { className: 'refs-table kb-table' + (t.picture ? ' kb-pictures' : '') }, el('thead', {}, el('tr', {}, ...t.columns.filter((c) => !c.hidden).map((c) => this.header(c)), ...(t.links ? [el('th', { textContent: 'Look up' })] : []))), body);
+    const table = el('table', { className: 'refs-table kb-table' + (t.picture ? ' kb-pictures' : '') + (t.fit ? ' kb-fit' : '') }, el('thead', {}, el('tr', {}, ...t.columns.filter((c) => !c.hidden).map((c) => this.header(c)), ...(t.links ? [el('th', { textContent: 'Look up' })] : []))), body);
     if (!rows.length) {
       const q = this.search.value.trim();
       const empty = el('p', { className: 'muted kb-empty', textContent: this.lookingInside ? `Looking for compounds containing ${q}…` : this.queryCanon ? `Nothing in ${t.title} is or contains ${q}.` : q ? `Nothing in ${t.title} matches “${q}”.` : 'This table is empty.' });

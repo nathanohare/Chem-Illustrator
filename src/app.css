@@ -1936,6 +1936,10 @@ dialog.kb-window { position: fixed; inset: 56px 0 auto 0; margin: 0 auto; z-inde
 .kb-mx-swatch.one { margin-left: 10px; }
 .kb-table th.narrow, .kb-table td.narrow { width: 1%; white-space: nowrap; }
 .kb-table td.prose { min-width: 26ch; max-width: 46ch; white-space: normal; line-height: 1.35; }
+/* a table that fits the window: its sentences wrap into the height its drawings give each row */
+.kb-table.kb-fit { width: 100%; }
+.kb-table.kb-fit td.prose { min-width: 14ch; font-size: var(--fs-sm); }
+.kb-table.kb-fit td.kb-links { white-space: normal; min-width: 8ch; }
 .kb-window abbr[title] { text-decoration: underline dotted var(--muted); text-underline-offset: 2px; cursor: help; }
 .kb-empty { padding: 12px; margin: 0; }
 /* a structure search: "This compound" over the same one, "Containing it" over the rest */

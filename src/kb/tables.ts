@@ -52,6 +52,8 @@ export interface KbTable {
   picture?: (row: Record<string, Cell>) => Template | null;
   /** How big those drawings are, in pixels (48 when not given): whole molecules need more room than groups. */
   pictureSize?: number;
+  /** Fit the window's width, wrapping its sentences, instead of scrolling sideways (tall rows with notes and sources). */
+  fit?: boolean;
   /** The structure shown when the pointer rests on a row's name (a solvent's), when it has one. */
   structure?: (row: Record<string, Cell>) => Template | null;
   /**

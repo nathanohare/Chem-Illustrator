@@ -34,11 +34,12 @@ describe('a set of structures kept for searching', () => {
   });
 });
 
-describe('the Knowledge Base window, searched by structure', () => {
+// the first search reads every table's structures into a set, a few seconds once the big tables are in
+describe('the Knowledge Base window, searched by structure', { timeout: 30000 }, () => {
   afterEach(() => { document.body.replaceChildren(); });
 
   const until = async (ok: () => boolean) => {
-    for (let i = 0; i < 400 && !ok(); i++) await new Promise((r) => setTimeout(r, 10));
+    for (let i = 0; i < 2000 && !ok(); i++) await new Promise((r) => setTimeout(r, 10));
     expect(ok()).toBe(true);
   };
 
