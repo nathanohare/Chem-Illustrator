@@ -32,6 +32,8 @@ export interface AtomShifts {
   /** For atoms carrying hydrogens: the shift of those hydrogens. */
   h1: ShiftHit | null;
   hCount: number;
+  /** For a CH2, the predicted gap (ppm) between its two protons, when the networks give one: they sit at h1 ± gap/2. */
+  h1gap?: number;
 }
 
 interface Header { version: number; scale: Record<TableNucleus, number>; params: Record<TableNucleus, LookupParams>; sections: Omit<Section, 'codes' | 'med' | 'mad' | 'n'>[]; sources?: Record<string, number> }

@@ -7,7 +7,11 @@ and the error bar calibration, read by src/chem/nmr/net.ts.
 
 Layout: 'NMRN', u32 version, u32 header length, JSON header {models: [{hidden, layers,
 tensors: [{name, shape, offset}]}], norm, solvents}, padding to 8, then float16 values
-(row-major, as torch stores them) for every tensor, each padded to 8 bytes."""
+(row-major, as torch stores them) for every tensor, each padded to 8 bytes.
+
+Version 2 adds header fields from the checkpoints ('features' and 'outputs' keys, default 1 and 2):
+features = the graph feature set (src/chem/nmr/features.ts; 2 adds stereochemistry); outputs = 3
+when each atom also gives the gap between a CH2's two protons (ppm = NORM 1H scale x softplus)."""
 import json
 import struct
 import sys
@@ -26,9 +30,10 @@ def main():
         rep = json.load(open(paths[1]))
         blend = {n: {**rep[n]['params'], **({'calib': rep[n]['calib']} if 'calib' in rep[n] else {})} for n in ('13C', '1H')}
         paths = paths[2:]
-    models, blobs, off = [], [], 0
+    models, blobs, off, kinds = [], [], 0, set()
     for p in paths:
         ck = torch.load(p, map_location='cpu')
+        kinds.add((ck.get('features', 1), ck.get('outputs', 2)))
         tens = []
         for name, t in ck['state'].items():
             a = t.detach().numpy().astype('<f2')
@@ -38,8 +43,15 @@ def main():
             blobs.append(b)
             off += len(b)
         models.append({'hidden': ck['hidden'], 'layers': ck['layers'], 'tensors': tens})
-    head = json.dumps({'version': 1, 'models': models, 'norm': NORM, 'solvents': SOLVENTS, 'blend': blend}).encode()
-    pre = b'NMRN' + struct.pack('<II', 1, len(head)) + head
+    if len(kinds) != 1:
+        sys.exit(f'networks disagree on feature set or outputs: {sorted(kinds)}')
+    features, outputs = kinds.pop()
+    version = 1 if (features, outputs) == (1, 2) else 2
+    meta = {'version': version, 'models': models, 'norm': NORM, 'solvents': SOLVENTS, 'blend': blend}
+    if version == 2:
+        meta.update(features=features, outputs=outputs)
+    head = json.dumps(meta).encode()
+    pre = b'NMRN' + struct.pack('<II', version, len(head)) + head
     pre += b'\0' * (-len(pre) % 8)
     with open(out, 'wb') as f:
         f.write(pre)

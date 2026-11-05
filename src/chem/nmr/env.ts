@@ -6,8 +6,9 @@
 // degree, smallest ring). Each further radius folds in the neighbours' codes from the radius
 // before, with the bond type, the way Morgan/ECFP environments grow one bond at a time.
 
-export interface EnvAtom { el: string; q: number; arom: boolean; h: number }
-export interface EnvBond { u: number; v: number; o: number }
+/** cip and ez (CIP labels from the drawing) are read only by the shift networks' stereo features. */
+export interface EnvAtom { el: string; q: number; arom: boolean; h: number; cip?: string | null }
+export interface EnvBond { u: number; v: number; o: number; ez?: 'E' | 'Z' | null }
 export interface EnvGraph { atoms: EnvAtom[]; bonds: EnvBond[] }
 
 export const MAX_RADIUS = 5;

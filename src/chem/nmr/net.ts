@@ -3,22 +3,27 @@
 // Several networks trained with different seeds give a mean and, from their spread, an error bar.
 
 import type { EnvGraph } from './env';
-import { ATOM_BLOCKS, ATOM_DIM, graphFeatures, NET_SOLVENTS, solventIndex } from './features';
+import { atomBlockSizes, atomDim, type FeatureSet, graphFeatures, NET_SOLVENTS, solventIndex } from './features';
 import type { AtomShifts, Nucleus, ShiftHit } from './lookup';
 
 interface TensorInfo { name: string; shape: number[]; offset: number }
 /** How the lookup and the networks are weighed (scripts/nmr/blend_tune.py), and the error bar. */
 export interface BlendParams { g: [number, number, number]; b: number; d: number; calib?: { c0: number; c1: number } }
 
-interface Header { blend?: Record<Nucleus, BlendParams> | null; version: number; models: { hidden: number; layers: number; tensors: TensorInfo[] }[]; norm: Record<Nucleus, [number, number]>; solvents: string[] }
+/**
+ * features: the graph feature set (features.ts; 2 adds stereochemistry). outputs: per atom 2 (13C,
+ * 1H) or 3, where the third gives the gap between the two protons of a CH2: gap = 1H scale x softplus.
+ */
+interface Header { blend?: Record<Nucleus, BlendParams> | null; version: number; features?: FeatureSet; outputs?: number; models: { hidden: number; layers: number; tensors: TensorInfo[] }[]; norm: Record<Nucleus, [number, number]>; solvents: string[] }
 
 /** A dense layer: out = W x + b, with W stored rows = outputs. */
 interface Dense { w: Float32Array; b: Float32Array | null; out: number; inp: number }
 
 interface Model { hidden: number; inp: Dense; msg: Dense[]; bond: Float32Array[]; self: Dense[]; agg: Dense[]; o1: Dense; o2: Dense }
 
-/** Per atom: the ensemble mean and standard deviation for 13C and for the attached 1H. */
-export interface NetShift { c13: number; c13sd: number; h1: number; h1sd: number }
+/** Per atom: the ensemble mean and standard deviation for 13C and for the attached 1H, and for a CH2
+ * the gap between its two protons (NaN when the networks don't predict one). */
+export interface NetShift { c13: number; c13sd: number; h1: number; h1sd: number; h1gap: number }
 
 function half(u: Uint16Array): Float32Array {
   const out = new Float32Array(u.length);
@@ -43,6 +48,7 @@ function dense(x: Float32Array, n: number, d: Dense): Float32Array {
   return y;
 }
 
+const softplus = (z: number) => (z > 20 ? z : Math.log1p(Math.exp(z)));
 const relu = (x: Float32Array) => { for (let i = 0; i < x.length; i++) if (x[i] < 0) x[i] = 0; return x; };
 
 export class ShiftNet {
@@ -54,7 +60,7 @@ export class ShiftNet {
     if (String.fromCharCode(...new Uint8Array(buf, 0, 4)) !== 'NMRN') throw new Error('Not an NMR shift network');
     const len = dv.getUint32(8, true);
     this.head = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 12, len))) as Header;
-    if (this.head.version !== 1) throw new Error(`NMR shift network version ${this.head.version} is not supported`);
+    if (this.head.version !== 1 && this.head.version !== 2) throw new Error(`NMR shift network version ${this.head.version} is not supported`);
     let base = 12 + len;
     base += (8 - (base % 8)) % 8;
     this.models = this.head.models.map((m) => {
@@ -99,24 +105,27 @@ export class ShiftNet {
 
   /** Shifts for every atom of a structure in a solvent (any name; unknown solvents count as "other"). */
   predict(g: EnvGraph, solvent: string | null): NetShift[] {
-    const f = graphFeatures(g);
+    const v = this.head.features ?? 1;
+    const f = graphFeatures(g, v);
     const n = g.atoms.length;
-    const sizes = Object.values(ATOM_BLOCKS);
-    const D = ATOM_DIM + NET_SOLVENTS.length + 1;
+    const sizes = atomBlockSizes(v);
+    const AD = atomDim(v), D = AD + NET_SOLVENTS.length + 1;
     const x = new Float32Array(n * D);
     const si = solventIndex(solvent);
     f.atoms.forEach((a, i) => {
       let off = 0;
       a.forEach((v, j) => { x[i * D + off + v] = 1; off += sizes[j]; });
-      x[i * D + ATOM_DIM + si] = 1;
+      x[i * D + AD + si] = 1;
     });
     const [cm, cs] = this.head.norm['13C'], [hm, hs] = this.head.norm['1H'];
     const outs = this.models.map((m) => this.run(m, x, n, f.bonds));
+    const k = this.head.outputs ?? 2;
     return Array.from({ length: n }, (_, i) => {
-      const c = outs.map((o) => o[2 * i] * cs + cm), h = outs.map((o) => o[2 * i + 1] * hs + hm);
+      const c = outs.map((o) => o[k * i] * cs + cm), h = outs.map((o) => o[k * i + 1] * hs + hm);
       const mean = (v: number[]) => v.reduce((t, z) => t + z, 0) / v.length;
       const sd = (v: number[]) => { const mu = mean(v); return Math.sqrt(v.reduce((t, z) => t + (z - mu) ** 2, 0) / Math.max(1, v.length - 1)); };
-      return { c13: mean(c), c13sd: sd(c), h1: mean(h), h1sd: sd(h) };
+      const gap = k >= 3 ? mean(outs.map((o) => hs * softplus(o[k * i + 2]))) : NaN;
+      return { c13: mean(c), c13sd: sd(c), h1: mean(h), h1sd: sd(h), h1gap: gap };
     });
   }
 
@@ -130,6 +139,7 @@ export class ShiftNet {
       const n = net[i];
       if (s.c13 !== undefined && g.atoms[i].el === 'C') s.c13 = this.blendOne('13C', s.c13, n.c13, n.c13sd);
       if (g.atoms[i].h > 0) s.h1 = this.blendOne('1H', s.h1, n.h1, n.h1sd);
+      if (g.atoms[i].el === 'C' && g.atoms[i].h === 2 && Number.isFinite(n.h1gap)) s.h1gap = n.h1gap;
     });
   }
 
