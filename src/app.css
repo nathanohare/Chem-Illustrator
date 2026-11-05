@@ -633,7 +633,7 @@ details.style-group > :not(summary) { margin-left: 12px; }
 .role-products .role-dot { color: #16955a; }
 .role-above .role-dot, .role-below .role-dot { color: #c47a00; }
 .style-row textarea.style-arrow-text { width: 100%; resize: vertical; padding: 2px 4px; font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-control); }
-.style-row select, .style-row input[type='number'] { width: 100%; padding: 2px 4px; font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-control); }
+.style-row select, .style-row input[type='number'], .style-row input.style-font { width: 100%; padding: 2px 4px; font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-control); }
 .style-row input[type='color'] { width: 44px; height: 22px; padding: 0 2px; border: 1px solid var(--line); border-radius: var(--r-control); background: var(--panel); }
 #side-content table, .cr-lent table { border-collapse: collapse; width: 100%; }
 #side-content th, .cr-lent th { text-align: left; font-weight: 500; color: var(--muted); padding: 2px 8px 2px 0; white-space: nowrap; vertical-align: top; }

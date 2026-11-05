@@ -31,6 +31,7 @@ import { frameMembers } from '../editor/frames';
 import { methylState, writeTerminalMethyls, type MethylStyle } from '../chem/hydrogens';
 import type { TableData } from '../model';
 import { labelAlignment, labelAlignPatch, type LabelAlign } from '../chem/label-align';
+import { labelAtoms, labelLookOf, setLabelFont, setLabelSize } from '../editor/label-font';
 import { ringsThroughBond } from '../chem/aromatic';
 import { canMerge, deleteColumn, deleteRow, fitColumns, insertColumn, insertRow, mergeDown, mergeRight, rowSpanOf, setColumnAlign, setColumnWidth, setRowSpan, setSpan, spanOf, splitCell, type TablePart } from '../table';
 import { SLIDE_TABLE_STYLES, lookOf, slideCellLook, slideTableStyle } from '../deck/table-styles';
@@ -1050,6 +1051,7 @@ export class StylePanel {
     this.color('Color', a.color, (v) => set('Atom color', { color: v }));
     this.color('Highlight', a.highlight, (v) => { set(v ? 'Highlight' : 'Remove highlight', { highlight: v }); if (v) this.highlightUsed(v); }, 'None');
     this.highlightControls([a], []);
+    if (a.label || a.z !== 6 || a.showCarbon) this.labelFontControls([a]);
     if (a.label || a.z !== 6 || a.showCarbon) {
       this.select('Label alignment', LABEL_ALIGNS, labelAlignment(a), (v) => this.edit('Label alignment', () => this.doc.updateAtom(a.id, labelAlignPatch(this.doc, a, v))));
     } else if (a.z === 6 && this.doc.degree(a.id) === 3 && (this.doc.adj.get(a.id) ?? []).every((bid) => ringsThroughBond(this.doc, bid).length > 0)) {
@@ -1270,6 +1272,7 @@ export class StylePanel {
       if (v) this.highlightUsed(v);
     }, 'None');
     this.highlightControls(atoms, bonds);
+    if (atoms.length) this.labelFontControls(atoms);
     if (bonds.length >= 3 && this.ringFill) {
       const row = document.createElement('div');
       row.className = 'style-buttons';
@@ -1282,6 +1285,43 @@ export class StylePanel {
       this.body.append(row);
     }
     this.methylControls(atoms.map((a) => a.id));
+  }
+
+  /**
+   * The labels' own font and size (as Home ▸ Font sets them with atoms picked): an empty font box
+   * shows the drawing's font, greyed, and goes back to it.
+   */
+  private labelFontControls(list: Atom[]): void {
+    const atoms = labelAtoms(this.doc, list.map((a) => a.id));
+    if (!atoms.length) return;
+    const look = labelLookOf(this.doc, atoms);
+    const font = document.createElement('input');
+    font.type = 'text';
+    font.className = 'style-font';
+    font.spellcheck = false;
+    font.value = look.font ?? '';
+    font.placeholder = look.mixedFont ? 'Mixed' : this.doc.style.labelFont || 'Arial';
+    font.setAttribute('aria-label', 'Label font');
+    font.setAttribute('list', 'ci-fonts');
+    font.addEventListener('change', () => this.edit('Label font', () => setLabelFont(this.doc, atoms, font.value)));
+    font.addEventListener('keydown', (e) => { if (e.key === 'Enter') font.blur(); e.stopPropagation(); });
+    const row = document.createElement('label');
+    row.className = 'style-row';
+    const name = document.createElement('span');
+    name.textContent = 'Label font';
+    addInfo(name, 'The font and size of the picked atoms\' labels (Home ▸ Font sets them too). Leave the font empty for the drawing\'s (Drawing Style). A structure from ChemDraw keeps its labels\' own font.');
+    row.append(name, font);
+    this.body.appendChild(row);
+    const size = document.createElement('input');
+    size.type = 'number';
+    size.step = '0.5';
+    size.min = '1';
+    size.max = '400';
+    size.value = look.size !== undefined ? String(look.size) : '';
+    size.placeholder = look.size === undefined ? 'Mixed' : '';
+    size.addEventListener('change', () => { const v = Number(size.value); if (size.value.trim() && v > 0) this.edit('Label size', () => setLabelSize(this.doc, atoms, Math.min(400, v))); });
+    size.addEventListener('keydown', (e) => { if (e.key === 'Enter') size.blur(); e.stopPropagation(); });
+    this.row('Label size (pt)', size);
   }
 
   /** Terminal methyls among these atoms: not written out, CH3 or Me (Chemistry > Show Terminal Methyls). */

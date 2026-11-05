@@ -6,6 +6,7 @@ import { guideAt, guideLines, movedGuide, snapToGuides, ticksBetween, type Guide
 import { DEFAULT_CURSOR_AIDS, drawCursorAids, hintLines, modifierHints, readoutText, type CursorAidPrefs, type HintState, type Mods } from './cursor-aids';
 import { Sketcher } from './sketch';
 import { installPenAndTouch } from './touch';
+import { labelAtoms, labelLookOf, setLabelFont, setLabelSize, toggleLabelBold } from './label-font';
 import { Doc, Atom, Bond, BondDisplay, PARTIAL, Arrow, Shape, Caption, isMetalAtom, isWedge, applyBase, captionBase, stripBase, type StepRoles, type Justify, type HighlightStyle, type Entity } from '../model';
 import { scaleOwnWidths } from '../style';
 import { CaptionEditor } from '../ui/caption-editor';
@@ -6163,7 +6164,8 @@ export class Editor {
         if (!caps.length && !shapes.length) { this.requestScene(); this.changed(); return true; }
       }
     }
-    if (!caps.length && !shapes.length) return false;
+    // atoms picked on their own: Home ▸ Font sets their labels' font, size and bold
+    if (!caps.length && !shapes.length) return this.formatLabels(f);
     doc.edit('Format text', () => {
       for (const c of caps) {
         const base = c.ph ? doc.textStyles?.[c.ph] : undefined;
@@ -6182,6 +6184,24 @@ export class Editor {
         doc.updateShape(sh.id, { text, textAlign: res.justify === 'center' ? undefined : res.justify });
       }
     });
+    this.requestScene();
+    this.changed();
+    return true;
+  }
+
+  /** Home ▸ Font with atoms picked: their labels' font, size (in points) or bold. False when it doesn't apply to labels. */
+  private formatLabels(f: TextFormat): boolean {
+    const doc = this.doc;
+    const atoms = labelAtoms(doc, this.sel.atoms);
+    if (!atoms.length) return false;
+    let label: string | null = null;
+    let change: (() => void) | null = null;
+    if (f.kind === 'style' && 'font' in f.patch) { label = 'Label font'; change = () => setLabelFont(doc, atoms, f.patch.font); }
+    else if (f.kind === 'style' && f.patch.size !== undefined) { const pt = f.patch.size; label = 'Label size'; change = () => setLabelSize(doc, atoms, pt); }
+    else if (f.kind === 'grow') { const now = labelLookOf(doc, atoms).size ?? doc.style.labelSize; label = 'Label size'; change = () => setLabelSize(doc, atoms, Math.max(1, now + f.by)); }
+    else if (f.kind === 'toggle' && f.key === 'bold') { label = 'Bold labels'; change = () => toggleLabelBold(doc, atoms); }
+    if (!change || !label) return false;
+    doc.edit(label, change);
     this.requestScene();
     this.changed();
     return true;
@@ -6256,6 +6276,12 @@ export class Editor {
     if (sh?.text) {
       const len = plainText(sh.text.runs).length;
       return { style: rt.commonStyle(sh.text.runs, 0, len), align: sh.textAlign ?? 'center', line: 1, defaultSize: this.r.geoTextSize(), defaultFont: st.captionFont };
+    }
+    // atoms picked: their labels (the font box shows the drawing's font, greyed, where they have none of their own)
+    const atoms = labelAtoms(this.doc, this.sel.atoms);
+    if (atoms.length) {
+      const l = labelLookOf(this.doc, atoms);
+      return { style: { ...(l.font ? { font: l.font } : {}), ...(l.size !== undefined ? { size: l.size } : {}), ...(l.bold ? { bold: true } : {}) }, align: 'left', line: 1, defaultSize: st.labelSize, defaultFont: l.mixedFont ? 'Mixed' : st.labelFont || 'Arial' };
     }
     return null;
   }
