@@ -2132,7 +2132,7 @@ class DocxReader {
       const xf = kid(pic ? kid(pic, 'spPr') : kid(group!, 'grpSpPr'), 'xfrm');
       const rot = (((Number(xf?.getAttribute('rot') ?? 0) / 60000 || 0) % 360) + 360) % 360;
       const turn = { ...(rot ? { rot: round(rot) } : {}), ...(yes(xf?.getAttribute('flipH') ?? null) ? { flipH: true } : {}), ...(yes(xf?.getAttribute('flipV') ?? null) ? { flipV: true } : {}) };
-      this.emitObject(ctx, { kind: 'drawing', contents, scale, ...(m.frame ? { frame: structuredClone(m.frame) } : {}), ...(look ? { look } : {}), ...(float ? { float } : {}), ...(contentsAlt(contents) ? {} : alt), ...turn }, r);
+      this.emitObject(ctx, { kind: 'drawing', contents, scale, ...(m.frame ? { frame: structuredClone(m.frame) } : {}), ...(look ? { look } : {}), ...(float ? { float } : {}), ...(contentsAlt(contents) ? {} : alt), ...turn, ...(m.ole ? { ole: m.ole } : {}) }, r);
       return;
     }
     if (!pic) { this.warn('shapes'); return; }
@@ -2214,6 +2214,8 @@ class DocxReader {
     if (object) {
       const ole = Array.from(object.getElementsByTagNameNS('*', 'OLEObject'))[0];
       const prog = ole?.getAttribute('ProgID') ?? '';
+      // one of our structures saved as a ChemDraw object, not changed in ChemDraw since: our drawing
+      if (isChemDraw(prog) && ole && this.ourChemdraw(ole, shape, shown, r, ctx)) return;
       // a ChemDraw object is kept with Word's picture of it unless asked to redraw it here (or it has no picture)
       if (isChemDraw(prog) && (this.deps.convertChemDraw || !img) && this.chemdraw(ole, shown, r, ctx)) return;
       // anything else is kept whole with its picture, and goes back into the Word file as it came
@@ -2241,6 +2243,30 @@ class DocxReader {
     return readEmbedded(prog, bytes, rel.target, rel.type, ole.getAttribute('DrawAspect') === 'Icon');
   }
 
+  /**
+   * One of our structures saved as a ChemDraw object: the drawing from our part, while the object
+   * still holds the CDX written (one changed in ChemDraw since is ChemDraw's). It is saved as the
+   * setting says next time, unless it came from ChemDraw (`ole` in our part).
+   */
+  private ourChemdraw(ole: Element, shape: Element | undefined, shown: { w: number; h: number }, r: RProps, ctx: Ctx): boolean {
+    const drawings = this.model?.drawings;
+    if (!drawings) return false;
+    const path = this.relTarget(rAttr(ole, 'id'));
+    const bin = path ? this.pkg.bytes(path) : null;
+    const cdx = bin ? chemdrawCdx(bin) : null;
+    if (!cdx) return false;
+    const print = bytesHash(cdx);
+    const m = Object.values(drawings).find((d) => d.cdx === print && d.contents);
+    if (!m) return false;
+    const natural = shownSize({ w: m.w, h: m.h }, 1, this.textW);
+    const scale = Math.abs(natural.w - shown.w) < 0.75 || m.w <= 0 ? undefined : round(shown.w / m.w, 1e4);
+    const contents = structuredClone(m.contents);
+    // alt text: a structure's own, not the description by SMILES written when it has none
+    const descr = shape?.getAttribute('alt')?.trim() ?? '';
+    const alt = descr && !/^Chemical structure( \(SMILES\): | or scheme$)/.test(descr) && !contentsAlt(contents) ? { alt: descr } : {};
+    return this.emitObject(ctx, { kind: 'drawing', contents, scale, ...(m.ole ? { ole: m.ole } : {}), ...alt }, r) !== null || ctx.cell;
+  }
+
   private chemdraw(ole: Element, shown: { w: number; h: number }, r: RProps, ctx: Ctx): boolean {
     if (!this.deps.chemdraw) return false;
     const path = this.relTarget(rAttr(ole, 'id'));
@@ -2254,11 +2280,11 @@ class DocxReader {
     } catch {
       contents = null;
     }
-    return this.drawingAt(contents, shown, r, ctx);
+    return this.drawingAt(contents, shown, r, ctx, null, null, ole.getAttribute('ProgID') || undefined);
   }
 
-  /** A drawing in place of a picture, kept at the size the picture had. False when there is none. */
-  private drawingAt(contents: Contents | null, shown: { w: number; h: number }, r: RProps, ctx: Ctx, look?: FigureLook | null, float?: Float | null): boolean {
+  /** A drawing in place of a picture, kept at the size the picture had (saved as a ChemDraw object with `ole`, its program name). False when there is none. */
+  private drawingAt(contents: Contents | null, shown: { w: number; h: number }, r: RProps, ctx: Ctx, look?: FigureLook | null, float?: Float | null, ole?: string): boolean {
     if (!contents) return false;
     const own = this.deps.drawingSize?.(contents, this.drawingStyle);
     let scale: number | undefined;
@@ -2266,7 +2292,7 @@ class DocxReader {
       const natural = shownSize(own, 1, this.textW);
       if (Math.abs(natural.w - shown.w) > 0.01 * shown.w) scale = round(shown.w / own.w, 1e4);
     }
-    return this.emitObject(ctx, { kind: 'drawing', contents, scale, ...(look ? { look } : {}), ...(float ? { float } : {}) }, r) !== null || ctx.cell;
+    return this.emitObject(ctx, { kind: 'drawing', contents, scale, ...(look ? { look } : {}), ...(float ? { float } : {}), ...(ole ? { ole } : {}) }, r) !== null || ctx.cell;
   }
 
   // ---------------------------------------------------------------- tables

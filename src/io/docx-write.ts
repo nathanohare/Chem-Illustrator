@@ -30,7 +30,7 @@ import { DEFAULT_THEME, type WorkbookTheme } from '../sheet/themes';
 import { themeXml } from './xlsx-view';
 import { facesToEmbed, newGuid, obfuscate, type FontSource } from './font-embed';
 import { fromDataUrl } from '../render/images';
-import { embeddedPart } from './ole-object';
+import { CHEMDRAW_PROG, chemdrawObject, embeddedPart, OLE_REL, OLE_TYPE } from './ole-object';
 import { BULLETS, fitParas, listInfo, paraCount, schemeOf, splitParagraphs } from '../text/paragraphs';
 import { BOX_PAD, COL_GAP, COMPOUND, END_FORMAT, FOOT_FORMAT, columnsOf, OBJECT_CHAR, SHADOWS, charStylesOf, watermarkPlace, fieldTexts, floatOf, floatGaps, lookExtent, lookOf, noteStyle, objectsInText, pruneObjects, EMPTY_FORM, styleOf, runStyleOf, type CharStyle, type DocObject, type DocText, type Embedded, type FigureFrame, type FigureLook, type HeaderFooter, type HfBody, type HfKey, type NamedStyle, type PageBorder, type PageSetup, type Watermark } from '../document/document';
 import { ACS_LINE, GRID_LINE, bibHang, docCellAlign, shownSize } from '../document/doc-layout';
@@ -78,6 +78,13 @@ export interface DocxDeps {
   fonts?: FontSource;
   /** Each paragraph's page number as laid out here, for the contents (without it Word works them out when the file opens). */
   pages?(t: DocText): string[] | undefined;
+  /** A drawing as CDX, ChemDraw's own format, for a ChemDraw object (null when it can't be written). */
+  cdx?(contents: Contents, style: DocStyle): Uint8Array | null;
+  /**
+   * Structures and schemes saved as ChemDraw objects (a double-click in Word opens them in
+   * ChemDraw); otherwise as pictures. One that came from a ChemDraw object goes back as one either way.
+   */
+  chemdrawObjects?: boolean;
 }
 
 /** The namespaces of a part of the text (body, header, footer, notes). Word 2010's text effects (w14)
@@ -968,8 +975,16 @@ class DocxWriter {
       return '';
     }
     const img = this.media(main, bytes, ext);
+    return this.objectXml(main, { bytes: part.bytes, type: part.type, rel: part.rel, path: `${part.base}{n}.${part.ext}` }, e.prog, img, { w: o.w, h: o.h }, size, rPr, !!e.icon, o.alt?.trim());
+  }
+
+  /**
+   * An object's part and its picture (`img`, a relationship id) as Word writes them: a VML shape
+   * `size` big (its own size `own`), and the OLEObject naming the program that opens the part.
+   */
+  private objectXml(main: string, part: { bytes: Uint8Array; type: string; rel: string; path: string }, prog: string, img: string, own: { w: number; h: number }, size: { w: number; h: number }, rPr: string, icon: boolean, alt?: string): string {
     const n = ++this.oleCount;
-    const path = `embeddings/${part.base}${n}.${part.ext}`;
+    const path = `embeddings/${part.path.replace('{n}', String(n))}`;
     this.pkg.add(`word/${path}`, part.bytes, part.type);
     const rel = this.pkg.relate(main, part.rel, path);
     const shape = `_x0000_i${1024 + n}`;
@@ -978,9 +993,34 @@ class DocxWriter {
     this.oleTypes.add(main);
     const pt = (v: number) => Math.round(v * 100) / 100;
     const r = rPr ? `<w:rPr>${rPr}</w:rPr>` : '';
-    return `<w:r>${r}<w:object xmlns:v="${V_NS}" xmlns:o="${O_NS}" w:dxaOrig="${twips(o.w)}" w:dyaOrig="${twips(o.h)}">${type}` +
-      `<v:shape id="${shape}" type="#_x0000_t75" style="width:${pt(size.w)}pt;height:${pt(size.h)}pt" o:ole=""><v:imagedata r:id="${img}" o:title=""/></v:shape>` +
-      `<o:OLEObject Type="Embed" ProgID="${xml(e.prog)}" ShapeID="${shape}" DrawAspect="${e.icon ? 'Icon' : 'Content'}" ObjectID="_${1800000000 + n}" r:id="${rel}"/></w:object></w:r>`;
+    return `<w:r>${r}<w:object xmlns:v="${V_NS}" xmlns:o="${O_NS}" w:dxaOrig="${twips(own.w)}" w:dyaOrig="${twips(own.h)}">${type}` +
+      `<v:shape id="${shape}" type="#_x0000_t75"${alt ? ` alt="${xmlAttr(alt)}"` : ''} style="width:${pt(size.w)}pt;height:${pt(size.h)}pt" o:ole=""><v:imagedata r:id="${img}" o:title=""/></v:shape>` +
+      `<o:OLEObject Type="Embed" ProgID="${xml(prog)}" ShapeID="${shape}" DrawAspect="${icon ? 'Icon' : 'Content'}" ObjectID="_${1800000000 + n}" r:id="${rel}"/></w:object></w:r>`;
+  }
+
+  /**
+   * A structure as a ChemDraw object (Word's w:object holding the drawing as CDX): a double-click
+   * in Word opens it in ChemDraw, and until then Word shows the picture made here. The drawing
+   * goes in our part too, with a fingerprint of the CDX, to be used while the object still holds
+   * it. Null when it can't be one (no CDX), to be saved as a picture instead.
+   */
+  private async chemdrawDrawing(main: string, id: number, o: Extract<DocObject, { kind: 'drawing' }>, prog: string, rPr: string): Promise<string | null> {
+    const t = this.t;
+    let cdx: Uint8Array | null = null;
+    try {
+      cdx = this.deps.cdx?.(o.contents, t.drawingStyle) ?? null;
+    } catch {
+      cdx = null;
+    }
+    if (!cdx) return null;
+    const pic = await this.deps.picture(o.contents, t.drawingStyle, o.frame);
+    if (!pic) return null;
+    const smiles = await this.deps.smiles?.(o.contents, t.drawingStyle).catch(() => null) ?? null;
+    const alt = o.alt?.trim() || contentsAlt(o.contents) || structureAltText(smiles) || '';
+    this.model.drawings[id] = { contents: o.contents, w: pic.w, h: pic.h, png: bytesHash(pic.png), cdx: bytesHash(cdx), alt, ...(o.ole ? { ole: o.ole } : {}) };
+    const size = shownSize({ w: pic.w, h: pic.h }, o.scale ?? 1, this.textW);
+    const img = this.media(main, pic.png, 'png');
+    return this.objectXml(main, { bytes: chemdrawObject(cdx, prog), type: OLE_TYPE, rel: OLE_REL, path: 'oleObject{n}.bin' }, prog, img, { w: pic.w, h: pic.h }, size, rPr, false, alt);
   }
 
   private oleCount = 0;
@@ -989,6 +1029,13 @@ class DocxWriter {
   private async picture(main: string, id: number, o: DocObject, rPr: string): Promise<string> {
     if (o.kind === 'picture' && o.chart) return this.chart(main, id, o, o.chart, rPr);
     if (o.kind === 'picture' && o.embed) return this.embedded(main, o, o.embed, rPr);
+    // a structure saved as a ChemDraw object: one that came from a ChemDraw object, or any when
+    // structures are saved as ChemDraw objects (in the line only, and not turned: as Word keeps objects)
+    if (o.kind === 'drawing' && !floatOf(o) && !o.rot && !o.flipH && !o.flipV && !o.frame && !lookOf(o)) {
+      const prog = o.ole ?? (this.deps.chemdrawObjects && o.contents.atoms.length ? CHEMDRAW_PROG : undefined);
+      const got = prog ? await this.chemdrawDrawing(main, id, o, prog, rPr) : null;
+      if (got) return got;
+    }
     const t = this.t;
     let blip: string, svgId: string | null = null, size: { w: number; h: number }, name: string, smiles: string | null = null;
     // a picture's Picture Format settings, its cropping, and its original when the blip has effects worked in
@@ -1006,7 +1053,7 @@ class DocxWriter {
           `${kids}</wpg:wgp></a:graphicData></a:graphic>`;
       }
       const svg = pic.svg ? new TextEncoder().encode(pic.svg) : null;
-      this.model.drawings[id] = { contents: o.contents, w: pic.w, h: pic.h, png: bytesHash(pic.png), ...(svg ? { svg: bytesHash(svg) } : {}), ...(o.frame ? { frame: o.frame } : {}) };
+      this.model.drawings[id] = { contents: o.contents, w: pic.w, h: pic.h, png: bytesHash(pic.png), ...(svg ? { svg: bytesHash(svg) } : {}), ...(o.frame ? { frame: o.frame } : {}), ...(o.ole ? { ole: o.ole } : {}) };
       blip = this.media(main, pic.png, 'png');
       if (svg) svgId = this.media(main, svg, 'svg');
       size = shownSize({ w: pic.w, h: pic.h }, o.scale ?? 1, this.textW);

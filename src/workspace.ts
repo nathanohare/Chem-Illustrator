@@ -112,6 +112,8 @@ export interface WorkspaceHooks {
    * stop when the file has been changed elsewhere since it was opened ('save-as' asks for another place).
    */
   beforeWrite?(tab: Tab, ref: FileRef, name: string, how: SaveHow): Promise<'go' | 'stop' | 'save-as'>;
+  /** Save As has a file name (`name`): anything to ask about saving under it, before it is written. */
+  beforeSaveAs?(tab: Tab, name: string): Promise<void>;
   /** A file was written (`was`: where the tab's file was before, which Save As changes). */
   saved?(tab: Tab, data: Uint8Array, how: SaveHow, was: FileRef): void;
   /**
@@ -847,6 +849,7 @@ export class Workspace {
     const first = types.find((t) => t.extension === ext) ?? (tab.book?.macros ? XLSM : types[0]);
     const target = await saveFileDialog(withExtension(tab.name, first.extension), [first, ...types.filter((t) => t !== first)]).catch(async (e) => { await showError(String(e)); return null; });
     if (!target) return false;
+    await this.hooks.beforeSaveAs?.(tab, target.name);
     return this.writeTo(tab, target.ref, target.name);
   }
 

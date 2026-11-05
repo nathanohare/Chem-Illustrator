@@ -58,7 +58,7 @@ import { invoke, isTauri } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
 import { copyDrawing, copyImage, forgetCopy, looksLikeChemistry, extractDrawing, insertDrawing, isEmpty, nativeClipboard, readClipboardText, readNativeClipboard, readPasteEvent, readWebClipboard, clipboardFormats, fitPasted, typicalBondLength, Pasted,
   nativeFirst, writeNativeFormats, looksLikeCdxml, cfHtml, fromCfHtml, CELLS_FORMAT, OWN_FORMAT, CDX_FORMAT, setWordObjects, embeddedPicture, packFormats } from './io/clipboard';
-import { cdxToCdxml } from './io/cdx';
+import { cdxToCdxml, cdxmlToCdx } from './io/cdx';
 import { writeCdxml } from './io/cdxml-write';
 import { WORKSPACE, folderOf } from './io/workspace-file';
 import { askLink, followLink, setLinkHost, type LinkPlace } from './ui/links-ui';
@@ -3843,7 +3843,13 @@ const docFiles: DocxDeps = {
   bakePicture: (p) => fxPng(p, 'baked'),
   fonts: bundledFaces,
   smiles: (contents, style) => drawingSmiles(structureDoc(contents, style)),
+  // structures as ChemDraw objects (Settings ▸ General)
+  cdx: (contents, style) => cdxmlToCdx(writeCdxml(structureDoc(contents, style), { name: 'Document drawing.cdxml', textMeasure: measureText })),
+  get chemdrawObjects() { return officeStructures.docx === 'chemdraw'; },
 };
+
+/** How structures are saved in Word and PowerPoint files (Settings ▸ General): pictures, or ChemDraw objects. */
+let officeStructures: Settings['officeStructures'] = { docx: 'pictures', pptx: 'pictures' };
 
 /** Opening Word files: ChemDraw objects in them become structures, kept at the size they had. */
 const docRead: DocxReadDeps = {
@@ -3912,6 +3918,7 @@ const ws: Workspace = new Workspace(doc, {
   newPage: () => (defaultPage ? { ...defaultPage } : null),
   newMaster: (m) => { const t = themeById(slideTemplate); return t && t.id !== 'plain' ? applyTemplate(m, t) : null; },
   beforeWrite: (tab, ref, name, how) => keeper.beforeWrite(tab, ref, name, how),
+  beforeSaveAs: (tab, name) => offerChemdrawToPictures(tab, name),
   saved: (tab, data, how, was) => { keeper.saved(tab, data, how, was); if (how !== 'autosaved') void noteFileCompounds(tab).catch(() => {}); },
   autoSaveFailed: (tab, msg) => keeper.autoSaveFailed(tab, msg),
   canvasEdited: async (name, n) => {
@@ -3956,7 +3963,7 @@ function tickAutoSave(): void {
  */
 const PPTX_FALLBACK_DPI = 150;
 
-/** How slides are saved for PowerPoint: structures as pictures (PNG and SVG), the bundled fonts inside. */
+/** How slides are saved for PowerPoint: structures as pictures (PNG and SVG) or ChemDraw objects, the bundled fonts inside. */
 function pptxOptions(): PptxOptions {
   return {
     picture: async (d) => {
@@ -3969,6 +3976,7 @@ function pptxOptions(): PptxOptions {
     bakePicture: (p) => fxPng(p, 'baked'),
     fonts: bundledFaces,
     smiles: drawingSmiles,
+    chemdrawObjects: officeStructures.pptx === 'chemdraw',
   };
 }
 
@@ -10146,6 +10154,61 @@ async function drawingPreferences(): Promise<void> {
   else storeSettings();
 }
 
+/**
+ * Save As a Word or PowerPoint file while structures are saved there as pictures: ChemDraw objects
+ * from ChemDraw stay ChemDraw objects unless converted, which is asked here (keeping them is the default).
+ */
+async function offerChemdrawToPictures(tab: Tab, name: string): Promise<void> {
+  const ext = (/\.([^.]+)$/.exec(name)?.[1] ?? '').toLowerCase();
+  const word = !!tab.document && /^(docx|docm|dotx|dotm)$/.test(ext) && officeStructures.docx === 'pictures';
+  const slides = !!tab.deck && /^(pptx|pptm|potx|potm|ppsx|ppsm)$/.test(ext) && officeStructures.pptx === 'pictures';
+  if (!word && !slides) return;
+  const n = word ? (docMode?.chemdrawObjectCount(tab.document!) ?? 0) : deckChemdrawObjects(tab.deck!).size;
+  if (!n) return;
+  const what = word ? 'document' : tab.mode === 'design' ? 'design' : 'presentation';
+  const app = word ? 'Word' : 'PowerPoint';
+  const them = n === 1 ? 'it' : 'them';
+  const got = await askChoice('Convert ChemDraw Objects to Pictures?',
+    `This ${what} has ${n} ChemDraw object${n === 1 ? '' : 's'}. Save ${them} as pictures (SVG and PNG) like the rest of its structures, or keep ${them} as ChemDraw objects?`,
+    [{ value: 'convert', label: 'Convert to Pictures' }, { value: 'keep', label: 'Keep as ChemDraw Objects', primary: true }], 'keep',
+    `Converted, each is redrawn here from its ChemDraw data and saved as a picture, with the drawing kept beside it so it opens here as a structure; it no longer opens in ChemDraw from ${app}. Kept, they stay exactly as they came. Settings ▸ General ▸ Save structures in ${app} files as decides how the rest are saved.`);
+  if (got !== 'convert') return;
+  if (word) {
+    const failed = docMode?.convertChemdrawObjects(tab.document!) ?? 0;
+    if (failed) flash(`${failed} ChemDraw object${failed === 1 ? '' : 's'} couldn't be read and stay${failed === 1 ? 's' : ''} as ChemDraw had ${failed === 1 ? 'it' : 'them'}.`, 8000);
+  } else convertDeckChemdraw(tab.deck!);
+}
+
+/** The ChemDraw objects from ChemDraw on a deck's slides (their structures carry its mark), by id. */
+function deckChemdrawObjects(deck: Deck): Set<number> {
+  const ids = new Set<number>();
+  deck.slides.forEach((_, i) => {
+    const d = deck.docOf(i);
+    for (const x of [...d.atoms.values(), ...d.captions.values(), ...d.arrows.values(), ...d.shapes.values()]) if (x.ole) ids.add(x.ole.id);
+  });
+  return ids;
+}
+
+/** Save As with structures saved as pictures: a deck's ChemDraw objects made plain structures, saved as pictures (each slide one step to undo). */
+function convertDeckChemdraw(deck: Deck): void {
+  deck.slides.forEach((_, i) => {
+    const d = deck.docOf(i);
+    const marked = (x: { ole?: unknown }) => !!x.ole;
+    if (![...d.atoms.values(), ...d.captions.values(), ...d.arrows.values(), ...d.shapes.values()].some(marked)) return;
+    d.edit('Convert ChemDraw Objects to Pictures', () => {
+      for (const a of [...d.atoms.values()]) if (a.ole) d.updateAtom(a.id, { ole: undefined });
+      for (const c of [...d.captions.values()]) if (c.ole) d.updateCaption(c.id, { ole: undefined });
+      for (const r of [...d.arrows.values()]) if (r.ole) d.updateArrow(r.id, { ole: undefined });
+      for (const sh of [...d.shapes.values()]) if (sh.ole) d.updateShape(sh.id, { ole: undefined });
+    });
+  });
+  deck.edits++;
+}
+
+/** Settings ▸ General: how structures are saved in Word and PowerPoint files. */
+const STRUCTURES_AS = [{ value: 'pictures', label: 'Pictures (SVG and PNG)' }, { value: 'chemdraw', label: 'ChemDraw objects' }];
+const STRUCTURES_AS_HELP = 'ChemDraw objects open in ChemDraw when double-clicked in Word or PowerPoint, on computers that have ChemDraw; elsewhere they show as pictures. Pictures (SVG and PNG) look the same in every program, including Google Docs, LibreOffice and Keynote. Either way, Chem Illustrator opens them again as editable drawings. ChemDraw objects that came in with a file stay ChemDraw objects.';
+
 /** Settings ▸ General: selecting, groups, linked text, and your name on tracked changes. */
 async function generalPreferences(): Promise<void> {
   const r = await ask('General', [
@@ -10159,6 +10222,8 @@ async function generalPreferences(): Promise<void> {
       help: 'Making a bond triple (or giving an allene carbon its second double bond) swings the smaller side around so the sp carbon\'s two bonds lie in a straight line. Off: atoms stay where they are. New bonds always go straight on.' },
     { name: 'convertChemDraw', label: 'Redraw ChemDraw objects in Word files as they open', type: 'checkbox', value: String(!!docRead.convertChemDraw),
       help: 'Off: they keep the look they had in Word and become drawings when you edit one. On: each is redrawn here in the document\'s drawing style.' },
+    { name: 'docxStructures', label: 'Save structures in Word files as', value: officeStructures.docx, options: STRUCTURES_AS, help: STRUCTURES_AS_HELP },
+    { name: 'pptxStructures', label: 'Save structures in PowerPoint files as', value: officeStructures.pptx, options: STRUCTURES_AS, help: STRUCTURES_AS_HELP },
     { name: 'reviewer', label: 'Your name on tracked changes in documents', value: reviewAuthor() },
     { name: 'startView', label: 'Show the start view (new tabs, recent files) when the program opens', type: 'checkbox', value: String(startView) },
   ], { ok: 'Save' });
@@ -10168,6 +10233,7 @@ async function generalPreferences(): Promise<void> {
   linkSide = (['below', 'above', 'left', 'right'].includes(r.linkSide) ? r.linkSide : 'keep') as Settings['linkSide'];
   askWholeDrawing = r.ask === 'true';
   docRead.convertChemDraw = r.convertChemDraw === 'true';
+  officeStructures = { docx: r.docxStructures === 'chemdraw' ? 'chemdraw' : 'pictures', pptx: r.pptxStructures === 'chemdraw' ? 'chemdraw' : 'pictures' };
   matchStructure.on = r.matchStructure === 'true';
   straightenLinear.on = r.straightenLinear === 'true';
   setReviewAuthor(r.reviewer ?? '');
@@ -10412,6 +10478,7 @@ function currentSettings(): Settings {
     pubchemNames,
     ai: aiPrefs,
     convertChemDraw: !!docRead.convertChemDraw,
+    officeStructures: { ...officeStructures },
     matchStructure: matchStructure.on,
     straightenLinear: straightenLinear.on,
     fileTypesOffered,
@@ -10645,6 +10712,7 @@ function applySettings(s: Settings): void {
   aiPrefs = s.ai;
   showAssistantMenu();
   docRead.convertChemDraw = s.convertChemDraw;
+  officeStructures = { ...s.officeStructures };
   matchStructure.on = s.matchStructure;
   straightenLinear.on = s.straightenLinear;
   fileTypesOffered = s.fileTypesOffered;
@@ -13323,7 +13391,7 @@ watchRibbons((on) => { ribbonChosen = on; storeSettings(); });
 // the Canvas ribbon's arrow switches it between Classic and Simplified (Settings ▸ Toolboxes and Ribbon has both too)
 addLookToggle(canvasRibbon.el, { simple: () => ribbonLook === 'simple', toggle: () => { setRibbonLook(ribbonLook === 'simple' ? 'classic' : 'simple'); storeSettings(); } });
 const SETTINGS_PAGES: SettingsPage[] = [
-  { id: 'general', title: 'General', words: 'groups selecting click outline linked text above below ask whole page tracked changes reviewer name start view recent files', open: generalPreferences },
+  { id: 'general', title: 'General', words: 'groups selecting click outline linked text above below ask whole page tracked changes reviewer name start view recent files chemdraw objects ole word powerpoint docx pptx save structures pictures svg png compatibility', open: generalPreferences },
   { id: 'preferences', title: 'Preferences', words: 'personal personalize habits enter return key finish text tool box new line alt option escape esc taste alkyl prefix italic dash hyphen tbu t-bu ipr i-pr nbu sbu ibu tert-butyl isopropyl', open: personalPreferences },
   { id: 'drawing', title: 'Drawing', words: 'bond ends round rounded square caps mitre corners methyl me ch3 axial chirality ra sa helicity charges circled text tool atom r groups superscript mechanism arrows reroute arrow width arrowhead head size length angle readout look box plain solid pointer cursor hints modifier shift alt ctrl keys', open: drawingPreferences },
   { id: 'style', perFile: true, title: 'Drawing Style', words: 'bond length line width font journal acs rsc wiley elsevier thieme hash spacing margin arrow text reagents conditions above below size smaller reaction arrows gap fit alignment line up structures plus scheme', open: drawingStyleDialog },
