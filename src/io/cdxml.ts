@@ -12,7 +12,7 @@ import { highlightStyleFromTag } from '../render/highlight';
 import { attachRingFills, ringGeometry, ringsIn } from '../chem/ring-fill';
 import { paperOf } from './cdxml-print';
 import { lipDirection } from '../chem/polymer';
-import { Doc, Atom, Bond, BondDisplay, TextRun, Arrow, Shape, Entity, Kind, StereoLabel, Caption, StepRoles, MorphStep, CHIRAL_FLAGS, PARTIAL, PAPER, type Pin, type PictureFx, type ShapeMath, type HighlightStyle } from '../model';
+import { Doc, Atom, Bond, BondDisplay, TextRun, Arrow, Shape, Entity, Kind, StereoLabel, Caption, StepRoles, MorphStep, CHIRAL_FLAGS, PARTIAL, PAPER, type Pin, type OrbitalTag, type PictureFx, type ShapeMath, type HighlightStyle } from '../model';
 import { TEXT_TAG, parseTextTag, runsFromChemDraw } from '../text/chemdraw-text';
 import { readPageTag } from '../page-grid';
 import { DocStyle, MAP_LOOKS, mapBoxStyle, type MapLook } from '../style';
@@ -998,6 +998,9 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
       }
       const ft = kids(g).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === FRAME_TAG);
       if (ft) s.frame = frameFromTag(ft.getAttribute('Value'));
+      // a part of an orbital drawn here, so it can be changed again
+      const orb = orbitalTag(kids(g).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === ORBITAL_TAG)?.getAttribute('Value'));
+      if (orb) s.orb = orb;
       // an outline of its own width: ChemDraw draws a graphic's lines at its LineWidth, and bold
       // ones at its BoldWidth, when the graphic has one that isn't the drawing's
       const ownW = g.getAttribute(s.bold ? 'BoldWidth' : 'LineWidth');
@@ -1588,6 +1591,18 @@ export const CIRCLE_TAG = 'ci-aromatic-circle';
 export const FILL_TAG = 'Chem Illustrator fill';
 /** A frame's gap and whether it follows what it surrounds (editor/frames.ts). */
 export const FRAME_TAG = 'Chem Illustrator frame';
+/** A part of an orbital drawn here that ChemDraw keeps as an oval (an s orbital, a dz²'s ring): how the orbital was asked for (Shape.orb as JSON). */
+export const ORBITAL_TAG = 'Chem Illustrator orbital';
+
+/** An orbital part's tag read back, or undefined when it isn't one. */
+export function orbitalTag(json: string | null | undefined): OrbitalTag | undefined {
+  try {
+    const v = JSON.parse(json ?? '') as Partial<OrbitalTag>;
+    if (typeof v?.kind !== 'string' || typeof v.look !== 'string' || typeof v.part !== 'number' || !Number.isInteger(v.part) || v.part < 0) return undefined;
+    const colours = Array.isArray(v.colours) && v.colours.length === 2 && v.colours.every((c) => typeof c === 'string') ? { colours: v.colours as [string, string] } : {};
+    return { kind: v.kind, look: v.look, ...(v.flip === true ? { flip: true } : {}), ...colours, part: v.part };
+  } catch { return undefined; }
+}
 /** The tag on a reaction step listing the captions written inside a catalytic cycle (its step names). */
 export const INSIDE_TAG = 'Chem Illustrator inside';
 /** The gradient and pattern settings kept in a fill tag, checked. */

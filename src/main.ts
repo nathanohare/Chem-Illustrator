@@ -14,7 +14,7 @@ import './app.css';
 import type { MethylStyle } from './chem/hydrogens';
 import { STANDARD_COLOURS, usedColours } from './colours';
 import { ICONS } from './icons';
-import { Toolboxes, lockIcon, sideFolded, commandButton, defaultToolboxes, menuCommands, boxIds, boxGrid, boxTitle, flyGrid, isEditable, withoutGoneItems, isOwnBox, overflowOf, CONTEXT_BOXES, type ContextBox, type Pickable, type ToolboxDef, type ToolboxState } from './ui/toolboxes';
+import { Toolboxes, lockIcon, sideFolded, boxLocked, commandButton, defaultToolboxes, menuCommands, boxIds, boxGrid, boxTitle, flyGrid, isEditable, withoutGoneItems, isOwnBox, overflowOf, CONTEXT_BOXES, type ContextBox, type Pickable, type ToolboxDef, type ToolboxState } from './ui/toolboxes';
 import { gridItems, inBlock, oneColumn, shownGrid, wrapped, type Grid, type Shown } from './ui/toolbox-grid';
 import { ToolboxEditor } from './ui/toolbox-editor';
 import { RibbonEditor } from './ui/ribbon-editor';
@@ -83,7 +83,7 @@ import { DesignLibrary, GEO_DRAG_TYPE, pickDesignSize, sizeLabel, setShapeInk } 
 import { ShapeMenu } from './ui/shape-menu';
 import { whenIconsLoaded } from './design/icons';
 import { SlideTextRibbon } from './ui/slide-text-ribbon';
-import { CaptionEditor } from './ui/caption-editor';
+import { CaptionEditor, setCaptionTint } from './ui/caption-editor';
 import { LayersPanel } from './ui/layers-panel';
 import { Scrollbars } from './ui/scrollbars';
 import type { Presenter, ShowOptions } from './ui/present';
@@ -167,13 +167,13 @@ import { stoichiometryBook, type StoichRow, type StoichRole } from './chem/stoic
 import { isReactionSmiles, isRxn, parseRxn, reactionSmiles, rxnBlock, splitReactionSmiles } from './chem/reaction-io';
 import { showBalance } from './ui/balance-dialog';
 import { withoutCharge } from './chem/formula';
-import { makePin } from './chem/pins';
-import { ORBITAL_KINDS, ORBITAL_LOOKS, orbitalShapes, shapeCentre, type OrbitalKind, type OrbitalLook } from './chem/orbitals';
+import { ORBITAL_KINDS, ORBITAL_LOOKS, angleOfDir, openDirection, orbitalAtom, orbitalShapes, orbitalsAmong, putOrbital, readAngle, readOrbital, redrawOrbital, takenDirections, type OrbitalKind, type OrbitalLook, type OrbitalSpec } from './chem/orbitals';
 import { BATCH_FORMATS, BATCH_INPUTS, readBatchFile, smilesLine, uniqueName, writeBatchItem, type BatchDeps, type BatchFormat } from './io/batch-convert';
 import { zipSync } from 'fflate';
 import { labelsOf, schemePrefs, setSchemePrefs, SPACING, type SchemePrefs } from './chem/scheme-layout';
 import { plainText, savableChar } from './richtext';
 import { buildTextToolbox, type TextToolboxHooks } from './ui/text-toolbox';
+import { buildTextBar } from './ui/text-bar';
 import { buildGuidesToolbox, GUIDES_INFO, type GuidesToolboxHooks } from './ui/guides-toolbox';
 import { htmlToRich } from './text/html';
 import { LiveStereo } from './chem/live-stereo';
@@ -187,7 +187,7 @@ import { TypingDialog } from './ui/typing-dialog';
 import { ModeColoursDialog, ModeColours, DEFAULT_MODE_COLOURS, applyModeColours as applyModeColoursOnly, modeColour } from './ui/mode-colours';
 import { typingPrefs, setTypingPrefs, onTypingPrefs } from './text/typing';
 import { NicknameChooser } from './ui/nickname-chooser';
-import { ask } from './ui/ask';
+import { ask, type Field } from './ui/ask';
 import { ACTION_LINKS, geoShapeStyle } from './design/geo';
 import { BuildHint } from './ui/build-hint';
 import { alkylPreview, bondEndSwatch, chargeSwatch, navigationPreview, pageGridPreview, readingPreview, stylePreview } from './ui/settings-previews';
@@ -349,14 +349,15 @@ const renderer = new Renderer(scene, overlay);
 const editor = new Editor(doc, renderer, host);
 
 /**
- * Colour the window for a mode; in Canvas mode the selection, hover and drawing marks take the
- * mode's teal too, so the accent is the same everywhere (UI rule 5).
+ * Colour the window for a mode; in Canvas mode the selection, hover and drawing marks and the box
+ * round text being typed take the mode's teal too, so the accent is the same everywhere (UI rule 5).
  */
 function applyModeColours(mode: Parameters<typeof applyModeColoursOnly>[0], c: ModeColours): void {
   applyModeColoursOnly(mode, c);
   const tint = mode === 'drawing' ? modeColour('drawing', c) : null;
   setMarkTint(tint);
   setAidTint(tint);
+  setCaptionTint(tint);
   editor.requestScene();
 }
 editor.lengthUnits = () => rulerPrefs.units;
@@ -499,6 +500,7 @@ const SYMBOLS: PaletteDef = {
     { name: 'sym-radical-anion', title: 'Radical anion (•−): click an atom or a bracket; an atom becomes a radical with a − charge' },
     { name: 'sym-dagger', title: 'Dagger (†), for a footnote or a compound' },
     { name: 'sym-ddagger', title: 'Double dagger (‡) for a transition state' },
+    { name: 'sym-lobe', title: 'Single orbital lobe: click an atom to put one in its most open space, or press on the atom and drag around it to aim it (Alt: 15° steps). Uses the phases and size last picked in the Orbital window; double-click it to change it' },
   ],
 };
 
@@ -701,11 +703,16 @@ const toolbar = new Toolbar($<HTMLDivElement>('#tools'), TOOL_GROUPS, (name) => 
 
 // The Canvas ribbon: the chemistry commands without a toolbox of their own (Smart Schemes, energy
 // diagrams, mechanism checks, look-ups), with Analysis and the warnings in two small boxes
+/** The Canvas ribbon's Font and Paragraph groups: their rows, filled once the text hooks are made (further down). */
+let canvasTextRows: { font: HTMLElement; paragraph: HTMLElement } | null = null;
+let canvasFont: { refresh(): void } | null = null;
 const canvasRibbon = new CanvasRibbon({
   command: (cmd) => { command(cmd); },
   pickTool: (name) => pickTool(name),
   hasTool: (name) => name in TOOLS,
   icon: (it) => ('cmd' in it ? commandIcon(it.cmd) ?? RIBBON_ONLY_ICONS[it.cmd] ?? ICONS[it.cmd] : ICONS[it.tool]),
+  textGroups: (font, paragraph) => { canvasTextRows = { font, paragraph }; },
+  pasteMenu: (r) => { popupMenu(r.left, r.bottom + 2, [['Paste', () => command('paste')], ['Paste SMILES', () => command('paste-smiles')]]); },
 }, $('#sheet-ribbon'));
 const analysisBox = new AnalysisBox($('#analysis-section'));
 const warningsBox = new WarningsBox($('#warnings-section'));
@@ -799,23 +806,26 @@ function showChemPanes(): void {
 const rulerPrefs: RulerPrefs = { units: 'in', from: 'centre' };
 /** A guide being dragged: which, and the guides as they are while it moves. */
 let guideDrag: { which: { axis: 'x' | 'y'; i: number }; view: SlideView } | null = null;
-/** View > Alignment Guides: moved things snap into line with other things and the page, on or off for each kind of tab. */
-const guidesOn: Record<'drawing' | 'slides' | 'design', boolean> = { drawing: false, slides: true, design: true };
+/**
+ * Smart guides (moved things snap into line with other things and the page, with pink lines), on
+ * or off for presentations (View > Grid Settings) and designs (the ribbon's Guides box). Canvases
+ * have the Guides toolbox instead.
+ */
+const guidesOn: Record<'slides' | 'design', boolean> = { slides: true, design: true };
 const guideMode = (): keyof typeof guidesOn | null => {
   const m = ws.active.mode;
-  return m === 'drawing' || m === 'slides' || m === 'design' ? m : null;
+  return m === 'slides' || m === 'design' ? m : null;
 };
 /** The Guides toolbox, while it is shown (it shows the drawing's guides). */
 let guidesToolbox: { refresh(): void } | null = null;
 /** The Text Formatting toolbox's buttons, while it is shown (they show which are on). */
 let textToolbox: { refresh(): void } | null = null;
-/** Turn the guides on or off for the kind of tab showing, and tick the menus. */
+/** Turn the smart guides on or off for the kind of tab showing, and show the drawing's guides in the Guides toolbox. */
 function showGuides(): void {
   guidesToolbox?.refresh();
   textToolbox?.refresh();
   const m = guideMode();
   editor.smartGuides = !!m && guidesOn[m];
-  $('[data-cmd="alignment-guides"]')?.setAttribute('aria-checked', String(editor.smartGuides));
   if (m === 'design') $<HTMLInputElement>('#dz-guides').checked = guidesOn.design;
 }
 
@@ -844,6 +854,12 @@ function showToolStatus(): void {
   // (the first tool is picked before the tabs exist: its hint comes once they do)
   if (!statusReady) { queueMicrotask(() => { statusReady = true; showToolStatus(); }); return; }
   if (stepHintOn || (ws.active.mode === 'sheet' || ws.active.mode === 'document') && !splitDrawing) return;
+  // while text is typed: the keys that work in it
+  if (typingKeys) {
+    const keys = typingKeys.split(' · ').map((k): [string, string] => { const i = k.indexOf(': '); return [k.slice(0, i), k.slice(i + 2)]; });
+    setStatus({ name: 'Typing', steps: [], numbered: false, at: -1, keys, full: typingKeys });
+    return;
+  }
   const name = editor.toolName, t = TOOLS[name];
   const sel = editor.sel;
   const one = sel.atoms.size + sel.bonds.size + sel.captions.size === 0 && sel.arrows.size + sel.shapes.size === 1;
@@ -856,6 +872,9 @@ function showToolStatus(): void {
   const h = toolHelp(name, t);
   setStatus({ name: toolLabel(name), steps: h.steps, numbered: h.steps.length > 1 && name !== 'select', at: Math.min(toolStep, h.steps.length - 1), keys: h.keys, full: h.what });
 }
+/** The keys that work in the text being typed ("Enter: new paragraph · …"), shown in the status bar; null when nothing is typed. */
+let typingKeys: string | null = null;
+CaptionEditor.onHint = (h) => { typingKeys = h; showToolStatus(); };
 /** The status bar's step-by-step hint: the tool, its steps (the one in hand marked), then its keys. */
 function setStatus(s: { name: string; steps: string[]; numbered: boolean; at: number; keys: [string, string][]; full: string }): void {
   const el = $('#hint');
@@ -1306,6 +1325,7 @@ async function plateFigure(kind: PlateKind | null, id: number | null, file?: { n
   if (got) editor.putPlateAt(got, pasteCentre(), now ? id! : undefined, deckNow()?.size);
 }
 editor.onPlate = (id) => void plateFigure(null, id);
+editor.onOrbital = () => void editOrbital();
 
 /** What the crystal structure window needs from here: a CIF file to open, and the clipboard. */
 function crystalOptions(file?: { name: string; text: string }) {
@@ -1325,11 +1345,13 @@ function crystalOptions(file?: { name: string; text: string }) {
   };
 }
 
-/** How the last orbital was asked for, so the next starts the same way. */
-const orbitalChoice: Record<string, string> = { kind: 'p', look: 'shaded', size: '1.1', angle: 'auto', flip: 'false' };
+/** How the last orbital was asked for, so the next starts the same way (and the single-lobe button's phases and size). */
+const orbitalChoice: Record<string, string> = { kind: 'p', look: 'shaded', size: '1.1', angle: 'Auto', flip: 'false' };
+editor.lobeLook = () => ({ look: (ORBITAL_LOOKS.some((k) => k.value === orbitalChoice.look) ? orbitalChoice.look : 'shaded') as OrbitalLook, size: orbitalSize(orbitalChoice.size), flip: orbitalChoice.flip === 'true' });
 
-/** Which way an orbital on this atom points when left to choose: hybrids away from its bonds, others up. */
+/** Which way an orbital on this atom points when left to choose: hybrids away from its bonds, a single lobe into the most open space, others up. */
 function orbitalAngle(kind: OrbitalKind, atom: Atom | undefined): number {
+  if (atom && kind === 'lobe') return angleOfDir(openDirection(takenDirections(doc, atom.id)));
   if (!atom || (kind !== 'sp' && kind !== 'sp2' && kind !== 'sp3')) return 0;
   let vx = 0, vy = 0;
   for (const n of doc.neighbors(atom.id)) { const d = Math.hypot(n.x - atom.x, n.y - atom.y) || 1; vx -= (n.x - atom.x) / d; vy -= (n.y - atom.y) / d; }
@@ -1337,45 +1359,119 @@ function orbitalAngle(kind: OrbitalKind, atom: Atom | undefined): number {
   return (Math.atan2(vx, -vy) * 180) / Math.PI;
 }
 
+/** A lobe length typed in bond lengths, kept to a sensible range. */
+const orbitalSize = (text: string | undefined): number => Math.max(0.2, Math.min(5, Number(text) || 1.1));
+
+/** The Orbital window's settings as an orbital to draw, on `atom` (or pointing up off it). */
+function orbitalSpec(v: Record<string, string>, atom: Atom | undefined): OrbitalSpec {
+  const kind = (ORBITAL_KINDS.some((k) => k.value === v.kind) ? v.kind : 'p') as OrbitalKind;
+  const a = readAngle(v.angle);
+  return { kind, look: (ORBITAL_LOOKS.some((k) => k.value === v.look) ? v.look : 'shaded') as OrbitalLook, angle: a === 'auto' ? orbitalAngle(kind, atom) : a, size: orbitalSize(v.size) * doc.style.bondLength, ...(v.flip === 'true' ? { flip: true } : {}) };
+}
+
+/** A picture of an orbital as the window will draw it: on its atom with the atom's bonds, as it will look there. */
+function orbitalPreview(spec: OrbitalSpec, atom: Atom | undefined, at?: Vec): Node {
+  const x = new Doc();
+  x.style = { ...doc.style };
+  x.edit('Preview', () => {
+    let c = at ?? { x: 0, y: 0 };
+    if (atom) {
+      const a = x.addAtom(atom.x, atom.y, atom.z);
+      x.updateAtom(a.id, { label: atom.label, charge: atom.charge });
+      for (const n of doc.neighbors(atom.id)) { const m = x.addAtom(n.x, n.y, n.z); x.updateAtom(m.id, { label: n.label }); x.addBond(a.id, m.id); }
+      c = atom;
+    }
+    for (const sh of orbitalShapes(spec, c)) x.addShape(sh);
+  });
+  const pic = recordPicture(x, 4);
+  const box = document.createElement('div');
+  box.className = 'orbital-preview';
+  box.innerHTML = pic ? pictureSvg(pic).replace(/^<\?xml[^>]*>\s*/, '') : '';
+  return box;
+}
+
+/** The Orbital window's boxes, filled in from `v`. */
+function orbitalFields(v: Record<string, string>): Field[] {
+  return [
+    { name: 'kind', label: 'Orbital', value: v.kind, options: ORBITAL_KINDS },
+    { name: 'look', label: 'Phases', value: v.look, options: ORBITAL_LOOKS },
+    { name: 'angle', label: 'Pointing', value: v.angle, unit: '°', suggestions: ['Auto', '0', '45', '90', '135', '180', '225', '270', '315'], help: 'Degrees clockwise from straight up. Auto points hybrids away from the bonds, a single lobe into the most open space, and the others straight up.' },
+    { name: 'size', label: 'Lobe length', value: v.size, type: 'number', unit: 'bond lengths' },
+    { name: 'flip', label: 'Swap the phases', value: v.flip, type: 'checkbox' },
+  ];
+}
+
 /** Chemistry ▸ Orbitals: an orbital on each selected atom (or in the middle of the view), its lobes stuck to the atom. */
 async function insertOrbital(quick: boolean): Promise<void> {
   finishTyping();
   const atoms = [...editor.sel.atoms].map((id) => doc.atoms.get(id)).filter((a): a is Atom => !!a && !a.multi);
   if (quick && !atoms.length) { flash('Select the atoms of the π system first (drag around them, or Shift-click each).'); return; }
-  let v: Record<string, string> = { ...orbitalChoice, kind: 'p', angle: 'auto' };
+  let v: Record<string, string> = { ...orbitalChoice, kind: 'p', angle: 'Auto' };
   if (!quick) {
-    const got = await ask('Orbital', [
-      { name: 'kind', label: 'Orbital', value: orbitalChoice.kind, options: ORBITAL_KINDS },
-      { name: 'look', label: 'Phases', value: orbitalChoice.look, options: ORBITAL_LOOKS },
-      { name: 'angle', label: 'Pointing', value: orbitalChoice.angle, options: [
-        { value: 'auto', label: 'By itself (hybrids away from the bonds, others up)' }, { value: '0', label: 'Up' }, { value: '90', label: 'Right' }, { value: '180', label: 'Down' }, { value: '270', label: 'Left' }, { value: '45', label: 'Up and right (45°)' }, { value: '315', label: 'Up and left (45°)' },
-      ] },
-      { name: 'size', label: 'Lobe length', value: orbitalChoice.size, type: 'number', unit: 'bond lengths' },
-      { name: 'flip', label: 'Swap the phases', value: orbitalChoice.flip, type: 'checkbox' },
-    ], { ok: 'Insert', note: atoms.length ? `One on each of the ${atoms.length} selected atom${atoms.length > 1 ? 's' : ''}; the lobes stay with the atoms.` : 'Select atoms first to put one on each; otherwise it goes in the middle of the view.' });
+    const got = await ask('Orbital', orbitalFields(orbitalChoice), { ok: 'Insert', preview: { title: 'Preview', draw: (vals) => orbitalPreview(orbitalSpec(vals, atoms[0]), atoms[0]) }, note: atoms.length ? `One on each of the ${atoms.length} selected atom${atoms.length > 1 ? 's' : ''}; the lobes stay with the atoms. Double-click one later to change it.` : 'Select atoms first to put one on each; otherwise it goes in the middle of the view. Double-click one later to change it.' });
     if (!got) return;
     Object.assign(orbitalChoice, got);
     v = got;
   }
-  const L = doc.style.bondLength;
-  const kind = v.kind as OrbitalKind;
-  const size = Math.max(0.2, Math.min(5, Number(v.size) || 1.1)) * L;
   const made: number[] = [];
-  doc.edit(kind === 'p' && quick ? 'p Orbitals' : 'Orbital', () => {
-    let top = 0;
-    for (const m of [doc.atoms, doc.captions, doc.arrows, doc.shapes] as Map<number, { grp?: number }>[]) for (const e of m.values()) if (e.grp !== undefined && e.grp > top) top = e.grp;
-    for (const at of atoms.length ? atoms : [undefined]) {
-      const c = at ?? pasteCentre();
-      const angle = v.angle === 'auto' ? orbitalAngle(kind, at) : Number(v.angle) || 0;
-      const grp = ++top;
-      for (const sh of orbitalShapes({ kind, look: v.look as OrbitalLook, angle, size, flip: v.flip === 'true' }, c)) {
-        const pin = at ? makePin(doc, 'atom', [at.id], shapeCentre(sh)) ?? undefined : undefined;
-        made.push(doc.addShape({ ...sh, grp, ...(pin ? { pin } : {}) }).id);
-      }
-    }
+  doc.edit(v.kind === 'p' && quick ? 'p Orbitals' : 'Orbital', () => {
+    for (const at of atoms.length ? atoms : [undefined]) made.push(...putOrbital(doc, orbitalSpec(v, at), at ?? pasteCentre(), at?.id));
   });
   editor.sel = { atoms: new Set(), bonds: new Set(), captions: new Set(), arrows: new Set(), shapes: new Set(made) };
   editor.changed();
+}
+
+/** The orbitals selected (each as its parts). */
+const selectedOrbitals = (): Shape[][] => orbitalsAmong(doc, editor.sel.shapes);
+
+/**
+ * Draw orbitals again with some settings changed (the Style panel's rows, the Edit Orbital
+ * window): each keeps the settings not changed, its own angle and size among them, and stays
+ * selected.
+ */
+function restyleOrbitals(list: Shape[][], patch: Partial<OrbitalSpec>, autoAngle = false): void {
+  const made: number[] = [];
+  doc.edit(list.length > 1 ? 'Change Orbitals' : 'Change Orbital', () => {
+    for (const parts of list) {
+      const now = readOrbital(parts);
+      if (!now) continue;
+      const spec: OrbitalSpec = { ...now.spec, ...patch };
+      if (!spec.flip) delete spec.flip;
+      // Auto: each points its own way on its own atom
+      if (autoAngle) { const at = orbitalAtom(doc, parts); spec.angle = orbitalAngle(spec.kind, at !== undefined ? doc.atoms.get(at) : undefined); }
+      made.push(...redrawOrbital(doc, parts, spec));
+    }
+  });
+  editor.sel = { ...editor.sel, shapes: new Set([...[...editor.sel.shapes].filter((id) => doc.shapes.has(id)), ...made]) };
+  editor.changed();
+}
+
+/** Edit Orbital… (or a double-click on one): the Orbital window with the selected orbitals' settings, to draw them again. */
+async function editOrbital(): Promise<void> {
+  finishTyping();
+  const list = selectedOrbitals();
+  if (!list.length) { flash('Select an orbital first.'); return; }
+  const first = readOrbital(list[0]);
+  if (!first) return;
+  const atomId = orbitalAtom(doc, list[0]);
+  const atom = atomId !== undefined ? doc.atoms.get(atomId) : undefined;
+  const was: Record<string, string> = { kind: first.spec.kind, look: first.spec.look, angle: String(Math.round(first.spec.angle * 10) / 10), size: String(Math.round((first.spec.size / doc.style.bondLength) * 100) / 100), flip: String(!!first.spec.flip) };
+  const got = await ask(list.length > 1 ? `Edit ${list.length} Orbitals` : 'Edit Orbital', orbitalFields(was), {
+    ok: 'Apply',
+    preview: { title: 'Preview', draw: (vals) => orbitalPreview({ ...orbitalSpec(vals, atom), ...(vals.size === was.size ? { size: first.spec.size } : {}) }, atom, first.at) },
+    note: list.length > 1 ? 'Only the settings you change are applied to each orbital; each keeps its own angle and size unless you change them.' : 'Draws the orbital again with these settings, on the same atom.',
+  });
+  if (!got) return;
+  // only what was changed: several orbitals each keep their own angle and size
+  const patch: Partial<OrbitalSpec> = {};
+  if (got.kind !== was.kind) patch.kind = got.kind as OrbitalKind;
+  if (got.look !== was.look) patch.look = got.look as OrbitalLook;
+  if (got.flip !== was.flip) patch.flip = got.flip === 'true';
+  if (got.size !== was.size) patch.size = orbitalSize(got.size) * doc.style.bondLength;
+  if (got.angle !== was.angle) { const a = readAngle(got.angle); if (a !== 'auto') patch.angle = a; }
+  orbitalChoice.look = got.look; orbitalChoice.flip = got.flip; orbitalChoice.size = got.size;
+  const auto = readAngle(got.angle) === 'auto';
+  if (Object.keys(patch).length || auto) restyleOrbitals(list, patch, auto);
 }
 
 /** A diagram drawn as an SVG picture, for the diagram window's preview and its layout buttons. */
@@ -7854,7 +7950,7 @@ window.addEventListener('keydown', (e) => {
 
 /** Menu commands that work the same whatever shows. */
 const ANY_TAB = new Set(['references', 'compound-library', 'knowledge-base', 'ligand-library', 'toolbox-text', 'toolbox-guides', 'insert-compound', 'add-to-compound-library', 'library-location', 'find-structure-files', 'new-from-template', 'check-accessibility', 'format-painter', 'insert-symbol', 'edit-palettes', 'preferences', 'export-settings', 'import-settings', 'customize-ribbon', 'toolbox-main', 'toolbox-structure', 'toolbox-arrange', 'toolbox-templates', 'toolbox-colours', 'toolbox-highlight', 'toolbox-custom', 'toolbox-schemes', 'toolbox-diagrams', 'toolbox-tables', 'toolbox-biopolymers', 'toolbox-perspective', 'fold-side', 'customize-toolbox', 'customize-quick-bar', 'lock-toolboxes', 'reset-toolboxes', 'new', 'new-slides', 'new-design', 'new-sheet', 'new-document', 'open', 'save', 'save-as', 'autosave', 'version-history', 'recover-work', 'keep-options', 'close-tab', 'next-tab', 'prev-tab', 'undo', 'redo',
-  'drawing-style', 'navigation-settings', 'dark-page', 'dark-colours', 'alignment-guides', 'hotkeys', 'typing-spelling', 'mode-colours', 'dev-tools', ...STRESS_SIZES.map((n) => `stress-${n}`), 'scroll-bars', 'title-bar-in-menu', 'collapse-ribbon', 'ui-scale-in', 'ui-scale-out', 'ui-scale-reset', ...UI_SCALES.map((v) => `ui-scale-${Math.round(v * 100)}`), 'text-bar-docked', 'text-bar-floating', 'text-bar-hidden', 'theme-system', 'theme-light', 'theme-dark', 'theme-darkgray', 'density-snug', 'density-cozy', 'density-normal', 'density-standard', 'density-large', 'shadows-light', 'shadows-strong', 'shadows-off', 'icons-mode', 'icons-kind', 'shape-ink-accent', 'focus-view', 'one-column-tools', 'group-tips', 'tool-tips', 'touch-mode-auto', 'touch-mode-on', 'touch-mode-off', 'atom-keypad', 'pen-sketch', 'show-stereo', 'clipboard-formats', 'split-view', 'command-search', 'next-region', 'prev-region', 'print',
+  'drawing-style', 'navigation-settings', 'dark-page', 'dark-colours', 'hotkeys', 'typing-spelling', 'mode-colours', 'dev-tools', ...STRESS_SIZES.map((n) => `stress-${n}`), 'scroll-bars', 'title-bar-in-menu', 'collapse-ribbon', 'ui-scale-in', 'ui-scale-out', 'ui-scale-reset', ...UI_SCALES.map((v) => `ui-scale-${Math.round(v * 100)}`), 'text-bar-docked', 'text-bar-floating', 'text-bar-hidden', 'theme-system', 'theme-light', 'theme-dark', 'theme-darkgray', 'density-snug', 'density-cozy', 'density-normal', 'density-standard', 'density-large', 'shadows-light', 'shadows-strong', 'shadows-off', 'icons-mode', 'icons-kind', 'shape-ink-accent', 'focus-view', 'one-column-tools', 'group-tips', 'tool-tips', 'touch-mode-auto', 'touch-mode-on', 'touch-mode-off', 'atom-keypad', 'pen-sketch', 'show-stereo', 'clipboard-formats', 'split-view', 'command-search', 'next-region', 'prev-region', 'print',
   'assistant', 'help', 'about', 'user-guide', 'help-here', 'send-feedback', 'report-problem', 'copy-diagnostics', 'open-log-folder', 'open-inspector', 'check-updates']);
 
 // ---------------------------------------------------------------- accessibility (Review > Check Accessibility, Alt Text…)
@@ -8558,14 +8654,6 @@ const COMMANDS: Record<string, () => unknown> = {
   'tool-sketch': () => { editor.setTool(editor.toolName === 'sketch' ? 'bond-single' : 'sketch'); },
   'pen-sketch': () => { editor.options.penSketch = !editor.options.penSketch; $('[data-cmd="pen-sketch"]')?.setAttribute('aria-checked', String(editor.options.penSketch)); storeSettings(); },
   'dark-page': () => { showDark(!dark.on); storeSettings(); },
-  'alignment-guides': () => {
-    const m = guideMode();
-    if (!m) { flash('Alignment guides are for canvases, presentations and designs. In a document, figures line up with the text.'); return; }
-    guidesOn[m] = !guidesOn[m];
-    showGuides();
-    storeSettings();
-    flash(guidesOn[m] ? 'Alignment guides on: moved things snap into line with structures, text and shapes (hold Alt to move freely).' : 'Alignment guides off.');
-  },
   'dark-colours': () => settingsWindow.open('dark'),
   'zoom-in': () => editor.zoomBy(1.25),
   'zoom-out': () => editor.zoomBy(0.8),
@@ -8622,7 +8710,8 @@ const COMMANDS: Record<string, () => unknown> = {
   'toolbox-biopolymers': () => { contextBoxes.byHand('biopolymers'); },
   'toolbox-perspective': () => { contextBoxes.byHand('perspective'); },
   // the panel taken out as a toolbox folds up to its title bar; at the right it folds to a strip
-  'fold-side': () => foldSide(!sideIsFolded()),
+  // resting as a strip with nothing to show: brought out; otherwise closed all the way, or opened again
+  'fold-side': () => { if (sideResting()) { sideForced = 'open'; restSidePanel(); return; } foldSide(!sideIsFolded()); },
   'customize-toolbox': () => openCustomToolbox(),
   'customize-quick-bar': () => quickBar?.edit(),
   'customize-ribbon': () => ribbonEditor.open(RIBBON_OF_MODE[ws.active.mode]),
@@ -8745,6 +8834,7 @@ const COMMANDS: Record<string, () => unknown> = {
   orbital: () => void insertOrbital(false),
   gel: () => void plateFigure('gel', null),
   'crystal-structure': () => void plateFigure('crystal', null),
+  'edit-orbital': () => void editOrbital(),
   'edit-plate': () => { const id = editor.selectedPlate(); if (id === null) flash('Select a lab figure (TLC plate, gel, MO diagram or crystal structure) first.'); else void plateFigure(null, id); },
   'insert-diagram': () => void smartDiagram(null),
   'edit-diagram': () => { const id = editor.selectedDiagram(); if (id === null) flash('Select a diagram first.'); else void smartDiagram(id); },
@@ -11764,7 +11854,7 @@ function drawingMenu(): MenuItem[] {
   const texts = selectedSpecies().length > 0;
   const shapes = [...s.shapes].map((id) => doc.shapes.get(id)).filter((x): x is Shape => !!x);
   const design = ws.active.mode === 'design';
-  const view: MenuItem = { label: 'View', items: [{ cmd: 'zoom-in' }, { cmd: 'zoom-out' }, { cmd: 'zoom-fit' }, { cmd: 'zoom-selection' }, { cmd: 'zoom-actual' }, null, { cmd: 'show-stereo' }, { cmd: 'group-tips' }, { cmd: 'tool-tips' }, { cmd: 'scroll-bars' }, { cmd: 'alignment-guides' }, null, { cmd: 'dark-page' }, { cmd: 'dark-colours' }] };
+  const view: MenuItem = { label: 'View', items: [{ cmd: 'zoom-in' }, { cmd: 'zoom-out' }, { cmd: 'zoom-fit' }, { cmd: 'zoom-selection' }, { cmd: 'zoom-actual' }, null, { cmd: 'show-stereo' }, { cmd: 'group-tips' }, { cmd: 'tool-tips' }, { cmd: 'scroll-bars' }, null, { cmd: 'dark-page' }, { cmd: 'dark-colours' }] };
   if (!any) {
     return [
       { cmd: 'paste' }, { cmd: 'paste-smiles' }, { cmd: 'select-all' }, null,
@@ -11802,6 +11892,7 @@ function drawingMenu(): MenuItem[] {
     ...(editor.selectedTorsion() !== null ? [{ cmd: 'edit-torsion' }, { cmd: 'copy-torsion-data' }, null] : []),
     ...(editor.selectedNewman() !== null ? [{ cmd: 'edit-newman' }, ...(doc.shapes.get(editor.selectedNewman()!)?.newman?.link ? [{ cmd: 'unlink-newman' }] : []), null] : []),
     ...(editor.selectedPlate() !== null ? [{ cmd: 'edit-plate' }, null] : []),
+    ...(selectedOrbitals().length ? [{ cmd: 'edit-orbital' }, null] : []),
     ...(editor.selectedDiagram() !== null ? [{ cmd: 'edit-diagram' }, { cmd: 'diagram-to-shapes' }, null] : []),
     ...(atoms || texts ? [{ label: 'Copy As', items: [{ cmd: 'copy-smiles' }, { cmd: 'copy-mol' }, { cmd: 'copy-cdxml' }] }, null] : []),
     ...(s.captions.size ? [readAsMenu(), ...(texts && !atoms ? [{ cmd: 'expand-label', label: 'Expand to Structure' }, { cmd: 'expand-label-full', label: 'Expand to Full Structure' }] : []), null] : []),
@@ -12006,6 +12097,10 @@ stylePanel.plate = {
   edit: (id) => void plateFigure(null, id),
   restyle: (id, patch) => { const d = doc.shapes.get(id)?.plate; if (d) editor.putPlateAt({ ...d, ...patch }, pasteCentre(), id); },
 };
+stylePanel.orbital = {
+  edit: () => void editOrbital(),
+  restyle: (ids, patch) => restyleOrbitals(orbitalsAmong(doc, ids), patch),
+};
 stylePanel.energy = {
   edit: (id) => void energyDiagram(id),
   restyle: (id, patch) => { const d = doc.shapes.get(id)?.energy; if (d) editor.putEnergyDiagram({ ...d, ...patch }, pasteCentre(), id); },
@@ -12092,6 +12187,8 @@ setTimeout(() => {
     save: () => void saveFavorite(),
     menu: (f, at) => favoriteMenu(f, at),
   }));
+  // (the galleries make their groups wider: fit the ribbons again, so none runs past the window's edge)
+  fitRibbons();
 }, 400);
 
 function favoritesChanged(): void {
@@ -12499,7 +12596,7 @@ const SPECIAL_BOXES: Record<string, (body: HTMLElement, vertical: boolean) => vo
   // The side panel (Style, Warnings, Analysis; Format in documents, Cell in sheets) is a toolbox,
   // docked at the right to start with. Its arrow goes with it, so it shows even when the title bar is
   // locked away.
-  details: (body) => { body.before($('#side-fold')); body.append(sideContent); },
+  details: (body) => { body.before($('#side-strip'), $('#side-fold')); body.append(sideContent); },
   text: (body, vertical) => { textToolbox = buildTextToolbox(body, vertical, textToolboxHooks); },
   guides: (body, vertical) => { guidesToolbox = buildGuidesToolbox(body, vertical, guidesToolboxHooks); },
   // the Smart Scheme species list, docked (it floats beside the scheme otherwise)
@@ -12518,10 +12615,8 @@ const guidesToolboxHooks: GuidesToolboxHooks = {
   },
   centre: () => { const a = editor.viewArea(); return { x: (a.x1 + a.x2) / 2, y: (a.y1 + a.y2) / 2 }; },
   units: () => rulerPrefs.units,
-  smart: () => guidesOn.drawing,
-  setSmart: (on) => { guidesOn.drawing = on; showGuides(); storeSettings(); },
 };
-editor.onGuides = () => { ws.noteChange(); guidesToolbox?.refresh(); };
+editor.onGuides = () => { ws.noteKeptChange(); guidesToolbox?.refresh(); };
 
 const DOC_TOGGLES: Partial<Record<string, string>> = { bold: 'doc-bold', italic: 'doc-italic', underline: 'doc-underline', sub: 'doc-sub', sup: 'doc-sup', formula: 'doc-formula' };
 const DOC_ALIGN: Record<string, string> = { left: 'doc-align-left', center: 'doc-align-center', right: 'doc-align-right', justify: 'doc-justify' };
@@ -12546,6 +12641,20 @@ const textToolboxHooks: TextToolboxHooks = {
   back: () => editor.refocusText(),
   say: (t) => flash(t),
 };
+// the Canvas ribbon's Font and Paragraph groups: all of the typing bar, working as the Text Formatting
+// toolbox does (and while they show, the bar above the text hides: see CaptionEditor.barElsewhere)
+// (set by the ribbon's callback, which TypeScript can't see)
+const textRows = canvasTextRows as { font: HTMLElement; paragraph: HTMLElement } | null;
+if (textRows) {
+  canvasFont = buildTextBar(textRows.font, {
+    format: (f) => textToolboxHooks.format(f),
+    type: (ch) => textToolboxHooks.type(ch),
+    link: () => textToolboxHooks.link(),
+    state: () => textToolboxHooks.look(),
+    back: () => textToolboxHooks.back(),
+    nothing: () => flash('Click into some text, or pick a caption or text box, first.'),
+  }, { ribbon: { paragraph: textRows.paragraph } });
+}
 
 /** Ring Shape on the right-click menu, when the selection is one cyclohexane that can be redrawn. */
 function ringShapeMenu(): MenuItem[] {
@@ -12580,7 +12689,7 @@ const toolboxes = new Toolboxes(toolboxDefs, {
   folded: (id) => (id === 'details' ? sideIsFolded() : undefined),
   fold: (id) => { if (id !== 'details') return false; command('fold-side'); return true; },
   say: (text) => flash(text),
-  rendered: () => fitTools(),
+  rendered: () => { fitTools(); restSidePanel(); },
 });
 contextBoxes.ready = true;
 
@@ -12661,13 +12770,25 @@ function fitTools(): void {
     const over = () => (floating ? box.scrollHeight > box.clientHeight + 1 : across ? c.scrollWidth > dock.clientWidth - 16 : tall() > room + 1);
     for (let f = (across ? s.cols : s.rows) - 1; f >= 1 && over(); f--) layCells(c, f);
   }
+  settleDocks();
   fadeDocks();
+}
+/**
+ * Let the docks down the sides measure their width afresh. A dock squeezed or overfilled for a
+ * moment while its toolboxes were built and wrapped took a scroll bar, and the browser kept that
+ * bar's width after the bar went: the toolbox stayed wider and the work moved over (a jump).
+ */
+function settleDocks(): void {
+  const docks = [...document.querySelectorAll<HTMLElement>('.dock-v')];
+  for (const d of docks) d.style.overflowY = 'hidden';
+  void document.body.offsetWidth;
+  for (const d of docks) d.style.removeProperty('overflow-y');
 }
 function fadeDocks(): void {
   for (const d of document.querySelectorAll<HTMLElement>('.dock-v')) d.classList.toggle('more-below', d.scrollTop + d.clientHeight < d.scrollHeight - 2);
 }
 for (const d of document.querySelectorAll<HTMLElement>('.dock-v')) d.addEventListener('scroll', fadeDocks, { passive: true });
-addEventListener('resize', () => { fitTools(); autoFoldRibbon(); });
+addEventListener('resize', () => { fitTools(); autoFoldRibbon(); restSidePanel(); });
 
 /** The ribbon folded or whole as you last chose it (Ctrl+F1, View > Ribbon > Collapse the Ribbon). */
 let ribbonChosen = false;
@@ -12701,9 +12822,94 @@ function placeSidePanel(): void {
   fold.textContent = '×';
   fold.title = 'Close the side panel (Ctrl+Alt+B, or the panel button at the bottom right, opens it again)';
   fold.setAttribute('aria-label', fold.title);
+  restSidePanel();
 }
 $('#side-fold').addEventListener('click', () => command('fold-side'));
 $('#status-side').addEventListener('click', () => command('fold-side'));
+
+/*
+ * While the side panel has nothing to show (nothing selected, and no Warnings, Analysis, Layers,
+ * Comments or Animation pane open), it rests as a thin strip at the right edge, docked there or
+ * floating. Something selected, or a click on the strip, brings it out: docked, over the edge of
+ * the work rather than beside it, so the drawing never moves or changes size as the selection
+ * changes. Documents and spreadsheets always have their Format or Cell pane, so it never rests there.
+ */
+const sideStrip = $<HTMLButtonElement>('#side-strip');
+/** The strip clicked: the panel out though it has nothing to show ('open'), or put away though it has ('closed'), until the selection changes. */
+let sideForced: 'open' | 'closed' | null = null;
+let sideSelKey = '';
+
+/** The panes the side panel shows now. */
+const sidePanes = (): HTMLElement[] => [...sideContent.children].filter((el): el is HTMLElement => el instanceof HTMLElement && !el.hidden && getComputedStyle(el).display !== 'none');
+
+/** The side panel has only the Style pane's "Select something" to show. */
+const sideHasNothing = (): boolean => sidePanes().every((el) => el.id === 'style-section' && el.classList.contains('empty'));
+
+/**
+ * The side panel rests as a strip when it has nothing to show and comes out over the work: when
+ * it is open, docked at the right (its place locked) or floating, and shows only the Style pane.
+ * Another pane turned on (Warnings, Analysis, Layers, Comments, Animation; a document's Format or a
+ * sheet's Cell) keeps it open beside the work, as before.
+ */
+function sideCanRest(): boolean {
+  const p = toolboxState.places.details;
+  if (!p?.shown || sideIsFolded() || !(p.dock === 'float' || (p.dock === 'right' && boxLocked(toolboxState, 'details')))) return false;
+  return sidePanes().every((el) => el.id === 'style-section');
+}
+
+/** The side panel resting as a strip now. */
+const sideResting = (): boolean => !!$('.toolbox[data-id="details"]')?.classList.contains('side-rest');
+
+/** Rest the side panel as a strip, or bring it out, as what it has to show and the strip say. */
+function restSidePanel(): void {
+  const box = document.querySelector<HTMLElement>('.toolbox[data-id="details"]');
+  if (!box) return;
+  const s = editor.sel;
+  const key = `${ws.active.id}|${s.atoms.size}.${s.bonds.size}.${s.captions.size}.${s.arrows.size}.${s.shapes.size}|${[s.atoms, s.bonds, s.captions, s.arrows, s.shapes].map((x) => x.values().next().value ?? '').join('.')}`;
+  // (a new selection, or another tab, ends what a click on the strip asked for)
+  if (key !== sideSelKey) { sideSelKey = key; sideForced = null; }
+  const auto = sideCanRest();
+  const nothing = auto && sideHasNothing();
+  const rest = auto && (sideForced === 'closed' || (nothing && sideForced !== 'open'));
+  const over = auto && !rest && box.classList.contains('vertical') && !box.classList.contains('floating');
+  box.classList.toggle('side-auto', auto);
+  box.classList.toggle('side-rest', rest);
+  box.classList.toggle('side-over', over);
+  sideStrip.setAttribute('aria-expanded', String(auto && !rest));
+  sideStrip.title = rest ? 'Show the side panel (Ctrl+Alt+B): its Style settings come out here when something is selected' : 'Put the side panel away to its strip';
+  sideStrip.setAttribute('aria-label', rest ? 'Show the side panel' : 'Put the side panel away');
+  if (over) {
+    // out over the work, beside the strip, as tall as the dock leaves
+    const r = sideStrip.getBoundingClientRect(), dock = box.parentElement!.getBoundingClientRect();
+    box.style.setProperty('--so-right', `${Math.round(innerWidth - r.left + 4)}px`);
+    box.style.setProperty('--so-top', `${Math.round(r.top)}px`);
+    box.style.setProperty('--so-h', `${Math.max(120, Math.round(dock.bottom - r.top - 6))}px`);
+  }
+  if (rest && box.classList.contains('floating')) {
+    // floating: the strip at the top of the work's right edge
+    const w = $('#work').getBoundingClientRect();
+    box.style.setProperty('--sr-right', `${Math.round(innerWidth - w.right)}px`);
+    box.style.setProperty('--sr-top', `${Math.round(w.top + 8)}px`);
+  }
+}
+sideStrip.addEventListener('click', () => {
+  sideForced = sideResting() ? 'open' : 'closed';
+  restSidePanel();
+});
+// a panel brought out by the strip with nothing to show goes back on a click elsewhere or Escape
+document.addEventListener('pointerdown', (e) => {
+  if (sideForced !== 'open' || !sideHasNothing()) return;
+  const t = e.target as HTMLElement;
+  if (t.closest?.('.toolbox[data-id="details"]')) return;
+  sideForced = null;
+  restSidePanel();
+}, true);
+window.addEventListener('keydown', (e: KeyboardEvent) => {
+  if (e.key === 'Escape' && sideForced === 'open') { sideForced = null; restSidePanel(); }
+});
+// what the panel shows changes with the selection, the tab and the panes turned on: rest it or bring it out to match
+new MutationObserver(() => restSidePanel()).observe(sideContent, { subtree: true, childList: true, attributes: true, attributeFilter: ['hidden', 'class'] });
+new MutationObserver(() => restSidePanel()).observe(document.body, { attributes: true, attributeFilter: ['class'] });
 
 /** Below this window width the side panel folds by itself, so the drawing keeps its room. */
 const NARROW_WINDOW = 1200;
@@ -13130,7 +13336,8 @@ const navMap = new Navigator(host, renderer, () => orientPrefs, {
 });
 const edgeArrows = new EdgeArrows(host, renderer, () => editor.requestScene());
 editor.underlay = (ctx) => {
-  if (!drawingShown()) return;
+  // a structure drawn in its box (a cell's, a document's or a window's) stays white right to the box's edge
+  if (!drawingShown() || cellEdit) return;
   const p = gridPage();
   // with the page grid, whole pages show what is in use, so the tint round the drawing is left off
   if (p && pageLook.grid) paintPages(ctx, pageLook, renderer, p, pageExtent(p, doc.bounds()), pagesInUse(p), dark.on, dark.on ? null : darkSurround);
@@ -13144,7 +13351,8 @@ editor.walls = () => { const p = gridPage(); return p ? wallRect(p) : null; };
 /** Each frame: the navigator and the edge arrows follow the view and the drawing. */
 function updateOrientation(): void {
   const on = drawingShown();
-  navMap.update(on);
+  // (no Document Map over a structure's box: the box is small, and Fit shows the whole structure)
+  navMap.update(on && !cellEdit);
   edgeArrows.update(on && orientPrefs.edgeArrows ? arrowTargets() : null, doc.version, navMap.box());
 }
 
@@ -13637,9 +13845,11 @@ const designText = new SlideTextRibbon($('#design-ribbon'), {
 });
 /** The text groups of the ribbon showing (Presentation or Design) follow the text being edited. */
 const textRibbonNow = () => (ws.active.mode === 'slides' ? slideText : ws.active.mode === 'design' ? designText : null);
-// the Text Formatting toolbox is the typing bar, so with it showing the bar above the text hides
-CaptionEditor.barElsewhere = () => toolboxes.isShown('text');
-CaptionEditor.onState = () => { textRibbonNow()?.refresh(); textToolbox?.refresh(); };
+// the Text Formatting toolbox is the typing bar, and so are the Canvas ribbon's Home tab's Font and
+// Paragraph groups: with either showing, the bar above the text hides (with the ribbon collapsed or on
+// another tab, it shows as before)
+CaptionEditor.barElsewhere = () => toolboxes.isShown('text') || (!canvasRibbon.el.hidden && !ribbonCollapsed() && canvasRibbon.tab === 'home');
+CaptionEditor.onState = () => { textRibbonNow()?.refresh(); textToolbox?.refresh(); canvasFont?.refresh(); };
 // the Smart Scheme pane: the selected scheme's species, beside it
 const smartPane = new SmartPane({
   doc: () => editor.doc,
@@ -13704,7 +13914,7 @@ const buildHint = new BuildHint({
 });
 editor.onOverlay = () => { smartPane.place(); buildHint.place(); };
 editor.onSmartAdded = (frame, cap) => smartPane.focusCaption(frame, cap);
-editor.onChange = () => { welcomeWatch?.(); showToolStatus(); showRibbonContext(); smartPane.refresh(); buildHint.refresh(); if (ws.active.mode === 'slides' || ws.active.mode === 'design') { textRibbonNow()?.refresh(); showContextTabs(); } textToolbox?.refresh(); animUi?.selectionChanged(); updateStereo(); scheduleAnalysis(); updatePanels(); ws.noteChange(); stylePanel.refresh(); void refreshDescriptors(); scheduleLabelCheck(); };
+editor.onChange = () => { welcomeWatch?.(); showToolStatus(); showRibbonContext(); smartPane.refresh(); buildHint.refresh(); if (ws.active.mode === 'slides' || ws.active.mode === 'design') { textRibbonNow()?.refresh(); showContextTabs(); } textToolbox?.refresh(); canvasFont?.refresh(); animUi?.selectionChanged(); updateStereo(); scheduleAnalysis(); updatePanels(); ws.noteChange(); stylePanel.refresh(); restSidePanel(); void refreshDescriptors(); scheduleLabelCheck(); };
 chem.onReady = () => {
   (window as any).__chemReadyMs = performance.now() - startMs;
   sheetChem.flush();

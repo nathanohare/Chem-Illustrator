@@ -8,6 +8,7 @@
 import type { Template, TemplateAtom, TemplateBond } from '../chem/templates';
 import type { Cell, KbTable } from './tables';
 import PICS from './hammett-pics.json';
+import { ORIGINAL_REFS, ROW_REFS } from './hammett-refs';
 
 export interface Hammett {
   /** The group as chemists write it. */
@@ -174,6 +175,12 @@ export function onBenzene(x: Hammett): string | null {
   return x.smiles.replace('[*]', 'c1ccccc1');
 }
 
+/** The original papers for a Table I row, in our short form ("Definition" for hydrogen). */
+export function originalSources(row: number): string {
+  const refs = ROW_REFS[row] ?? [];
+  return refs.length ? refs.map((r) => ORIGINAL_REFS[r]).join('; ') : 'Definition';
+}
+
 /** Each group's drawing (scripts/kb/build-hammett-pics.mjs), with a wavy line where it joins the ring. */
 export function groupPicture(group: string): Template | null {
   const p = (PICS as unknown as Record<string, { atoms: TemplateAtom[]; bonds: TemplateBond[]; stubs: number[] }>)[group];
@@ -181,8 +188,8 @@ export function groupPicture(group: string): Template | null {
 }
 
 /** What the four constants mean (the "i" by their headings). */
-const SIGMA_INFO = 'Hammett substituent constant: how much the group pulls electrons from (positive) or pushes them into (negative) a benzene ring, measured from the acidity of the substituted benzoic acid in water at 25 °C (σm with the group meta to the reaction site, σp para). An electronic effect, not a safety or green score. Source: Hansch, Leo and Taft, Chem. Rev. 1991, Table I.';
-const FR_INFO = 'The field/inductive (F) and resonance (R) parts of the group\'s electronic effect (Swain–Lupton, as modified by Hansch, Leo and Taft; σp ≈ F + R). Positive pulls electrons, negative pushes them. Source: Chem. Rev. 1991, Table I.';
+const SIGMA_INFO = 'Hammett substituent constant: how much the group pulls electrons from (positive) or pushes them into (negative) a benzene ring, measured from the acidity of the substituted benzoic acid in water at 25 °C (σm with the group meta to the reaction site, σp para). An electronic effect, not a safety or green score. Source: the paper in each row\'s Original source column, as compiled by Hansch, Leo and Taft, Chem. Rev. 1991, Table I.';
+const FR_INFO = 'The field/inductive (F) and resonance (R) parts of the group\'s electronic effect (Swain–Lupton, as modified by Hansch, Leo and Taft; σp ≈ F + R). Positive pulls electrons, negative pushes them. Worked out by Hansch, Leo and Taft from σm and σp (Chem. Rev. 1991, eq 8, Table I), not taken from the original papers.';
 
 // a plain minus sign, so the values sort and paste into Excel as numbers
 const fmt = (n: number) => (n === 0 ? '0.00' : n.toFixed(2));
@@ -190,7 +197,7 @@ const fmt = (n: number) => (n === 0 ? '0.00' : n.toFixed(2));
 export const HAMMETT_TABLE: KbTable = {
   id: 'hammett',
   title: 'Hammett Constants',
-  about: 'Hammett σm and σp, and the field (F) and resonance (R) parameters (Swain–Lupton, as modified by Hansch, Leo and Taft; σp ≈ F + R), of common substituents on a benzene ring. Search by group (NO2, OMe) or name. Values in brackets are ones the paper marks as less certain. A selection: the paper lists about 530 groups, and Import Table adds the rest from your copy.',
+  about: 'Hammett σm and σp, and the field (F) and resonance (R) parameters (Swain–Lupton, as modified by Hansch, Leo and Taft; σp ≈ F + R), of common substituents on a benzene ring. Search by group (NO2, OMe) or name. Values in brackets are ones the paper marks as less certain. Each row names the original paper its σm and σp come from. A selection: the paper lists about 530 groups, and Import Table adds the rest from your copy.',
   columns: [
     { key: 'pic', label: 'Structure', picture: true },
     { key: 'group', label: 'Group' },
@@ -199,12 +206,13 @@ export const HAMMETT_TABLE: KbTable = {
     { key: 'sp', label: 'σp', numeric: true, info: SIGMA_INFO },
     { key: 'F', label: 'F', numeric: true, info: FR_INFO },
     { key: 'R', label: 'R', numeric: true, info: FR_INFO },
+    { key: 'refs', label: 'Original source', prose: true, info: 'The paper(s) the σm and σp values were measured or first reported in, as Hansch, Leo and Taft\'s Table I cites them. Hydrogen is 0 by definition.' },
     { key: 'row', label: 'Table I no.', numeric: true, narrow: true },
   ],
   picture: (row: Record<string, Cell>) => groupPicture(String(row.group)),
   rows: HAMMETT.map((x) => {
     const v = (n: number) => (x.approx ? `(${fmt(n)})` : fmt(n));
-    return { group: x.group, name: x.name, sm: v(x.sm), sp: v(x.sp), F: v(x.F), R: v(x.R), row: x.row, smiles: onBenzene(x) };
+    return { group: x.group, name: x.name, sm: v(x.sm), sp: v(x.sp), F: v(x.F), R: v(x.R), refs: originalSources(x.row), row: x.row, smiles: onBenzene(x) };
   }),
-  sources: [HANSCH_1991, { label: 'Selection, names and SMILES by Chem Illustrator' }],
+  sources: [HANSCH_1991, { label: 'Original papers for each value: the Original source column (as cited in Table I)' }, { label: 'Selection, names and SMILES by Chem Illustrator' }],
 };

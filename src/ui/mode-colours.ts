@@ -18,6 +18,8 @@ export interface ModeColours {
 
 // (canvases were blue #2f6fdf until 2026-10-30: too close to the documents' blue to tell the two apart at a glance)
 export const DEFAULT_MODE_COLOURS: ModeColours = { style: 'accent', drawing: '#0e7c93', slides: '#c8572a', sheet: '#1e8a50', document: '#2647a8', design: '#7b3fbf' };
+/** The canvases' colour before the teal: a saved settings file that holds it is read as the teal. */
+const OLD_DRAWING = '#2f6fdf';
 const STYLES: ModeColourStyle[] = ['accent', 'window', 'off'];
 const HEX = /^#[0-9a-f]{6}$/i;
 
@@ -28,6 +30,9 @@ export function parseModeColours(raw: unknown): ModeColours {
   const r = raw as Record<string, unknown>;
   if (STYLES.includes(r.style as ModeColourStyle)) c.style = r.style as ModeColourStyle;
   for (const k of ['drawing', 'slides', 'sheet', 'document', 'design'] as const) if (typeof r[k] === 'string' && HEX.test(r[k] as string)) c[k] = (r[k] as string).toLowerCase();
+  // (the old blue was the canvases' colour until 2026-10-30, and every settings file saved before then
+  // holds it, though nobody chose it: it goes to the teal, as the other modes' colours never changed)
+  if (c.drawing === OLD_DRAWING) c.drawing = DEFAULT_MODE_COLOURS.drawing;
   return c;
 }
 

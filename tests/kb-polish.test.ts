@@ -1,14 +1,13 @@
 // @vitest-environment jsdom
 //
 // Knowledge Base polish from Nate's review: formulas with subscripts and nuclei with superscripts
-// (shown only: the data stays plain text), each multiplicity next to its shift, the NMR solvent the
-// spectrum was taken in, ⓘ notes on rated columns, and pictures of the Hammett groups.
+// (shown only: the data stays plain text), the NMR solvent the spectrum was taken in (for imported
+// tables), ⓘ notes on rated columns, and pictures of the Hammett groups.
 
 import { describe, expect, it } from 'vitest';
 import { prettyChem } from '../src/kb/pretty';
-import { NMR_SOLVENTS, withMult } from '../src/kb/data';
 import { HAMMETT, HAMMETT_TABLE, groupPicture } from '../src/kb/hammett';
-import { SOLVENTS_TABLE } from '../src/kb/property-tables';
+import { SOLVENTS_TABLE } from '../src/kb/solvents';
 import { REAGENT_SAFETY } from '../src/kb/safety-tables';
 import { findRows, tableTsv } from '../src/kb/tables';
 import { matchSolvent } from '../src/ui/knowledge-base';
@@ -36,25 +35,6 @@ describe('chemistry written properly', () => {
     expect(prettyChem('1H (ppm)', true)).toBe('¹H (ppm)');
     expect(prettyChem('13C', true)).toBe('¹³C');
     expect(prettyChem('2H', true)).toBe('²H');
-  });
-});
-
-describe('NMR Solvents', () => {
-  it('puts each multiplicity with its own shift', () => {
-    expect(withMult('3.31, 4.87 (OH)', 'quint, s')).toBe('3.31 (quint), 4.87 (s, OH)');
-    expect(withMult('7.26', 's')).toBe('7.26 (s)');
-    expect(withMult('8.74, 7.85, 7.22', 'brs, br, br')).toBe('8.74 (brs), 7.85 (br), 7.22 (br)');
-    expect(withMult('2.50', null)).toBe('2.50');
-    expect(withMult(null, 's')).toBe(null);
-  });
-
-  it('has no separate multiplicity columns, hides the CAS column and still finds by CAS and shift', () => {
-    expect(NMR_SOLVENTS.columns.map((c) => c.key)).not.toContain('hm');
-    expect(NMR_SOLVENTS.columns.find((c) => c.key === 'cas')?.hidden).toBe(true);
-    expect(NMR_SOLVENTS.rows.find((r) => r.name === 'Chloroform-d')?.h).toBe('7.26 (s)');
-    expect(findRows(NMR_SOLVENTS, '2206-27-1').map((m) => m.row.name)).toEqual(['Dimethyl sulfoxide-d6']);
-    expect(findRows(NMR_SOLVENTS, '7.26').map((m) => m.row.name)).toContain('Chloroform-d');
-    expect(tableTsv(NMR_SOLVENTS, []).split('\t')).not.toContain('CAS');
   });
 });
 

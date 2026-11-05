@@ -212,9 +212,27 @@ export function fitRibbons(): void {
   queued = true;
   requestAnimationFrame(() => {
     queued = false;
+    const showing = [...document.querySelectorAll<HTMLElement>('.ribbon')].filter((r) => r.offsetParent);
+    // each ribbon keeps its height while it is fitted and measured, so nothing else on the page
+    // moves in the layouts that takes: with every tab's buttons stacked up to be measured, the
+    // docks below were squeezed for a moment, took a scroll bar, and the toolbox at the left came
+    // back that much wider (the work jumped sideways each time a tab changed)
+    const pinned = showing.map(holdHeight);
     for (const row of rows()) if (row.offsetParent) fitRow(row);
-    for (const r of document.querySelectorAll<HTMLElement>('.ribbon')) if (r.offsetParent) evenHeights(r);
+    for (const r of showing) evenHeights(r);
+    pinned.forEach((release) => release());
   });
+}
+
+/** Keep a ribbon at the height it has now, its buttons free to be taller or shorter inside it, until the function returned is called. */
+function holdHeight(ribbon: HTMLElement): () => void {
+  const h = ribbon.offsetHeight;
+  ribbon.style.height = `${h}px`;
+  ribbon.classList.add('rb-measuring');
+  return () => {
+    ribbon.style.removeProperty('height');
+    ribbon.classList.remove('rb-measuring');
+  };
 }
 
 /** Keep the ribbons fitted: on resizing, on picking a ribbon tab, and when a ribbon or panel comes into view. */

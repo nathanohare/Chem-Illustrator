@@ -303,7 +303,6 @@
     </div>
     <hr />
     <button role="menuitemcheckbox" aria-checked="false" data-cmd="show-stereo" title="Preview every R/S and E/Z label in red (on screen only; use Chemistry &gt; Show Stereo Labels to add them to the drawing)"><span>Show R/S Preview</span></button>
-    <button role="menuitemcheckbox" aria-checked="false" data-cmd="alignment-guides" title="While moving, edges and middles snap into line with other structures, text, shapes and the page (pink lines; hold Alt to move freely). Set separately for canvases, presentations and designs"><span>Alignment Guides</span></button>
     <button role="menuitemcheckbox" aria-checked="true" data-cmd="group-tips" title="Rest the mouse on an abbreviation such as OTBS, Boc or CO2Me to see the group written out, with its name and formula"><span>Chemical Abbreviation Tooltips</span></button>
     <button role="menuitemcheckbox" aria-checked="true" data-cmd="tool-tips" title="Hold the mouse on a tool for a moment to see what it does and what Alt, Shift and Ctrl change. Off: a one-line tip"><span>Detailed Tooltips</span></button>
     <button role="menuitemcheckbox" aria-checked="true" data-cmd="scroll-bars" title="Scroll bars along the bottom and right of the drawing, showing where you are"><span>Scroll Bars</span></button>
@@ -512,7 +511,7 @@
     <button role="menuitemcheckbox" aria-checked="true" data-cmd="tabs-in-menu" title="The open files' tabs in the menu bar, beside the menus, to give the work a row more room (a row of their own when off). When many files are open the tabs show only their icons; rest the mouse on one for its name"><span>File Tabs in Menu Row</span></button>
     <hr />
     <button role="menuitem" data-cmd="dark-colours" title="Choose Reading Mode's colors (Graphite, Slate, Warm dark) or make your own">Reading Mode Colors…</button>
-    <button role="menuitem" data-cmd="mode-colours" title="Blue for drawings, orange for slides: choose how much of the window is colored, and the colors">Mode Colors…</button>
+    <button role="menuitem" data-cmd="mode-colours" title="Teal for canvases, orange for slides: choose how much of the window is colored, and the colors">Mode Colors…</button>
     </div>
     </div>
     <hr />
@@ -764,7 +763,8 @@
     <button role="menuitem" class="has-sub" aria-haspopup="menu" aria-expanded="false">Orbitals</button>
     <div class="menu sub" role="menu" hidden>
     <button role="menuitem" data-cmd="p-orbitals" title="A p orbital standing on each selected atom, as for a π system: the lobes stay with the atoms when the structure moves">p Orbitals on Selected Atoms</button>
-    <button role="menuitem" data-cmd="orbital" title="An s, p, d or sp/sp²/sp³ orbital on each selected atom (or in the middle of the view): which way it points, its size, and how the phases are shown (shaded, two colors or outlines)">Orbital…</button>
+    <button role="menuitem" data-cmd="orbital" title="An s, p, d, sp/sp²/sp³ orbital or a single lobe on each selected atom (or in the middle of the view): which way it points, its size, and how the phases are shown (shaded, two colors or outlines)">Orbital…</button>
+    <button role="menuitem" data-cmd="edit-orbital" title="Change the selected orbitals' type, phases, angle or size (or double-click one)">Edit Orbital…</button>
     <hr />
     <button role="menuitem" data-cmd="mo-diagram" title="A molecular orbital diagram from a table of levels: atomic orbitals at the sides, molecular orbitals in the middle, electrons by Hund's rule and dashed lines between them. Starts from H₂, N₂, O₂, CO or ethylene. Double-click it to change it">MO Diagram…</button>
     </div>
@@ -3007,6 +3007,7 @@
   </main>
 
   <aside>
+    <button id="side-strip" type="button" aria-expanded="false" title="Show the side panel (Ctrl+Alt+B)" aria-label="Show the side panel"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><path d="M10 3.5 5.5 8l4.5 4.5" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg><span class="ss-label">Side Panel</span></button>
     <button id="side-fold" type="button" title="Close the side panel (Ctrl+Alt+B)" aria-label="Close the side panel">×</button>
     <div id="side-content">
     <section id="anim-section" hidden></section>
@@ -3086,7 +3087,6 @@
         <ul>
           <li>File &gt; Drawing Style… sets how structures are drawn in the tab showing: bond length, line widths, double-bond spacing and label fonts. Built in are ACS 1996 (every ACS journal), RSC, Nature journals and a larger Slides style, with the source of each set of numbers shown. Every number can be changed</li>
           <li>Save as My Style keeps your changes under a name, in every mode. Check Use this style for new … to make new canvases, presentations, designs, documents or spreadsheets start in it</li>
-          <li>View &gt; Alignment Guides: while you move something, its edges and middle snap into line with other structures, text, arrows, shapes and the page, shown by pink lines. Hold <kbd>Alt</kbd> to move freely. It is on for presentations and designs and off for canvases to start with; each remembers its own setting</li>
           <li>View &gt; Reading Mode (or the eye button at the top) shows the page dark: black ink as light gray, white paper as dark gray, colors dimmed. It changes the screen only; files, printing, copies and exports stay as they are. View &gt; Window and Colors &gt; Reading Mode Colors… picks Graphite, Slate or Warm dark, or your own paper and ink colors</li>
           <li>When there are structures already, choose Redraw (they take the new bond length and widths) or Keep their look (only new structures use the new style). One Undo puts it all back</li>
         </ul>

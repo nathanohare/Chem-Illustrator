@@ -213,7 +213,7 @@ Changes work straight away and are saved in the settings file; the window shows 
 - **Drag a selection** to move it, with any tool. With the select tool, dragging an atom or object that isn't selected moves just that one.
 - **Ctrl+drag** makes a copy: the copy goes with the pointer and the original stays. Ctrl+dragging an unselected atom or bond copies its whole structure. (With a curved arrow tool, Ctrl+drag draws the arrow freehand instead.)
 - **Shift while dragging** keeps the move straight across or straight up and down.
-- **Alt while dragging** turns off the alignment guides, so you can move freely. It also lets you drop an atom on another without joining them (without Alt, an atom dragged onto another snaps to it and the two become one).
+- **Alt while dragging** turns off snapping to guides (and, in presentations and designs, the smart guides), so you can move freely. It also lets you drop an atom on another without joining them (without Alt, an atom dragged onto another snaps to it and the two become one).
 - **Alt while drawing** a bond, arrow or line lets it point at any angle instead of 15° steps (and ignores fixed bond lengths).
 - **Holding the mouse with a template** on a bond shows a blue outline of where it will go. Move the pointer, or press **Tab** / **Shift+Tab**, to try the other ways it can join (trans or cis for conformers), and release to place it. See [Fusing conformers](drawing.md#fusing-conformers).
 

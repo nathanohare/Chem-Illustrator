@@ -163,6 +163,8 @@ export const ICONS: Record<string, string> = {
   'bracket-left': svg('<path d="M14 4H9v16h5"/>'),
   'bracket-right': svg('<path d="M10 4h5v16h-5"/>'),
   'sym-ddagger': svg('<path d="M12 3v18M7 7.5h10M7 14h10" stroke-width="1.8"/>'),
+  // a single orbital lobe, shaded like the default phase (its point at the bottom, on the atom)
+  'sym-lobe': svg('<path d="M12 21C9.6 18.6 6 15.4 6 10.6 6 6.6 8.6 3.5 12 3.5s6 3.1 6 7.1c0 4.8-3.6 8-6 10.4z" fill="currentColor" fill-opacity=".38"/>'),
   'sym-lonepair': svg('<text x="12" y="19" font-size="13" text-anchor="middle" fill="currentColor" stroke="none" font-family="Arial, sans-serif">O</text><circle cx="9.5" cy="4.5" r="1.3" fill="currentColor" stroke="none"/><circle cx="14.5" cy="4.5" r="1.3" fill="currentColor" stroke="none"/>'),
   'sym-radical': svg('<text x="11" y="19" font-size="13" text-anchor="middle" fill="currentColor" stroke="none" font-family="Arial, sans-serif">C</text><circle cx="18.5" cy="7" r="1.5" fill="currentColor" stroke="none"/>'),
   'sym-plus': svg('<circle cx="12" cy="12" r="6.5"/><path d="M8.5 12h7M12 8.5v7"/>'),

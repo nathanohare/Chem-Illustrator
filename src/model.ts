@@ -789,6 +789,11 @@ export interface Pin {
   hand: number;
   /** Where the point was when it was last put in place: when it is elsewhere, it was moved by hand. */
   was: Vec;
+  /**
+   * Which way the thing points in the same frame (a lone pair's two dots, an orbital's lobe), so
+   * it turns with its atoms as well as going with them. Not set for things that point no way.
+   */
+  dir?: Vec;
 }
 
 /**
@@ -825,6 +830,20 @@ export interface StepRoles {
   manual?: boolean;
 }
 
+/**
+ * What a part of an orbital remembers (Shape.orb): the orbital's type, phases and which phase is
+ * shaded, and which of its shapes this one is (its place in orbitalShapes' list). Where it is, which
+ * way it points and how big it is are read from the shapes themselves, so turning, moving or
+ * resizing it by hand is kept when it is changed.
+ */
+export interface OrbitalTag {
+  kind: string;
+  look: string;
+  flip?: boolean;
+  colours?: [string, string];
+  part: number;
+}
+
 /** Lines or dots over a fill (Style panel > Pattern). */
 export type Pattern = 'hatch' | 'backhatch' | 'crosshatch' | 'horizontal' | 'vertical' | 'grid' | 'dots' | 'dense-dots';
 
@@ -853,6 +872,8 @@ export interface Shape {
   geo?: string;
   /** ChemDraw's orbital (an oval it draws as an orbital lobe or s orbital): its OrbitalType, kept for writing back. */
   orbital?: string;
+  /** A part of an orbital drawn with Chemistry ▸ Orbital (chem/orbitals.ts): how it was asked for, so it can be changed later. */
+  orb?: OrbitalTag;
   /** Text inside a design shape: wraps to the shape's text area and moves with it. */
   text?: { runs: TextRun[]; paras?: ParaStyle[] };
   /** Text inside a design shape: across (centred unless set) and up and down (middle unless set). */
@@ -1028,9 +1049,12 @@ export interface Shape {
   holder?: { runs?: TextRun[] };
 }
 
-/** Can this shape be turned to any angle (Slides and Design), keeping its box and turning it as a whole? */
-export function turnsFreely(s: Pick<Shape, 'kind' | 'chart' | 'table' | 'ring' | 'frame' | 'pin'>): boolean {
-  return (s.kind === 'rect' || s.kind === 'oval' || s.kind === 'geo' || s.kind === 'picture') && !s.chart && !s.frame && !s.pin;
+/**
+ * Can this shape be turned to any angle (Slides and Design, and an orbital's lobes anywhere),
+ * keeping its box and turning it as a whole? (An orbital's lobe stuck to its atom turns too.)
+ */
+export function turnsFreely(s: Pick<Shape, 'kind' | 'chart' | 'table' | 'ring' | 'frame'>): boolean {
+  return (s.kind === 'rect' || s.kind === 'oval' || s.kind === 'geo' || s.kind === 'picture') && !s.chart && !s.frame;
 }
 
 /**
@@ -2093,6 +2117,7 @@ export class Doc {
     this.style = { ...other.style };
     this.background = other.background;
     this.page = other.page && { ...other.page };
+    this.guides = other.guides && { ...other.guides, list: other.guides.list.map((g) => ({ ...g })) };
     this.source = other.source;
     this.kept = other.kept.slice();
     this.nextId = Math.max(this.nextId, other.nextId);
@@ -2118,7 +2143,7 @@ export class Doc {
    */
   swap(other: Doc): void {
     if (this.tx || other.tx) throw new Error('Cannot swap documents in the middle of an edit');
-    const fields = ['style', 'background', 'page', 'source', 'textStyles', 'atoms', 'bonds', 'captions', 'arrows', 'shapes', 'adj', 'centresOf',
+    const fields = ['style', 'background', 'page', 'guides', 'source', 'textStyles', 'atoms', 'bonds', 'captions', 'arrows', 'shapes', 'adj', 'centresOf',
       'grid', 'atomCell', 'maxBondLen', 'bondLenStale', 'bondLenShrunk', 'undoStack', 'redoStack'] as const;
     const a = this as unknown as Record<string, unknown>, b = other as unknown as Record<string, unknown>;
     for (const f of fields) { const t = a[f]; a[f] = b[f]; b[f] = t; }

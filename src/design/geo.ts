@@ -755,6 +755,18 @@ export function moveSteps(steps: GeoStep[], dx: number, dy: number): GeoStep[] {
   });
 }
 
+/** Steps turned `deg` degrees clockwise (on the page, y down) about `c`, as a turned shape is drawn. */
+export function turnSteps(steps: GeoStep[], c: Vec, deg: number): GeoStep[] {
+  if (!deg) return steps;
+  const a = (deg * Math.PI) / 180, cos = Math.cos(a), sin = Math.sin(a);
+  const t = (x: number, y: number): [number, number] => [c.x + (x - c.x) * cos - (y - c.y) * sin, c.y + (x - c.x) * sin + (y - c.y) * cos];
+  return steps.map((s): GeoStep => {
+    if (s[0] === 'Z') return s;
+    if (s[0] === 'C') return ['C', ...t(s[1], s[2]), ...t(s[3], s[4]), ...t(s[5], s[6])];
+    return [s[0], ...t(s[1], s[2])];
+  });
+}
+
 /** Trace steps on a canvas (or the vector recorder, which records the same calls). */
 export function traceSteps(ctx: { moveTo(x: number, y: number): void; lineTo(x: number, y: number): void; bezierCurveTo(a: number, b: number, c: number, d: number, e: number, f: number): void; closePath(): void }, steps: GeoStep[]): void {
   for (const s of steps) {

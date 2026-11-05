@@ -79,6 +79,67 @@ try {
     await page.waitForTimeout(400);
   }
 
+  step('every ribbon, on every tab, is the Spreadsheet\'s height');
+  await page.evaluate(() => window.__app.ws.newDesign({ w: 720, h: 540 }));
+  await page.waitForTimeout(400);
+  const heights = await page.evaluate(async () => {
+    const ws = window.__app.ws, out = [];
+    const frame = () => new Promise((ok) => requestAnimationFrame(() => requestAnimationFrame(ok)));
+    for (const tab of [...ws.tabs]) {
+      ws.activate(tab);
+      await frame();
+      const r = [...document.querySelectorAll('.ribbon')].find((x) => x.offsetParent);
+      if (!r) continue;
+      const tabs = [...r.querySelectorAll(':scope > .rb-tabs [role="tab"]')];
+      // (an object's own tabs too, hidden until one is selected)
+      for (const t of tabs) {
+        const was = t.hidden;
+        t.hidden = false;
+        t.click();
+        await frame();
+        out.push({ mode: tab.mode, tab: t.textContent.trim(), h: r.offsetHeight });
+        t.hidden = was;
+      }
+      tabs.find((t) => !t.hidden)?.click();
+    }
+    return out;
+  });
+  const sheetH = heights.find((x) => x.mode === 'sheet')?.h;
+  console.log(`  ${heights.length} tabs in ${new Set(heights.map((x) => x.mode)).size} modes, ${sheetH} px`);
+  if (new Set(heights.map((x) => x.mode)).size < 5) fail('not every mode\'s ribbon was checked');
+  for (const x of heights) if (x.h !== sheetH) fail(`the ${x.mode} ribbon's ${x.tab} tab is ${x.h} px tall, not the Spreadsheet's ${sheetH} px`);
+  await page.evaluate(() => window.__app.ws.activate(window.__app.ws.tabs.find((t) => t.mode === 'drawing')));
+  await page.waitForTimeout(200);
+
+  step('the Drawing Tools toolbox keeps its docked width when it floats');
+  const widths = await page.evaluate(async () => {
+    const tb = window.__app.toolboxes;
+    const w = () => document.querySelector('.toolbox[data-id="main"] .tb-cells').getBoundingClientRect().width;
+    const box = () => document.querySelector('.toolbox[data-id="main"]').getBoundingClientRect().width;
+    tb.setLocked(false);
+    tb.put('main', { dock: 'float', x: 300, y: 120 });
+    await new Promise((ok) => requestAnimationFrame(ok));
+    const got = { cells: w(), box: box() };
+    tb.reset();
+    return got;
+  });
+  if (widths.box > widths.cells + 20) fail(`the floating Drawing Tools toolbox is ${Math.round(widths.box)} px wide for ${Math.round(widths.cells)} px of buttons`);
+
+  step('typing on the Canvas, the Home tab\'s Font and Paragraph groups stand in for the bar above the text');
+  await page.evaluate(() => window.__app.editor.setTool('text'));
+  const ov = await page.locator('#overlay').boundingBox();
+  await page.mouse.click(ov.x + ov.width / 2, ov.y + 120);
+  await page.keyboard.type('CH2Cl2');
+  const typing = await page.evaluate(() => ({
+    open: !!window.__app.editor.typingCaption,
+    bar: document.querySelector('.caption-bar')?.hidden,
+    buttons: document.querySelectorAll('#canvas-ribbon [data-cr-panel="home"] .cr-font .cb-btn').length,
+  }));
+  await page.keyboard.press('Escape');
+  if (!typing.open) fail('clicking with the Text tool opened no text to type in');
+  else if (typing.bar !== true) fail('the bar above the text shows while the Canvas Home tab has the same buttons');
+  if (typing.buttons < 18) fail(`the Canvas Home tab's Font and Paragraph groups have ${typing.buttons} buttons, not all of the typing bar's`);
+
   step('every menu fits in one column at 1280 × 720');
   for (const btn of await page.$$('header > .menu-wrap > button')) {
     if (!(await btn.isVisible())) continue;

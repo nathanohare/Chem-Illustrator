@@ -3,7 +3,8 @@
 // are built here, so they stay exactly alike: bold, italic, underline; sub- and superscript, a
 // formula in one click, stereodescriptors in italics in one click; font, size and color; lining
 // up; bullets, numbering and indents; line and paragraph spacing and the text box width; links;
-// and the Greek letters and symbols chemists type.
+// and the Greek letters and symbols chemists type. The Canvas ribbon's Font and Paragraph groups are
+// built here too, from the same buttons and boxes (`ribbon`), so they work and look as these do.
 
 import type { Justify } from '../model';
 import * as rt from '../richtext';
@@ -83,8 +84,18 @@ const lineIcon = (j: string) => {
 };
 const listIcon = (marks: string[]) => svg(marks.map((m, i) => `${m.replace(/Y/g, String(3 + i * 5))}<rect x="6" y="${2 + i * 5}" width="9" height="1.6"/>`).join(''));
 
+export interface TextBarOptions {
+  /**
+   * As a ribbon's Font and Paragraph groups, two rows each, as the Spreadsheet's Font group has them.
+   * `bar` gets the font and size, then bold, italic, underline, sub- and superscript, formula,
+   * stereodescriptors and color; `paragraph` gets bullets, numbering, indents and spacing, then lining
+   * up, links and symbols. The symbols and spacing panels drop down under their buttons.
+   */
+  ribbon?: { paragraph: HTMLElement };
+}
+
 /** Fill `bar` with the text formatting bar. Its groups, then the two panels, go straight into it. */
-export function buildTextBar(bar: HTMLElement, ops: TextBarOps): TextBar {
+export function buildTextBar(bar: HTMLElement, ops: TextBarOps, opts: TextBarOptions = {}): TextBar {
   const d = bar.ownerDocument;
   const buttons = new Map<string, HTMLButtonElement>();
   const inputs = {} as Record<'font' | 'size' | 'color' | 'line' | 'before' | 'after' | 'wrap', HTMLInputElement>;
@@ -97,7 +108,13 @@ export function buildTextBar(bar: HTMLElement, ops: TextBarOps): TextBar {
 
   const run = (f: TextFormat) => { if (!ops.format(f)) ops.nothing?.(); };
   const after = () => { refresh(); ops.back(); };
-  const group = () => { const g = d.createElement('span'); g.className = 'cb-group'; bar.appendChild(g); return g; };
+  // (ribbon: two rows in each group; which row each part goes in is said as it is made)
+  const rib = opts.ribbon;
+  const twoRows = (into: HTMLElement) => [0, 1].map(() => { const r = d.createElement('div'); r.className = 'cb-row'; into.appendChild(r); return r; });
+  const rows = rib ? twoRows(bar) : null;
+  const prows = rib ? twoRows(rib.paragraph) : null;
+  let into: HTMLElement = rows ? rows[1] : bar;
+  const group = () => { const g = d.createElement('span'); g.className = 'cb-group'; into.appendChild(g); return g; };
   const button = (g: HTMLElement, id: string, html: string, title: string, on: () => void) => {
     const b = d.createElement('button');
     b.type = 'button';
@@ -144,7 +161,18 @@ export function buildTextBar(bar: HTMLElement, ops: TextBarOps): TextBar {
     inputs[id] = input;
     return input;
   };
-  const panel = (open: HTMLDivElement, shut: HTMLDivElement) => () => { open.hidden = !open.hidden; shut.hidden = true; ops.resized?.(); };
+  const panel = (open: HTMLDivElement, shut: HTMLDivElement, id: string) => () => {
+    open.hidden = !open.hidden;
+    shut.hidden = true;
+    // (in a ribbon the panel drops down under its button, kept on the screen)
+    const b = buttons.get(id);
+    if (rib && b && !open.hidden) {
+      const r = b.getBoundingClientRect();
+      open.style.left = `${Math.max(4, Math.min(r.left, innerWidth - open.offsetWidth - 4))}px`;
+      open.style.top = `${r.bottom + 2}px`;
+    }
+    ops.resized?.();
+  };
 
   let g = group();
   button(g, 'bold', '<b>B</b>', 'Bold (Ctrl+B)', () => run({ kind: 'toggle', key: 'bold' }));
@@ -156,6 +184,7 @@ export function buildTextBar(bar: HTMLElement, ops: TextBarOps): TextBar {
   button(g, 'formula', 'CH<sub>3</sub>', 'Formula: numbers after letters go down, charges go up (CH2Cl2 → CH₂Cl₂)', () => run({ kind: 'toggle', key: 'formula' }));
   button(g, 'stereo', '(<i>R</i>)', 'Stereodescriptors in italics: (2R,3S)-, (E)-, cis-, tert-, n-Bu, p- (again: back to upright)', () => run({ kind: 'stereo' }));
 
+  if (rows) into = rows[0];
   g = group();
   const font = d.createElement('input');
   font.type = 'text';
@@ -180,15 +209,18 @@ export function buildTextBar(bar: HTMLElement, ops: TextBarOps): TextBar {
   color.title = 'Text color';
   color.setAttribute('aria-label', 'Text color');
   color.addEventListener('change', () => { run({ kind: 'style', patch: { color: color.value.toLowerCase() === '#000000' ? undefined : color.value } }); after(); });
-  g.appendChild(color);
+  // (ribbon: at the end of the bottom row, after the style buttons)
+  (rows ? rows[1].lastElementChild! : g).appendChild(color);
   inputs.color = color;
 
+  if (prows) into = prows[1];
   g = group();
   button(g, 'left', lineIcon('left'), 'Align Left', () => run({ kind: 'align', j: 'left' }));
   button(g, 'center', lineIcon('center'), 'Center', () => run({ kind: 'align', j: 'center' }));
   button(g, 'right', lineIcon('right'), 'Align Right', () => run({ kind: 'align', j: 'right' }));
   button(g, 'justify', lineIcon('justify'), 'Justify', () => run({ kind: 'align', j: 'justify' }));
 
+  if (prows) into = prows[0];
   g = group();
   button(g, 'bullet', listIcon(['<circle cx="2.5" cy="Y" r="1.4"/>', '<circle cx="2.5" cy="Y" r="1.4"/>', '<circle cx="2.5" cy="Y" r="1.4"/>']),
     'Bullets', () => run({ kind: 'list', list: 'bullet' }));
@@ -199,12 +231,13 @@ export function buildTextBar(bar: HTMLElement, ops: TextBarOps): TextBar {
   button(g, 'indent', svg('<rect x="1" y="2" width="14" height="1.6"/><rect x="7" y="6" width="8" height="1.6"/><rect x="7" y="10" width="8" height="1.6"/><rect x="1" y="14" width="14" height="1.6"/><path d="M1.5 6.5v4.5L5 8.75z"/>'),
     'More indent (Tab)', () => run({ kind: 'indent', by: 1 }));
   button(g, 'spacing', svg('<rect x="7" y="2" width="8" height="1.6"/><rect x="7" y="7.2" width="8" height="1.6"/><rect x="7" y="12.4" width="8" height="1.6"/><path d="M3 1l2.5 3h-5zM3 15l2.5-3h-5z"/><rect x="2.4" y="3.5" width="1.2" height="9"/>'),
-    'Line and paragraph spacing, text box width', panel(spacing, symbols));
+    'Line and paragraph spacing, text box width', panel(spacing, symbols, 'spacing'));
 
+  if (prows) into = prows[1];
   g = group();
   button(g, 'link', svg('<path d="M6.6 9.4a.8.8 0 0 1 0-1.1l1.7-1.7a.8.8 0 1 1 1.1 1.1L7.7 9.4a.8.8 0 0 1-1.1 0z"/><path d="M8.9 3.2a3 3 0 0 1 4.2 4.2l-1.6 1.6a.8.8 0 1 1-1.1-1.1L12 6.3a1.4 1.4 0 0 0-2-2L8.4 5.9a.8.8 0 1 1-1.1-1.1zM4 9.7l1.6-1.6a.8.8 0 1 1 1.1 1.1L5.1 10.8a1.4 1.4 0 0 0 2 2l1.6-1.6a.8.8 0 1 1 1.1 1.1l-1.6 1.6a3 3 0 0 1-4.2-4.2z"/>'),
     'Link to a web page, DOI, file or slide (Ctrl+K)', () => ops.link());
-  button(g, 'symbols', 'αΩ', 'Greek letters and symbols', panel(symbols, spacing));
+  button(g, 'symbols', 'αΩ', 'Greek letters and symbols', panel(symbols, spacing, 'symbols'));
   for (const row of TEXT_SYMBOL_ROWS) {
     const r = d.createElement('div');
     r.className = 'cs-row';
@@ -235,14 +268,26 @@ export function buildTextBar(bar: HTMLElement, ops: TextBarOps): TextBar {
   number(row('Space before (pt)'), 'before', 'Space before the selected paragraphs, in points', { min: 0, max: 200, step: 1, cls: 'cb-num' }, (v) => run({ kind: 'para', patch: { spaceBefore: v ?? 0 } }));
   number(row('Space after (pt)'), 'after', 'Space after the selected paragraphs, in points', { min: 0, max: 200, step: 1, cls: 'cb-num' }, (v) => run({ kind: 'para', patch: { spaceAfter: v ?? 0 } }));
   number(row('Box width (pt)'), 'wrap', 'Width the lines wrap to, in points (blank: lines break only where you press Enter)', { min: 4, max: 5000, step: 1, cls: 'cb-num', blank: 'none' }, (v) => run({ kind: 'wrap', w: v ?? undefined }));
-  bar.append(symbols, spacing);
+  if (rib) {
+    // drop-downs over the window, which a click anywhere else closes; clicks in them keep the text open
+    for (const p of [symbols, spacing]) { p.classList.add('cb-pop'); p.dataset.keepsTyping = ''; d.body.append(p); }
+    d.addEventListener('mousedown', (e) => {
+      const at = e.target as Node;
+      let shut = false;
+      for (const [p, id] of [[symbols, 'symbols'], [spacing, 'spacing']] as const) {
+        if (!p.hidden && !p.contains(at) && !buttons.get(id)!.contains(at)) { p.hidden = true; shut = true; }
+      }
+      if (shut) refresh();
+    }, true);
+  } else bar.append(symbols, spacing);
+  return finish();
 
-  const press = (id: string, on: boolean) => {
+  function press(id: string, on: boolean): void {
     const b = buttons.get(id);
     if (!b) return;
     b.classList.toggle('on', on);
     b.setAttribute('aria-pressed', String(on));
-  };
+  }
 
   function refresh(): void {
     const s = ops.state();
@@ -255,7 +300,7 @@ export function buildTextBar(bar: HTMLElement, ops: TextBarOps): TextBar {
     press('symbols', !symbols.hidden);
     press('spacing', !spacing.hidden);
     const active = d.activeElement;
-    const show = (k: keyof typeof inputs, v: string) => { if (active !== inputs[k]) inputs[k].value = v; };
+    const show = (k: keyof typeof inputs, v: string) => { if (inputs[k] && active !== inputs[k]) inputs[k].value = v; };
     const r2 = (v: number) => String(Math.round(v * 100) / 100);
     show('font', st.font ?? '');
     inputs.font.placeholder = st.font === undefined ? s?.defaultFont ?? 'Font' : '';
@@ -267,6 +312,8 @@ export function buildTextBar(bar: HTMLElement, ops: TextBarOps): TextBar {
     show('after', s ? r2(s.after) : '');
     show('wrap', s?.wrap !== undefined ? r2(s.wrap) : '');
   }
-  refresh();
-  return { refresh, closePanels: () => { symbols.hidden = true; spacing.hidden = true; refresh(); } };
+  function finish(): TextBar {
+    refresh();
+    return { refresh, closePanels: () => { symbols.hidden = true; spacing.hidden = true; refresh(); } };
+  }
 }

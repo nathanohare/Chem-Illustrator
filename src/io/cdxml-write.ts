@@ -11,8 +11,8 @@ import { CdxmlSource, Doc, Atom, Bond, Caption, Arrow, Shape, TextRun, Entity, K
 import { interpretArrow, isReactionArrow, linkRows, isStep, plainMeasure, schemeItems, type Item } from '../chem/reaction';
 import { SYMBOLS } from '../chem/elements';
 import { labelBonds, labelSpec, layoutLabel, labelDir, labelGraph, tokenize, isGenericLabel, Measure, MiniGraph, kekulize, labelLook } from '../chem/labels';
-import { Vec, DEG, arcCenter, norm, sub, Rect } from '../geom';
-import { arrowEllipse, bezPoints } from '../objects';
+import { Vec, DEG, arcCenter, norm, sub, Rect, turnedCorners } from '../geom';
+import { arrowEllipse, bezPoints, boxOf, shapeTurn } from '../objects';
 import { kids, descendants, wellFormed, withoutDoctype } from './xml';
 import { arialWidth } from '../text-metrics';
 import { toSymbolPieces, isSymbolFont, faceFromStyle } from '../richtext';
@@ -22,13 +22,13 @@ import { ATTACH_TAG, CHEM_TAG, IGNORE_TAG, attachTag } from '../editor/attached'
 import { captionSpecies } from '../chem/species';
 import { atomStereoText, bondStereoText, StereoPlacer, PlacedLabel } from '../chem/stereo';
 import { fromDataUrl, rasterPng } from '../render/images';
-import { BOND_LOOK_TAG, RING_TAG, PAGE_TAG, GUIDES_TAG, ARROW_TEXT_TAG, MAP_LOOK_TAG, KEKULE_TAG, ALT_TAG, CHART_TAG, MATH_TAG, PICTURE_FX_TAG, OWN_PICTURE, OWN_CROP, CIRCLE_TAG, FILL_TAG, FRAME_TAG, INSIDE_TAG, GROUP_TAG, GEO_TAG, MORPH_TAG, MAP_TAG, PIECE_TAG, PIN_TAG, CURVE_ARROW_TAG, TURN_TAG, GEO_BOX_ATTR, DOTTED_ATTR, DOTTED_TAG, HIGHLIGHT_TAG, HIGHLIGHT_LOOK_TAG, SPOKES_TAG, STACK_TAG, decodeTags, encodeTags, hoistOwnTags, lowerOwnTags } from './cdxml';
+import { BOND_LOOK_TAG, RING_TAG, PAGE_TAG, GUIDES_TAG, ARROW_TEXT_TAG, MAP_LOOK_TAG, KEKULE_TAG, ALT_TAG, CHART_TAG, MATH_TAG, PICTURE_FX_TAG, OWN_PICTURE, OWN_CROP, CIRCLE_TAG, FILL_TAG, FRAME_TAG, ORBITAL_TAG, INSIDE_TAG, GROUP_TAG, GEO_TAG, MORPH_TAG, MAP_TAG, PIECE_TAG, PIN_TAG, CURVE_ARROW_TAG, TURN_TAG, GEO_BOX_ATTR, DOTTED_ATTR, DOTTED_TAG, HIGHLIGHT_TAG, HIGHLIGHT_LOOK_TAG, SPOKES_TAG, STACK_TAG, decodeTags, encodeTags, hoistOwnTags, lowerOwnTags } from './cdxml';
 import { stackItems, usesStacking } from '../editor/stacking';
 import { frameTag } from '../editor/frames';
 import { tableContents } from '../editor/table-figs';
 import { macPrintInfo, paperOf, SHEETS } from './cdxml-print';
 import { pageExtent, pageCount, pageTag } from '../page-grid';
-import { geoDef, isPathId, isPenId, moveSteps, outlineParts, textArea, type GeoStep } from '../design/geo';
+import { geoDef, isPathId, isPenId, moveSteps, outlineParts, textArea, turnSteps, type GeoStep } from '../design/geo';
 import { FADE, tint } from '../colours';
 import { fillInk, mix, ringShadowGroups, ringShadowSize, shadowLook } from '../render/fills';
 import { shapeShadow } from '../render/highlight-fx';
@@ -1904,8 +1904,11 @@ class CdxmlWriter {
       : def.draw(b.x2 - b.x1, b.y2 - b.y1);
     const lw = this.doc.style.lineWidth;
     const width = ringPts ? 0 : s.lineWidth ?? (s.bold ? lw * 2.5 : lw);
+    // a turned shape (an orbital's lobe, a shape turned on a slide) is turned in ChemDraw too
+    const turn = s.kind === 'geo' ? shapeTurn(s) : 0;
+    const mid = { x: (b.x1 + b.x2) / 2, y: (b.y1 + b.y2) / 2 };
     const curves = (steps: GeoStep[], type: string, color: string | undefined) => {
-      for (const c of chemDrawCurves(moveSteps(steps, b.x1, b.y1))) {
+      for (const c of chemDrawCurves(turnSteps(moveSteps(steps, b.x1, b.y1), mid, turn))) {
         const closed = c.closed && type !== 'open';
         // CurveType's bits (to be checked in ChemDraw): closed 1, dashed 2, bold 4, filled 128
         const kinds = (closed ? 1 : 0) | (type !== 'fill' && s.dashed ? 2 : 0) | (type !== 'fill' && width > 1.75 * lw ? 4 : 0) | (type === 'fill' ? 128 : 0);
@@ -1964,8 +1967,10 @@ class CdxmlWriter {
     // (with the first curve's points as written: ChemDraw keeps them as they are unless the shape is
     // moved or changed there, when the curves are read instead)
     const first = kids(g).find((k) => k.nodeName === 'curve')?.getAttribute('CurvePoints');
-    g.appendChild(this.el('objecttag', { TagType: 'String', Name: GEO_TAG, Value: JSON.stringify({ ...look, savedBox: box(b), ...(first ? { seen: { curve: first } } : {}) }), Visible: 'no' }));
-    this.set(g, 'BoundingBox', box(b));
+    // (a turned shape's group goes round its turned corners)
+    const gb = turn ? boxOf(turnedCorners(b, mid, turn)) : b;
+    g.appendChild(this.el('objecttag', { TagType: 'String', Name: GEO_TAG, Value: JSON.stringify({ ...look, savedBox: box(gb), ...(first ? { seen: { curve: first } } : {}) }), Visible: 'no' }));
+    this.set(g, 'BoundingBox', box(gb));
     g.removeAttribute(GEO_BOX_ATTR);
     this.changed = true;
   }
@@ -2200,6 +2205,9 @@ class CdxmlWriter {
     }
     for (const c of kids(g)) if (c.nodeName === 'objecttag' && c.getAttribute('Name') === FRAME_TAG) g.removeChild(c);
     if (s.frame) g.appendChild(this.el('objecttag', { TagType: 'String', Name: FRAME_TAG, Value: frameTag(s.frame), Visible: 'no' }));
+    // a part of an orbital drawn here (an s orbital, a dz²'s ring): how it was asked for, to change it again
+    for (const c of kids(g)) if (c.nodeName === 'objecttag' && c.getAttribute('Name') === ORBITAL_TAG) g.removeChild(c);
+    if (s.orb) g.appendChild(this.el('objecttag', { TagType: 'String', Name: ORBITAL_TAG, Value: JSON.stringify(s.orb), Visible: 'no' }));
     const filled = !s.filled || fade !== null ? null : s.fill === 'shaded' ? 'Shaded' : 'Filled';
     // an outline of its own width (a frame pasted from ChemDraw keeps its drawing's width): ChemDraw
     // draws a graphic's lines at its own LineWidth, and bold ones at its BoldWidth
