@@ -3918,6 +3918,7 @@ const ws: Workspace = new Workspace(doc, {
   newPage: () => (defaultPage ? { ...defaultPage } : null),
   newMaster: (m) => { const t = themeById(slideTemplate); return t && t.id !== 'plain' ? applyTemplate(m, t) : null; },
   beforeWrite: (tab, ref, name, how) => keeper.beforeWrite(tab, ref, name, how),
+  beforeSaveAs: (tab, name) => offerChemdrawToPictures(tab, name),
   saved: (tab, data, how, was) => { keeper.saved(tab, data, how, was); if (how !== 'autosaved') void noteFileCompounds(tab).catch(() => {}); },
   autoSaveFailed: (tab, msg) => keeper.autoSaveFailed(tab, msg),
   canvasEdited: async (name, n) => {
@@ -10151,6 +10152,57 @@ async function drawingPreferences(): Promise<void> {
   showHelicity(r.axial === 'PM');
   if (r.methyl !== editor.options.methylStyle) chooseMethylStyle(r.methyl as MethylStyle);
   else storeSettings();
+}
+
+/**
+ * Save As a Word or PowerPoint file while structures are saved there as pictures: ChemDraw objects
+ * from ChemDraw stay ChemDraw objects unless converted, which is asked here (keeping them is the default).
+ */
+async function offerChemdrawToPictures(tab: Tab, name: string): Promise<void> {
+  const ext = (/\.([^.]+)$/.exec(name)?.[1] ?? '').toLowerCase();
+  const word = !!tab.document && /^(docx|docm|dotx|dotm)$/.test(ext) && officeStructures.docx === 'pictures';
+  const slides = !!tab.deck && /^(pptx|pptm|potx|potm|ppsx|ppsm)$/.test(ext) && officeStructures.pptx === 'pictures';
+  if (!word && !slides) return;
+  const n = word ? (docMode?.chemdrawObjectCount(tab.document!) ?? 0) : deckChemdrawObjects(tab.deck!).size;
+  if (!n) return;
+  const what = word ? 'document' : tab.mode === 'design' ? 'design' : 'presentation';
+  const app = word ? 'Word' : 'PowerPoint';
+  const them = n === 1 ? 'it' : 'them';
+  const got = await askChoice('Convert ChemDraw Objects to Pictures?',
+    `This ${what} has ${n} ChemDraw object${n === 1 ? '' : 's'}. Save ${them} as pictures (SVG and PNG) like the rest of its structures, or keep ${them} as ChemDraw objects?`,
+    [{ value: 'convert', label: 'Convert to Pictures' }, { value: 'keep', label: 'Keep as ChemDraw Objects', primary: true }], 'keep',
+    `Converted, each is redrawn here from its ChemDraw data and saved as a picture, with the drawing kept beside it so it opens here as a structure; it no longer opens in ChemDraw from ${app}. Kept, they stay exactly as they came. Settings ▸ General ▸ Save structures in ${app} files as decides how the rest are saved.`);
+  if (got !== 'convert') return;
+  if (word) {
+    const failed = docMode?.convertChemdrawObjects(tab.document!) ?? 0;
+    if (failed) flash(`${failed} ChemDraw object${failed === 1 ? '' : 's'} couldn't be read and stay${failed === 1 ? 's' : ''} as ChemDraw had ${failed === 1 ? 'it' : 'them'}.`, 8000);
+  } else convertDeckChemdraw(tab.deck!);
+}
+
+/** The ChemDraw objects from ChemDraw on a deck's slides (their structures carry its mark), by id. */
+function deckChemdrawObjects(deck: Deck): Set<number> {
+  const ids = new Set<number>();
+  deck.slides.forEach((_, i) => {
+    const d = deck.docOf(i);
+    for (const x of [...d.atoms.values(), ...d.captions.values(), ...d.arrows.values(), ...d.shapes.values()]) if (x.ole) ids.add(x.ole.id);
+  });
+  return ids;
+}
+
+/** Save As with structures saved as pictures: a deck's ChemDraw objects made plain structures, saved as pictures (each slide one step to undo). */
+function convertDeckChemdraw(deck: Deck): void {
+  deck.slides.forEach((_, i) => {
+    const d = deck.docOf(i);
+    const marked = (x: { ole?: unknown }) => !!x.ole;
+    if (![...d.atoms.values(), ...d.captions.values(), ...d.arrows.values(), ...d.shapes.values()].some(marked)) return;
+    d.edit('Convert ChemDraw Objects to Pictures', () => {
+      for (const a of [...d.atoms.values()]) if (a.ole) d.updateAtom(a.id, { ole: undefined });
+      for (const c of [...d.captions.values()]) if (c.ole) d.updateCaption(c.id, { ole: undefined });
+      for (const r of [...d.arrows.values()]) if (r.ole) d.updateArrow(r.id, { ole: undefined });
+      for (const sh of [...d.shapes.values()]) if (sh.ole) d.updateShape(sh.id, { ole: undefined });
+    });
+  });
+  deck.edits++;
 }
 
 /** Settings ▸ General: how structures are saved in Word and PowerPoint files. */

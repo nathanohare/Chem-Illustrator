@@ -4107,7 +4107,18 @@ export class DocumentMode {
   private chemdrawToDrawing(id: number): boolean {
     const f = this.file!;
     const o = f.t.objects[id];
-    if (o?.kind !== 'picture' || !o.embed || !this.host.chemdrawDrawing) return false;
+    if (o?.kind !== 'picture' || !o.embed) return false;
+    const got = this.drawingOfChemdraw(f, o);
+    if (!got) { this.host.flash('The ChemDraw drawing in this object can\'t be read; it is kept as it is, and Word opens it.', 8000); return false; }
+    // (saved as a ChemDraw object again, so it still opens in ChemDraw from Word)
+    const next: DocObject = { ...got, ole: o.embed.prog };
+    f.ed.update({ ...f.t, objects: { ...f.t.objects, [id]: next } } as DocText, 'Edit ChemDraw object');
+    return true;
+  }
+
+  /** A ChemDraw object's drawing, at the size the object was shown, with its look, place and alt text; null when it can't be read. */
+  private drawingOfChemdraw(f: DocFile, o: Extract<DocObject, { kind: 'picture' }>): Extract<DocObject, { kind: 'drawing' }> | null {
+    if (!o.embed || !this.host.chemdrawDrawing) return null;
     let got: { contents: Contents; w: number } | null = null;
     try {
       const cdx = chemdrawCdx(fromDataUrl(o.embed.data).bytes);
@@ -4115,15 +4126,41 @@ export class DocumentMode {
     } catch {
       got = null;
     }
-    if (!got) { this.host.flash('The ChemDraw drawing in this object can\'t be read; it is kept as it is, and Word opens it.', 8000); return false; }
+    if (!got) return null;
     const textW = f.layout().textW;
     const shown = shownSize({ w: o.w, h: o.h }, o.scale ?? 1, textW);
     const natural = shownSize({ w: got.w, h: 0 }, 1, textW);
     const scale = got.w > 0 && Math.abs(natural.w - shown.w) > 0.01 * shown.w ? Math.round((shown.w / got.w) * 1e4) / 1e4 : undefined;
-    // (saved as a ChemDraw object again, so it still opens in ChemDraw from Word)
-    const next: DocObject = { kind: 'drawing', contents: got.contents, ole: o.embed.prog, ...(scale ? { scale } : {}), ...(o.look ? { look: o.look } : {}), ...(o.float ? { float: o.float } : {}), ...(o.alt ? { alt: o.alt } : {}) };
-    f.ed.update({ ...f.t, objects: { ...f.t.objects, [id]: next } } as DocText, 'Edit ChemDraw object');
-    return true;
+    return { kind: 'drawing', contents: got.contents, ...(scale ? { scale } : {}), ...(o.look ? { look: o.look } : {}), ...(o.float ? { float: o.float } : {}), ...(o.alt ? { alt: o.alt } : {}) };
+  }
+
+  /** How many ChemDraw objects from ChemDraw a document has (kept as they came, or made drawings here). */
+  chemdrawObjectCount(f: DocFile): number {
+    return Object.values(f.t.objects).filter((o) => (o.kind === 'picture' && !!o.embed && isChemDraw(o.embed)) || (o.kind === 'drawing' && !!o.ole)).length;
+  }
+
+  /**
+   * Save As with structures saved as pictures (asked first): every ChemDraw object from ChemDraw
+   * made a structure here that is saved as a picture, in one step to undo. Returns how many
+   * couldn't be read, which stay as they are.
+   */
+  convertChemdrawObjects(f: DocFile): number {
+    const objects: Record<number, DocObject> = { ...f.t.objects };
+    let failed = 0, changed = false;
+    for (const [k, o] of Object.entries(objects)) {
+      const id = Number(k);
+      if (o.kind === 'drawing' && o.ole) {
+        const next = { ...o };
+        delete next.ole;
+        objects[id] = next;
+        changed = true;
+      } else if (o.kind === 'picture' && o.embed && isChemDraw(o.embed)) {
+        const d = this.drawingOfChemdraw(f, o);
+        if (d) { objects[id] = d; changed = true; } else failed++;
+      }
+    }
+    if (changed) f.ed.update({ ...f.t, objects } as DocText, 'Convert ChemDraw Objects to Pictures');
+    return failed;
   }
 
   /** An embedded object's file was saved in its program: take it back, with a new picture. */
