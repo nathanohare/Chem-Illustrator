@@ -90,3 +90,63 @@ export function olePrint(doc: Doc, sel: Selection): { print: string; x: number; 
   const text = JSON.stringify(placed.contents(), (k, v: unknown) => (k === 'ole' ? undefined : typeof v === 'number' ? +v.toFixed(3) : v));
   return { print: bytesHash(new TextEncoder().encode(text)), x, y };
 }
+
+/**
+ * A structure picture saved here, as the file read has it: its SVG and PNG, saved back in place of
+ * drawing it again while the structure (and the drawing style) is the one read. A save of an
+ * unchanged deck then keeps its pictures, and takes no time drawing them.
+ */
+export interface KeptPicture {
+  svg: Uint8Array;
+  png: Uint8Array;
+  /** Where its first thing stood (olePrint), to tell how far the structure was moved. */
+  x: number;
+  y: number;
+  /** The picture's frame on the slide. */
+  frame: { x1: number; y1: number; x2: number; y2: number };
+}
+
+/** A value as JSON with its objects' keys in order, so two equal values give the same text. */
+const stable = (v: unknown): string =>
+  v && typeof v === 'object'
+    ? Array.isArray(v) ? `[${v.map(stable).join(',')}]` : `{${Object.keys(v).sort().filter((k) => (v as Record<string, unknown>)[k] !== undefined).map((k) => `${JSON.stringify(k)}:${stable((v as Record<string, unknown>)[k])}`).join(',')}}`
+    : JSON.stringify(v) ?? 'null';
+
+/** The print a kept structure picture is found by: the drawing wherever it stands, and the style it is drawn in. */
+export function picturePrint(doc: Doc, sel: Selection): { print: string; x: number; y: number } {
+  const p = olePrint(doc, sel);
+  return { ...p, print: `${p.print}.${bytesHash(new TextEncoder().encode(stable(doc.style)))}` };
+}
+
+// ---------------------------------------------------------------- the drawing inside its picture
+
+/** Where the drawing rides in a structure's SVG (so a program that drops PowerPoint's tags, LibreOffice for one, keeps it). */
+const SVG_NS = 'urn:chem-illustrator:drawing';
+
+const escText = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+
+/** A structure's SVG with its drawing (CDXML) and the box it was drawn in inside, in a metadata element. */
+export function svgWithDrawing(svg: string, cdxml: string, box: string): string {
+  if (svg.includes(SVG_NS)) return svg;
+  const open = /<svg\b[^>]*?(\/?)>/.exec(svg);
+  if (!open) return svg;
+  const meta = `<metadata><ci:drawing xmlns:ci="${SVG_NS}" box="${box}">${escText(cdxml)}</ci:drawing></metadata>`;
+  const at = open.index + open[0].length;
+  // (an empty <svg/> opens and closes in one)
+  if (open[1]) return `${svg.slice(0, open.index)}${open[0].slice(0, -2)}>${meta}</svg>${svg.slice(at)}`;
+  return svg.slice(0, at) + meta + svg.slice(at);
+}
+
+/** The drawing inside a structure's SVG saved here, if any. */
+export function drawingInSvg(svg: Uint8Array): { cdxml: string; box: string } | null {
+  const text = new TextDecoder().decode(svg);
+  if (!text.includes(SVG_NS)) return null;
+  try {
+    const dom = new DOMParser().parseFromString(text, 'image/svg+xml');
+    const el = dom.getElementsByTagNameNS(SVG_NS, 'drawing')[0];
+    const cdxml = el?.textContent ?? '';
+    return cdxml ? { cdxml, box: el.getAttribute('box') ?? '' } : null;
+  } catch {
+    return null;
+  }
+}

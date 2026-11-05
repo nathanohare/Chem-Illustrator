@@ -10,7 +10,7 @@ import * as rt from '../richtext';
 import type { Contents, Justify, ParaStyle, TableCell, TableData, TextRun } from '../model';
 import type { DocStyle } from '../style';
 import { fieldTexts, styleOf, type DocObject, type DocText } from '../document/document';
-import { fitParas, paraCount, splitParagraphs } from '../text/paragraphs';
+import { fitParas, laidParas, paraCount, splitParagraphs } from '../text/paragraphs';
 import { kid, kids, unzipPackage, ZipTooBigError, xml } from './ooxml';
 import { DocBuilder, headingId, styleIdOf } from './doc-build';
 
@@ -509,7 +509,8 @@ class OdtWriter {
   async body(): Promise<string> {
     const t = this.t;
     const runsOf = splitParagraphs(t.runs);
-    const paras = fitParas(t.paras, paraCount(rt.plainText(t.runs)));
+    // a line after a line break (Shift+Enter) is a paragraph of its own here, with no space above it
+    const paras = laidParas(fitParas(t.paras, paraCount(rt.plainText(t.runs))));
     let out = '';
     let list: 'bullet' | 'number' | null = null;
     let tables = 0;

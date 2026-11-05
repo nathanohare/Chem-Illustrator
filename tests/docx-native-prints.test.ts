@@ -79,13 +79,39 @@ describe('structures in Word', () => {
     expect(got.warnings.join(' ')).toMatch(/structures were changed in Word/);
   });
 
-  it('stay structures when cropped or recolored in Word, with a warning that it was left off', async () => {
+  it('stay structures when cropped or recolored in Word, with a warning that it isn\'t shown here', async () => {
     const p = await write();
     for (const f of [(x: string) => x.replace('<a:stretch>', '<a:srcRect l="25000" r="25000"/><a:stretch>'), (x: string) => x.replace(/(<a:blip r:embed="[^"]+">)/, '$1<a:grayscl/>')]) {
       const got = await kinds(edited(p, f));
       expect(got.kinds).toEqual(['drawing']);
-      expect(got.warnings.join(' ')).toMatch(/Cropping and color changes/);
+      expect(got.warnings.join(' ')).toMatch(/Cropping and color changes.*saved back to Word/);
     }
+  });
+
+  it('save Word\'s cropping and color changes back while the structure is unchanged', async () => {
+    const p = await write();
+    // Word: a quarter cut off each side (so shown half as wide), and Recolor > Grayscale
+    const ext = (x: string) => /<wp:extent cx="(\d+)" cy="(\d+)"/.exec(x)!.slice(1).map(Number);
+    const [cx0, cy0] = ext(text(p, 'word/document.xml'));
+    const cropped = edited(p, (x) => x.replace('<a:stretch>', '<a:srcRect l="25000" r="25000"/><a:stretch>').replace(/(<a:blip r:embed="[^"]+">)/, '$1<a:grayscl/>')
+      .replace(/<wp:extent cx="(\d+)"/, (_m, cx) => `<wp:extent cx="${Math.round(Number(cx) / 2)}"`).replace(/(<pic:spPr><a:xfrm><a:off x="0" y="0"\/><a:ext cx=")(\d+)/, (_m, a, cx) => `${a}${Math.round(Number(cx) / 2)}`));
+    const { doc } = await readDocx(cropped);
+    const o = Object.values(doc.objects)[0];
+    expect(o.kind === 'drawing' && o.wordLook).toMatchObject({ crop: { l: 0.25, r: 0.25, t: 0, b: 0 }, fx: { recolor: { kind: 'grey' } } });
+    // shown here whole, at the size Word shows it at
+    expect(o.kind === 'drawing' && o.scale).toBeUndefined();
+    const again = strFromU8(unzipSync(await writeDocx(doc, deps))['word/document.xml']);
+    expect(again).toMatch(/<a:srcRect l="25000" t="0" r="25000" b="0"\/>/);
+    expect(again).toContain('<a:grayscl/>');
+    const [cx1, cy1] = ext(again);
+    expect(Math.abs(cx1 - cx0 / 2)).toBeLessThan(2);
+    expect(Math.abs(cy1 - cy0)).toBeLessThan(2);
+    // changed here: drawn afresh, without them
+    if (o.kind === 'drawing') o.contents = { ...o.contents, captions: [{ ...o.contents.captions[0], runs: [{ text: 'OMe' }] }] };
+    const changed = strFromU8(unzipSync(await writeDocx(doc, deps))['word/document.xml']);
+    expect(changed).not.toContain('srcRect');
+    expect(changed).not.toContain('<a:grayscl/>');
+    expect(ext(changed)[0]).toBe(cx0);
   });
 });
 

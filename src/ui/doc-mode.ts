@@ -1835,14 +1835,15 @@ export class DocumentMode {
    */
   private enter(soft: boolean): void {
     const ed = this.ed;
-    if (this.file?.box) { ed.enter(soft); return; }
+    if (this.file?.box) { ed.enter(soft, true); return; }
     const before = ed.text;
     const p = paraAt(before, ed.start);
     const r = paraRange(before, p);
     const atEnd = ed.collapsed && ed.focus === r.end && r.end > r.start;
     const st = styleOf(this.file!.t, this.file!.t.paras[p]);
-    ed.enter(soft);
-    if (atEnd && st.next && st.next !== st.id && this.file!.t.styles[st.next]) {
+    // Shift+Enter: a line break, the next line carrying on this paragraph (Word's)
+    ed.enter(soft, true);
+    if (!soft && atEnd && st.next && st.next !== st.id && this.file!.t.styles[st.next]) {
       const q = paraAt(ed.text, ed.focus);
       const t = setParaStyle(this.file!.t, q, q, st.next);
       ed.update(t, null);

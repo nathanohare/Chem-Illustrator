@@ -31,8 +31,8 @@ import { themeXml } from './xlsx-view';
 import { facesToEmbed, newGuid, obfuscate, type FontSource } from './font-embed';
 import { fromDataUrl } from '../render/images';
 import { CHEMDRAW_PROG, chemdrawObject, embeddedPart, OLE_REL, OLE_TYPE } from './ole-object';
-import { BULLETS, fitParas, listInfo, paraCount, schemeOf, splitParagraphs } from '../text/paragraphs';
-import { BOX_PAD, COL_GAP, COMPOUND, END_FORMAT, FOOT_FORMAT, columnsOf, OBJECT_CHAR, SHADOWS, charStylesOf, watermarkPlace, fieldTexts, floatOf, floatGaps, lookExtent, lookOf, noteStyle, objectsInText, pruneObjects, EMPTY_FORM, styleOf, runStyleOf, type CharStyle, type DocObject, type DocText, type Embedded, type FigureFrame, type FigureLook, type HeaderFooter, type HfBody, type HfKey, type NamedStyle, type PageBorder, type PageSetup, type Watermark } from '../document/document';
+import { BULLETS, fitParas, listInfo, paraCount, samePara, schemeOf, splitParagraphs } from '../text/paragraphs';
+import { BOX_PAD, COL_GAP, COMPOUND, END_FORMAT, FOOT_FORMAT, columnsOf, contentsPrint, OBJECT_CHAR, SHADOWS, charStylesOf, watermarkPlace, fieldTexts, floatOf, floatGaps, lookExtent, lookOf, noteStyle, objectsInText, pruneObjects, EMPTY_FORM, styleOf, runStyleOf, type CharStyle, type DocObject, type DocText, type Embedded, type FigureFrame, type FigureLook, type HeaderFooter, type HfBody, type HfKey, type NamedStyle, type PageBorder, type PageSetup, type Watermark } from '../document/document';
 import { ACS_LINE, GRID_LINE, bibHang, docCellAlign, shownSize } from '../document/doc-layout';
 import { sectionsOf, type Section } from '../document/sections';
 import { bibliography, piecesText, type Reference } from '../document/references';
@@ -110,6 +110,14 @@ const PRIORITY: Record<string, number> = { Normal: 0, Title: 10, Caption: 35, ..
 /** Word's own character styles, by id: their names, and where Word lists them. */
 const WORD_CHAR: Record<string, [string, number]> = { Emphasis: ['Emphasis', 20], Strong: ['Strong', 22], SubtleEmphasis: ['Subtle Emphasis', 19], IntenseEmphasis: ['Intense Emphasis', 21] };
 const JC: Record<Justify, string> = { left: 'left', center: 'center', right: 'right', justify: 'both' };
+
+/** What a paragraph looks like apart from what is only its own (its line break above, bookmarks, index entries). */
+const lineless = (p: ParaStyle): ParaStyle => ({ ...p, soft: undefined, cont: undefined, marks: undefined, xe: undefined, ta: undefined });
+/** Whether a paragraph carrying on the one before it after a line break (Shift+Enter) goes in that Word paragraph: they look the same. */
+const joins = (prev: ParaStyle | undefined, ps: ParaStyle): boolean =>
+  !!ps.soft && !!prev && !ps.pageBreak && !ps.colBreak && !ps.section && samePara(lineless(prev), lineless(ps));
+/** A Word paragraph with another's runs added after a line break. */
+const joinTo = (para: string, body: string): string => `${para.slice(0, -'</w:p>'.length)}<w:r><w:br/></w:r>${body}</w:p>`;
 
 /** Save a document as a Word file. */
 const THEME_CT = 'application/vnd.openxmlformats-officedocument.theme+xml';
@@ -308,6 +316,8 @@ class DocxWriter {
     const out: string[] = [];
     let lastWasTable = false, lastFloats = false;
     let listNum = 0;
+    // the last plain paragraph written, and where: a line after a line break (Shift+Enter) joins it
+    let plain: { p: number; at: number } | null = null;
     // each section but the last ends with its section properties in its last paragraph (Word's way)
     const secs = sectionsOf({ ...t, paras });
     const endsSection = new Map<number, Section>();
@@ -374,7 +384,14 @@ class DocxWriter {
         }
         if (part.some((x) => x.text) || own.xe || own.ta) out.push(await partPara());
         close();
-      } else out.push(await this.paragraph(main, ps, runs, listNum, p, sectXml));
+        plain = null;
+      } else if (plain?.p === p - 1 && plain.at === out.length - 1 && !sectXml && !endsSection.has(p - 1) && !markRev[p - 1] && !markRev[p] && joins(paras[p - 1], ps)) {
+        out[plain.at] = joinTo(out[plain.at], await this.paragraph(main, ps, runs, listNum, p, '', true));
+        plain = { p, at: plain.at };
+      } else {
+        out.push(await this.paragraph(main, ps, runs, listNum, p, sectXml));
+        plain = sectXml ? null : { p, at: out.length - 1 };
+      }
       lastWasTable = false;
     }
     blockTo(undefined);
@@ -526,7 +543,7 @@ class DocxWriter {
     }
   }
 
-  private async paragraph(main: string, ps: ParaStyle, runs: TextRun[], listNum: number, index = -1, sectXml = ''): Promise<string> {
+  private async paragraph(main: string, ps: ParaStyle, runs: TextRun[], listNum: number, index = -1, sectXml = '', bodyOnly = false): Promise<string> {
     const t = this.t;
     const st = styleOf(t, ps);
     const pPr: string[] = [];
@@ -636,6 +653,8 @@ class DocxWriter {
     controlTo(undefined);
     linkTo(undefined);
     for (const m of marks) out.push(`<w:bookmarkEnd w:id="${m.id}"/>`);
+    // a line after a line break: just its runs, to go in the paragraph before it
+    if (bodyOnly) return out.join('');
     return `<w:p>${pPr.length ? `<w:pPr>${pPr.join('')}</w:pPr>` : ''}${colBreak}${out.join('')}</w:p>`;
   }
 
@@ -823,9 +842,12 @@ class DocxWriter {
             const c = cite(r);
             return c ? this.citeXml(c, runProps(r, st, { cs: this.charStyleOf(r) }), this.shown.get(r.obj!) ?? '') : this.tracked(r.rev, this.textRuns(r, st));
           });
-          return `<w:p><w:pPr>${pPr.join('')}</w:pPr>${mark}${body}</w:p>`;
+          return { para: `<w:p><w:pPr>${pPr.join('')}</w:pPr>${mark}${body}</w:p>`, body };
         });
-        out.push(`<w:${tag} w:id="${n}">${ps.join('')}</w:${tag}>`);
+        // a line after a line break (Shift+Enter) goes in the paragraph before it
+        const xmls: string[] = [];
+        ps.forEach((x, i) => { if (i > 0 && joins(paras[i - 1], paras[i])) xmls[xmls.length - 1] = joinTo(xmls[xmls.length - 1], x.body); else xmls.push(x.para); });
+        out.push(`<w:${tag} w:id="${n}">${xmls.join('')}</w:${tag}>`);
       }
       const name = `${tag}s.xml`;
       this.pkg.relate(main, end ? DOCX_REL.endnotes : DOCX_REL.footnotes, name);
@@ -935,7 +957,10 @@ class DocxWriter {
     const paras = fitParas(o.paras, n);
     const runsOf = this.splitParas(o.runs);
     const ps: string[] = [];
-    for (let p = 0; p < n; p++) ps.push(await this.paragraph(main, paras[p], runsOf[p] ?? [], 0));
+    for (let p = 0; p < n; p++) {
+      if (p > 0 && joins(paras[p - 1], paras[p])) ps[ps.length - 1] = joinTo(ps[ps.length - 1], await this.paragraph(main, paras[p], runsOf[p] ?? [], 0, -1, '', true));
+      else ps.push(await this.paragraph(main, paras[p], runsOf[p] ?? [], 0));
+    }
     const N = styleOf(this.t, {});
     const lines = o.runs.reduce((a, r) => a + (r.text.match(/\n/g)?.length ?? 0), 1);
     // a shape keeps its own height (its text in the middle); a text box grows to fit its text
@@ -1103,6 +1128,13 @@ class DocxWriter {
       blip = this.media(main, pic.png, 'png');
       if (svg) svgId = this.media(main, svg, 'svg');
       size = shownSize({ w: pic.w, h: pic.h }, o.scale ?? 1, this.textW);
+      // cropping and color changes Word made, while the structure (and so its picture) is as it was
+      const wl = o.wordLook;
+      if (wl && Math.abs(wl.w - pic.w) < 0.01 && Math.abs(wl.h - pic.h) < 0.01 && wl.print === contentsPrint(o.contents)) {
+        fx = wl.fx;
+        crop = wl.crop;
+        if (crop) size = { w: size.w * (1 - crop.l - crop.r), h: size.h * (1 - crop.t - crop.b) };
+      }
       name = `${DRAWING_NAME} ${id}`;
       smiles = await this.deps.smiles?.(o.contents, t.drawingStyle).catch(() => null) ?? null;
     } else if (o.kind === 'picture') {
@@ -1290,8 +1322,10 @@ class DocxWriter {
             lastTable = true;
             continue;
           }
+          const cps = { ...ps[i], align: ps[i]?.align ?? ca };
+          if (i > 0 && !lastTable && paras.length && joins({ ...ps[i - 1], align: ps[i - 1]?.align ?? ca }, cps)) paras[paras.length - 1] = joinTo(paras[paras.length - 1], await this.paragraph(main, cps, pr, 0, -1, '', true));
+          else paras.push(await this.paragraph(main, cps, pr, 0));
           lastTable = false;
-          paras.push(await this.paragraph(main, { ...ps[i], align: ps[i]?.align ?? ca }, pr, 0));
         }
         // (Word's cells end with a paragraph, after any table in them)
         if (lastTable || !paras.length) paras.push('<w:p/>');
@@ -1411,7 +1445,9 @@ class DocxWriter {
         if (p === runsOf.length - 1) out.push('<w:p><w:pPr><w:spacing w:before="0" w:after="0"/></w:pPr></w:p>');
         continue;
       }
-      out.push(await this.paragraph(part, ps[p], runs, 0));
+      const joined = p > 0 && out.length && joins(ps[p - 1], ps[p]) && out[out.length - 1].endsWith('</w:p>');
+      if (joined) out[out.length - 1] = joinTo(out[out.length - 1], await this.paragraph(part, ps[p], runs, 0, -1, '', true));
+      else out.push(await this.paragraph(part, ps[p], runs, 0));
     }
     const wm = kind === 'header' && t.watermark?.text ? watermarkXml(t.watermark, pg, this.watermarks++) : '';
     // the watermark goes in the first paragraph, behind the text
