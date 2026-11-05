@@ -22,7 +22,7 @@ import { ATTACH_TAG, CHEM_TAG, IGNORE_TAG, attachTag } from '../editor/attached'
 import { captionSpecies } from '../chem/species';
 import { atomStereoText, bondStereoText, StereoPlacer, PlacedLabel } from '../chem/stereo';
 import { fromDataUrl, rasterPng } from '../render/images';
-import { BOND_LOOK_TAG, RING_TAG, PAGE_TAG, GUIDES_TAG, ARROW_TEXT_TAG, MAP_LOOK_TAG, KEKULE_TAG, ALT_TAG, CHART_TAG, MATH_TAG, PICTURE_FX_TAG, OWN_PICTURE, OWN_CROP, CIRCLE_TAG, FILL_TAG, FRAME_TAG, INSIDE_TAG, GROUP_TAG, GEO_TAG, MORPH_TAG, MAP_TAG, PIECE_TAG, PIN_TAG, CURVE_ARROW_TAG, TURN_TAG, GEO_BOX_ATTR, DOTTED_ATTR, DOTTED_TAG, HIGHLIGHT_TAG, HIGHLIGHT_LOOK_TAG, SPOKES_TAG, STACK_TAG, decodeTags, encodeTags, hoistOwnTags, lowerOwnTags } from './cdxml';
+import { BOND_LOOK_TAG, RING_TAG, PAGE_TAG, GUIDES_TAG, ARROW_TEXT_TAG, MAP_LOOK_TAG, KEKULE_TAG, ALT_TAG, CHART_TAG, MATH_TAG, PICTURE_FX_TAG, OWN_PICTURE, OWN_CROP, CIRCLE_TAG, FILL_TAG, FRAME_TAG, ORBITAL_TAG, INSIDE_TAG, GROUP_TAG, GEO_TAG, MORPH_TAG, MAP_TAG, PIECE_TAG, PIN_TAG, CURVE_ARROW_TAG, TURN_TAG, GEO_BOX_ATTR, DOTTED_ATTR, DOTTED_TAG, HIGHLIGHT_TAG, HIGHLIGHT_LOOK_TAG, SPOKES_TAG, STACK_TAG, decodeTags, encodeTags, hoistOwnTags, lowerOwnTags } from './cdxml';
 import { stackItems, usesStacking } from '../editor/stacking';
 import { frameTag } from '../editor/frames';
 import { tableContents } from '../editor/table-figs';
@@ -2205,6 +2205,9 @@ class CdxmlWriter {
     }
     for (const c of kids(g)) if (c.nodeName === 'objecttag' && c.getAttribute('Name') === FRAME_TAG) g.removeChild(c);
     if (s.frame) g.appendChild(this.el('objecttag', { TagType: 'String', Name: FRAME_TAG, Value: frameTag(s.frame), Visible: 'no' }));
+    // a part of an orbital drawn here (an s orbital, a dz²'s ring): how it was asked for, to change it again
+    for (const c of kids(g)) if (c.nodeName === 'objecttag' && c.getAttribute('Name') === ORBITAL_TAG) g.removeChild(c);
+    if (s.orb) g.appendChild(this.el('objecttag', { TagType: 'String', Name: ORBITAL_TAG, Value: JSON.stringify(s.orb), Visible: 'no' }));
     const filled = !s.filled || fade !== null ? null : s.fill === 'shaded' ? 'Shaded' : 'Filled';
     // an outline of its own width (a frame pasted from ChemDraw keeps its drawing's width): ChemDraw
     // draws a graphic's lines at its own LineWidth, and bold ones at its BoldWidth

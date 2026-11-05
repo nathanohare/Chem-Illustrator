@@ -16,8 +16,9 @@ import { stopAtEdge } from '../ui/scrollbars';
 export const WALL_BAND = 14;
 import { linkAtPoint } from '../links';
 import { typingPrefs } from '../text/typing';
-import { geoDef, geoShapeStyle, moveSteps, traceSteps } from '../design/geo';
+import { GEO_BY_ID, ORBITAL_LOBE, geoDef, geoShapeStyle, moveSteps, traceSteps, turnSteps } from '../design/geo';
 import { distinctChoices } from '../chem/template-choices';
+import { angleOfDir, openDirection, orbitalParts, orbitalShapes, putOrbital, shapeCentre as partCentre, takenDirections, type OrbitalLook } from '../chem/orbitals';
 import { TEMPLATES, Template, Placement, templateById, templatePoints, placePoint, fusePlacements, atomPlacements, freePlacement, crowdingOf, placeTemplate, snap15 } from '../chem/templates';
 import { fusions3d } from '../chem/fuse3d';
 import { labelAlignPatch, type LabelAlign } from '../chem/label-align';
@@ -126,8 +127,8 @@ export type Tool =
   /** Frames ▸ Freeform: a line through points clicked one after another (drag a point out to curve through it). */
   | { kind: 'pen' };
 
-/** Marks put on atoms for mechanisms: a lone pair, a radical's dot, a circled charge, or δ+ / δ−. */
-export type SymbolKind = 'LonePair' | 'Electron' | 'CirclePlus' | 'CircleMinus' | 'DeltaPlus' | 'DeltaMinus' | 'RadicalCation' | 'RadicalAnion';
+/** Marks put on atoms for mechanisms: a lone pair, a radical's dot, a circled charge, δ+ / δ−, or an orbital's single lobe. */
+export type SymbolKind = 'LonePair' | 'Electron' | 'CirclePlus' | 'CircleMinus' | 'DeltaPlus' | 'DeltaMinus' | 'RadicalCation' | 'RadicalAnion' | 'Lobe';
 
 /** How a new arrow looks (everything else is the document's default). */
 export type ArrowStyle = Partial<Pick<Arrow, 'headStyle' | 'tailStyle' | 'headType' | 'line' | 'noGo' | 'noGoKind' | 'dipole' | 'equilibrium' | 'sweep' | 'elbow' | 'from' | 'to' | 'bez' | 'pin'>> & {
@@ -227,6 +228,7 @@ export const TOOLS: Record<string, Tool> = {
   'sym-radical-anion': { kind: 'symbol', symbol: 'RadicalAnion' },
   'sym-dagger': { kind: 'mark', text: '†' },
   'sym-ddagger': { kind: 'mark', text: '‡' },
+  'sym-lobe': { kind: 'symbol', symbol: 'Lobe' },
 };
 for (const t of TEMPLATES) TOOLS[`tpl-${t.id}`] = { kind: 'template', id: t.id };
 
@@ -466,6 +468,10 @@ export class Editor {
   onEnergy: (id: number) => void = () => {};
   /** A double-click on a TLC plate or gel: open its lanes (the frame's id). */
   onPlate: (id: number) => void = () => {};
+  /** A double-click on an orbital (its parts selected): the Edit Orbital window. */
+  onOrbital: () => void = () => {};
+  /** The single-lobe button's phases and length (in bond lengths): those last picked in the Orbital window. */
+  lobeLook: () => { look: OrbitalLook; size: number; flip: boolean } = () => ({ look: 'shaded', size: 1.1, flip: false });
   /** A double-click on a diagram away from its words: open its text and look (the frame's id). */
   onDiagram: (id: number) => void = () => {};
   /** A chart (on a slide or drawing) was double-clicked: open its data and settings. */
@@ -1650,6 +1656,13 @@ export class Editor {
       if (this.labelInput?.dataset.atom !== String(h.id)) this.editLabel(h.id);
     } else if (h && h.kind === 'caption') {
       this.editCaption(h.id, { x: e.clientX, y: e.clientY });
+    } else if (h && h.kind === 'shape' && this.doc.shapes.get(h.id)?.orb && orbitalParts(this.doc, h.id).length) {
+      // an orbital drawn here: its settings, to change it
+      this.sel = emptySel();
+      for (const x of orbitalParts(this.doc, h.id)) this.sel.shapes.add(x.id);
+      this.requestOverlay();
+      this.onChange();
+      this.onOrbital();
     } else if (h && h.kind === 'shape' && this.doc.shapes.get(h.id)?.kind === 'table') {
       this.editTableAt(h.id, p);
     } else if (h && h.kind === 'shape' && this.doc.shapes.get(h.id)?.chart) {
@@ -3359,6 +3372,7 @@ export class Editor {
     if (kind === 'CirclePlus' || kind === 'CircleMinus') return 4.5;
     if (kind === 'RadicalCation' || kind === 'RadicalAnion') return 6.5;
     if (kind === 'DeltaPlus' || kind === 'DeltaMinus') return 0.9 * this.doc.style.bondLength;
+    if (kind === 'Lobe') return this.lobeLook().size * this.doc.style.bondLength;
     return 1.4;
   }
 
@@ -3383,6 +3397,7 @@ export class Editor {
   private placeSymbol(kind: SymbolKind, h: Hit, p: Vec, aim?: Vec): void {
     const doc = this.doc;
     const atom = h?.kind === 'atom' ? doc.atoms.get(h.id)! : null;
+    if (kind === 'Lobe') { this.placeLobe(atom, p, aim); return; }
     const delta = kind === 'DeltaPlus' || kind === 'DeltaMinus';
     const circled = kind === 'CirclePlus' || kind === 'CircleMinus';
     const size = this.symbolSize(kind);
@@ -3416,6 +3431,27 @@ export class Editor {
       // a radical's dot makes the atom a radical (one hydrogen fewer)
       if (atom && kind === 'Electron' && !atom.radical) doc.updateAtom(atom.id, { radical: 'doublet' });
       if (atom && circled) doc.updateAtom(atom.id, { charge: atom.charge + (kind === 'CirclePlus' ? 1 : -1), hideCharge: true });
+    });
+    this.changed();
+  }
+
+  /** An orbital's single lobe for the lobe button, with the phases and length last picked in the Orbital window. */
+  private lobeSpec(dir: Vec) {
+    const k = this.lobeLook();
+    return { kind: 'lobe' as const, look: k.look, size: k.size * this.doc.style.bondLength, angle: angleOfDir(dir), ...(k.flip ? { flip: true } : {}) };
+  }
+
+  /**
+   * Put a single lobe on the clicked atom, its point on the atom, in the most open space round it
+   * (or toward `aim`, when dragged round the atom), stuck to the atom; on the paper, pointing up
+   * from the click.
+   */
+  private placeLobe(atom: Atom | null, p: Vec, aim?: Vec): void {
+    const doc = this.doc;
+    const dir = aim ?? (atom ? openDirection(takenDirections(doc, atom.id)) : { x: 0, y: -1 });
+    doc.edit('Orbital Lobe', () => {
+      this.sel = emptySel();
+      for (const id of putOrbital(doc, this.lobeSpec(dir), atom ? { x: atom.x, y: atom.y } : p, atom?.id)) this.sel.shapes.add(id);
     });
     this.changed();
   }
@@ -7416,6 +7452,7 @@ export class Editor {
 
   /** A lone pair, radical dot or circled charge as it will be placed, centred on `at`, pointing along `dir`. */
   private drawSymbolGhost(ctx: CanvasRenderingContext2D, kind: SymbolKind, at: Vec, dir: Vec): void {
+    if (kind === 'Lobe') { this.drawLobeGhost(ctx, at, dir); return; }
     ctx.save();
     ctx.fillStyle = ctx.strokeStyle = PREVIEW;
     ctx.beginPath();
@@ -7437,6 +7474,24 @@ export class Editor {
     ctx.restore();
   }
 
+  /** A single lobe as it will be placed: its point at `at`, pointing along `dir`. */
+  private drawLobeGhost(ctx: CanvasRenderingContext2D, at: Vec, dir: Vec): void {
+    const sh = orbitalShapes(this.lobeSpec(dir), at)[0];
+    const def = GEO_BY_ID.get(ORBITAL_LOBE);
+    if (!def) return;
+    const steps = turnSteps(moveSteps(def.draw(sh.x2 - sh.x1, sh.y2 - sh.y1).body, sh.x1, sh.y1), partCentre(sh), sh.rot ?? 0);
+    ctx.save();
+    ctx.fillStyle = ctx.strokeStyle = PREVIEW;
+    ctx.lineWidth = this.doc.style.lineWidth;
+    ctx.beginPath();
+    traceSteps(ctx, steps);
+    ctx.globalAlpha = 0.25;
+    ctx.fill();
+    ctx.globalAlpha = 1;
+    ctx.stroke();
+    ctx.restore();
+  }
+
   private drawPreview(ctx: CanvasRenderingContext2D, d: Drag): void {
     const doc = this.doc;
     const t = this.tool;
@@ -7453,7 +7508,7 @@ export class Editor {
     if (t.kind === 'symbol') {
       // the symbol where it will go, turned toward the pointer
       const aim = startAtom && this.symbolAim(d, d.last);
-      if (aim) this.drawSymbolGhost(ctx, t.symbol, symbolAt(doc, this.measure(), startAtom.id, aim, this.symbolSize(t.symbol)), aim);
+      if (aim) this.drawSymbolGhost(ctx, t.symbol, t.symbol === 'Lobe' ? startAtom : symbolAt(doc, this.measure(), startAtom.id, aim, this.symbolSize(t.symbol)), aim);
     } else if (t.kind === 'text') {
       ctx.setLineDash([4 / this.r.view.scale, 3 / this.r.view.scale]);
       ctx.lineWidth = 1 / this.r.view.scale;
