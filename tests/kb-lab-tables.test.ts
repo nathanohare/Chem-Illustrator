@@ -18,6 +18,8 @@ describe('Solvents', () => {
     const row = (n: string) => SOLVENTS_TABLE.rows.find((r) => r.name === n)!;
     expect(row('Water')).toMatchObject({ bp: '100.00', mp: '0.00', polarity: '1.000' });
     expect(row('Acetone').water).toBe('Miscible');
+    // corrected from the measured value: Murov repeats the solubility figure (0.59) here
+    expect(row('1-Hexanol').viscosity).toBe('4.6');
   });
 
   it('finds solvents by their other names', () => {
@@ -37,7 +39,8 @@ describe('Solvents', () => {
 describe('Miscibility', () => {
   it('names only solvents on the chart, each pair once', () => {
     expect(MISCIBLE_SOLVENTS).toHaveLength(31);
-    expect(IMMISCIBLE).toHaveLength(42);
+    expect(IMMISCIBLE).toHaveLength(41);
+    expect(immiscible('Xylene', 'Trichloroethylene')).toBe(false);
     const seen = new Set<string>();
     for (const [a, b] of IMMISCIBLE) {
       expect(MISCIBLE_SOLVENTS).toContain(a);
@@ -76,6 +79,7 @@ describe('Acids and Bases', () => {
 
   it('keeps one decimal as printed, and copies each part under its own title', () => {
     expect(conc.find((r) => r.name === 'Phosphoric acid')?.molarity).toBe('16.0');
+    expect(conc.find((r) => r.name === 'Hydrochloric acid')?.sg).toBe(1.18);
     expect(ACIDS_TABLE.rows.find((r) => r.name === 'Tartaric acid')?.ph).toBe('2.0');
     expect(ACIDS_TABLE.rows.filter((r) => r.part === 'ph')).toHaveLength(33);
     const tsv = tableTsv(ACIDS_TABLE, findRows(ACIDS_TABLE, '')).split('\n');
@@ -87,5 +91,16 @@ describe('Acids and Bases', () => {
     const ids = BUILT_IN_TABLES.map((t) => t.id);
     expect(ids.slice(1, 4)).toEqual(['solvents', 'miscibility', 'acids-bases']);
     for (const gone of ['nmr-solvents', 'handling', 'techniques', 'solubility', 'green-nmr']) expect(ids).not.toContain(gone);
+  });
+});
+
+describe('Hammett original sources', () => {
+  it('names the paper behind each row, as Table I cites it', async () => {
+    const { HAMMETT, HAMMETT_TABLE, originalSources } = await import('../src/kb/hammett');
+    const row = (g: string) => HAMMETT_TABLE.rows.find((r) => r.group === g)!;
+    expect(row('NO2').refs).toBe('McDaniel and Brown, J. Org. Chem. 1958, 23, 420');
+    expect(row('H').refs).toBe('Definition');
+    for (const x of HAMMETT) expect(originalSources(x.row), x.group).not.toMatch(/undefined/);
+    expect(HAMMETT.filter((x) => originalSources(x.row) === 'Definition').map((x) => x.group)).toEqual(['H']);
   });
 });

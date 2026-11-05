@@ -13,7 +13,12 @@ export const MISCIBLE_SOLVENTS = [
   '2-Propanol', 'THF', 'Toluene', 'Trichloroethylene', 'Water', 'Xylene',
 ];
 
-/** The pairs that form two phases in some proportions; every other pair mixes in all proportions. */
+/**
+ * The pairs that form two phases in some proportions; every other pair mixes in all proportions.
+ * The supplied chart also shaded xylene + trichloroethylene, which mix: their mixtures have been
+ * measured across the whole composition range (Nath and Dubey, J. Phys. Chem. 1981, 85, 886), so
+ * that pair is left out.
+ */
 export const IMMISCIBLE: [string, string][] = [
   ['Cyclohexane', 'Acetonitrile'], ['DMF', 'Cyclohexane'], ['DMSO', 'Cyclohexane'], ['Diethyl ether', 'DMSO'],
   ['Heptane', 'DMSO'], ['Heptane', 'DMF'], ['Heptane', 'Acetonitrile'],
@@ -25,7 +30,7 @@ export const IMMISCIBLE: [string, string][] = [
   ['Water', 'MTBE'], ['Water', 'Hexane'], ['Water', 'Heptane'], ['Water', 'Diethyl ether'], ['Water', 'Ethyl acetate'],
   ['Water', 'Dichloromethane'], ['Water', '1,2-Dichloroethane'], ['Water', 'Cyclohexane'], ['Water', 'Chloroform'],
   ['Water', 'Carbon tetrachloride'], ['Water', 'Butyl acetate'], ['Water', '1-Butanol'], ['Water', 'Benzene'],
-  ['Xylene', 'Water'], ['Xylene', 'Trichloroethylene'], ['Xylene', 'DMSO'], ['Xylene', 'DMF'],
+  ['Xylene', 'Water'], ['Xylene', 'DMSO'], ['Xylene', 'DMF'],
 ];
 
 /** Does this pair form two phases? */
@@ -52,7 +57,10 @@ export const MISCIBILITY_TABLE: KbTable = {
     markInfo: 'Immiscible: in some proportions the two form two phases (layers). Many such pairs still dissolve a little in each other.',
     other: 'Miscible',
   },
-  sources: [{ label: 'Common solvent miscibility chart (HPLC solvent suppliers), as supplied by Nate' }],
+  sources: [
+    { label: 'Common solvent miscibility chart (HPLC solvent suppliers), as supplied by Nate' },
+    { label: 'Nath, J.; Dubey, S. J. Phys. Chem. 1981, 85, 886 (trichloroethylene + p-xylene mix in all proportions; the chart shaded the pair)', url: 'https://doi.org/10.1021/j150607a030' },
+  ],
 };
 
 /** Concentrated reagents: % by weight, molarity, mL for 1 L of a 1 M solution, specific gravity. */
@@ -62,7 +70,7 @@ const CONCENTRATED: [string, number, number, number, number][] = [
   ['Ammonia (ammonium hydroxide)', 35, 18.1, 55.2, 0.88],
   ['Formic acid', 90, 23.6, 42.4, 1.205],
   ['Formic acid', 98, 25.9, 38.5, 1.22],
-  ['Hydrochloric acid', 36, 11.6, 86.2, 1.19],
+  ['Hydrochloric acid', 36, 11.6, 86.2, 1.18], // the chart printed 1.19; 36.0% HCl is 1.1791 g/mL at 20 °C (CRC Handbook)
   ['Nitric acid', 70, 15.7, 63.7, 1.42],
   ['Perchloric acid', 60, 9.2, 108.8, 1.54],
   ['Perchloric acid', 72, 12.2, 82.1, 1.7],
@@ -113,5 +121,8 @@ export const ACIDS_TABLE: KbTable = {
     ...CONCENTRATED.map(([name, percent, molarity, ml, sg]): Record<string, Cell> => ({ part: 'conc', name, percent, molarity: molarity.toFixed(1), ml: ml.toFixed(1), sg })),
     ...SOLUTION_PH.map(([name, conc, ph]): Record<string, Cell> => ({ part: 'ph', name, conc, ph: ph.toFixed(1) })),
   ],
-  sources: [{ label: 'Common laboratory reference values, as supplied by Nate; molarities checked against % × density ÷ molar mass' }],
+  sources: [
+    { label: 'Common laboratory reference values, as supplied by Nate; molarities checked against % × density ÷ molar mass' },
+    { label: 'CRC Handbook of Chemistry and Physics, Concentrative Properties of Aqueous Solutions: 36.0% HCl, 1.1791 g/mL at 20 °C (the chart printed 1.19)' },
+  ],
 };

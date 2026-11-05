@@ -23,8 +23,6 @@ import type { Template } from '../chem/templates';
 const PIC = 48;
 /** The structure shown beside a solvent's name, in pixels. */
 const STRUCTURE_PIC = 120;
-/** The miscibility chart shows each pair once (a triangle, like the printed charts). */
-const MATRIX_HALF = true;
 
 /** Rows built when a table is shown, and how many more each time it is scrolled near its end. */
 const FIRST_ROWS = 60;
@@ -522,28 +520,23 @@ export class KnowledgeBaseWindow {
     const q = this.search.value.trim();
     const hit = new Set(q ? rows.map((r) => String(r.row.name)) : []);
     const marked = new Set(m.pairs.flatMap(([a, b]) => [`${a}|${b}`, `${b}|${a}`]));
-    const n = m.names.length;
     const head = el('tr', {}, el('th', { className: 'kb-mx-corner' }));
     m.names.forEach((name, j) => {
       const th = el('th', { className: 'kb-mx-col' }, el('span', {}, prettyChem(name)));
       th.dataset.c = String(j);
       if (hit.has(name)) th.classList.add('hit');
-      // half a chart: the last solvent has no column (its pairs are all in rows above)
-      if (!(MATRIX_HALF && j === n - 1)) head.append(th);
+      head.append(th);
     });
     const body = el('tbody');
     m.names.forEach((a, i) => {
-      // ...and the first has no row
-      if (MATRIX_HALF && i === 0) return;
       const th = el('th', { className: 'kb-mx-row', textContent: prettyChem(a) });
       th.dataset.r = String(i);
       if (hit.has(a)) th.classList.add('hit');
       const tr = el('tr', {}, th);
       m.names.forEach((b, j) => {
-        if (MATRIX_HALF && j === n - 1) return;
         const td = el('td');
-        // half the chart (each pair once, like the printed charts) or all of it
-        if (MATRIX_HALF ? j >= i : j === i) { td.className = MATRIX_HALF ? 'kb-mx-none' : 'kb-mx-self'; tr.append(td); return; }
+        // the full square (Nate's pick): every pair twice, a solvent with itself shaded on the diagonal
+        if (j === i) { td.className = 'kb-mx-self'; tr.append(td); return; }
         const two = marked.has(`${a}|${b}`);
         td.className = two ? 'kb-mx-two' : 'kb-mx-one';
         td.dataset.r = String(i);
@@ -554,7 +547,7 @@ export class KnowledgeBaseWindow {
       });
       body.append(tr);
     });
-    const table = el('table', { className: `kb-matrix${MATRIX_HALF ? ' half' : ''}` }, el('thead', {}, head), body);
+    const table = el('table', { className: 'kb-matrix' }, el('thead', {}, head), body);
     // the row and column of the square under the pointer
     let lit: Element[] = [];
     table.addEventListener('pointerover', (e) => {

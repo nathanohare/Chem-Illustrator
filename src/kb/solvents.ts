@@ -61,7 +61,7 @@ glycerin|290|17.8|1.261|M|0.812||||2.7|42.5|934
 heptane|98|-90.6|0.684|0.0003|0.012||400|48|0|1.9|0.39
 1-heptanol|176.4|-35|0.819|0.17|0.549||||1.7|12|6.0
 hexane|69|-95|0.655|0.0014|0.009|0.01|50|160|0|1.9|0.29
-1-hexanol|158|-46.7|0.814|0.59|0.559|||0.22*|1.60|12.5|0.59
+1-hexanol|158|-46.7|0.814|0.59|0.559|||0.22*|1.60|12.5|4.6
 methanol|64.6|-98|0.791|M|0.762|0.95|200|128|1.6|33|0.54
 methyl acetate|56.9|-98.1|0.933|24.4|0.253||200|220|1.7|6.68|0.36
 methyl t-butyl ether (MTBE)|55.2|-109|0.741|4.8|0.124|0.20||250*|1.4|2.6|0.36
@@ -202,7 +202,7 @@ export const SOLVENTS_TABLE: KbTable = {
     { key: 'vp', label: 'VP (hPa)', numeric: true, info: 'Vapor pressure (VP) at 20 °C, in hectopascals (1 hPa = 0.75 mmHg); values marked * are at 25 °C. Higher evaporates faster and fills the air sooner. Source: Murov, Table 1, from Reichardt and ChemIDplus.' },
     { key: 'dipole', label: 'Dipole (D)', numeric: true, info: 'Dipole moment in debye (D). Zero for symmetric molecules (benzene, CCl4, hexane) even when their bonds are polar.' },
     { key: 'dielectric', label: 'ε', numeric: true, info: 'Dielectric constant (relative permittivity, ε): how well the solvent separates charges. Above about 15, ions and charged intermediates are well stabilized (polar solvents); below about 5, hardly at all.' },
-    { key: 'viscosity', label: 'η (cP)', numeric: true, info: 'Viscosity (η) in centipoise (cP), the same number as millipascal-seconds (mPa·s). Water is 0.89 at 25 °C. Thicker solvents run slower through a column or a filter.' },
+    { key: 'viscosity', label: 'η (cP)', numeric: true, info: 'Viscosity (η) in centipoise (cP), the same number as millipascal-seconds (mPa·s). Water is 0.89 at 25 °C. Thicker solvents run slower through a column or a filter. Source: Murov, Table 1, except 1-hexanol: Murov prints 0.59 (the solubility figure repeated); 4.6 is the measured value at 25 °C (Cano-Gómez et al., J. Chem. Eng. Data 2015, 60, 1945, via NIST TRC ThermoML).' },
     { key: 'ich', label: 'ICH class', filter: true, info: 'ICH Q3C(R8) residual-solvent class: how much of a solvent may be left in a medicine, set by its toxicity. Class 1: avoid (known or suspected carcinogens, environmental hazards). Class 2: limit (a ppm cap for each). Class 3: low toxic potential (up to 5,000 ppm). "No adequate data": listed, but no limit set. A safety limit for drug products, not a green-chemistry ranking. Source: ICH Q3C(R8), 2021.' },
     { key: 'aka', label: 'Also called', hidden: true },
     { key: 'smiles', label: 'SMILES', hidden: true },
@@ -211,6 +211,7 @@ export const SOLVENTS_TABLE: KbTable = {
   structure: solventPicture,
   sources: [
     MUROV_SOURCE,
+    { label: 'Cano-Gómez, J. J. et al. J. Chem. Eng. Data 2015, 60, 1945 (1-hexanol viscosity, 4.56 mPa·s at 25 °C; Murov prints 0.59)', url: 'https://doi.org/10.1021/je501133u' },
     { label: 'ICH Q3C(R8) Impurities: Guideline for Residual Solvents, 2021 (class)', url: 'https://database.ich.org/sites/default/files/ICH_Q3C-R8_Guideline_Step4_2021_0422_1.pdf' },
   ],
 };

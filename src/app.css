@@ -1885,7 +1885,6 @@ dialog.kb-window { position: fixed; inset: 56px 0 auto 0; margin: 0 auto; z-inde
 .kb-matrix th.kb-mx-col { vertical-align: bottom; padding: 0 0 4px; width: 17px; }
 .kb-matrix th.kb-mx-col span { writing-mode: vertical-rl; transform: rotate(180deg); white-space: nowrap; display: inline-block; }
 .kb-matrix td { width: 17px; min-width: 17px; height: 17px; padding: 0; border: 1px solid var(--line); }
-.kb-matrix td.kb-mx-none { border: 0; }
 .kb-matrix td.kb-mx-self { background: var(--line); }
 .kb-matrix td.kb-mx-two { background: color-mix(in srgb, var(--text) 38%, transparent); }
 .kb-matrix .hit, .kb-matrix td.kb-mx-one.lit, .kb-matrix th.lit { background: var(--accent-soft); }
