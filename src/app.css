@@ -497,10 +497,12 @@ body.slides-mode #canvas-host, body.design-mode #canvas-host { background: var(-
   caret-color: transparent;
   white-space: pre;
   font-size: var(--fs-sm);
+  /* it sits at the caret: a press there must reach the drawing, to start selecting from the caret */
+  pointer-events: none;
 }
 /* touch mode: the field covers the text being typed, so Apple Pencil's Scribble can write into it.
    It stays see-through (the text is drawn on the drawing); 16 px stops Safari zooming in on it. */
-.text-input.scribble-pad { opacity: 1; font-size: var(--fs-lg); touch-action: none; white-space: pre-wrap; }
+.text-input.scribble-pad { pointer-events: auto; opacity: 1; font-size: var(--fs-lg); touch-action: none; white-space: pre-wrap; }
 .text-input.scribble-pad::selection { background: transparent; color: transparent; }
 .caption-bar {
   position: absolute;
