@@ -977,9 +977,10 @@ class DocxWriter {
           `<wpg:grpSpPr><a:xfrm${turnAttrs(o)}><a:off x="0" y="0"/><a:ext cx="${emu(size.w)}" cy="${emu(size.h)}"/><a:chOff x="${emu(at.x)}" y="${emu(at.y)}"/><a:chExt cx="${emu(at.w)}" cy="${emu(at.h)}"/></a:xfrm></wpg:grpSpPr>` +
           `${kids}</wpg:wgp></a:graphicData></a:graphic>`;
       }
-      this.model.drawings[id] = { contents: o.contents, w: pic.w, h: pic.h, png: bytesHash(pic.png), ...(o.frame ? { frame: o.frame } : {}) };
+      const svg = pic.svg ? new TextEncoder().encode(pic.svg) : null;
+      this.model.drawings[id] = { contents: o.contents, w: pic.w, h: pic.h, png: bytesHash(pic.png), ...(svg ? { svg: bytesHash(svg) } : {}), ...(o.frame ? { frame: o.frame } : {}) };
       blip = this.media(main, pic.png, 'png');
-      if (pic.svg) svgId = this.media(main, new TextEncoder().encode(pic.svg), 'svg');
+      if (svg) svgId = this.media(main, svg, 'svg');
       size = shownSize({ w: pic.w, h: pic.h }, o.scale ?? 1, this.textW);
       name = `${DRAWING_NAME} ${id}`;
       smiles = await this.deps.smiles?.(o.contents, t.drawingStyle).catch(() => null) ?? null;

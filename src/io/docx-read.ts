@@ -124,6 +124,8 @@ const WARN = {
   restart: 'Caption numbers that were set to start again were numbered straight through.',
   hfPictures: 'Pictures and tables in the header and footer were left out.',
   pictureWatermark: 'A picture watermark was left out (text watermarks are kept).',
+  drawingChanged: 'Some structures were changed in Word (Change Picture) or copied in from another file, so they came in as pictures.',
+  drawingCrop: 'Cropping and color changes made in Word to some structures were left off (the structures stay editable).',
 };
 
 type Pos = 'base' | 'sub' | 'sup';
@@ -1899,7 +1901,14 @@ class DocxReader {
     const ours = new RegExp(`^${DRAWING_NAME} (\\d+)$`).exec(name);
     const m = ours ? this.model?.drawings?.[Number(ours[1])] : undefined;
     const look = pic ? readLook(kid(pic, 'spPr')) : null;
-    if (m?.contents && this.isOurDrawing(m, pic, descr)) {
+    const mineNow = !!m?.contents && this.isOurDrawing(m, pic, descr);
+    // one of ours by its name whose picture is no longer the one written: Word's picture
+    if (m?.contents && !mineNow) this.warn('drawingChanged');
+    if (m?.contents && mineNow) {
+      // cropped or recoloured in Word: the structure, without them
+      const blipNow = kid(pic, 'blipFill', 'blip');
+      const sr = kid(pic, 'blipFill', 'srcRect');
+      if (['l', 't', 'r', 'b'].some((k) => Number(sr?.getAttribute(k) ?? 0)) || kids(blipNow).some((k) => k.localName !== 'extLst')) this.warn('drawingCrop');
       const natural = shownSize({ w: m.w, h: m.h }, 1, this.textW);
       const scale = Math.abs(natural.w - shown.w) < 0.75 || m.w <= 0 ? undefined : round(shown.w / m.w, 1e4);
       // a diagram's shapes may have been typed into in Word: their words go back into its text
@@ -1944,11 +1953,19 @@ class DocxReader {
    * Files from before the fingerprints were kept are taken by the name.
    */
   private isOurDrawing(m: DocxModel['drawings'][number], pic: Element | null, descr: string): boolean {
-    if (m.png === undefined && m.alt === undefined) return true;
+    if (m.png === undefined && m.alt === undefined && m.svg === undefined) return true;
     const blip = kid(pic, 'blipFill', 'blip');
     const path = this.relTarget(rAttr(blip, 'embed'));
     const bytes = path ? this.pkg.bytes(path) : null;
     if (m.png !== undefined && bytes && bytesHash(bytes) === m.png) return true;
+    // the SVG, which Word keeps as written: the picture is ours exactly while it is the same (the
+    // alt text is the person's to change, and stays with a picture changed by Change Picture)
+    if (m.svg !== undefined && pic) {
+      const svg = Array.from(blip?.getElementsByTagNameNS('*', 'svgBlip') ?? [])[0];
+      const svgPath = this.relTarget(rAttr(svg, 'embed'));
+      const svgBytes = svgPath ? this.pkg.bytes(svgPath) : null;
+      return !!svgBytes && bytesHash(svgBytes) === m.svg;
+    }
     return m.alt !== undefined && m.alt.trim() === descr;
   }
 

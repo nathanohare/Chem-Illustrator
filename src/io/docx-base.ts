@@ -106,11 +106,12 @@ export interface DocxModel {
   drawingStyle: DocStyle;
   /** Each drawing by its id: what it is, and its picture's own size (for its scale). */
   /**
-   * Each drawing, by the number in its picture's name. `png` (the picture's fingerprint) and `alt`
-   * (its alt text as written) tell it from a picture Word copied in from another of our files
-   * under the same name.
+   * Each drawing, by the number in its picture's name. `svg` (the fingerprint of its SVG, which
+   * Word keeps byte for byte), or in older files `png` (the PNG's, which Word makes afresh when it
+   * saves) and `alt` (its alt text as written), tell it from a picture changed in Word (Change
+   * Picture) or copied in from another of our files under the same name.
    */
-  drawings: Record<number, { contents: Contents; w: number; h: number; png?: string; alt?: string; /** A figure's area (Insert > Figure): the picture is of all of it. */ frame?: FigureFrame }>;
+  drawings: Record<number, { contents: Contents; w: number; h: number; png?: string; svg?: string; alt?: string; /** A figure's area (Insert > Figure): the picture is of all of it. */ frame?: FigureFrame }>;
   /** Each shape's library outline (Insert > Shapes in a document), by its id ("Shape 3"): Word keeps those without a preset as custom shapes. */
   geos?: Record<number, string>;
   /**

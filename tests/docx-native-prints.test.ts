@@ -1,7 +1,11 @@
 // @vitest-environment jsdom
 //
-// What Chem Illustrator keeps in its own part of a Word file (tables, charts) is used only while
-// Word has not changed the document's own markup for them:
+// What Chem Illustrator keeps in its own part of a Word file (structures, tables, charts) is used
+// only while Word has not changed the document's own markup for them:
+// - a structure is recognised by its SVG, which Word keeps byte for byte (it makes the PNG beside
+//   it afresh on every save, and the alt text is the person's to edit); a picture put in its
+//   place (Change Picture) comes in as that picture, with a warning; a crop or recolour made in
+//   Word is warned about;
 // - text bolded or shaded in a table in Word, its words unchanged, comes back as Word has it;
 // - a chart changed to another type in Word comes back as that type.
 
@@ -14,11 +18,14 @@ import { newChartBox } from '../src/sheet/chart-box';
 import type { Contents, TableData, TextRun } from '../src/model';
 
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52, 0, 0, 0, 2, 0, 0, 0, 1]);
+/** The PNG Word makes for the SVG when it saves the file. */
+const PNG_WORD = new Uint8Array([...PNG, 9, 9, 9]);
 const deps: DocxDeps = {
   async picture() { return { png: PNG, svg: '<svg xmlns="http://www.w3.org/2000/svg" width="80" height="40"/>', w: 80, h: 40 }; },
   async svgToPng() { return PNG; },
   async smiles() { return null; },
 };
+const DRAWING: Contents = { atoms: [], bonds: [], captions: [{ id: 1, x: 0, y: 0, runs: [{ text: 'OH' }], justify: 'left' }], arrows: [], shapes: [] };
 const TABLE: TableData = {
   cols: [60, 40], head: 1, lines: 'acs', title: [{ text: 'Table 1. Screening', bold: true }],
   rows: [[{ runs: [{ text: 'Entry' }] }, { runs: [{ text: 'Yield' }] }], [{ runs: [{ text: '1' }] }, { runs: [{ text: '95%' }] }]],
@@ -45,6 +52,41 @@ const edited = (p: Parts, f: (x: string) => string, more: Parts = {}): Uint8Arra
   expect(now).not.toBe(was);
   return rezip({ ...p, ...more, 'word/document.xml': new Uint8Array(strToU8(now)) });
 };
+/** A picture's file in the package, by the relationship named in the document. */
+const target = (p: Parts, re: RegExp) => 'word/' + new RegExp(`Id="${re.exec(text(p, 'word/document.xml'))![1]}"[^>]*Target="([^"]+)"`).exec(text(p, 'word/_rels/document.xml.rels'))![1];
+
+describe('structures in Word', () => {
+  const write = async () => unzipSync(await writeDocx(docOf({ kind: 'drawing', contents: DRAWING }), deps));
+  const kinds = async (bytes: Uint8Array) => {
+    const { doc, warnings } = await readDocx(bytes);
+    return { kinds: Object.values(doc.objects).map((o) => o.kind), warnings };
+  };
+
+  it('stay structures after a Word save with their alt text edited', async () => {
+    const p = await write();
+    const png = target(p, /<a:blip r:embed="([^"]+)"/);
+    const got = await kinds(edited(p, (x) => x.replace(/descr="[^"]*"/, 'descr="Phenol, the starting material"'), { [png]: PNG_WORD }));
+    expect(got.kinds).toEqual(['drawing']);
+    expect(got.warnings).toEqual([]);
+  });
+
+  it('come in as the picture put in their place in Word, with a warning, though the alt text is kept', async () => {
+    const p = await write();
+    const png = target(p, /<a:blip r:embed="([^"]+)"/), svg = target(p, /<asvg:svgBlip [^>]*r:embed="([^"]+)"/);
+    const got = await kinds(rezip({ ...p, [png]: PNG_WORD, [svg]: new Uint8Array(strToU8('<svg xmlns="http://www.w3.org/2000/svg" width="20" height="20"/>')) }));
+    expect(got.kinds).toEqual(['picture']);
+    expect(got.warnings.join(' ')).toMatch(/structures were changed in Word/);
+  });
+
+  it('stay structures when cropped or recolored in Word, with a warning that it was left off', async () => {
+    const p = await write();
+    for (const f of [(x: string) => x.replace('<a:stretch>', '<a:srcRect l="25000" r="25000"/><a:stretch>'), (x: string) => x.replace(/(<a:blip r:embed="[^"]+">)/, '$1<a:grayscl/>')]) {
+      const got = await kinds(edited(p, f));
+      expect(got.kinds).toEqual(['drawing']);
+      expect(got.warnings.join(' ')).toMatch(/Cropping and color changes/);
+    }
+  });
+});
 
 describe('tables in Word', () => {
   const write = async () => unzipSync(await writeDocx(docOf({ kind: 'drawing', contents: TABLE_DRAWING }), deps));
