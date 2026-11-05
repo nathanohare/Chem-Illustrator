@@ -13,7 +13,7 @@ import { withStack, type TextLayout } from '../text/layout';
 import { geoDef, moveSteps, traceSteps } from '../design/geo';
 import type { DocLayout, PageBox, PlacedObject, TableBox } from './doc-layout';
 import type { BorderLine, TableData } from '../model';
-import { coveringCell, spanOf } from '../table';
+import { coveringCell, rowSpanOf, spanOf } from '../table';
 import { DEFAULT_MARGINS, hasLines, resolveTable, strokeOf, type TableStyleDef } from './table-styles';
 import { docMeasure } from './doc-file';
 import { drawMath } from './math';
@@ -348,7 +348,18 @@ export function drawDocTable(ctx: CanvasRenderingContext2D, t: TableData, tb: Ta
   for (const { r, x, y } of rows) {
     tb.cells[r]?.forEach((cl, c) => {
       const m = tb.pads[r]?.[c] ?? DEFAULT_MARGINS;
-      if (cl) drawLayout(ctx, cl, x + tb.xs[c] + m.left, y + m.top + tb.drop[r][c] - cl.box.y1);
+      if (!cl) return;
+      // a row of an exact height cuts off the text that doesn't fit in it (as Word does)
+      const down = rowSpanOf(t, r, c);
+      const cut = !!t.rowH?.[r + down - 1]?.exact;
+      if (cut) {
+        ctx.save();
+        ctx.beginPath();
+        ctx.rect(x + tb.xs[c], y, tb.xs[c + spanOf(t, r, c)] - tb.xs[c], tb.hs.slice(r, r + down).reduce((a, b) => a + b, 0));
+        ctx.clip();
+      }
+      drawLayout(ctx, cl, x + tb.xs[c] + m.left, y + m.top + tb.drop[r][c] - cl.box.y1);
+      if (cut) ctx.restore();
     });
   }
   const lines: { x1: number; y1: number; x2: number; y2: number; e: BorderLine | null }[] = [];

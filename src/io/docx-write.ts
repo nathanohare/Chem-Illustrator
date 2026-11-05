@@ -17,7 +17,7 @@ import type { CellBorders, Contents, Justify, ParaStyle, PictureFx, TableData, T
 import { bakedPart } from '../render/picture-fx';
 import { blipEffectsXml, imgPropsXml, pictureGeomXml } from './picture-xml';
 import { DEFAULT_MARGINS, builtInStyle } from '../document/table-styles';
-import { borderXml, bordersXml, lookXml as tableLookXml, marginsXml, tableStyleXml } from './docx-table-styles';
+import { borderXml, bordersXml, lookXml as tableLookXml, marginsXml, rowHeightXml, tableFloatXml, tableStyleXml, tableWidthXml } from './docx-table-styles';
 import { BORDER_SPACE, cleanBorders } from '../document/para-borders';
 import { fieldInstr } from '../document/fields';
 import type { DocStyle } from '../style';
@@ -31,7 +31,7 @@ import { facesToEmbed, newGuid, obfuscate, type FontSource } from './font-embed'
 import { fromDataUrl } from '../render/images';
 import { embeddedPart } from './ole-object';
 import { BULLETS, fitParas, listInfo, paraCount, schemeOf, splitParagraphs } from '../text/paragraphs';
-import { BOX_PAD, COL_GAP, COMPOUND, END_FORMAT, FLOAT_GAP, FOOT_FORMAT, columnsOf, OBJECT_CHAR, SHADOWS, charStylesOf, watermarkPlace, fieldTexts, floatOf, lookExtent, lookOf, noteStyle, objectsInText, pruneObjects, EMPTY_FORM, styleOf, runStyleOf, type CharStyle, type DocObject, type DocText, type Embedded, type FigureFrame, type FigureLook, type HeaderFooter, type HfBody, type HfKey, type NamedStyle, type PageBorder, type PageSetup, type Watermark } from '../document/document';
+import { BOX_PAD, COL_GAP, COMPOUND, END_FORMAT, FOOT_FORMAT, columnsOf, OBJECT_CHAR, SHADOWS, charStylesOf, watermarkPlace, fieldTexts, floatOf, floatGaps, lookExtent, lookOf, noteStyle, objectsInText, pruneObjects, EMPTY_FORM, styleOf, runStyleOf, type CharStyle, type DocObject, type DocText, type Embedded, type FigureFrame, type FigureLook, type HeaderFooter, type HfBody, type HfKey, type NamedStyle, type PageBorder, type PageSetup, type Watermark } from '../document/document';
 import { ACS_LINE, GRID_LINE, bibHang, docCellAlign, shownSize } from '../document/doc-layout';
 import { sectionsOf, type Section } from '../document/sections';
 import { bibliography, piecesText, type Reference } from '../document/references';
@@ -298,7 +298,7 @@ class DocxWriter {
     for (const r of t.runs) for (const ch of r.text) if (ch === '\n') markRev.push(r.rev);
     this.markRev = markRev;
     const out: string[] = [];
-    let lastWasTable = false;
+    let lastWasTable = false, lastFloats = false;
     let listNum = 0;
     // each section but the last ends with its section properties in its last paragraph (Word's way)
     const secs = sectionsOf({ ...t, paras });
@@ -325,9 +325,12 @@ class DocxWriter {
       // a paragraph holding just a table: Word's own table
       const only = runs.length === 1 && runs[0].obj !== undefined && runs[0].text === OBJECT_CHAR ? t.objects[runs[0].obj] : undefined;
       if (only?.kind === 'table') {
-        if (lastWasTable) out.push('<w:p><w:pPr><w:spacing w:before="0" w:after="0"/></w:pPr></w:p>');
+        // Word joins two tables with nothing between them into one: an empty paragraph keeps them
+        // apart. Two floating tables are placed apart and stay two tables, as Word writes them (a label sheet's).
+        if (lastWasTable && !(lastFloats && only.table.float)) out.push('<w:p><w:pPr><w:spacing w:before="0" w:after="0"/></w:pPr></w:p>');
         out.push(await this.docTable(main, only.table, ps.align ?? styleOf(t, ps).align));
         lastWasTable = true;
+        lastFloats = !!only.table.float;
         close();
         continue;
       }
@@ -336,6 +339,7 @@ class DocxWriter {
         if (lastWasTable) out.push('<w:p><w:pPr><w:spacing w:before="0" w:after="0"/></w:pPr></w:p>');
         out.push(this.table(runs[0].obj!, table, ps.align ?? styleOf(t, ps).align));
         lastWasTable = true;
+        lastFloats = false;
         close();
         continue;
       }
@@ -833,12 +837,12 @@ class DocxWriter {
     const was = fl.name ? /<wp:docPr [^>]*?name="([^"]*)"/.exec(inner)?.[1] : undefined;
     if (fl.name && was !== undefined) inner = inner.replace(/(<wp:docPr [^>]*?name=")[^"]*"/, (_, a: string) => `${a}${xmlAttr(fl.name!)}"`);
     if (pr && (fl.group !== undefined || fl.name)) (this.model.floats ??= {})[Number(pr[1])] = { ...(fl.group !== undefined ? { group: fl.group } : {}), ...(fl.name ? { name: fl.name } : {}), ...(was !== undefined ? { was } : {}) };
-    const gap = emu(fl.gap ?? FLOAT_GAP);
+    const gap = floatGaps(fl);
     const [l, t] = lookExtent(lookOf(o));
     const h = fl.xFrom === 'page' ? 'page' : 'margin';
     const v = fl.yFrom === 'page' ? 'page' : fl.yFrom === 'margin' ? 'margin' : 'paragraph';
     const wrap = fl.wrap === 'square' ? '<wp:wrapSquare wrapText="largest"/>' : fl.wrap === 'topBottom' ? '<wp:wrapTopAndBottom/>' : '<wp:wrapNone/>';
-    return `<wp:anchor distT="${gap}" distB="${gap}" distL="${gap}" distR="${gap}" simplePos="0" relativeHeight="${251659264 + (fl.z !== undefined ? fl.z + 1 : this.docPr) * 1024}" behindDoc="${fl.wrap === 'behind' ? 1 : 0}" locked="0" layoutInCell="1" allowOverlap="1">` +
+    return `<wp:anchor distT="${emu(gap.t)}" distB="${emu(gap.b)}" distL="${emu(gap.l)}" distR="${emu(gap.r)}" simplePos="0" relativeHeight="${251659264 + (fl.z !== undefined ? fl.z + 1 : this.docPr) * 1024}" behindDoc="${fl.wrap === 'behind' ? 1 : 0}" locked="0" layoutInCell="1" allowOverlap="1">` +
       `<wp:simplePos x="0" y="0"/><wp:positionH relativeFrom="${h}"><wp:posOffset>${emu(fl.x + l)}</wp:posOffset></wp:positionH>` +
       `<wp:positionV relativeFrom="${v}"><wp:posOffset>${emu(fl.y + t)}</wp:posOffset></wp:positionV>${ext}${wrap}${inner}</wp:anchor>`;
   }
@@ -1099,11 +1103,11 @@ class DocxWriter {
       ? `<w:top ${grid}/><w:left ${grid}/><w:bottom ${grid}/><w:right ${grid}/><w:insideH ${grid}/><w:insideV ${grid}/>`
       : tab.lines === 'acs' ? `<w:top ${rule}/><w:left ${none}/><w:bottom ${rule}/><w:right ${none}/><w:insideH ${none}/><w:insideV ${none}/>`
         : `<w:top ${none}/><w:left ${none}/><w:bottom ${none}/><w:right ${none}/><w:insideH ${none}/><w:insideV ${none}/>`;
-    const width = tab.cols.reduce((a, b) => a + b, 0);
     // a table style: Word's own (written in styles.xml), with the parts it picks out; else the lines themselves
     const styled = !!tab.style && !!(this.t.tableStyles?.[tab.style] ?? builtInStyle(tab.style));
-    const tblPr = `<w:tblPr>${styled ? `<w:tblStyle w:val="${tab.style}"/>` : ''}<w:tblW w:w="${twips(width)}" w:type="dxa"/><w:jc w:val="${align === 'right' ? 'right' : align === 'center' ? 'center' : 'left'}"/>` +
-      `${styled ? '' : `<w:tblBorders>${borders}</w:tblBorders>`}<w:tblLayout w:type="fixed"/>` +
+    // (a floating table, its width, indent and AutoFit as Word had them; a table made here has fixed columns)
+    const tblPr = `<w:tblPr>${styled ? `<w:tblStyle w:val="${tab.style}"/>` : ''}${tableFloatXml(tab.float)}${tableWidthXml(tab)}<w:jc w:val="${align === 'right' ? 'right' : align === 'center' ? 'center' : 'left'}"/>` +
+      `${tab.indent ? `<w:tblInd w:w="${twips(tab.indent)}" w:type="dxa"/>` : ''}${styled ? '' : `<w:tblBorders>${borders}</w:tblBorders>`}${tab.autofit ? '' : '<w:tblLayout w:type="fixed"/>'}` +
       marginsXml('tblCellMar', tab.pad ?? DEFAULT_MARGINS) +
       `${styled ? tableLookXml(tab) : '<w:tblLook w:val="0000" w:firstRow="0" w:lastRow="0" w:firstColumn="0" w:lastColumn="0" w:noHBand="1" w:noVBand="1"/>'}</w:tblPr>`;
     const gridXml = `<w:tblGrid>${tab.cols.map((w) => `<w:gridCol w:w="${twips(w)}"/>`).join('')}</w:tblGrid>`;
@@ -1158,7 +1162,9 @@ class DocxWriter {
         if (lastTable || !paras.length) paras.push('<w:p/>');
         cells.push(`<w:tc><w:tcPr>${tcPr.join('')}</w:tcPr>${paras.join('')}</w:tc>`);
       }
-      rows.push(`<w:tr>${r < tab.head ? '<w:trPr><w:tblHeader/></w:trPr>' : ''}${cells.join('')}</w:tr>`);
+      // its height, and whether it repeats at the top of each page as a heading row
+      const trPr = rowHeightXml(tab.rowH?.[r]) + (r < tab.head && !tab.noRepeat ? '<w:tblHeader/>' : '');
+      rows.push(`<w:tr>${trPr ? `<w:trPr>${trPr}</w:trPr>` : ''}${cells.join('')}</w:tr>`);
     }
     return `<w:tbl>${tblPr}${gridXml}${rows.join('')}</w:tbl>`;
   }

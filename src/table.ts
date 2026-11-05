@@ -7,7 +7,7 @@
 // Positions in a layout are in points from the table's top left corner (the top of its title,
 // or of its first rule when it has no title).
 
-import type { Justify, TableCell, TableData, TextRun } from './model';
+import type { Justify, RowHeight, TableCell, TableData, TextRun } from './model';
 import { layoutText, type Measure, type TextLayout } from './text/layout';
 import { drawLayout } from './text/draw';
 import type { Rect, Vec } from './geom';
@@ -392,6 +392,14 @@ export function setPart(t: TableData, part: TablePart, text: { runs: TextRun[]; 
   return { ...t, rows };
 }
 
+/** A document table's row heights changed as its rows are (`edit` changes the list in place), as a part of the table. */
+export function rowHeights(t: TableData, edit: (h: (RowHeight | null)[]) => void): Pick<TableData, 'rowH'> {
+  if (!t.rowH) return {};
+  const h = t.rows.map((_, r) => t.rowH?.[r] ?? null);
+  edit(h);
+  return { rowH: h };
+}
+
 export function insertRow(t: TableData, at: number): TableData {
   const rows = [...t.rows];
   const row = t.cols.map(emptyCell);
@@ -403,8 +411,8 @@ export function insertRow(t: TableData, at: number): TableData {
     }
   }
   rows.splice(at, 0, row);
-  // a row put in among the headings is a heading too
-  return { ...t, rows, head: at < t.head ? t.head + 1 : t.head };
+  // a row put in among the headings is a heading too; it is as tall as its text
+  return { ...t, rows, head: at < t.head ? t.head + 1 : t.head, ...rowHeights(t, (h) => h.splice(at, 0, null)) };
 }
 
 export function deleteRow(t: TableData, r: number): TableData {
@@ -420,7 +428,7 @@ export function deleteRow(t: TableData, r: number): TableData {
     else if (rows[r + 1]) rows[r + 1] = rows[r + 1].map((x, k) => (k === c ? tidySpan({ ...t.rows[r][c], rowSpan: down - 1 }) : x));
   }
   rows.splice(r, 1);
-  return { ...t, rows, head: r < t.head ? t.head - 1 : t.head };
+  return { ...t, rows, head: r < t.head ? t.head - 1 : t.head, ...rowHeights(t, (h) => h.splice(r, 1)) };
 }
 
 export function insertColumn(t: TableData, at: number, width = t.cols[Math.max(0, Math.min(at, t.cols.length - 1))] ?? 60): TableData {

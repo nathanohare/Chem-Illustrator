@@ -13,13 +13,13 @@
 // typed into here, and a table of figures (a TOC field for captions) as one worked out here.
 
 import { COVER_MARK } from '../document/quick-parts';
-import type { AuthorityMark, CellBorders, Contents, IndexMark, Justify, ParaBorders, ParaStyle, PictureFx, TabStop, TableCell, TableData, TextRun } from '../model';
+import type { AuthorityMark, CellBorders, Contents, IndexMark, Justify, ParaBorders, ParaStyle, PictureFx, RowHeight, TabStop, TableCell, TableData, TextRun } from '../model';
 import { parseIndex, parseTa, parseToa, parseXe } from '../document/index-toa';
 import { ALG_SIDS, type ProtectKind, type Protection } from '../document/protect';
 import { tidyFx } from '../render/picture-fx';
 import { readPictureFx } from './picture-xml';
 import { DEFAULT_MARGINS, builtInStyle, type TableStyleDef } from '../document/table-styles';
-import { keepDirectBorders, readBorder, readBorders, readLook as readTableLook, readMargins, readTableStyle, sameStyle, styleIsRich } from './docx-table-styles';
+import { keepDirectBorders, readBorder, readBorders, readLook as readTableLook, readMargins, readRowHeight, readTableFloat, readTableStyle, readTableWidth, sameStyle, styleIsRich } from './docx-table-styles';
 import { cleanBorders } from '../document/para-borders';
 import { ACS_1996, type DocStyle } from '../style';
 import * as rt from '../richtext';
@@ -158,6 +158,8 @@ function finalTabs(p: PProps): TabStop[] | undefined {
   out.sort((a, b) => a.pos - b.pos);
   return out.length ? out : undefined;
 }
+/** What a table's style gives the paragraphs and text in its cells. */
+interface CellLook { p: PProps; r: RProps }
 interface WStyle { id: string; type: string; name: string; basedOn?: string; next?: string; isDefault: boolean; p: PProps; r: RProps; el: Element }
 interface Level { fmt: string; text: string; p: PProps }
 interface Piece { runs: TextRun[]; pageBreak: boolean; soft: boolean; colBreak?: boolean; /** Index entries and marked citations in it (XE and TA fields). */ xe?: IndexMark[]; ta?: AuthorityMark[] }
@@ -188,6 +190,8 @@ class DocxReader {
   private theme = { major: '', minor: '' };
   private wstyles = new Map<string, WStyle>();
   private defaultPara = 'Normal';
+  /** Word's default table style (the one a table that names none is in), if the file has one. */
+  private defaultTable: string | null = null;
   private docDefaults: { p: PProps; r: RProps } = { p: {}, r: {} };
   /** Word's style ids to ours (Word's default paragraph style is our Normal, and so on). */
   private idMap = new Map<string, string>();
@@ -575,6 +579,7 @@ class DocxReader {
       };
       this.wstyles.set(`${type}:${id}`, ws);
       if (type === 'paragraph' && ws.isDefault) this.defaultPara = id;
+      if (type === 'table' && ws.isDefault) this.defaultTable = id;
     }
     // what each style gives, its own settings over those of the style it is based on
     for (const ws of this.wstyles.values()) {
@@ -1045,11 +1050,18 @@ class DocxReader {
     const wrap = kind === 'wrapTopAndBottom' ? 'topBottom' as const
       : kind === 'wrapNone' ? (yes(anchor.getAttribute('behindDoc')) ? 'behind' as const : 'front' as const)
       : 'square' as const;
-    const dist = Math.max(fromEmu(anchor.getAttribute('distL') ?? '0'), fromEmu(anchor.getAttribute('distR') ?? '0'), fromEmu(anchor.getAttribute('distT') ?? '0'));
     const fl: Float = { wrap, x: round(x - l), y: round(y - t) };
     if (xFrom) fl.xFrom = xFrom;
     if (yFrom) fl.yFrom = yFrom;
-    if (Math.abs(dist - FLOAT_GAP) > 0.5) fl.gap = round(dist);
+    // the room kept from the text on each side (Word's own figures: 0.13 in at the sides, none above and below)
+    const dist = (k: string) => Math.max(0, fromEmu(anchor.getAttribute(k) ?? '0'));
+    const L = dist('distL');
+    if (Math.abs(L - FLOAT_GAP) > 0.5) fl.gap = round(L);
+    const g = fl.gap ?? FLOAT_GAP;
+    const T = dist('distT'), B = dist('distB'), R = dist('distR');
+    if (Math.abs(T - g) > 0.05) fl.gapTop = round(T);
+    if (Math.abs(B - g) > 0.05) fl.gapBottom = round(B);
+    if (Math.abs(R - g) > 0.05) fl.gapRight = round(R);
     // hidden in the Selection Pane; its group and name, kept with our data
     const pr = kid(anchor, 'docPr');
     if (yes(pr?.getAttribute('hidden') ?? null)) fl.hidden = true;
@@ -1076,11 +1088,15 @@ class DocxReader {
     [...s].sort((a, b) => a.rh - b.rh).forEach((x, z) => { x.fl.z = z; });
   }
 
-  /** A text box's paragraphs, read as the document's are. */
-  private boxText(content: Element): { runs: TextRun[]; paras: ParaStyle[] } {
-    const out = this.out, brk = this.breakNext;
+  /**
+   * A text box's paragraphs, read as the document's are. `styled` keeps each paragraph's style
+   * (a table cell's or text box's); `look` is what the table's style gives a cell's paragraphs.
+   */
+  private boxText(content: Element, styled = false, look: CellLook | null = null): { runs: TextRun[]; paras: ParaStyle[] } {
+    const out = this.out, brk = this.breakNext, was = this.cellLook;
     this.out = [];
-    this.blocks(kids(content));
+    this.cellLook = look;
+    try { this.blocks(kids(content)); } finally { this.cellLook = was; }
     const got = this.out;
     this.out = out;
     this.breakNext = brk;
@@ -1090,8 +1106,11 @@ class DocxReader {
       runs.push(...p.runs);
     });
     if (!runs.length) runs.push({ ...(got[0]?.mark ?? {}), text: '' });
-    return { runs: rt.normalizeRuns(runs), paras: got.map((p) => { const q = cleanPara(p.ps); delete q.style; delete q.pageBreak; delete q.section; return q; }) };
+    return { runs: rt.normalizeRuns(runs), paras: got.map((p) => { const q = cleanPara(p.ps); if (!styled) delete q.style; delete q.pageBreak; delete q.section; return q; }) };
   }
+
+  /** What the style of the table whose cell is being read gives its paragraphs (null outside a cell). */
+  private cellLook: CellLook | null = null;
 
   /** A paragraph's own and its style's formatting. */
   private paraProps(pPr: Element | null): { style: string; p: PProps; direct: PProps; base: RProps; mark: RProps } {
@@ -1099,8 +1118,10 @@ class DocxReader {
     const style = this.wstyles.has(`paragraph:${sid}`) ? sid : this.defaultPara;
     const ch = this.chain('paragraph', style);
     const direct = this.readPPr(pPr);
-    const p = mergeP(this.docDefaults.p, ch.p, direct);
-    const base = merge<RProps>(this.docDefaults.r, ch.r);
+    // a table cell's: its table style's settings come after the document's defaults, before the paragraph style (ECMA-376 part 1, 17.7.2)
+    const tbl = this.cellLook;
+    const p = mergeP(this.docDefaults.p, tbl?.p, ch.p, direct);
+    const base = merge<RProps>(this.docDefaults.r, tbl?.r, ch.r);
     const mark = merge<RProps>(base, this.readRPr(kid(pPr, 'rPr')));
     return { style, p, direct, base, mark };
   }
@@ -1139,7 +1160,7 @@ class DocxReader {
     const levels = numId && numId !== '0' ? this.abstracts.get(this.nums.get(numId) ?? '') : undefined;
     const ilvl = Math.max(0, Math.min(8, own.ilvl ?? 0));
     const level = levels?.[ilvl];
-    const p = level ? mergeP(this.docDefaults.p, this.chain('paragraph', style).p, level.p, direct) : own;
+    const p = level ? mergeP(this.docDefaults.p, this.cellLook?.p, this.chain('paragraph', style).p, level.p, direct) : own;
     let list: 'bullet' | 'number' | undefined;
     let scheme: string | undefined, bullet: string | undefined;
     if (level && levels && level.fmt !== 'none') {
@@ -1837,7 +1858,7 @@ class DocxReader {
       const fillClr = kid(spPr, 'solidFill', 'srgbClr')?.getAttribute('val');
       const fill = fillClr && /^[0-9a-f]{6}$/i.test(fillClr) ? `#${fillClr.toLowerCase()}` : kid(spPr, 'noFill') ? undefined : kid(spPr, 'solidFill') ? '#ffffff' : undefined;
       const float = (box.localName === 'anchor' ? this.floatOf(box, look, shown.w) : null) ?? { wrap: 'topBottom' as const, x: 0, y: 0 };
-      const { runs, paras } = this.boxText(content);
+      const { runs, paras } = this.boxText(content, true);
       const geo = this.shapeGeo(spPr, name);
       const o: DocObject = { kind: 'textbox', runs, w: round(shown.w), float, ...(geo ? { geo, h: round(shown.h) } : {}), ...(paras.some((q) => Object.keys(q).length) ? { paras } : {}), ...(fill ? { fill } : {}), ...(look ? { look } : {}) };
       this.emitObject(ctx, o, r);
@@ -2154,6 +2175,31 @@ class DocxReader {
     return id;
   }
 
+  /**
+   * What a table's style (or Word's default table style, for a table that names none) gives the
+   * paragraphs and text in its cells. A style drawn here (`drawn`) gives its bold, italic and
+   * colour as the table is laid out, so those are left to it.
+   */
+  private cellLookOf(id: string | null, drawn: boolean): CellLook | null {
+    const sid = id ?? this.defaultTable;
+    if (!sid) return null;
+    const ch = this.chain('table', sid);
+    const r: RProps = { ...ch.r };
+    if (drawn) { delete r.bold; delete r.italic; delete r.color; }
+    return Object.keys(ch.p).length || Object.keys(r).length ? { p: ch.p, r } : null;
+  }
+
+  /** Word lays the table out to fit its contents (AutoFit): no fixed layout of its own, nor from its style. */
+  private autofitOf(tblPr: Element | null, id: string | null): boolean {
+    let el = kid(tblPr, 'tblLayout');
+    const seen = new Set<string>();
+    for (let st = this.wstyles.get(`table:${id ?? this.defaultTable}`); !el && st && !seen.has(st.id); st = st.basedOn ? this.wstyles.get(`table:${st.basedOn}`) : undefined) {
+      seen.add(st.id);
+      el = kid(kid(st.el, 'tblPr'), 'tblLayout');
+    }
+    return this.a(el, 'type') !== 'fixed';
+  }
+
   /** A Word table as a table in the text: its cells read as text is (structures and pictures kept). */
   private textTable(tbl: Element): void {
     const tblPr = kid(tbl, 'tblPr');
@@ -2162,11 +2208,19 @@ class DocxReader {
     type Cell = { cell: TableCell; span: number; borders: Element | null; vm: 'restart' | 'continue' | null };
     const grid: Cell[][] = [];
     let head = 0, counting = true;
+    // a Word table style that shades or picks out parts: drawn in it here too
+    const style = this.a(kid(tblPr, 'tblStyle'));
+    const styleId = style ? this.tableStyleOf(style) : null;
+    // what the table's style (or Word's default one) gives its cells' paragraphs
+    const paraLook = this.cellLookOf(style, !!styleId);
+    // each row's height, as Word sets it
+    const heights: (RowHeight | null)[] = [];
     const was = this.inCell;
     this.inCell = true;
     try {
       for (const tr of rows) {
         const trPr = kid(tr, 'trPr');
+        heights.push(readRowHeight(trPr, this.a.bind(this)));
         if (counting && kid(trPr, 'tblHeader') && this.on(kid(trPr, 'tblHeader'))) head++;
         else counting = false;
         const row: Cell[] = [];
@@ -2178,7 +2232,7 @@ class DocxReader {
           // merged down a column: the first cell starts it, the ones under it carry it on
           const vmEl = kid(tcPr, 'vMerge');
           const vm = !vmEl ? null : this.a(vmEl) === 'restart' ? 'restart' : 'continue';
-          const cell: TableCell = vm === 'continue' ? { runs: [] } : this.textCell(tc);
+          const cell: TableCell = vm === 'continue' ? { runs: [] } : this.textCell(tc, paraLook);
           const fill = this.a(kid(tcPr, 'shd'), 'fill');
           if (fill && /^[0-9a-f]{6}$/i.test(fill) && fill.toLowerCase() !== 'ffffff') cell.fill = `#${fill.toLowerCase()}`;
           const va = this.a(kid(tcPr, 'vAlign'));
@@ -2226,7 +2280,6 @@ class DocxReader {
       while (out.length < cols.length) out.push({ runs: [] });
       table.rows.push(out);
     }
-    const style = this.a(kid(tblPr, 'tblStyle'));
     const b = new Map([...(style ? this.styleTableBorders(style) : new Map<string, boolean>()), ...this.borders(kid(tblPr, 'tblBorders'))]);
     let cellV = false, cellH = false, underRow = -1;
     grid.forEach((row, ri) => row.forEach((c) => {
@@ -2246,14 +2299,24 @@ class DocxReader {
       return [...count.entries()].sort((x, y) => y[1] - x[1])[0]?.[0] ?? 'left';
     });
     table.rows.forEach((row) => row.forEach((c, ci) => { if (c.align === table.align![ci] || (!c.runs.length && c.align)) delete c.align; }));
-    // a Word table style that shades or picks out parts: drawn in it here too
-    const styleId = style ? this.tableStyleOf(style) : null;
     if (styleId) {
       table.style = styleId;
       const look = readTableLook(kid(tblPr, 'tblLook'), this.a.bind(this));
       if (look) table.look = look;
       if ((look?.header ?? true) && !table.head) table.head = 1;
     }
+    // heading rows that only look like headings (no Repeat Header Rows in Word): not repeated when saved either
+    if (!head && table.head) table.noRepeat = true;
+    if (heights.some(Boolean)) table.rowH = heights;
+    // where Word places it and how wide, kept for saving: floating, its width, its indent and AutoFit
+    const float = readTableFloat(tblPr, this.a.bind(this));
+    if (float) table.float = float;
+    const wide = readTableWidth(tblPr, this.a.bind(this));
+    if (wide) table.width = wide;
+    const ind = kid(tblPr, 'tblInd');
+    const indent = (this.a(ind, 'type') ?? 'dxa') === 'dxa' ? this.tw(ind, 'w') : undefined;
+    if (indent && Math.abs(indent) >= 0.05) table.indent = round(indent);
+    if (this.autofitOf(tblPr, style)) table.autofit = true;
     // the cell margins, when not the standard ones
     const mar = readMargins(kid(tblPr, 'tblCellMar'), this.a.bind(this));
     if (Object.keys(mar).length) {
@@ -2288,8 +2351,8 @@ class DocxReader {
    * A cell of a table in the text: its paragraphs read as the text's are. Structures and
    * pictures stay (in their line); text boxes and the like inside a cell are left out.
    */
-  private textCell(tc: Element): TableCell {
-    const { runs, paras } = this.boxText(tc);
+  private textCell(tc: Element, look: CellLook | null = null): TableCell {
+    const { runs, paras } = this.boxText(tc, true, look);
     const kept = runs.filter((r) => {
       const o = r.obj !== undefined ? this.objects[r.obj] : undefined;
       if (!o) return true;
@@ -2614,11 +2677,13 @@ class DocxReader {
   }
 
   private assemble(hf: HeaderFooter, sect: Element | null): DocText {
-    // the empty paragraphs Word needs between tables and after a table at the end
+    // the empty paragraphs Word needs between tables and after a table at the end (after a
+    // floating table, which Word keeps apart from the next without one, the paragraph is the text's own)
+    const floats = (p: OutPara) => { const o = this.objects[p.runs.find((r) => r.obj !== undefined)?.obj ?? -1]; return o?.kind === 'table' && !!o.table.float; };
     const out = this.out.filter((p, i, all) => {
       if (p.runs.length || p.table) return true;
       const prev = all[i - 1], next = all[i + 1];
-      return !(prev?.table && (!next || next.table));
+      return !(prev?.table && !floats(prev) && (!next || next.table));
     });
     // Word's "don't add space between paragraphs of the same style"
     for (let i = 0; i + 1 < out.length; i++) {
