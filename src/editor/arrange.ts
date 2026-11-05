@@ -4,6 +4,8 @@
 
 import { Doc, Atom, Caption, Bond, Arrow, Shape, turnsFreely } from '../model';
 import { Vec, Rect, add, sub, normDegrees } from '../geom';
+import { isOrbitalPart } from '../chem/orbitals';
+import { pointShape, shapeAxis } from '../chem/pins';
 import { arrowPoints, boxOf, shapeBox, unionRect } from '../objects';
 import { frameMembers } from './frames';
 
@@ -218,7 +220,8 @@ export function snapshot(doc: Doc, sel: Selection, m: Measure): Snapshot {
 
 /**
  * Put everything in a snapshot through a rotation or a mirror. Text stays upright: captions
- * and boxes move with their centres. A mirror turns the drawing over, so double bonds keep
+ * and boxes move with their centres. Things that point a way turn with it: a lone pair's two
+ * dots, and an orbital's lobes. A mirror turns the drawing over, so double bonds keep
  * their second line on the same side, curved arrows bend the other way and brackets keep
  * facing in. Call inside an edit.
  */
@@ -251,7 +254,23 @@ export function transform(doc: Doc, snap: Snapshot, f: (p: Vec) => Vec, mirror: 
     }
     doc.updateArrow(r.id, patch);
   }
+  // an orbital's lobes (and the ring round a dz²'s middle, grouped with them) point a way
+  const orbitals = new Set(snap.shapes.filter((s) => s.grp !== undefined && isOrbitalPart(s)).map((s) => s.grp));
+  const orbital = (s: Shape) => isOrbitalPart(s) || (s.kind === 'oval' && s.grp !== undefined && orbitals.has(s.grp));
   for (const s of snap.shapes) {
+    // a lone pair's two dots (a bar, a radical ion's dot and sign) go where they are taken, each
+    if (s.kind === 'symbol' && shapeAxis(s)) {
+      const p = f({ x: s.x1, y: s.y1 }), q = f({ x: s.x2, y: s.y2 });
+      doc.updateShape(s.id, { x1: p.x, y1: p.y, x2: q.x, y2: q.y });
+      continue;
+    }
+    if (orbital(s)) {
+      // turned or turned over about its middle, so it still points from its atom
+      const mid = { x: (s.x1 + s.x2) / 2, y: (s.y1 + s.y2) / 2 }, axis = shapeAxis(s)!;
+      const m = f(mid), d = sub(f(add(mid, axis)), m);
+      doc.updateShape(s.id, { x1: s.x1 + m.x - mid.x, y1: s.y1 + m.y - mid.y, x2: s.x2 + m.x - mid.x, y2: s.y2 + m.y - mid.y, ...pointShape(s, d) });
+      continue;
+    }
     if (s.kind === 'line' || s.kind === 'bracket') {
       let p = f({ x: s.x1, y: s.y1 }), q = f({ x: s.x2, y: s.y2 });
       // a bracket's lips are on the right of its direction, so a mirror image runs the other way

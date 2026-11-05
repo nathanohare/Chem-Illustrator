@@ -167,7 +167,7 @@ import { stoichiometryBook, type StoichRow, type StoichRole } from './chem/stoic
 import { isReactionSmiles, isRxn, parseRxn, reactionSmiles, rxnBlock, splitReactionSmiles } from './chem/reaction-io';
 import { showBalance } from './ui/balance-dialog';
 import { withoutCharge } from './chem/formula';
-import { makePin } from './chem/pins';
+import { makePin, shapeAxis } from './chem/pins';
 import { ORBITAL_KINDS, ORBITAL_LOOKS, orbitalShapes, shapeCentre, type OrbitalKind, type OrbitalLook } from './chem/orbitals';
 import { BATCH_FORMATS, BATCH_INPUTS, readBatchFile, smilesLine, uniqueName, writeBatchItem, type BatchDeps, type BatchFormat } from './io/batch-convert';
 import { zipSync } from 'fflate';
@@ -1369,7 +1369,7 @@ async function insertOrbital(quick: boolean): Promise<void> {
       const angle = v.angle === 'auto' ? orbitalAngle(kind, at) : Number(v.angle) || 0;
       const grp = ++top;
       for (const sh of orbitalShapes({ kind, look: v.look as OrbitalLook, angle, size, flip: v.flip === 'true' }, c)) {
-        const pin = at ? makePin(doc, 'atom', [at.id], shapeCentre(sh)) ?? undefined : undefined;
+        const pin = at ? makePin(doc, 'atom', [at.id], shapeCentre(sh), shapeAxis(sh)) ?? undefined : undefined;
         made.push(doc.addShape({ ...sh, grp, ...(pin ? { pin } : {}) }).id);
       }
     }
