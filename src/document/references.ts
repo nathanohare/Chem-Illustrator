@@ -386,7 +386,13 @@ export function parseReferenceText(text: string): Reference[] {
  * text, or a bibliography's entries, kept while the field cites what it did then (`for`: the
  * citation's reference ids, or the bibliography's, in order, joined by spaces).
  */
-export interface ShownByManager { text?: string; for?: string; entries?: { label: string; pieces: Piece[] }[] }
+export interface ShownByManager {
+  text?: string;
+  for?: string;
+  /** Kept as a reference manager showed it in Word: valid while the document cites what it did then (every reference id cited, in order, joined by spaces). */
+  all?: string;
+  entries?: { label: string; pieces: Piece[] }[];
+}
 
 /** What the text has that counts for citations: its runs, its fields and its references. */
 export interface Citing {
@@ -482,13 +488,14 @@ const managerPlaceholder = (o: { refs?: string[]; live?: ShownByManager }): bool
 /** What every citation in the text shows, by its field's id. */
 export function citationTexts(t: Citing): Map<number, string> {
   const numbers = citationNumbers(t);
+  const all = [...numbers.keys()].join(' ');
   const f = formatOf(t);
   const out = new Map<number, string>();
   for (const [k, o] of Object.entries(t.objects)) {
     if (o.kind !== 'cite') continue;
     const refs = o.refs ?? [];
-    // what Zotero showed, while the citation cites what it did then
-    if (o.live?.text !== undefined && o.live.for === refs.join(' ')) { out.set(Number(k), o.live.text); continue; }
+    // what Zotero (or a manager whose text was kept on open) showed, while the citation cites what it did then
+    if (o.live?.text !== undefined && o.live.for === refs.join(' ') && (o.live.all === undefined || o.live.all === all)) { out.set(Number(k), o.live.text); continue; }
     const nums = refs.map((r) => numbers.get(r)).filter((n): n is number => n !== undefined);
     out.set(Number(k), citeText(nums, f));
   }
@@ -513,8 +520,8 @@ export function citationWarning(t: Citing): string | null {
 
 // ---------------------------------------------------------------- the bibliography
 
-/** A piece of a bibliography entry in one look. */
-export interface Piece { text: string; italic?: boolean; bold?: boolean }
+/** A piece of a bibliography entry in one look (a manager's entries kept from Word may also be underlined, raised, lowered or linked). */
+export interface Piece { text: string; italic?: boolean; bold?: boolean; underline?: boolean; sup?: boolean; sub?: boolean; link?: string }
 
 export interface BibEntry {
   n: number;
@@ -535,7 +542,8 @@ export function bibLabel(n: number, style?: CiteStyle | CiteFormat): string {
 
 /**
  * The references cited, in citation order, each as the style prints it; or, while Zotero's
- * bibliography is up to date (the same references cited, in the same order), Zotero's entries.
+ * bibliography (or a manager's bibliography kept as Word had it) is up to date (the same
+ * references cited, in the same order), its own entries.
  */
 export function bibliography(t: Citing): BibEntry[] {
   const style = formatOf(t);

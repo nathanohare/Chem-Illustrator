@@ -185,7 +185,7 @@ describe('saving to Excel', () => {
     const strings = strFromU8(f['xl/sharedStrings.xml']);
     expect(strings).toContain('Mean yield');
     // formulas in text show as chemistry in Excel too (the 2 as a subscript run)
-    expect(strings).toContain('<t>Showing Catalyst: Pd(OAc)</t></r><r><rPr><vertAlign val="subscript"/></rPr><t>2</t>');
+    expect(strings).toMatch(/<t>Showing Catalyst: Pd\(OAc\)<\/t><\/r><r><rPr>(?:<[bi]\/>)*<vertAlign val="subscript"\/><sz val="\d+(?:\.\d+)?"\/>.*?<\/rPr><t>2<\/t>/);
     expect(strings).toContain('Screen of 14 Oct');
     const sheet2 = strFromU8(f['xl/worksheets/sheet2.xml']);
     // the headline number spans its tile in Excel (no ####)

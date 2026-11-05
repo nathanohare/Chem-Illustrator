@@ -37,7 +37,8 @@ export function placesOf(kind: GoToKind, t: DocText, lay: DocLayout | null): num
     }
     case 'footnote': return objs((o) => o.kind === 'note' && !o.end);
     case 'endnote': return objs((o) => o.kind === 'note' && !!o.end);
-    case 'field': return objs((o) => ['field', 'seq', 'ref', 'cite', 'toc', 'tof', 'bib'].includes(o.kind));
+    // (hidden text kept from Word isn't a field to go to)
+    case 'field': return objs((o) => ['field', 'seq', 'ref', 'cite', 'toc', 'tof', 'bib'].includes(o.kind) && !(o.kind === 'field' && o.code === 'hidden'));
     case 'table': return objs((o) => o.kind === 'table');
     case 'graphic': return objs((o) => o.kind === 'drawing' || o.kind === 'picture' || o.kind === 'textbox');
     case 'equation': return objs((o) => o.kind === 'math');

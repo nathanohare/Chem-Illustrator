@@ -148,10 +148,15 @@ export function fileFormula(text: string, dynamic: boolean): string {
   return out.join('');
 }
 
-/** A formula (without its =) from a file, in this program's spelling: prefixes taken off, ANCHORARRAY(A1) as A1#, SINGLE(x) as @x. */
+/**
+ * A formula (without its =) from a file, in this program's spelling: prefixes taken off,
+ * ANCHORARRAY(A1) as A1#, SINGLE(x) as @x. Text in quotes is left as it is.
+ */
 export function readFileFormula(text: string): string {
-  let f = text.replace(/_xlfn\.|_xlws\.|_xlpm\./g, '');
-  f = f.replace(/\bANCHORARRAY\(\s*((?:'(?:[^']|'')+'|[A-Za-z0-9_.]+)?!?\$?[A-Za-z]{1,3}\$?\d+)\s*\)/gi, '$1#');
-  f = f.replace(/\bSINGLE\(/gi, '@(');
-  return '=' + f;
+  return '=' + text.split(/("(?:[^"]|"")*")/).map((part, i) => {
+    if (i % 2) return part;
+    let f = part.replace(/_xlfn\.|_xlws\.|_xlpm\./g, '');
+    f = f.replace(/\bANCHORARRAY\(\s*((?:'(?:[^']|'')+'|[A-Za-z0-9_.]+)?!?\$?[A-Za-z]{1,3}\$?\d+)\s*\)/gi, '$1#');
+    return f.replace(/\bSINGLE\(/gi, '@(');
+  }).join('');
 }

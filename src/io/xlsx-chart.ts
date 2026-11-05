@@ -3,7 +3,7 @@
 // axes and legend, and reading charts made in Excel back in. Each series keeps its cell
 // references and a copy of its numbers (for programs that don't work them out).
 
-import { xml, hex6, kid, kids, type Package } from './ooxml';
+import { xml, xmlAttr, hex6, kid, kids, type Package } from './ooxml';
 import type { Chart, ChartAxis, ChartKind, Series, SeriesData, SeriesFit, ErrorBars, MarkerShape, Bins, BoxOptions } from '../sheet/chart';
 import { seenChartId, isChartEx, isLevelled, comboAs, onSecondAxis } from '../sheet/chart';
 import type { FitKind } from '../sheet/fit';
@@ -394,7 +394,7 @@ export function readChartExXml(doc: Document, at: Chart['at'], w: number, h: num
 export function chartAnchorXml(c: Chart, to: { col: number; colOff: number; row: number; rowOff: number }, n: number, rid: string): string {
   const PX = 9525;
   const ex = isChartEx(c.kind);
-  const descr = c.alt?.trim() ? ` descr="${xml(c.alt.trim())}"` : '';
+  const descr = c.alt?.trim() ? ` descr="${xmlAttr(c.alt.trim())}"` : '';
   const frame = `<xdr:graphicFrame macro=""><xdr:nvGraphicFramePr><xdr:cNvPr id="${n}" name="Chart ${c.id}"${descr}/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr>` +
     `<xdr:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></xdr:xfrm>` +
     (ex ? `<a:graphic><a:graphicData uri="${CX_NS}"><cx:chart xmlns:cx="${CX_NS}" r:id="${rid}"/></a:graphicData></a:graphic></xdr:graphicFrame>`
@@ -406,7 +406,8 @@ export function chartAnchorXml(c: Chart, to: { col: number; colOff: number; row:
       `<xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:solidFill><a:prstClr val="white"/></a:solidFill><a:ln w="1"><a:solidFill><a:prstClr val="green"/></a:solidFill></a:ln></xdr:spPr>` +
       `<xdr:txBody><a:bodyPr vertOverflow="clip" horzOverflow="clip"/><a:lstStyle/><a:p><a:r><a:rPr lang="en-US" sz="1100"/><a:t>This chart needs Excel 2016 or later.</a:t></a:r></a:p></xdr:txBody></xdr:sp></mc:Fallback></mc:AlternateContent>`
     : frame;
-  return `<xdr:twoCellAnchor editAs="oneCell">` +
+  // (moving and sizing with its cells, twoCell, is the anchor's default: Excel writes no editAs for it)
+  return `<xdr:twoCellAnchor${c.placement ? ` editAs="${c.placement}"` : ''}>` +
     `<xdr:from><xdr:col>${c.at.col}</xdr:col><xdr:colOff>${Math.round(c.at.dx * PX)}</xdr:colOff><xdr:row>${c.at.row}</xdr:row><xdr:rowOff>${Math.round(c.at.dy * PX)}</xdr:rowOff></xdr:from>` +
     `<xdr:to><xdr:col>${to.col}</xdr:col><xdr:colOff>${Math.round(to.colOff * PX)}</xdr:colOff><xdr:row>${to.row}</xdr:row><xdr:rowOff>${Math.round(to.rowOff * PX)}</xdr:rowOff></xdr:to>` +
     `${body}<xdr:clientData/></xdr:twoCellAnchor>`;

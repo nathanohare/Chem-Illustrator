@@ -9,6 +9,7 @@
 // moving slides, or changing the master, are undone too.
 
 import type { KeptParts } from '../io/kept-parts';
+import type { KeptOle } from '../io/ole-kept';
 import type { SlideView } from './guides';
 import type { HandoutSetup, NotesPageSetup } from './notes-pages';
 import { copyPinned, type PinnedComment } from '../document/comments';
@@ -40,7 +41,14 @@ export interface DeckSettings {
 
 export const copySettings = (s: DeckSettings): DeckSettings => structuredClone(s);
 
-export interface SlideSize { w: number; h: number }
+export interface SlideSize {
+  w: number;
+  h: number;
+  /** PowerPoint's name for the size (p:sldSz's type: Letter, A4, 16:9...), kept from the file read while the size stays. */
+  type?: string;
+}
+/** PowerPoint's names for slide sizes (ECMA-376 Part 1 §19.7.18). */
+export const SLIDE_SIZE_TYPES = ['35mm', 'A3', 'A4', 'B4ISO', 'B4JIS', 'B5ISO', 'B5JIS', 'banner', 'custom', 'hagakiCard', 'ledger', 'letter', 'overhead', 'screen16x10', 'screen16x9', 'screen4x3'];
 /** PowerPoint's two standard sizes, in points: widescreen 13.33 × 7.5 in, and 10 × 7.5 in. */
 export const WIDE: SlideSize = { w: 960, h: 540 };
 export const STANDARD: SlideSize = { w: 720, h: 540 };
@@ -155,7 +163,52 @@ export interface Master {
   template?: string;
   /** Layouts changed or made in the slide master: built-in ones (by their own ids) as edited, then new ones in the order shown. */
   layouts?: LayoutDef[];
+  /** A PowerPoint template's own artwork and theme, kept from the file the deck was opened from (see TemplateArt). */
+  art?: TemplateArt;
 }
+
+/**
+ * A PowerPoint template's artwork: the pictures, shapes and text its slide master and layouts
+ * draw behind every slide (a title bar, rules, a university's seal), which aren't placeholders.
+ * PowerPoint shows them on every slide of a layout unless the layout or slide hides them
+ * (showMasterSp="0"). They are kept as the file had them, drawn behind the slides here and
+ * written back into the master and layouts when saved, with the file's own theme, which their
+ * colors and styles refer to.
+ */
+export interface TemplateArt {
+  /** The slide size the artwork was made for (it is scaled to the deck's size when that differs). */
+  size: SlideSize;
+  /** The master's artwork: on every slide unless its layout or the slide hides it. */
+  master?: ArtLayer;
+  /** Each layout's own artwork, by layout id. */
+  layouts?: Record<LayoutId, ArtLayer>;
+  /** The file's theme (its colors, fonts and fill styles), with the pictures it uses. */
+  theme?: KeptXmlPart;
+  /** The master's color map (a dark template maps the background to dk1), where it isn't PowerPoint's usual one. */
+  clrMap?: Record<string, string>;
+}
+
+/** One master's or layout's artwork. */
+export interface ArtLayer {
+  /** What it draws, as this program's objects (drawn behind the slide; never edited here). */
+  contents: Contents;
+  /** Each shape's XML as the file had it, back to front; its links to pictures name `rels` (see KeptXmlPart). */
+  xml: string[];
+  rels: KeptRel[];
+  /** The layout hides the master's artwork (showMasterSp="0"). */
+  hideMaster?: boolean;
+  /** The layout's own color map (clrMapOvr), which its artwork's theme colors go through. */
+  clrMap?: Record<string, string>;
+}
+
+/**
+ * A part kept as XML. Where it points at another part (a picture), the relationship id in the XML
+ * is `__REL_n__`, naming `rels[n]`; the ids are made again when it is saved.
+ */
+export interface KeptXmlPart { xml: string; rels: KeptRel[] }
+
+/** A kept part's relationship: a picture (its bytes as a data URL) or a link outside the file. */
+export interface KeptRel { type: string; data?: string; ext?: string; target?: string; external?: boolean }
 
 /**
  * Shapes a design template draws behind every slide, in its accent colours: a bar along the top,
@@ -558,6 +611,8 @@ export interface Slide {
   refList?: RefListSpec;
   /** What Zotero last set on its references (citing with Zotero). */
   zotero?: SlideZotero;
+  /** Its notes as PowerPoint had them, saved back while they are unchanged. */
+  notesKept?: NotesKept;
 }
 
 /**
@@ -574,7 +629,13 @@ export interface SectionCount { name: string; count: number }
 export type SizeFit = 'centre' | 'fit' | 'max';
 
 /** A slide's transition, animations, comments, own background and whether it is hidden, copied (for duplicates and the undo history). */
-export interface Motion { transition?: Transition; anims?: Anim[]; comments?: PinnedComment[]; background?: Background; hideGraphics?: boolean; hidden?: boolean; hf?: SlideHF; canvas?: CanvasData; refs?: string[]; refLook?: Partial<RefLook>; refList?: RefListSpec; zotero?: SlideZotero }
+export interface Motion { transition?: Transition; anims?: Anim[]; comments?: PinnedComment[]; background?: Background; hideGraphics?: boolean; hidden?: boolean; hf?: SlideHF; canvas?: CanvasData; refs?: string[]; refLook?: Partial<RefLook>; refList?: RefListSpec; zotero?: SlideZotero; notesKept?: NotesKept }
+
+/**
+ * Speaker notes as PowerPoint had them, formatting and all (its notes text body, links as kept
+ * relationships): saved back as they were while the notes still read `text`.
+ */
+export interface NotesKept { text: string; xml: string; rels: KeptRel[] }
 const copyMotion = (m: Motion): Motion => ({
   ...(m.transition ? { transition: { ...m.transition } } : {}),
   ...(m.anims?.length ? { anims: m.anims.map((a) => ({ ...a, target: { ...a.target }, ...(a.trigger ? { trigger: { ...a.trigger } } : {}) })) } : {}),
@@ -588,6 +649,7 @@ const copyMotion = (m: Motion): Motion => ({
   ...(m.refLook && Object.keys(m.refLook).length ? { refLook: { ...m.refLook } } : {}),
   ...(m.refList ? { refList: structuredClone(m.refList) } : {}),
   ...(m.zotero ? { zotero: structuredClone(m.zotero) } : {}),
+  ...(m.notesKept ? { notesKept: m.notesKept } : {}),
 });
 
 /** A slide copied out of a deck (Copy, or Reuse Slides): its layout, drawing, notes and the rest. */
@@ -655,6 +717,8 @@ export class Deck {
   settings: DeckSettings = {};
   /** Other programs' data in the file read (custom XML, custom properties, add-ins' settings), saved back with it. */
   kept: KeptParts | undefined = undefined;
+  /** ChemDraw objects as the file read has them, saved back while they stay unchanged. */
+  oleKept: Map<number, KeptOle> | undefined = undefined;
   /** The slide being edited; its drawing is in `host`. */
   index = -1;
   /** Called whenever the deck changes in a way the slide list or title bar should show. */

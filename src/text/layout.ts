@@ -10,7 +10,7 @@
 import type { Justify, ParaStyle, TabStop, TextFx, TextRun } from '../model';
 import { textFx } from './fx';
 import type { Rect } from '../geom';
-import { formulaParts } from '../richtext';
+import { formulaRunParts } from '../richtext';
 import { fitParas, listMarkers, paraCount } from './paragraphs';
 
 export const FONT_STACK = "Arial, 'Liberation Sans', Helvetica, sans-serif";
@@ -267,15 +267,15 @@ function segments(runs: TextRun[], defaultSize: number, n: number): { segs: Seg[
   const sizes: number[] = Array.from({ length: n }, () => 0);
   let p = 0, off = 0;
   if (runs.length) sizes[0] = runs[0].size ?? defaultSize;
-  for (const r of runs) {
+  for (const [k, r] of runs.entries()) {
     const from0 = { p, k: segs[p]?.length ?? 0 };
-    collect(r);
+    collect(r, k);
     // hidden text (a markup view's): every piece the run made
     if (r.hide) for (let q = from0.p; q <= Math.min(p, n - 1); q++) for (const sg of segs[q].slice(q === from0.p ? from0.k : 0)) sg.hide = true;
   }
   return { segs, sizes };
 
-  function collect(r: TextRun): void {
+  function collect(r: TextRun, k: number): void {
     const base = r.size ?? defaultSize;
     const style = `${r.italic ? 'italic ' : ''}${r.bold ? 'bold ' : ''}`;
     const family = r.font ? withStack(r.font) : FONT_STACK;
@@ -291,7 +291,7 @@ function segments(runs: TextRun[], defaultSize: number, n: number): { segs: Seg[
       return;
     }
     const from = { p, k: segs[p]?.length ?? 0 };
-    const parts = r.formula && !r.sub && !r.sup ? formulaParts(r.text) : [{ text: r.text, pos: r.sub ? 'sub' : r.sup ? 'sup' : 'base' }];
+    const parts = r.formula && !r.sub && !r.sup ? formulaRunParts(runs, k) : [{ text: r.text, pos: r.sub ? 'sub' : r.sup ? 'sup' : 'base' }];
     for (const part of parts) {
       const small = part.pos !== 'base';
       const size = small ? base * 0.75 : base;

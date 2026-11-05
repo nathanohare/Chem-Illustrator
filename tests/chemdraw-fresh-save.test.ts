@@ -3,6 +3,11 @@
 // A copy to ChemDraw is a fresh save. What real drawings lost that way (2026-11-03, compared with
 // ChemDraw's own picture of each): labels running left, label sizes, italics, attachment colours, tints.
 
+import { readFileSync } from 'fs';
+import { join } from 'path';
+import { zlibSync } from 'fflate';
+import { emfInWmf } from '../src/render/wmf-read';
+import { cdxToCdxml, cdxmlToCdx } from '../src/io/cdx';
 import { describe, it, expect } from 'vitest';
 import { readCdxml } from '../src/io/cdxml';
 import { writeCdxml } from '../src/io/cdxml-write';
@@ -227,5 +232,55 @@ describe('a filled circle recolored in ChemDraw', () => {
   it('keeps the tag when it is the same color, give or take rounding', () => {
     const s = read(oval('4', { fillColor: '#2f4fc8', color: '#2f4fc8' }));
     expect(s.fillColor).toBe('#2f4fc8');
+  });
+});
+
+describe('pictures ChemDraw packs in a CDX', () => {
+  const emf = () => new Uint8Array(readFileSync(join(__dirname, 'fixtures', 'chemdraw-clipboard', 'from-powerpoint', 'picture.emf')));
+  const hex = (b: Uint8Array) => Buffer.from(b).toString('hex').toUpperCase();
+  const page = (attrs: string) => `<?xml version="1.0" encoding="UTF-8" ?><CDXML><page id="1"><embeddedobject id="9" BoundingBox="10 10 110 60" ${attrs}/></page></CDXML>`;
+  const shown = (xml: string) => [...readCdxml(xml).doc.shapes.values()][0];
+  it('shows a compressed enhanced metafile, and carries it through CDX unchanged', () => {
+    const packed = zlibSync(emf());
+    const xml = page(`CompressedEnhancedMetafile="${hex(packed)}" UncompressedEnhancedMetafileSize="${emf().length}"`);
+    const pic = shown(xml);
+    expect(pic.kind).toBe('picture');
+    expect(pic.src?.startsWith('data:image/x-emf')).toBe(true);
+    const back = cdxToCdxml(cdxmlToCdx(xml));
+    expect(back).toContain(`CompressedEnhancedMetafile="${hex(packed)}"`);
+    expect(back).toContain(`UncompressedEnhancedMetafileSize="${emf().length}"`);
+    expect(shown(back).src).toBe(pic.src);
+  });
+  it('finds the enhanced metafile Windows keeps inside a metafile', () => {
+    const e = emf();
+    // [MS-WMF]: the 18-byte header, the EMF cut into two escape records, and the closing record
+    const piece = (data: Uint8Array) => {
+      const size = 44 + data.length + (data.length & 1);
+      const out = new Uint8Array(size);
+      const v = new DataView(out.buffer);
+      v.setUint32(0, size / 2, true);
+      v.setUint16(4, 0x0626, true);
+      v.setUint16(6, 0x000f, true);
+      v.setUint16(8, size - 10, true);
+      v.setUint32(10, 0x43464d57, true);
+      v.setUint32(14, 1, true);
+      v.setUint32(18, 0x00010000, true);
+      v.setUint32(32, data.length, true);
+      v.setUint32(36, 0, true);
+      v.setUint32(40, e.length, true);
+      out.set(data, 44);
+      return out;
+    };
+    const head = new Uint8Array(18);
+    new DataView(head.buffer).setUint16(2, 9, true);
+    const cut = e.length >> 1;
+    const end = new Uint8Array([3, 0, 0, 0, 0, 0]);
+    const parts = [head, piece(e.subarray(0, cut)), piece(e.subarray(cut)), end];
+    const wmf = new Uint8Array(parts.reduce((n, p) => n + p.length, 0));
+    let at = 0;
+    for (const p of parts) { wmf.set(p, at); at += p.length; }
+    expect(emfInWmf(wmf)).toEqual(e);
+    expect(shown(page(`WindowsMetafile="${hex(wmf)}"`)).src?.startsWith('data:image/x-emf')).toBe(true);
+    expect(emfInWmf(new Uint8Array(40))).toBeNull();
   });
 });

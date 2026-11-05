@@ -254,8 +254,8 @@ describe('sections in Word files', () => {
     const body = p['word/document.xml'];
     const sects = body.match(/<w:sectPr>.*?<\/w:sectPr>/g)!;
     expect(sects).toHaveLength(4);
-    // the first: roman numbers from i, no number on its first page
-    expect(sects[0]).toContain('<w:pgNumType w:fmt="lowerRoman" w:start="1"/>');
+    // the first: roman numbers from i (where the first section's numbers start anyway, so no start is written), no number on its first page
+    expect(sects[0]).toContain('<w:pgNumType w:fmt="lowerRoman"/>');
     expect(sects[0]).toContain('<w:titlePg/>');
     // the second: its own header, numbers from 1
     expect(sects[1]).toContain('<w:pgNumType w:start="1"/>');

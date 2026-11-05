@@ -126,8 +126,13 @@ export function restack(doc: Doc, sel: Selection, how: StackMove): boolean {
   const byItem = new Map(units.map((u) => [u.item, u]));
   const next = restackOrder(units.map((u) => u.item), (it) => picked(it, sel), how);
   if (!next) return false;
-  // every object gets its place, so the order holds whatever is added later
-  flatten(next.map((it) => byItem.get(it)!)).forEach((it, i) => {
+  place(doc, flatten(next.map((it) => byItem.get(it)!)));
+  return true;
+}
+
+/** Every object gets its place (1, 2… back to front), so the order holds whatever is added later. */
+function place(doc: Doc, items: StackItem[]): void {
+  items.forEach((it, i) => {
     const n = i + 1;
     for (const id of it.ids) {
       if (it.kind === 'shape') { const s = doc.shapes.get(id); if (s && (s.stack !== n || s.z !== n)) doc.updateShape(id, { stack: n, z: n }); }
@@ -136,5 +141,26 @@ export function restack(doc: Doc, sel: Selection, how: StackMove): boolean {
       else if (doc.atoms.get(id)?.stack !== n) doc.updateAtom(id, { stack: n });
     }
   });
+}
+
+/**
+ * Put the drawing's objects in the order a file stacks them: `rank` says where each came from
+ * (lower is further back: a slide's shapes are stacked in the order they are listed), and things
+ * of the same rank keep the order they have now. Only done when the file's order differs from the
+ * one now in a way that shows, two objects that `overlap` the other way round; otherwise the
+ * usual layers are left to hold. Call inside an edit or bulk. True when it put things in order.
+ */
+export function stackAsRead(doc: Doc, rank: (it: StackItem) => number, overlap: (a: StackItem, b: StackItem) => boolean): boolean {
+  const units = stackUnits(doc);
+  const keyed = units.map((u, i) => ({ u, r: rank(u.item), i }));
+  const sorted = keyed.slice().sort((a, b) => a.r - b.r || a.i - b.i);
+  let differs = false;
+  for (let x = 0; x < sorted.length && !differs; x++) {
+    for (let y = x + 1; y < sorted.length; y++) {
+      if (sorted[x].i > sorted[y].i && overlap(sorted[x].u.item, sorted[y].u.item)) { differs = true; break; }
+    }
+  }
+  if (!differs) return false;
+  place(doc, flatten(sorted.map((k) => k.u)));
   return true;
 }

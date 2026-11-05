@@ -8,6 +8,7 @@
 import type { BackgroundRemoval, PictureFx } from '../model';
 import { SEPIA_LIGHT, WASHOUT, knownShape, tidyFx } from '../render/picture-fx';
 import { hex6, kid, kids, NS } from './ooxml';
+import { applyColorMods } from './dml-color';
 
 /** Office 2010's drawing namespace, and the blip extension that holds a picture's layer and effects. */
 export const NS_A14 = 'http://schemas.microsoft.com/office/drawing/2010/main';
@@ -64,17 +65,17 @@ export function pictureGeomXml(fx: PictureFx | undefined, fallback: string): str
 
 // ---------------------------------------------------------------- reading
 
-/** A colour inside a DrawingML element: sRGB or a preset (theme colours count as black or white by name). */
+/** A colour inside a DrawingML element: sRGB or a preset (theme colours count as black or white by name), with its changes (lighter, darker...). */
 function colourIn(el: Element | null): string | null {
   if (!el) return null;
   const v = el.getAttribute('val') ?? '';
-  if (el.localName === 'srgbClr' && /^[0-9a-f]{6}$/i.test(v)) return `#${v.toLowerCase()}`;
-  if (el.localName === 'prstClr' || el.localName === 'schemeClr') {
-    if (/^(black|dk1|tx1)$/i.test(v)) return '#000000';
-    if (/^(white|lt1|bg1)$/i.test(v)) return '#ffffff';
-  }
-  if (el.localName === 'sysClr') return `#${(el.getAttribute('lastClr') ?? '000000').toLowerCase()}`;
-  return null;
+  let hex: string | null = null;
+  if (el.localName === 'srgbClr' && /^[0-9a-f]{6}$/i.test(v)) hex = v;
+  else if (el.localName === 'prstClr' || el.localName === 'schemeClr') {
+    if (/^(black|dk1|tx1)$/i.test(v)) hex = '000000';
+    else if (/^(white|lt1|bg1)$/i.test(v)) hex = 'ffffff';
+  } else if (el.localName === 'sysClr') hex = el.getAttribute('lastClr') ?? '000000';
+  return hex ? applyColorMods(hex, kids(el)) : null;
 }
 
 /** What a read picture's settings came to, and what it had that isn't kept here. */
