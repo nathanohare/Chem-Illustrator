@@ -180,7 +180,8 @@ describe('opening files made in PowerPoint', () => {
     expect(title.y).toBeGreaterThan(29 + 30);
     const body = caps.find((c) => c.ph === 'body')!;
     expect(body.runs).toEqual([{ text: 'Yield ' }, { text: '92%\n', bold: true }, { text: 'after workup', size: 24 }]);
-    expect(body.paras).toEqual([{ list: 'bullet' }, { list: 'bullet', level: 1 }]);
+    // (the master's bullet on the second level is PowerPoint's •, not our usual –)
+    expect(body.paras).toEqual([{ list: 'bullet' }, { list: 'bullet', level: 1, bullet: '•' }]);
   });
 
   it('keeps text box formatting: sizes, subscripts and colours', () => {
