@@ -30,9 +30,9 @@ import { DEFAULT_THEME, type WorkbookTheme } from '../sheet/themes';
 import { themeXml } from './xlsx-view';
 import { facesToEmbed, newGuid, obfuscate, type FontSource } from './font-embed';
 import { fromDataUrl } from '../render/images';
-import { embeddedPart } from './ole-object';
-import { BULLETS, fitParas, listInfo, paraCount, schemeOf, splitParagraphs } from '../text/paragraphs';
-import { BOX_PAD, COL_GAP, COMPOUND, END_FORMAT, FOOT_FORMAT, columnsOf, OBJECT_CHAR, SHADOWS, charStylesOf, watermarkPlace, fieldTexts, floatOf, floatGaps, lookExtent, lookOf, noteStyle, objectsInText, pruneObjects, EMPTY_FORM, styleOf, runStyleOf, type CharStyle, type DocObject, type DocText, type Embedded, type FigureFrame, type FigureLook, type HeaderFooter, type HfBody, type HfKey, type NamedStyle, type PageBorder, type PageSetup, type Watermark } from '../document/document';
+import { CHEMDRAW_PROG, chemdrawObject, embeddedPart, OLE_REL, OLE_TYPE } from './ole-object';
+import { BULLETS, fitParas, listInfo, paraCount, samePara, schemeOf, splitParagraphs } from '../text/paragraphs';
+import { BOX_PAD, COL_GAP, COMPOUND, END_FORMAT, FOOT_FORMAT, columnsOf, contentsPrint, OBJECT_CHAR, SHADOWS, charStylesOf, watermarkPlace, fieldTexts, floatOf, floatGaps, lookExtent, lookOf, noteStyle, objectsInText, pruneObjects, EMPTY_FORM, styleOf, runStyleOf, type CharStyle, type DocObject, type DocText, type Embedded, type FigureFrame, type FigureLook, type HeaderFooter, type HfBody, type HfKey, type NamedStyle, type PageBorder, type PageSetup, type Watermark } from '../document/document';
 import { ACS_LINE, GRID_LINE, bibHang, docCellAlign, shownSize } from '../document/doc-layout';
 import { sectionsOf, type Section } from '../document/sections';
 import { bibliography, piecesText, type Reference } from '../document/references';
@@ -78,6 +78,13 @@ export interface DocxDeps {
   fonts?: FontSource;
   /** Each paragraph's page number as laid out here, for the contents (without it Word works them out when the file opens). */
   pages?(t: DocText): string[] | undefined;
+  /** A drawing as CDX, ChemDraw's own format, for a ChemDraw object (null when it can't be written). */
+  cdx?(contents: Contents, style: DocStyle): Uint8Array | null;
+  /**
+   * Structures and schemes saved as ChemDraw objects (a double-click in Word opens them in
+   * ChemDraw); otherwise as pictures. One that came from a ChemDraw object goes back as one either way.
+   */
+  chemdrawObjects?: boolean;
 }
 
 /** The namespaces of a part of the text (body, header, footer, notes). Word 2010's text effects (w14)
@@ -103,6 +110,14 @@ const PRIORITY: Record<string, number> = { Normal: 0, Title: 10, Caption: 35, ..
 /** Word's own character styles, by id: their names, and where Word lists them. */
 const WORD_CHAR: Record<string, [string, number]> = { Emphasis: ['Emphasis', 20], Strong: ['Strong', 22], SubtleEmphasis: ['Subtle Emphasis', 19], IntenseEmphasis: ['Intense Emphasis', 21] };
 const JC: Record<Justify, string> = { left: 'left', center: 'center', right: 'right', justify: 'both' };
+
+/** What a paragraph looks like apart from what is only its own (its line break above, bookmarks, index entries). */
+const lineless = (p: ParaStyle): ParaStyle => ({ ...p, soft: undefined, cont: undefined, marks: undefined, xe: undefined, ta: undefined });
+/** Whether a paragraph carrying on the one before it after a line break (Shift+Enter) goes in that Word paragraph: they look the same. */
+const joins = (prev: ParaStyle | undefined, ps: ParaStyle): boolean =>
+  !!ps.soft && !!prev && !ps.pageBreak && !ps.colBreak && !ps.section && samePara(lineless(prev), lineless(ps));
+/** A Word paragraph with another's runs added after a line break. */
+const joinTo = (para: string, body: string): string => `${para.slice(0, -'</w:p>'.length)}<w:r><w:br/></w:r>${body}</w:p>`;
 
 /** Save a document as a Word file. */
 const THEME_CT = 'application/vnd.openxmlformats-officedocument.theme+xml';
@@ -292,7 +307,7 @@ class DocxWriter {
     const t = this.t;
     const n = paraCount(rt.plainText(t.runs));
     const paras = fitParas(t.paras, n);
-    const runsOf = splitParagraphs(t.runs);
+    const runsOf = this.splitParas(t.runs);
     const lists = listInfo(paras);
     // tracked changes on the paragraph marks (a line break typed or deleted while tracking)
     const markRev: (string | undefined)[] = [];
@@ -301,6 +316,8 @@ class DocxWriter {
     const out: string[] = [];
     let lastWasTable = false, lastFloats = false;
     let listNum = 0;
+    // the last plain paragraph written, and where: a line after a line break (Shift+Enter) joins it
+    let plain: { p: number; at: number } | null = null;
     // each section but the last ends with its section properties in its last paragraph (Word's way)
     const secs = sectionsOf({ ...t, paras });
     const endsSection = new Map<number, Section>();
@@ -329,7 +346,7 @@ class DocxWriter {
         // Word joins two tables with nothing between them into one: an empty paragraph keeps them
         // apart. Two floating tables are placed apart and stay two tables, as Word writes them (a label sheet's).
         if (lastWasTable && !(lastFloats && only.table.float)) out.push('<w:p><w:pPr><w:spacing w:before="0" w:after="0"/></w:pPr></w:p>');
-        out.push(await this.docTable(main, only.table, ps.align ?? styleOf(t, ps).align));
+        out.push(this.cmtRound(runs[0], await this.docTable(main, only.table, ps.align ?? styleOf(t, ps).align)));
         lastWasTable = true;
         lastFloats = !!only.table.float;
         close();
@@ -367,7 +384,14 @@ class DocxWriter {
         }
         if (part.some((x) => x.text) || own.xe || own.ta) out.push(await partPara());
         close();
-      } else out.push(await this.paragraph(main, ps, runs, listNum, p, sectXml));
+        plain = null;
+      } else if (plain?.p === p - 1 && plain.at === out.length - 1 && !sectXml && !endsSection.has(p - 1) && !markRev[p - 1] && !markRev[p] && joins(paras[p - 1], ps)) {
+        out[plain.at] = joinTo(out[plain.at], await this.paragraph(main, ps, runs, listNum, p, '', true));
+        plain = { p, at: plain.at };
+      } else {
+        out.push(await this.paragraph(main, ps, runs, listNum, p, sectXml));
+        plain = sectXml ? null : { p, at: out.length - 1 };
+      }
       lastWasTable = false;
     }
     blockTo(undefined);
@@ -384,6 +408,34 @@ class DocxWriter {
   // tracked changes count apart from the bookmarks (Word wants each id used once)
   private revId = 10001;
 
+  /** Where moved text's ranges start and end (Word pairs a move's two ends by its ranges' name): the markers before and after a run. */
+  private moveEdges = new WeakMap<TextRun, { before?: string; after?: string }>();
+  /** Moved text inside its ranges (written as Word's moveFrom and moveTo; elsewhere as a deletion or insertion). */
+  private moved = new WeakSet<TextRun>();
+
+  /** Text split into paragraphs, with the ranges round each stretch of moved text (which may run over paragraphs) worked out. */
+  private splitParas(runs: TextRun[]): TextRun[][] {
+    const out = splitParagraphs(runs);
+    const all = out.flat();
+    const keyOf = (r: TextRun | undefined) => { const v = parseRev(r?.rev); return v?.move ? `${v.kind}|${v.move}` : ''; };
+    let id = 0;
+    all.forEach((r, i) => {
+      const key = keyOf(r);
+      if (!key) return;
+      const v = parseRev(r.rev)!;
+      const tag = v.kind === 'del' ? 'moveFrom' : 'moveTo';
+      this.moved.add(r);
+      const edge: { before?: string; after?: string } = {};
+      if (keyOf(all[i - 1]) !== key) {
+        id = this.revId++;
+        edge.before = `<w:${tag}RangeStart w:id="${id}" w:name="${xml(v.move!)}" w:author="${xml(v.author || 'Author')}"${v.date ? ` w:date="${xml(v.date)}"` : ''}/>`;
+      }
+      if (keyOf(all[i + 1]) !== key) edge.after = `<w:${tag}RangeEnd w:id="${id}"/>`;
+      if (edge.before || edge.after) this.moveEdges.set(r, edge);
+    });
+    return out;
+  }
+
   /** A tracked change's attributes for Word. */
   private revAttrs(rev: string): string {
     const v = parseRev(rev)!;
@@ -391,9 +443,11 @@ class DocxWriter {
   }
 
   /** A run's Word XML inside its tracked change (deleted text is Word's w:delText). */
-  private tracked(rev: string | undefined, body: string): string {
+  private tracked(rev: string | undefined, body: string, run?: TextRun): string {
     const v = parseRev(rev);
     if (!v || !body) return body;
+    // moved text: Word's moveTo and moveFrom (whose text stays w:t)
+    if (v.move && run && this.moved.has(run)) return `<w:${v.kind === 'del' ? 'moveFrom' : 'moveTo'} ${this.revAttrs(rev!)}>${body}</w:${v.kind === 'del' ? 'moveFrom' : 'moveTo'}>`;
     if (v.kind === 'ins') return `<w:ins ${this.revAttrs(rev!)}>${body}</w:ins>`;
     const del = body.replace(/<w:t( [^>]*)?>/g, '<w:delText$1>').replace(/<\/w:t>/g, '</w:delText>')
       .replace(/<w:instrText( [^>]*)?>/g, '<w:delInstrText$1>').replace(/<\/w:instrText>/g, '</w:delInstrText>');
@@ -425,6 +479,17 @@ class DocxWriter {
       if (left <= 0 && this.cmtOpen.has(id)) out += this.cmtEnd(id);
     }
     return out;
+  }
+
+  /** A table's Word XML with the comments on the whole table round its text: from its first paragraph to its last. */
+  private cmtRound(r: TextRun, tbl: string): string {
+    const start = this.cmtBefore(r), end = this.cmtAfter(r);
+    if (!start && !end) return tbl;
+    const first = /<w:p(?=[ >])[^>]*>(?:<w:pPr>[\s\S]*?<\/w:pPr>)?/.exec(tbl);
+    const last = tbl.lastIndexOf('</w:p>');
+    if (!first || last < 0) return tbl;
+    const at = first.index + first[0].length;
+    return tbl.slice(0, at) + start + tbl.slice(at, last) + end + tbl.slice(last);
   }
 
   private cmtEnd(id: number): string {
@@ -478,7 +543,7 @@ class DocxWriter {
     }
   }
 
-  private async paragraph(main: string, ps: ParaStyle, runs: TextRun[], listNum: number, index = -1, sectXml = ''): Promise<string> {
+  private async paragraph(main: string, ps: ParaStyle, runs: TextRun[], listNum: number, index = -1, sectXml = '', bodyOnly = false): Promise<string> {
     const t = this.t;
     const st = styleOf(t, ps);
     const pPr: string[] = [];
@@ -530,6 +595,8 @@ class DocxWriter {
     const isCompound = (id: number) => { const o = this.t.objects[id]; return o?.kind === 'seq' && o.name === COMPOUND; };
     const seqs = runs.filter((r) => r.obj !== undefined && this.bookmarks.has(r.obj) && !isCompound(r.obj)).map((r) => r.obj!);
     const out: string[] = [];
+    // the end of a move's range, put after the run it ends with
+    const moveEnds: string[] = [];
     let open: { id: number; seq: number } | null = null;
     if (seqs.length) {
       open = { id: this.bookmarkId++, seq: seqs[0] };
@@ -565,24 +632,29 @@ class DocxWriter {
     for (const r of runs) {
       controlTo(r.cc);
       linkTo(r.link);
+      const move = this.moveEdges.get(r);
+      if (move?.before) out.push(move.before);
+      if (move?.after) moveEnds.push(move.after);
       out.push(this.cmtBefore(r));
-      if (r.obj === undefined) { out.push(this.tracked(r.rev, this.textRuns(r, st)), this.cmtAfter(r)); continue; }
+      if (r.obj === undefined) { out.push(this.tracked(r.rev, this.textRuns(r, st), r), this.cmtAfter(r), ...moveEnds.splice(0)); continue; }
       const o = this.t.objects[r.obj];
       if (o?.kind === 'math') {
         const m = `<m:oMath>${toOmml(o.tex)}</m:oMath>`;
-        out.push(display ? `<m:oMathPara>${m}</m:oMathPara>` : m, this.cmtAfter(r));
+        out.push(display ? `<m:oMathPara>${m}</m:oMathPara>` : m, this.cmtAfter(r), ...moveEnds.splice(0));
         continue;
       }
       const mark = this.bookmarks.has(r.obj) && isCompound(r.obj) ? this.bookmarkId++ : null;
       if (mark !== null) out.push(`<w:bookmarkStart w:id="${mark}" w:name="${this.bookmarks.get(r.obj)}"/>`);
-      out.push(this.tracked(r.rev, await this.objectRun(main, r, st)));
+      out.push(this.tracked(r.rev, await this.objectRun(main, r, st), r));
       if (mark !== null) out.push(`<w:bookmarkEnd w:id="${mark}"/>`);
       if (open && r.obj === open.seq) { out.push(`<w:bookmarkEnd w:id="${open.id}"/>`); open = null; }
-      out.push(this.cmtAfter(r));
+      out.push(this.cmtAfter(r), ...moveEnds.splice(0));
     }
     controlTo(undefined);
     linkTo(undefined);
     for (const m of marks) out.push(`<w:bookmarkEnd w:id="${m.id}"/>`);
+    // a line after a line break: just its runs, to go in the paragraph before it
+    if (bodyOnly) return out.join('');
     return `<w:p>${pPr.length ? `<w:pPr>${pPr.join('')}</w:pPr>` : ''}${colBreak}${out.join('')}</w:p>`;
   }
 
@@ -756,7 +828,7 @@ class DocxWriter {
       for (const [id, n] of mine) {
         const o = t.objects[id];
         if (o?.kind !== 'note') continue;
-        const runsOf = splitParagraphs(o.runs);
+        const runsOf = this.splitParas(o.runs);
         const paras = fitParas(o.paras, paraCount(rt.plainText(o.runs)));
         const ps = paras.map((p, i) => {
           const pPr: string[] = [`<w:pStyle w:val="${style}"/>`];
@@ -770,9 +842,12 @@ class DocxWriter {
             const c = cite(r);
             return c ? this.citeXml(c, runProps(r, st, { cs: this.charStyleOf(r) }), this.shown.get(r.obj!) ?? '') : this.tracked(r.rev, this.textRuns(r, st));
           });
-          return `<w:p><w:pPr>${pPr.join('')}</w:pPr>${mark}${body}</w:p>`;
+          return { para: `<w:p><w:pPr>${pPr.join('')}</w:pPr>${mark}${body}</w:p>`, body };
         });
-        out.push(`<w:${tag} w:id="${n}">${ps.join('')}</w:${tag}>`);
+        // a line after a line break (Shift+Enter) goes in the paragraph before it
+        const xmls: string[] = [];
+        ps.forEach((x, i) => { if (i > 0 && joins(paras[i - 1], paras[i])) xmls[xmls.length - 1] = joinTo(xmls[xmls.length - 1], x.body); else xmls.push(x.para); });
+        out.push(`<w:${tag} w:id="${n}">${xmls.join('')}</w:${tag}>`);
       }
       const name = `${tag}s.xml`;
       this.pkg.relate(main, end ? DOCX_REL.endnotes : DOCX_REL.footnotes, name);
@@ -880,9 +955,12 @@ class DocxWriter {
   private async textBox(main: string, id: number, o: Extract<DocObject, { kind: 'textbox' }>, rPr: string): Promise<string> {
     const n = paraCount(rt.plainText(o.runs));
     const paras = fitParas(o.paras, n);
-    const runsOf = splitParagraphs(o.runs);
+    const runsOf = this.splitParas(o.runs);
     const ps: string[] = [];
-    for (let p = 0; p < n; p++) ps.push(await this.paragraph(main, paras[p], runsOf[p] ?? [], 0));
+    for (let p = 0; p < n; p++) {
+      if (p > 0 && joins(paras[p - 1], paras[p])) ps[ps.length - 1] = joinTo(ps[ps.length - 1], await this.paragraph(main, paras[p], runsOf[p] ?? [], 0, -1, '', true));
+      else ps.push(await this.paragraph(main, paras[p], runsOf[p] ?? [], 0));
+    }
     const N = styleOf(this.t, {});
     const lines = o.runs.reduce((a, r) => a + (r.text.match(/\n/g)?.length ?? 0), 1);
     // a shape keeps its own height (its text in the middle); a text box grows to fit its text
@@ -968,8 +1046,16 @@ class DocxWriter {
       return '';
     }
     const img = this.media(main, bytes, ext);
+    return this.objectXml(main, { bytes: part.bytes, type: part.type, rel: part.rel, path: `${part.base}{n}.${part.ext}` }, e.prog, img, { w: o.w, h: o.h }, size, rPr, !!e.icon, o.alt?.trim());
+  }
+
+  /**
+   * An object's part and its picture (`img`, a relationship id) as Word writes them: a VML shape
+   * `size` big (its own size `own`), and the OLEObject naming the program that opens the part.
+   */
+  private objectXml(main: string, part: { bytes: Uint8Array; type: string; rel: string; path: string }, prog: string, img: string, own: { w: number; h: number }, size: { w: number; h: number }, rPr: string, icon: boolean, alt?: string): string {
     const n = ++this.oleCount;
-    const path = `embeddings/${part.base}${n}.${part.ext}`;
+    const path = `embeddings/${part.path.replace('{n}', String(n))}`;
     this.pkg.add(`word/${path}`, part.bytes, part.type);
     const rel = this.pkg.relate(main, part.rel, path);
     const shape = `_x0000_i${1024 + n}`;
@@ -978,9 +1064,34 @@ class DocxWriter {
     this.oleTypes.add(main);
     const pt = (v: number) => Math.round(v * 100) / 100;
     const r = rPr ? `<w:rPr>${rPr}</w:rPr>` : '';
-    return `<w:r>${r}<w:object xmlns:v="${V_NS}" xmlns:o="${O_NS}" w:dxaOrig="${twips(o.w)}" w:dyaOrig="${twips(o.h)}">${type}` +
-      `<v:shape id="${shape}" type="#_x0000_t75" style="width:${pt(size.w)}pt;height:${pt(size.h)}pt" o:ole=""><v:imagedata r:id="${img}" o:title=""/></v:shape>` +
-      `<o:OLEObject Type="Embed" ProgID="${xml(e.prog)}" ShapeID="${shape}" DrawAspect="${e.icon ? 'Icon' : 'Content'}" ObjectID="_${1800000000 + n}" r:id="${rel}"/></w:object></w:r>`;
+    return `<w:r>${r}<w:object xmlns:v="${V_NS}" xmlns:o="${O_NS}" w:dxaOrig="${twips(own.w)}" w:dyaOrig="${twips(own.h)}">${type}` +
+      `<v:shape id="${shape}" type="#_x0000_t75"${alt ? ` alt="${xmlAttr(alt)}"` : ''} style="width:${pt(size.w)}pt;height:${pt(size.h)}pt" o:ole=""><v:imagedata r:id="${img}" o:title=""/></v:shape>` +
+      `<o:OLEObject Type="Embed" ProgID="${xml(prog)}" ShapeID="${shape}" DrawAspect="${icon ? 'Icon' : 'Content'}" ObjectID="_${1800000000 + n}" r:id="${rel}"/></w:object></w:r>`;
+  }
+
+  /**
+   * A structure as a ChemDraw object (Word's w:object holding the drawing as CDX): a double-click
+   * in Word opens it in ChemDraw, and until then Word shows the picture made here. The drawing
+   * goes in our part too, with a fingerprint of the CDX, to be used while the object still holds
+   * it. Null when it can't be one (no CDX), to be saved as a picture instead.
+   */
+  private async chemdrawDrawing(main: string, id: number, o: Extract<DocObject, { kind: 'drawing' }>, prog: string, rPr: string): Promise<string | null> {
+    const t = this.t;
+    let cdx: Uint8Array | null = null;
+    try {
+      cdx = this.deps.cdx?.(o.contents, t.drawingStyle) ?? null;
+    } catch {
+      cdx = null;
+    }
+    if (!cdx) return null;
+    const pic = await this.deps.picture(o.contents, t.drawingStyle, o.frame);
+    if (!pic) return null;
+    const smiles = await this.deps.smiles?.(o.contents, t.drawingStyle).catch(() => null) ?? null;
+    const alt = o.alt?.trim() || contentsAlt(o.contents) || structureAltText(smiles) || '';
+    this.model.drawings[id] = { contents: o.contents, w: pic.w, h: pic.h, png: bytesHash(pic.png), cdx: bytesHash(cdx), alt, ...(o.ole ? { ole: o.ole } : {}) };
+    const size = shownSize({ w: pic.w, h: pic.h }, o.scale ?? 1, this.textW);
+    const img = this.media(main, pic.png, 'png');
+    return this.objectXml(main, { bytes: chemdrawObject(cdx, prog), type: OLE_TYPE, rel: OLE_REL, path: 'oleObject{n}.bin' }, prog, img, { w: pic.w, h: pic.h }, size, rPr, false, alt);
   }
 
   private oleCount = 0;
@@ -989,6 +1100,13 @@ class DocxWriter {
   private async picture(main: string, id: number, o: DocObject, rPr: string): Promise<string> {
     if (o.kind === 'picture' && o.chart) return this.chart(main, id, o, o.chart, rPr);
     if (o.kind === 'picture' && o.embed) return this.embedded(main, o, o.embed, rPr);
+    // a structure saved as a ChemDraw object: one that came from a ChemDraw object, or any when
+    // structures are saved as ChemDraw objects (in the line only, and not turned: as Word keeps objects)
+    if (o.kind === 'drawing' && !floatOf(o) && !o.rot && !o.flipH && !o.flipV && !o.frame && !lookOf(o)) {
+      const prog = o.ole ?? (this.deps.chemdrawObjects && o.contents.atoms.length ? CHEMDRAW_PROG : undefined);
+      const got = prog ? await this.chemdrawDrawing(main, id, o, prog, rPr) : null;
+      if (got) return got;
+    }
     const t = this.t;
     let blip: string, svgId: string | null = null, size: { w: number; h: number }, name: string, smiles: string | null = null;
     // a picture's Picture Format settings, its cropping, and its original when the blip has effects worked in
@@ -1006,10 +1124,17 @@ class DocxWriter {
           `${kids}</wpg:wgp></a:graphicData></a:graphic>`;
       }
       const svg = pic.svg ? new TextEncoder().encode(pic.svg) : null;
-      this.model.drawings[id] = { contents: o.contents, w: pic.w, h: pic.h, png: bytesHash(pic.png), ...(svg ? { svg: bytesHash(svg) } : {}), ...(o.frame ? { frame: o.frame } : {}) };
+      this.model.drawings[id] = { contents: o.contents, w: pic.w, h: pic.h, png: bytesHash(pic.png), ...(svg ? { svg: bytesHash(svg) } : {}), ...(o.frame ? { frame: o.frame } : {}), ...(o.ole ? { ole: o.ole } : {}) };
       blip = this.media(main, pic.png, 'png');
       if (svg) svgId = this.media(main, svg, 'svg');
       size = shownSize({ w: pic.w, h: pic.h }, o.scale ?? 1, this.textW);
+      // cropping and color changes Word made, while the structure (and so its picture) is as it was
+      const wl = o.wordLook;
+      if (wl && Math.abs(wl.w - pic.w) < 0.01 && Math.abs(wl.h - pic.h) < 0.01 && wl.print === contentsPrint(o.contents)) {
+        fx = wl.fx;
+        crop = wl.crop;
+        if (crop) size = { w: size.w * (1 - crop.l - crop.r), h: size.h * (1 - crop.t - crop.b) };
+      }
       name = `${DRAWING_NAME} ${id}`;
       smiles = await this.deps.smiles?.(o.contents, t.drawingStyle).catch(() => null) ?? null;
     } else if (o.kind === 'picture') {
@@ -1096,7 +1221,7 @@ class DocxWriter {
     const tblPr = `<w:tblPr><w:tblW w:w="${twips(width)}" w:type="dxa"/><w:jc w:val="${align === 'right' ? 'right' : align === 'left' ? 'left' : 'center'}"/>` +
       `<w:tblBorders>${borders}</w:tblBorders><w:tblLayout w:type="fixed"/>` +
       `<w:tblCellMar><w:top w:w="${padY}" w:type="dxa"/><w:left w:w="${padX}" w:type="dxa"/><w:bottom w:w="${padY}" w:type="dxa"/><w:right w:w="${padX}" w:type="dxa"/></w:tblCellMar>` +
-      `<w:tblLook w:val="0000" w:firstRow="0" w:lastRow="0" w:firstColumn="0" w:lastColumn="0" w:noHBand="1" w:noVBand="1"/>` +
+      `<w:tblLook w:val="0600" w:firstRow="0" w:lastRow="0" w:firstColumn="0" w:lastColumn="0" w:noHBand="1" w:noVBand="1"/>` +
       // its alt-text title: the table's own title (which of ours it is goes in a hidden bookmark)
       `${title ? `<w:tblCaption w:val="${xmlAttr(title)}"/>` : ''}</w:tblPr>`;
     const grid = `<w:tblGrid>${tab.cols.map((w) => `<w:gridCol w:w="${twips(w)}"/>`).join('')}</w:tblGrid>`;
@@ -1151,7 +1276,7 @@ class DocxWriter {
     const tblPr = `<w:tblPr>${styled ? `<w:tblStyle w:val="${tab.style}"/>` : ''}${tableFloatXml(tab.float)}${tableWidthXml(tab)}<w:jc w:val="${align === 'right' ? 'right' : align === 'center' ? 'center' : 'left'}"/>` +
       `${tab.indent ? `<w:tblInd w:w="${twips(tab.indent)}" w:type="dxa"/>` : ''}${styled ? '' : `<w:tblBorders>${borders}</w:tblBorders>`}${tab.autofit ? '' : '<w:tblLayout w:type="fixed"/>'}` +
       marginsXml('tblCellMar', tab.pad ?? DEFAULT_MARGINS) +
-      `${styled ? tableLookXml(tab) : '<w:tblLook w:val="0000" w:firstRow="0" w:lastRow="0" w:firstColumn="0" w:lastColumn="0" w:noHBand="1" w:noVBand="1"/>'}</w:tblPr>`;
+      `${styled ? tableLookXml(tab) : '<w:tblLook w:val="0600" w:firstRow="0" w:lastRow="0" w:firstColumn="0" w:lastColumn="0" w:noHBand="1" w:noVBand="1"/>'}</w:tblPr>`;
     const gridXml = `<w:tblGrid>${tab.cols.map((w) => `<w:gridCol w:w="${twips(w)}"/>`).join('')}</w:tblGrid>`;
     const rows: string[] = [];
     for (let r = 0; r < tab.rows.length; r++) {
@@ -1185,7 +1310,7 @@ class DocxWriter {
         const n = paraCount(rt.plainText(cell.runs));
         const ps = fitParas(cell.paras, n);
         const ca = docCellAlign(tab, r, c);
-        const parts = splitParagraphs(cell.runs);
+        const parts = this.splitParas(cell.runs);
         const paras: string[] = [];
         let lastTable = false;
         for (let i = 0; i < n; i++) {
@@ -1197,8 +1322,10 @@ class DocxWriter {
             lastTable = true;
             continue;
           }
+          const cps = { ...ps[i], align: ps[i]?.align ?? ca };
+          if (i > 0 && !lastTable && paras.length && joins({ ...ps[i - 1], align: ps[i - 1]?.align ?? ca }, cps)) paras[paras.length - 1] = joinTo(paras[paras.length - 1], await this.paragraph(main, cps, pr, 0, -1, '', true));
+          else paras.push(await this.paragraph(main, cps, pr, 0));
           lastTable = false;
-          paras.push(await this.paragraph(main, { ...ps[i], align: ps[i]?.align ?? ca }, pr, 0));
         }
         // (Word's cells end with a paragraph, after any table in them)
         if (lastTable || !paras.length) paras.push('<w:p/>');
@@ -1300,7 +1427,7 @@ class DocxWriter {
   /** A header or footer with pictures, tables or formatted text: its paragraphs as Word's (its pictures related from its own part), with the watermark. */
   private async hfBodyXml(part: string, kind: 'header' | 'footer', body: HfBody, pg: PageSetup): Promise<string> {
     const t = this.t;
-    const runsOf = splitParagraphs(body.runs);
+    const runsOf = this.splitParas(body.runs);
     const ps = fitParas(body.paras, runsOf.length);
     const out: string[] = [];
     for (let p = 0; p < runsOf.length; p++) {
@@ -1318,7 +1445,9 @@ class DocxWriter {
         if (p === runsOf.length - 1) out.push('<w:p><w:pPr><w:spacing w:before="0" w:after="0"/></w:pPr></w:p>');
         continue;
       }
-      out.push(await this.paragraph(part, ps[p], runs, 0));
+      const joined = p > 0 && out.length && joins(ps[p - 1], ps[p]) && out[out.length - 1].endsWith('</w:p>');
+      if (joined) out[out.length - 1] = joinTo(out[out.length - 1], await this.paragraph(part, ps[p], runs, 0, -1, '', true));
+      else out.push(await this.paragraph(part, ps[p], runs, 0));
     }
     const wm = kind === 'header' && t.watermark?.text ? watermarkXml(t.watermark, pg, this.watermarks++) : '';
     // the watermark goes in the first paragraph, behind the text
@@ -1500,6 +1629,8 @@ function runProps(r: TextRun, st: NamedStyle, x: { formula?: boolean; pos?: 'bas
   if (!!r.strike !== !!cs?.strike) out.push(r.strike ? '<w:strike/>' : '<w:strike w:val="0"/>');
   if (r.noProof) out.push('<w:noProof/>');
   if (x.vanish) out.push('<w:vanish/>');
+  // raised or lowered from the line, in half-points
+  if (r.raise) out.push(`<w:position w:val="${Math.round(r.raise * 2)}"/>`);
   const color = r.color ?? st.color;
   if ((color ?? '') !== (st.color ?? '')) out.push(`<w:color w:val="${color ? hex6(color) : 'auto'}"/>`);
   // character spacing (twentieths of a point) and kerning taken off
@@ -1656,10 +1787,10 @@ function formField(o: Extract<DocObject, { kind: 'form' }>, rPr: string, names: 
     `${result ? `<w:r>${pr}<w:fldChar w:fldCharType="separate"/></w:r>${run(rPr, result)}` : ''}<w:r>${pr}<w:fldChar w:fldCharType="end"/></w:r><w:bookmarkEnd w:id="${mark}"/>`;
 }
 
-/** A run of text (tabs as Word's tabs). */
+/** A run of text (tabs as Word's tabs, optional hyphens as its soft hyphens). */
 function run(rPr: string, text: string): string {
   if (!text) return '';
-  const body = text.split('\t').map((s, i) => (i > 0 ? '<w:tab/>' : '') + (s ? `<w:t xml:space="preserve">${xml(s)}</w:t>` : '')).join('');
+  const body = text.split(/([\t\u00ad])/).map((s) => (s === '\t' ? '<w:tab/>' : s === '\u00ad' ? '<w:softHyphen/>' : s ? `<w:t xml:space="preserve">${xml(s)}</w:t>` : '')).join('');
   return `<w:r>${rPr ? `<w:rPr>${rPr}</w:rPr>` : ''}${body}</w:r>`;
 }
 

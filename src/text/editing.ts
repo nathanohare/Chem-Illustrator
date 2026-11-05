@@ -257,7 +257,11 @@ export class TextEditing {
    * Enter: a new paragraph, carrying on a list. In an empty list item it ends the list instead,
    * as in Word. With Shift, a list item goes on in a new paragraph without a bullet of its own.
    */
-  enter(soft: boolean): void {
+  /**
+   * Enter, or Shift+Enter (soft): a new line in a list item carries on the item. With `line`
+   * (documents), Shift+Enter's new line carries on the paragraph above, as Word's line break.
+   */
+  enter(soft: boolean, line = false): void {
     const text = this.text;
     const p = paraAt(text, this.start);
     const ps = this.t.paras[p] ?? {};
@@ -270,9 +274,11 @@ export class TextEditing {
     const before = this.t;
     this.replace(this.start, this.end, [{ ...style, text: '\n' }], undefined, 'line');
     if (this.t === before) return;
-    if (soft && ps.list) {
+    // the new line carries on the paragraph (or list item) above after Shift+Enter, and not after Enter
+    const carry = soft && line;
+    if ((soft && ps.list) || !!this.t.paras[p + 1]?.soft !== carry) {
       const paras = this.t.paras.slice();
-      paras[p + 1] = cleanPara({ ...paras[p + 1], cont: true });
+      paras[p + 1] = cleanPara({ ...paras[p + 1], cont: soft && ps.list ? true : paras[p + 1]?.cont, soft: carry || undefined });
       this.t = { ...this.t, paras };
       this.lay = null;
       this.onChange('text');

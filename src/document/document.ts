@@ -239,6 +239,28 @@ export interface SectionBreak {
 }
 
 /** A figure's or picture's frame and shadow (Word's Picture Format). */
+/**
+ * Cropping (fractions of the picture cut from each side) and color changes (Recolor, brightness,
+ * contrast, transparency) Word made to a structure's picture, with a print of the structure and
+ * the picture's size as they were (when either changes here, the picture is drawn afresh and
+ * they no longer fit it).
+ */
+export interface WordLook {
+  crop?: { l: number; t: number; r: number; b: number };
+  fx?: PictureFx;
+  print: string;
+  w: number;
+  h: number;
+}
+
+/** A print of a structure's drawing, to tell whether it changed since Word cropped or recolored its picture. */
+export const contentsPrint = (c: Contents): string => {
+  const text = JSON.stringify(c, (_k, v: unknown) => (typeof v === 'number' ? +v.toFixed(3) : v));
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 0x01000193) >>> 0;
+  return `${text.length}|${h.toString(36)}`;
+};
+
 export interface FigureLook {
   /** A line round it, this many points wide, in `frameColor` (black when not set). */
   frame?: number;
@@ -358,7 +380,7 @@ export interface Embedded {
 
 export type DocObject =
   /** A structure, scheme or table: a drawing, edited with the drawing tools. `scale` 1 is the drawing's own size. */
-  | { kind: 'drawing'; contents: Contents; scale?: number; look?: FigureLook; float?: Float; alt?: string; /** A figure: a set area of the page (in the drawing's points) its structures are drawn in, sized by it rather than by them, so drawing inside it never moves the text round it. Never drawn when printed. */ frame?: FigureFrame; /** Turned and flipped, as a picture (Arrange > Rotate). */ rot?: number; flipH?: boolean; flipV?: boolean; /** A Chem4Word structure: its id in the file's CML part, and a fingerprint of the drawing as read (changed = the CML is written afresh). */ c4w?: { guid: string; sig: string } }
+  | { kind: 'drawing'; contents: Contents; scale?: number; look?: FigureLook; float?: Float; alt?: string; /** A figure: a set area of the page (in the drawing's points) its structures are drawn in, sized by it rather than by them, so drawing inside it never moves the text round it. Never drawn when printed. */ frame?: FigureFrame; /** Turned and flipped, as a picture (Arrange > Rotate). */ rot?: number; flipH?: boolean; flipV?: boolean; /** A Chem4Word structure: its id in the file's CML part, and a fingerprint of the drawing as read (changed = the CML is written afresh). */ c4w?: { guid: string; sig: string }; /** Saved as a ChemDraw object, by this program name (ChemDraw.Document.6.0): one that came from a ChemDraw object stays one, to open in ChemDraw from Word. */ ole?: string; /** Cropping and color changes Word made to its picture: not shown here, saved back to Word while the structure is as read. */ wordLook?: WordLook }
   /**
    * A picture: its own size is w × h points (`px` its pixels); `scale` 1 is that size. A chart
    * (Insert > Chart) is a picture with its chart and data: drawn from them, saved as Word's chart.

@@ -81,6 +81,11 @@ export interface Atom {
   s?: number;
   /** The label's own face bits (1 bold, 96 formula) where they differ from the drawing's labelFace. */
   face?: number;
+  /**
+   * The label's own font where it isn't the drawing's (Home ▸ Font or Style panel ▸ Label font with
+   * the structure picked; a ChemDraw label set in another font keeps it).
+   */
+  font?: string;
   /** The gap bonds keep from this atom's label, in points, where it isn't the document's scaled by `s` (ChemDraw's MarginWidth on an atom). */
   marginWidth?: number;
   /** A 3-D position kept from a file (ChemDraw's xyz on a structure built from a crystal file). */
@@ -376,6 +381,8 @@ export interface TextRun {
   shadow?: boolean;
   /** Documents: not spell- or grammar-checked (Word's Do not check spelling or grammar: chemical names, citations). */
   noProof?: boolean;
+  /** Documents: the text raised (less than 0: lowered) from the line by this many points, at its own size (Word's Font > Advanced > Position). */
+  raise?: number;
   /**
    * Which font a ChemDraw file had the run's signs in: true for its Symbol font (•, ° stay in it,
    * though Arial has them), false for an ordinary font (a − stays in Arial, though Symbol has it).
@@ -445,6 +452,12 @@ export interface ParaStyle {
   level?: number;
   /** Carries on the list item above (Shift+Enter): indented with it, with no bullet of its own. */
   cont?: boolean;
+  /**
+   * Documents: the next line of the paragraph above, after a line break (Shift+Enter; Word's text
+   * wrapping break): no space between them and no first-line indent of its own, and saved to Word
+   * in the same paragraph as that one.
+   */
+  soft?: boolean;
   /** This paragraph's own alignment, in place of the text box's. */
   align?: Justify;
   /** Extra space above and below the paragraph, in points. */

@@ -652,6 +652,8 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
     // sizes: set by hand, else grown to fit structures (and wrapped text, measured by the grid)
     const colW = (c: number) => (s.hiddenCols.has(c) ? 0 : s.colWidths.get(c) ?? DEFAULT_COL_W);
     const auto = new Map<number, number>(deps.rowHeights?.(s) ?? []);
+    // rows Excel fitted itself go back as Excel had them (a height it fits again, no customHeight)
+    for (const [r, px] of s.fittedRows) if (!auto.has(r)) auto.set(r, px);
     // rows grown for a structure's picture keep their height in Excel (its text can't show how tall the picture is)
     const pictureRows = new Set<number>();
     for (const [k, c] of s.cells) {
@@ -682,6 +684,13 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
       if (list) list.push(k); else byRow.set(r, [k]);
     }
     for (const r of [...s.rowHeights.keys(), ...auto.keys(), ...s.hiddenRows.keys(), ...s.rowLevels.keys(), ...[...s.rowLevels.keys()].map((r) => (s.outline?.summaryAbove ? r - 1 : r + 1)).filter((r) => r >= 0)]) if (!byRow.has(r)) byRow.set(r, []);
+    // a sheet whose unlisted rows are hidden (zeroHeight): every row shown, down to the last in use, is listed
+    const zero = !!own.fileRowHeight?.zero;
+    if (zero) {
+      let last = s.lastRow;
+      for (const r of byRow.keys()) if (r > last) last = r;
+      for (let r = 0; r <= Math.min(last, MAX_ROWS - 1); r++) if (!byRow.has(r)) byRow.set(r, []);
+    }
 
     const anchors: string[] = [];
     const pictures: { png: Uint8Array; key: string; name: string }[] = [];
@@ -805,8 +814,9 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
       // a row grown to fit its wrapped text is one Excel fits again when the text changes (no customHeight)
       const custom = s.rowHeights.get(r) ?? auto.get(r);
       const fixed = s.rowHeights.has(r) || pictureRows.has(r);
-      const attrs = `${custom !== undefined ? ` ht="${ptFromPx(custom)}"${fixed ? ' customHeight="1"' : ''}` : ''}${s.hiddenRows.has(r) ? ' hidden="1"' : ''}${outlineAttrs(s.rowLevels, s.hiddenRows, r, !!s.outline?.summaryAbove)}`;
-      if (cells.length || attrs) rowXml.push(`<row r="${r + 1}"${attrs}>${cells.join('')}</row>`);
+      // (a shown row of a zeroHeight sheet says its height, to be sure Excel shows it)
+      const attrs = `${custom !== undefined ? ` ht="${ptFromPx(custom)}"${fixed ? ' customHeight="1"' : ''}` : zero && !s.hiddenRows.has(r) ? ` ht="${own.fileRowHeight!.pt}"` : ''}${s.hiddenRows.has(r) ? ' hidden="1"' : ''}${outlineAttrs(s.rowLevels, s.hiddenRows, r, !!s.outline?.summaryAbove)}`;
+      if (cells.length || attrs || zero) rowXml.push(`<row r="${r + 1}"${attrs}>${cells.join('')}</row>`);
     }
 
     // columns: widths, hidden, and whole-column formatting
@@ -966,7 +976,7 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
       `${HEAD}<worksheet xmlns="${MAIN}" xmlns:r="${RNS}">` +
       `${sheetPr}<dimension ref="${used}"/>` +
       `<sheetViews><sheetView${sheetViewAttrs(own.viewOpts)}${own.excel?.viewAttrs ?? ''}${si === book.active ? ' tabSelected="1"' : ''} workbookViewId="0">${view}</sheetView></sheetViews>` +
-      `<sheetFormatPr defaultRowHeight="${own.fileRowHeight?.pt ?? 15}"${own.fileRowHeight?.custom ? ' customHeight="1"' : ''}${outlineLevelAttrs(s)}/>` +
+      `<sheetFormatPr defaultRowHeight="${own.fileRowHeight?.pt ?? 15}"${own.fileRowHeight?.custom ? ' customHeight="1"' : ''}${own.fileRowHeight?.zero ? ' zeroHeight="1"' : ''}${outlineLevelAttrs(s)}/>` +
       (colXml.length ? `<cols>${colXml.join('')}</cols>` : '') +
       `<sheetData>${rowXml.join('')}</sheetData>${sheetProtectionXml(own.excel)}${filterXml}${own.excel?.sortState ?? ''}${standIn ? '' : customSheetViewsXml(book, own)}${merges}${cfXml}${dvXml}${hyperlinks}` +
       `${page.printOptions}${page.pageMargins}${page.pageSetup}${page.headerFooter}${page.breaks}${own.excel?.ignoredErrors ?? ''}${drawingXml}${tableParts}${sparkExt ? `<extLst>${sparkExt}</extLst>` : ''}</worksheet>`,
@@ -1507,7 +1517,12 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
       const fmtPr = kid(ws, 'sheetFormatPr');
       // the height of rows with none of their own (14.25 in an Aptos Narrow workbook), to save back
       const defH = Number(fmtPr?.getAttribute('defaultRowHeight') ?? NaN);
-      if (defH > 0 && defH < 410) s.fileRowHeight = { pt: defH, ...(isOn(fmtPr?.getAttribute('customHeight')) ? { custom: true as const } : {}) };
+      // (zeroHeight: rows the file doesn't list are hidden)
+      const zero = isOn(fmtPr?.getAttribute('zeroHeight'));
+      if ((defH > 0 && defH < 410) || zero) s.fileRowHeight = { pt: defH > 0 && defH < 410 ? defH : 15, ...(isOn(fmtPr?.getAttribute('customHeight')) ? { custom: true as const } : {}), ...(zero ? { zero: true as const } : {}) };
+      const rowPt = s.fileRowHeight?.pt ?? 15;
+      const listed = new Set<number>();
+      const fitted = new Map<number, number>();
       let defW = fmtPr?.getAttribute('defaultColWidth') ? pxFromWidth(Number(fmtPr.getAttribute('defaultColWidth')))
         // a base width in digits, with padding and gridline, rounded up to 8 pixels (18.3.1.81)
         : fmtPr?.getAttribute('baseColWidth') ? Math.ceil((Number(fmtPr.getAttribute('baseColWidth')) * 7 + 5) / 8) * 8 : DEFAULT_COL_W;
@@ -1547,7 +1562,13 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
       for (const row of kids(kid(ws, 'sheetData'), 'row')) {
         rowNo = row.hasAttribute('r') ? Number(row.getAttribute('r')) - 1 : rowNo + 1;
         const r = rowNo;
-        if (isOn(row.getAttribute('customHeight')) && row.hasAttribute('ht')) s.setRowHeight(r, pxFromPt(Number(row.getAttribute('ht'))));
+        if (row.hasAttribute('ht')) {
+          const ht = Number(row.getAttribute('ht'));
+          if (isOn(row.getAttribute('customHeight'))) s.setRowHeight(r, pxFromPt(ht));
+          // a height Excel fitted the row to (wrapped text, a bigger font): shown as Excel shows it
+          else if (Number.isFinite(ht) && ht >= 0 && Math.abs(ht - rowPt) > 0.01) fitted.set(r, pxFromPt(ht));
+        }
+        listed.add(r);
         if (isOn(row.getAttribute('hidden'))) s.setRowHidden(r, true);
         const lv = Number(row.getAttribute('outlineLevel') ?? 0);
         if (lv > 0) s.setRowLevel(r, lv);
@@ -1649,6 +1670,14 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
         }
       }
       if (defW !== DEFAULT_COL_W) for (let c = 0; c <= maxCol; c++) if (!widthSet.has(c)) s.setColWidth(c, defW);
+      // (after the cells, which would otherwise take Excel's fit off)
+      for (const [r, px] of fitted) s.setFittedRow(r, px);
+      // rows hidden unless listed: those up to the last listed are hidden here too (the rest of the sheet stays hidden in Excel)
+      if (s.fileRowHeight?.zero) {
+        let last = -1;
+        for (const r of listed) if (r > last) last = r;
+        for (let r = 0; r <= last; r++) if (!listed.has(r)) s.setRowHidden(r, true);
+      }
 
       // merged cells, frozen panes, the filter
       const merges: Range[] = [];
@@ -1667,7 +1696,7 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
           while (i < 5000 && at + size(i) / 2 < px) at += size(i++);
           return i;
         };
-        const rowsUp = nearest(Number(pane.getAttribute('ySplit') ?? 0), (r) => (s.hiddenRows.has(r) ? 0 : s.rowHeights.get(r) ?? DEFAULT_ROW_H));
+        const rowsUp = nearest(Number(pane.getAttribute('ySplit') ?? 0), (r) => (s.hiddenRows.has(r) ? 0 : s.rowHeights.get(r) ?? s.fittedRows.get(r) ?? DEFAULT_ROW_H));
         const colsLeft = nearest(Number(pane.getAttribute('xSplit') ?? 0), (c) => (s.hiddenCols.has(c) ? 0 : s.colWidths.get(c) ?? DEFAULT_COL_W));
         if (rowsUp || colsLeft) s.setSplit({ rows: rowsUp, cols: colsLeft });
       }
@@ -1755,7 +1784,7 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
       // pictures and charts that aren't structures saved here
       if (dr) {
         const colPx = (c: number) => (s.hiddenCols.has(c) ? 0 : s.colWidths.get(c) ?? DEFAULT_COL_W);
-        const rowPx = (r: number) => (s.hiddenRows.has(r) ? 0 : s.rowHeights.get(r) ?? DEFAULT_ROW_H);
+        const rowPx = (r: number) => (s.hiddenRows.has(r) ? 0 : s.rowHeights.get(r) ?? s.fittedRows.get(r) ?? DEFAULT_ROW_H);
         // pictures, shapes and text boxes (not our structures' pictures, which are their cells)
         const drawRels = pkg.rels(drawingPath!);
         const got = readObjects(dr, (rid) => {

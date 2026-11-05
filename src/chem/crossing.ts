@@ -79,27 +79,57 @@ export function crossingBonds(doc: Doc, b: Bond): Bond[] {
   return out;
 }
 
+/** The stretch of p→q (as fractions along it) within `reach` of the segment r→s; null when none is. */
+function within(p: Vec, q: Vec, r: Vec, s: Vec, reach: number): [number, number] | null {
+  const l = Math.hypot(q.x - p.x, q.y - p.y), le = Math.hypot(s.x - r.x, s.y - r.y);
+  const ux = (q.x - p.x) / l, uy = (q.y - p.y) / l;
+  let lo = Infinity, hi = -Infinity;
+  const take = (a: number, c: number) => { if (c >= a) { lo = Math.min(lo, a); hi = Math.max(hi, c); } };
+  // round the segment's ends
+  for (const c of [r, s]) {
+    const fx = p.x - c.x, fy = p.y - c.y, m = fx * ux + fy * uy, disc = m * m - (fx * fx + fy * fy - reach * reach);
+    if (disc >= 0) take(-m - Math.sqrt(disc), -m + Math.sqrt(disc));
+  }
+  // and along it: between its ends, and within reach of its line
+  if (le > 1e-9) {
+    const ex = (s.x - r.x) / le, ey = (s.y - r.y) / le;
+    let a = -Infinity, c = Infinity;
+    const slab = (at: number, rate: number, from: number, to: number) => {
+      if (Math.abs(rate) < 1e-9) { if (at < from || at > to) a = Infinity; return; }
+      const u = (from - at) / rate, v = (to - at) / rate;
+      a = Math.max(a, Math.min(u, v));
+      c = Math.min(c, Math.max(u, v));
+    };
+    slab((p.x - r.x) * ex + (p.y - r.y) * ey, ux * ex + uy * ey, 0, le);
+    slab((p.x - r.x) * -ey + (p.y - r.y) * ex, ux * -ey + uy * ex, -reach, reach);
+    if (Number.isFinite(a) && Number.isFinite(c)) take(a, c);
+  }
+  return hi > 0 && lo < l ? [lo / l, hi / l] : null;
+}
+
+/** A line a bond draws, and how much further than a plain line its edge is (a bold bond's). */
+export interface FrontLine { a: Vec; b: Vec; extra: number }
+
 /**
  * Stretches of a bond to leave out where bonds in front of it cross: fractions along it, from
- * a1 to a2. `half` is how far the gap reaches either side of the bond in front.
+ * a1 to a2 (they can run past either end). As ChemDraw 25 cuts them, measured from its drawings:
+ * whatever lies within `reach` of a line of the bond in front goes, its margin width plus half a
+ * line (`linesOf`, when given, says what a bond's lines are: a double bond's second line counts).
+ * That goes for the bonds a file lists too (Bond.crossing): most of ChemDraw's near misses are
+ * too far off to cut anything, but one ending by this bond, or this bond ending by it, does.
  */
-export function crossingGaps(doc: Doc, b: Bond, half: number, crossing = crossingBonds(doc, b)): [number, number][] {
+export function crossingGaps(doc: Doc, b: Bond, reach: number, crossing = crossingBonds(doc, b), linesOf?: (o: Bond) => FrontLine[]): [number, number][] {
   const p = doc.atoms.get(b.a1)!, q = doc.atoms.get(b.a2)!;
-  const l = Math.hypot(q.x - p.x, q.y - p.y);
-  if (l < 1e-6) return [];
+  if (Math.hypot(q.x - p.x, q.y - p.y) < 1e-6) return [];
   const out: [number, number][] = [];
   const me = bondLayer(b);
-  // and the bonds a file says cross it, where they still pass close (ChemDraw counts near misses)
-  const listed = (b.crossing ?? []).map((id) => doc.bonds.get(id)).filter((o): o is Bond => !!o && !crossing.includes(o));
+  const listed = (b.crossing ?? []).map((id) => doc.bonds.get(id)).filter((o): o is Bond => !!o && !crossing.includes(o) && o.a1 !== b.a1 && o.a1 !== b.a2 && o.a2 !== b.a1 && o.a2 !== b.a2);
   for (const o of [...crossing, ...listed]) {
     if (bondLayer(o) <= me) continue;
-    const r = doc.atoms.get(o.a1)!, s = doc.atoms.get(o.a2)!;
-    // (ChemDraw lists pairs up to about half a bond apart, as the writer keeps them)
-    const c = crossAt(p, q, r, s) ?? (listed.includes(o) ? nearAt(p, q, r, s, Math.max(half * 1.5, doc.style.bondLength / 2)) : null);
-    if (!c) continue;
-    // a shallow crossing needs a longer gap to clear the other bond
-    const h = half / Math.max(0.35, c.sin) / l;
-    out.push([c.t - h, c.t + h]);
+    for (const line of linesOf?.(o) ?? [{ a: doc.atoms.get(o.a1)!, b: doc.atoms.get(o.a2)!, extra: 0 }]) {
+      const cut = within(p, q, line.a, line.b, reach + line.extra);
+      if (cut) out.push(cut);
+    }
   }
   return out.sort((a, b) => a[0] - b[0]);
 }
@@ -209,12 +239,12 @@ export function crossingBondsCached(doc: Doc, b: Bond): Bond[] {
 }
 
 /** crossingGaps, kept until the drawing changes near the bond. */
-export function crossingGapsCached(doc: Doc, b: Bond, half: number): [number, number][] {
+export function crossingGapsCached(doc: Doc, b: Bond, half: number, linesOf?: (o: Bond) => FrontLine[]): [number, number][] {
   const e = entryOf(doc, b);
   if (e.half !== half || !e.gaps) {
     e.half = half;
     // (a near miss a file listed leaves a gap too, with nothing crossing outright)
-    e.gaps = e.crossing.length || b.crossing?.length ? crossingGaps(doc, b, half, e.crossing.map((id) => doc.bonds.get(id)!)) : [];
+    e.gaps = e.crossing.length || b.crossing?.length ? crossingGaps(doc, b, half, e.crossing.map((id) => doc.bonds.get(id)!), linesOf) : [];
   }
   return e.gaps;
 }

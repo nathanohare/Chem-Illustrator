@@ -112,6 +112,8 @@ export interface WorkspaceHooks {
    * stop when the file has been changed elsewhere since it was opened ('save-as' asks for another place).
    */
   beforeWrite?(tab: Tab, ref: FileRef, name: string, how: SaveHow): Promise<'go' | 'stop' | 'save-as'>;
+  /** Save As has a file name (`name`): anything to ask about saving under it, before it is written. */
+  beforeSaveAs?(tab: Tab, name: string): Promise<void>;
   /** A file was written (`was`: where the tab's file was before, which Save As changes). */
   saved?(tab: Tab, data: Uint8Array, how: SaveHow, was: FileRef): void;
   /**
@@ -626,6 +628,7 @@ export class Workspace {
     deck.load(got.slides.map((s) => deck.makeSlide(s.layout, s.contents, s.notes, s, got.master)), got.size, got.master, got.sections, got.settings);
     deck.kept = got.kept;
     deck.oleKept = got.oleKept;
+    deck.picKept = got.picKept;
     t.deck = deck;
     this.tabs.splice(this.tabs.indexOf(this.active) + 1, 0, t);
     this.activate(t, true);
@@ -807,7 +810,7 @@ export class Workspace {
       const deck = tab.deck;
       const { writePptx } = await import('./io/pptx-write');
       const bytes = await writePptx({
-        size: deck.size, master: deck.master, design: tab.mode === 'design', sections: deck.sectionCounts(), settings: deck.settings, kept: deck.kept, oleKept: deck.oleKept,
+        size: deck.size, master: deck.master, design: tab.mode === 'design', sections: deck.sectionCounts(), settings: deck.settings, kept: deck.kept, oleKept: deck.oleKept, picKept: deck.picKept,
         slides: deck.slides.map((s, i) => ({ id: s.id, layout: s.layout, doc: deck.docOf(i), notes: s.notes, notesKept: s.notesKept, transition: s.transition, anims: s.anims, comments: s.comments, background: s.background, hideGraphics: s.hideGraphics, hidden: s.hidden, hf: s.hf, canvas: s.canvas, refs: s.refs, refLook: s.refLook, refList: s.refList, zotero: s.zotero })),
       }, { ...this.hooks.pptx, title: name.replace(/\.[^.]+$/, '') });
       return { data: bytes, type: PPTX, note: '' };
@@ -847,6 +850,7 @@ export class Workspace {
     const first = types.find((t) => t.extension === ext) ?? (tab.book?.macros ? XLSM : types[0]);
     const target = await saveFileDialog(withExtension(tab.name, first.extension), [first, ...types.filter((t) => t !== first)]).catch(async (e) => { await showError(String(e)); return null; });
     if (!target) return false;
+    await this.hooks.beforeSaveAs?.(tab, target.name);
     return this.writeTo(tab, target.ref, target.name);
   }
 

@@ -27,14 +27,14 @@ import { PPT_STYLE_IDS, lookOf, slideCellLook, styledRuns, type CellLine, type S
 import { tableBorders } from './cdxml-table';
 import { writeCdxml } from './cdxml-write';
 import { cdxmlToCdx } from './cdx';
-import { chemdrawInObject, chemdrawObject, chemdrawObjectName, OLE_REL, OLE_TYPE } from './ole-object';
+import { CHEMDRAW_PROG, chemdrawInObject, chemdrawObject, chemdrawObjectName, OLE_REL, OLE_TYPE } from './ole-object';
 import { extractDrawing } from './clipboard';
 import { contentsAlt, titleOverlaps, roughCaptionBox } from '../accessibility';
 import type { Selection } from '../editor/editor';
 import { Package, NS, REL, emu, xml, xmlAttr, hex6, MediaFiles, structureAltText, bytesHash } from './ooxml';
 import { SLIDE_SIZE_TYPES } from '../deck/deck';
 import { appPropsXml, corePropsXml, writeKeptParts, type KeptParts } from './kept-parts';
-import { olePrint, type KeptOle } from './ole-kept';
+import { olePrint, picturePrint, svgWithDrawing, type KeptOle, type KeptPicture } from './ole-kept';
 import { facesToEmbed, toEot, type FontSource } from './font-embed';
 import { dataUrl, fromDataUrl } from '../render/images';
 import { patternClear, patternInk, shadowLook } from '../render/fills';
@@ -73,6 +73,11 @@ export const TAG = {
    * after it was changed in ChemDraw).
    */
   oleCdx: 'CHEMILLUSTRATOR_OLE_CDX',
+  /**
+   * On a ChemDraw object saved here only because structures are saved as ChemDraw objects (not one
+   * from ChemDraw): read back as a plain structure, which the setting saves either way next time.
+   */
+  oleOwn: 'CHEMILLUSTRATOR_OLE_OWN',
   text: 'CHEMILLUSTRATOR_TEXT',
   master: 'CHEMILLUSTRATOR_MASTER',
   layout: 'CHEMILLUSTRATOR_LAYOUT',
@@ -198,6 +203,12 @@ export interface PptxOptions {
   title?: string;
   /** The free fonts that come with the app, to put inside the file when the slides use them. */
   fonts?: FontSource;
+  /**
+   * Structures and schemes saved as ChemDraw objects (a double-click in PowerPoint opens them in
+   * ChemDraw), each with its picture as made here for PowerPoint to show; otherwise as pictures.
+   * A ChemDraw object from the file read goes back as one either way.
+   */
+  chemdrawObjects?: boolean;
 }
 
 export interface DeckData {
@@ -215,6 +226,8 @@ export interface DeckData {
   kept?: KeptParts;
   /** ChemDraw objects as the file read has them (by OleMark id), saved back while they stay unchanged. */
   oleKept?: Map<number, KeptOle>;
+  /** Structure pictures as the file read has them (by picturePrint), saved back while their structures stay unchanged. */
+  picKept?: Map<string, KeptPicture>;
 }
 
 /**
@@ -992,7 +1005,9 @@ class Writer {
       for (const a of h.sel.atoms) { const x = bare.atoms.get(a); if (x) { delete x.highlight; delete x.hl; } }
       for (const b of h.sel.bonds) { const x = bare.bonds.get(b); if (x) { delete x.highlight; delete x.hl; } }
     }
-    const pic = await this.opts.picture(bare);
+    // a structure as the file read had it: its picture as the file had it, not drawn again
+    const kept = moving.length ? undefined : this.keptPicture(d, sel);
+    const pic = kept ?? await this.opts.picture(bare);
     if (!pic) return;
     const cdxml = writeCdxml(part, { name: 'Slide drawing.cdxml', textMeasure: this.measure });
     const box = [pic.box.x1, pic.box.y1, pic.box.x2, pic.box.y2].map((v) => +v.toFixed(3)).join(' ');
@@ -1013,12 +1028,14 @@ class Writer {
       for (const b of h.sel.bonds) spids.set(`highlight b${b}`, [...(spids.get(`highlight b${b}`) ?? []), id]);
       out.push(picXml(id, `Highlight ${id - 1}`, hpng, hsvg, hp.box, null, htags));
     }
-    // a ChemDraw object from PowerPoint goes back as one, which opens in ChemDraw (with the drawing as made here kept beside it)
-    const prog = was?.prog;
+    // a ChemDraw object from PowerPoint goes back as one, which opens in ChemDraw (with the drawing as made here kept beside it),
+    // and so does every structure when structures are saved as ChemDraw objects
+    const prog = was?.prog ?? (this.opts.chemdrawObjects && part.atoms.size ? CHEMDRAW_PROG : undefined);
     const cdx = prog ? chemdrawCdxOf(cdxml) : null;
-    const svgBytes = new TextEncoder().encode(pic.svg);
+    // (the drawing rides inside the SVG too, for programs that drop PowerPoint's tags)
+    const svgBytes = new TextEncoder().encode(svgWithDrawing(pic.svg, cdxml, box));
     // (a picture's print, its SVG's and its PNG's: the drawing kept with it is used only while PowerPoint shows this picture)
-    const tags = this.addTags(path, { [TAG.cdxml]: cdxml, [TAG.box]: box, ...(cdx ? { [TAG.oleCdx]: bytesHash(cdx) } : { [TAG.picPrint]: `${bytesHash(svgBytes)} ${bytesHash(pic.png)}` }) });
+    const tags = this.addTags(path, { [TAG.cdxml]: cdxml, [TAG.box]: box, ...(cdx ? { [TAG.oleCdx]: bytesHash(cdx), ...(was ? {} : { [TAG.oleOwn]: '1' }) } : { [TAG.picPrint]: `${bytesHash(svgBytes)} ${bytesHash(pic.png)}` }) });
     const png = this.addMedia(path, pic.png, 'png');
     const svg = this.addMedia(path, svgBytes, 'svg');
     const id = next();
@@ -1027,6 +1044,16 @@ class Writer {
     const alt = contentsAlt(part.contents()) ?? structureAltText(smiles);
     if (cdx) out.push(this.chemdrawObject(path, cdx, prog!, id, png, svg, pic.box, tags, alt));
     else out.push(picXml(id, `Structure ${id - 1}`, png, svg, pic.box, null, tags, undefined, alt));
+  }
+
+  /** The picture the file read had for a structure still as it was read (wherever it now stands), if any. */
+  private keptPicture(d: Doc, sel: Selection): { svg: string; png: Uint8Array; box: Rect } | undefined {
+    if (!this.deck.picKept?.size) return undefined;
+    const now = picturePrint(d, sel);
+    const k = this.deck.picKept.get(now.print);
+    if (!k) return undefined;
+    const dx = now.x - k.x, dy = now.y - k.y;
+    return { svg: new TextDecoder().decode(k.svg), png: k.png, box: { x1: k.frame.x1 + dx, y1: k.frame.y1 + dy, x2: k.frame.x2 + dx, y2: k.frame.y2 + dy } };
   }
 
   /**

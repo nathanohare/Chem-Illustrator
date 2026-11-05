@@ -32,8 +32,8 @@ import { arialWidth } from '../text-metrics';
 import { documentMeasure } from '../text/font-measure';
 import {
   OBJECT_CHAR, defaultCharStyles, defaultHeaderFooter, defaultPage, defaultStyles,
-  COL_GAP, FLOAT_GAP, columnsOf, lookExtent, usedObjects,
-  type BreakKind, type CharStyle, type DocObject, type DocText, type Embedded, type PageBorder, type Watermark, type FigureLook, type Float, type HeaderFooter, type HfBody, type HfZones, type LineNumbers, type NamedStyle, type NoteFormat, type NoteFormats, type NumberPlace, type PageNumFormat, type PageSetup, type SectionBreak,
+  COL_GAP, FLOAT_GAP, columnsOf, contentsPrint, lookExtent, usedObjects,
+  type WordLook, type BreakKind, type CharStyle, type DocObject, type DocText, type Embedded, type PageBorder, type Watermark, type FigureLook, type Float, type HeaderFooter, type HfBody, type HfZones, type LineNumbers, type NamedStyle, type NoteFormat, type NoteFormats, type NumberPlace, type PageNumFormat, type PageSetup, type SectionBreak,
 } from '../document/document';
 import { parseFieldInstr, type DocProps } from '../document/fields';
 import { shownSize } from '../document/doc-layout';
@@ -111,6 +111,7 @@ const WARN = {
   links: 'Links were kept as plain text.',
   cellMarks: 'Index entries and marked citations inside table cells were left out.',
   notes: 'Footnotes and endnotes inside table cells were left out.',
+  cmtWhole: 'Comments on text in a table or a footnote were kept on the whole table or on the note\'s number.',
   equations: 'Equations in table cells were kept as plain text.',
   shapes: 'SmartArt and drawn shapes were left out.',
   chartParts: 'Some charts mix chart types (a line over columns, a second axis): they show as one type.',
@@ -128,18 +129,18 @@ const WARN = {
   hfPictures: 'Pictures and tables in the header and footer were left out.',
   pictureWatermark: 'A picture watermark was left out (text watermarks are kept).',
   drawingChanged: 'Some structures were changed in Word (Change Picture) or copied in from another file, so they came in as pictures.',
-  drawingCrop: 'Cropping and color changes made in Word to some structures were left off (the structures stay editable).',
+  drawingCrop: 'Cropping and color changes made in Word to some structures aren\'t shown here (the structures stay editable). They are saved back to Word while those structures are unchanged.',
   macros: 'This document has macros (VBA). They are never run here, and they are left out when it is saved.',
   fields: 'Some fields were kept as the text they showed.',
   hidden: 'Hidden text is kept and saved back to Word, but isn\'t shown here.',
   hiddenCells: 'Hidden text in table cells and notes was left out.',
-  moves: 'Text moved while changes were tracked shows as a deletion and an insertion.',
+  moves: 'Text moved while changes were tracked, without a name for the move, shows as a deletion and an insertion.',
   propChanges: 'Tracked changes to paragraph, section and table formatting were accepted (changes to text and its formatting are kept).',
 };
 
 type Pos = 'base' | 'sub' | 'sup';
 /** Text formatting as a file gives it (only what it gives). `color` null is "automatic". */
-interface RProps { lang?: string; noProof?: boolean; font?: string; size?: number; bold?: boolean; italic?: boolean; underline?: boolean; color?: string | null; highlight?: string | null; pos?: Pos; hidden?: boolean; formula?: boolean; strike?: boolean; smallCaps?: boolean; allCaps?: boolean; cstyle?: string; spacing?: number; noKern?: boolean; noFill?: boolean; transparency?: number; outline?: string; outlineW?: number; shadow?: boolean }
+interface RProps { lang?: string; noProof?: boolean; raise?: number; font?: string; size?: number; bold?: boolean; italic?: boolean; underline?: boolean; color?: string | null; highlight?: string | null; pos?: Pos; hidden?: boolean; formula?: boolean; strike?: boolean; smallCaps?: boolean; allCaps?: boolean; cstyle?: string; spacing?: number; noKern?: boolean; noFill?: boolean; transparency?: number; outline?: string; outlineW?: number; shadow?: boolean }
 /** Paragraph formatting as a file gives it, in points. */
 interface PProps {
   align?: Justify; before?: number; after?: number; line?: { v: number; rule: string };
@@ -223,6 +224,8 @@ class DocxReader {
   private fields: Field[] = [];
   /** The tracked change the text being read is in (w:ins or w:del), as stored on runs. */
   private rev: string | undefined;
+  /** The moves whose ranges are open (moved from, moved to): their names, and the range ids that end them. */
+  private moving: { from?: string; fromId?: string; to?: string; toId?: string } = {};
   /** The formatting change (w:rPrChange) on the run being read, as stored on runs. */
   private fmt: string | undefined;
   /** Word's comments whose range the text being read is in, and those met so far. */
@@ -406,7 +409,8 @@ class DocxReader {
   /** Tracked changes kept only in part: moves (as a deletion and an insertion), and formatting changes other than to text (accepted). */
   private trackedOthers(root: Element): void {
     const has = (name: string) => root.getElementsByTagNameNS(this.W, name).length > 0;
-    if (has('moveFrom') || has('moveTo')) this.warn('moves');
+    // (a move's two ends are paired by the name on their ranges)
+    if ((has('moveFrom') && !has('moveFromRangeStart')) || (has('moveTo') && !has('moveToRangeStart'))) this.warn('moves');
     if (['pPrChange', 'sectPrChange', 'tblPrChange', 'trPrChange', 'tcPrChange', 'tblGridChange', 'numberingChange', 'tblPrExChange'].some(has)) this.warn('propChanges');
   }
 
@@ -471,6 +475,8 @@ class DocxReader {
         // the proofing language (its Latin text's), and text marked not to be checked
         case 'lang': { const v = this.a(c); if (v) out.lang = v; break; }
         case 'noProof': out.noProof = this.on(c); break;
+        // raised or lowered from the line (half-points)
+        case 'position': { const v = parseFloat(this.a(c) ?? ''); if (Number.isFinite(v)) out.raise = v / 2; break; }
         case 'rStyle': {
           const id = this.a(c) ?? '';
           Object.assign(out, this.charStyle(id));
@@ -992,6 +998,7 @@ class DocxReader {
     this.part = this.pkg.relOfType(this.main, end ? DOCX_REL.endnotes : DOCX_REL.footnotes) ?? part;
     this.link = undefined;
     this.pendingMarks = [];
+    const met = new Set(this.cmtMet);
     const got = this.boxText(note);
     this.fields = fields;
     this.cmtOpen = cmt;
@@ -1018,6 +1025,8 @@ class DocxReader {
       runs.shift();
     }
     this.emitObject(ctx, { kind: 'note', ...(end ? { end: true } : {}), runs: rt.normalizeRuns(runs), paras: got.paras, ...(lead !== ' ' ? { lead } : {}) }, { ...r, pos: 'sup' }, true);
+    // comments on the note's text go on its number
+    this.cmtOnObject(met, this.piece(ctx).runs);
   }
 
   // ---------------------------------------------------------------- the text
@@ -1027,7 +1036,13 @@ class DocxReader {
     for (const el of els) {
       switch (el.localName) {
         case 'p': this.paragraph(el); break;
-        case 'tbl': this.table(el); break;
+        case 'tbl': {
+          // comments on text in its cells (which keep no comment marks here) go on the whole table
+          const met = new Set(this.cmtMet), n = this.out.length;
+          this.table(el);
+          if (!this.inCell && this.out.length > n) this.cmtOnObject(met, this.out[this.out.length - 1].runs);
+          break;
+        }
         case 'sdt': {
           if (this.sdtTag(el) === 'MENDELEY_BIBLIOGRAPHY') {
             const id = this.managedBibliography();
@@ -1050,6 +1065,7 @@ class DocxReader {
           break;
         }
         case 'customXml': case 'ins': case 'moveTo': case 'smartTag': this.blocks(kids(el)); break;
+        case 'moveFromRangeStart': case 'moveToRangeStart': case 'moveFromRangeEnd': case 'moveToRangeEnd': this.moveRange(el); break;
         case 'AlternateContent': this.blocks(kids(this.alternate(el))); break;
         case 'bookmarkStart': this.markStart(el); break;
         case 'bookmarkEnd': this.markEnd(el); break;
@@ -1314,12 +1330,10 @@ class DocxReader {
         q.pageBreak = pc.pageBreak || undefined;
         q.colBreak = pc.colBreak || undefined;
         if (pc.soft) {
-          // a line break inside a paragraph: the next line as a paragraph of its own, with no space between
+          // a line break inside a paragraph: the next line as a paragraph of its own that carries on
+          // this one (no space between them, and saved back in the same Word paragraph)
+          q.soft = true;
           if (list) q.cont = true;
-          q.spaceBefore = 0;
-          q.firstLine = undefined;
-          const prev = this.out[this.out.length - 1];
-          if (prev) prev.ps = cleanPara({ ...prev.ps, spaceAfter: 0 });
         }
       } else {
         if (pc.pageBreak) q.pageBreak = true;
@@ -1364,7 +1378,7 @@ class DocxReader {
       font: r.font ?? WORD_FONT, size: r.size ?? WORD_SIZE, bold: r.bold, italic: r.italic, underline: r.underline,
       strike: r.strike, smallCaps: r.smallCaps, allCaps: r.allCaps, cstyle: r.cstyle,
       spacing: r.spacing, noKern: r.noKern, noFill: r.noFill, transparency: r.transparency, outline: r.outline, outlineW: r.outlineW, shadow: r.shadow,
-      lang: r.lang && r.lang.toLowerCase() !== (this.docDefaults.r.lang ?? 'en-US').toLowerCase() ? r.lang : undefined, noProof: r.noProof,
+      lang: r.lang && r.lang.toLowerCase() !== (this.docDefaults.r.lang ?? 'en-US').toLowerCase() ? r.lang : undefined, noProof: r.noProof, raise: r.raise || undefined,
       color: r.color ?? undefined, highlight: r.highlight ?? undefined, formula: formula || undefined,
       sub: (!formula && r.pos === 'sub') || undefined, sup: (!formula && r.pos === 'sup') || undefined,
     });
@@ -1442,11 +1456,27 @@ class DocxReader {
     if (el.localName === 'commentRangeStart') { this.cmtOpen.add(id); this.cmtMet.add(id); } else this.cmtOpen.delete(id);
   }
 
+  /**
+   * Comments met while reading a table's cells or a note's text, which keep no marks of their own
+   * here: put on the table's or the note's character in the text (`runs`, its last object run).
+   */
+  private cmtOnObject(before: Set<number>, runs: TextRun[]): void {
+    const inside = [...this.cmtMet].filter((id) => !before.has(id));
+    if (!inside.length) return;
+    let i = runs.length - 1;
+    while (i >= 0 && runs[i].obj === undefined) i--;
+    if (i < 0) return;
+    runs[i] = { ...runs[i], cmt: cmtString([...new Set([...cmtIds(runs[i].cmt), ...inside])]) };
+    this.warn('cmtWhole');
+  }
+
   /** A comment's mark in the text: one with no range of its own goes on the character before it. */
   private cmtPoint(el: Element, ctx: Ctx): void {
     const id = Number(this.a(el, 'id'));
-    if (!Number.isInteger(id) || id < 0 || this.cmtMet.has(id) || ctx.cell) return;
+    if (!Number.isInteger(id) || id < 0 || this.cmtMet.has(id)) return;
     this.cmtMet.add(id);
+    // (in a table cell: the comment goes on the whole table)
+    if (ctx.cell) return;
     const runs = this.piece(ctx).runs;
     const last = runs[runs.length - 1];
     if (!last?.text) return;
@@ -1607,13 +1637,16 @@ class DocxReader {
         case 'ins': case 'moveTo': case 'del': case 'moveFrom': {
           const before = this.rev;
           const kind = el.localName === 'ins' || el.localName === 'moveTo' ? 'ins' : 'del';
-          this.rev = revText({ kind, author: this.a(el, 'author') ?? '', date: this.a(el, 'date') ?? '' });
+          // moved text keeps its move's name, so its two ends stay one move
+          const move = el.localName === 'moveFrom' ? this.moving.from : el.localName === 'moveTo' ? this.moving.to : undefined;
+          this.rev = revText({ kind, author: this.a(el, 'author') ?? '', date: this.a(el, 'date') ?? '', ...(move ? { move } : {}) });
           this.inline(kids(el), ctx);
           this.rev = before;
           break;
         }
         case 'bookmarkStart': this.markStart(el); break;
         case 'bookmarkEnd': this.markEnd(el); break;
+        case 'moveFromRangeStart': case 'moveToRangeStart': case 'moveFromRangeEnd': case 'moveToRangeEnd': this.moveRange(el); break;
         case 'commentRangeStart': case 'commentRangeEnd': this.cmtRange(el); break;
         case 'oMath': case 'oMathPara': this.math(el, ctx); break;
         case 'AlternateContent': this.inline(kids(this.alternate(el)), ctx); break;
@@ -1645,6 +1678,8 @@ class DocxReader {
         case 't': case 'delText': this.emitText(ctx, c.textContent ?? '', r); break;
         case 'tab': case 'ptab': this.emitText(ctx, '\t', r); break;
         case 'noBreakHyphen': this.emitText(ctx, '‑', r); break;
+        // an optional hyphen: shown only where a line breaks at it
+        case 'softHyphen': this.emitText(ctx, '\u00ad', r); break;
         case 'br': {
           if (this.swallowing()) break;
           const type = this.a(c, 'type');
@@ -1972,6 +2007,19 @@ class DocxReader {
     return this.a(kid(kid(el, 'sdtPr'), 'tag'), 'val') ?? '';
   }
 
+  /** A move's range starting or ending (Word's moveFromRangeStart and the like): the name its moved text is paired by. */
+  private moveRange(el: Element): void {
+    const from = el.localName.startsWith('moveFrom');
+    const id = this.a(el, 'id') ?? '';
+    if (el.localName.endsWith('Start')) {
+      const name = this.a(el, 'name') || undefined;
+      if (from) this.moving = { ...this.moving, from: name, fromId: id };
+      else this.moving = { ...this.moving, to: name, toId: id };
+    } else if (from ? this.moving.fromId === id : this.moving.toId === id) {
+      this.moving = from ? { ...this.moving, from: undefined, fromId: undefined } : { ...this.moving, to: undefined, toId: undefined };
+    }
+  }
+
   private markStart(el: Element): void {
     const name = this.a(el, 'name');
     if (name && name !== '_GoBack') this.openMarks.set(this.a(el, 'id') ?? name, name);
@@ -2120,19 +2168,21 @@ class DocxReader {
     // one of ours by its name whose picture is no longer the one written: Word's picture
     if (m?.contents && !mineNow) this.warn('drawingChanged');
     if (m?.contents && mineNow) {
-      // cropped or recoloured in Word: the structure, without them
-      const blipNow = kid(pic, 'blipFill', 'blip');
-      const sr = kid(pic, 'blipFill', 'srcRect');
-      if (['l', 't', 'r', 'b'].some((k) => Number(sr?.getAttribute(k) ?? 0)) || kids(blipNow).some((k) => k.localName !== 'extLst')) this.warn('drawingCrop');
+      // cropped or recoloured in Word: the structure (whole, and in its colors), with them kept to save back to Word
+      const wordLook = this.wordLookOf(pic, m);
+      if (wordLook) this.warn('drawingCrop');
+      // (the size it is shown at, uncropped)
+      const c = wordLook?.crop;
+      const fullW = c ? shown.w / Math.max(0.01, 1 - c.l - c.r) : shown.w;
       const natural = shownSize({ w: m.w, h: m.h }, 1, this.textW);
-      const scale = Math.abs(natural.w - shown.w) < 0.75 || m.w <= 0 ? undefined : round(shown.w / m.w, 1e4);
+      const scale = Math.abs(natural.w - fullW) < 0.75 || m.w <= 0 ? undefined : round(fullW / m.w, 1e4);
       // a diagram's shapes may have been typed into in Word: their words go back into its text
       const contents = group ? retypedDiagram(structuredClone(m.contents), groupTexts(group)) : structuredClone(m.contents);
       // turned and flipped as a whole (Arrange > Rotate), on the picture or on the group of shapes
       const xf = kid(pic ? kid(pic, 'spPr') : kid(group!, 'grpSpPr'), 'xfrm');
       const rot = (((Number(xf?.getAttribute('rot') ?? 0) / 60000 || 0) % 360) + 360) % 360;
       const turn = { ...(rot ? { rot: round(rot) } : {}), ...(yes(xf?.getAttribute('flipH') ?? null) ? { flipH: true } : {}), ...(yes(xf?.getAttribute('flipV') ?? null) ? { flipV: true } : {}) };
-      this.emitObject(ctx, { kind: 'drawing', contents, scale, ...(m.frame ? { frame: structuredClone(m.frame) } : {}), ...(look ? { look } : {}), ...(float ? { float } : {}), ...(contentsAlt(contents) ? {} : alt), ...turn }, r);
+      this.emitObject(ctx, { kind: 'drawing', contents, scale, ...(m.frame ? { frame: structuredClone(m.frame) } : {}), ...(look ? { look } : {}), ...(float ? { float } : {}), ...(contentsAlt(contents) ? {} : alt), ...turn, ...(m.ole ? { ole: m.ole } : {}), ...(wordLook ? { wordLook: { ...wordLook, print: contentsPrint(contents) } } : {}) }, r);
       return;
     }
     if (!pic) { this.warn('shapes'); return; }
@@ -2167,6 +2217,19 @@ class DocxReader {
    * stored the picture afresh, its alt text (the structure's SMILES, unless typed) still does.
    * Files from before the fingerprints were kept are taken by the name.
    */
+  /** The cropping and color changes Word made to one of our structure's pictures, if any (those it shows live; not effects worked in). */
+  private wordLookOf(pic: Element | null, m: DocxModel['drawings'][number]): Omit<WordLook, 'print'> | null {
+    if (!pic) return null;
+    const sr = kid(pic, 'blipFill', 'srcRect');
+    const f = (k: string) => Math.max(0, Math.min(0.99, Number(sr?.getAttribute(k) ?? 0) / 100000 || 0));
+    const crop = { l: f('l'), t: f('t'), r: f('r'), b: f('b') };
+    const cropped = crop.l + crop.r < 0.99 && crop.t + crop.b < 0.99 && (crop.l || crop.t || crop.r || crop.b);
+    const got = readPictureFx(kid(pic, 'blipFill', 'blip'), null).fx;
+    const fx = got ? tidyFx({ ...(got.bright ? { bright: got.bright } : {}), ...(got.contrast ? { contrast: got.contrast } : {}), ...(got.recolor ? { recolor: got.recolor } : {}), ...(got.alpha ? { alpha: got.alpha } : {}), ...(got.clear ? { clear: got.clear } : {}) }) : undefined;
+    if (!cropped && !fx) return null;
+    return { ...(cropped ? { crop } : {}), ...(fx ? { fx } : {}), w: m.w, h: m.h };
+  }
+
   private isOurDrawing(m: DocxModel['drawings'][number], pic: Element | null, descr: string): boolean {
     if (m.png === undefined && m.alt === undefined && m.svg === undefined) return true;
     const blip = kid(pic, 'blipFill', 'blip');
@@ -2214,6 +2277,8 @@ class DocxReader {
     if (object) {
       const ole = Array.from(object.getElementsByTagNameNS('*', 'OLEObject'))[0];
       const prog = ole?.getAttribute('ProgID') ?? '';
+      // one of our structures saved as a ChemDraw object, not changed in ChemDraw since: our drawing
+      if (isChemDraw(prog) && ole && this.ourChemdraw(ole, shape, shown, r, ctx)) return;
       // a ChemDraw object is kept with Word's picture of it unless asked to redraw it here (or it has no picture)
       if (isChemDraw(prog) && (this.deps.convertChemDraw || !img) && this.chemdraw(ole, shown, r, ctx)) return;
       // anything else is kept whole with its picture, and goes back into the Word file as it came
@@ -2241,6 +2306,30 @@ class DocxReader {
     return readEmbedded(prog, bytes, rel.target, rel.type, ole.getAttribute('DrawAspect') === 'Icon');
   }
 
+  /**
+   * One of our structures saved as a ChemDraw object: the drawing from our part, while the object
+   * still holds the CDX written (one changed in ChemDraw since is ChemDraw's). It is saved as the
+   * setting says next time, unless it came from ChemDraw (`ole` in our part).
+   */
+  private ourChemdraw(ole: Element, shape: Element | undefined, shown: { w: number; h: number }, r: RProps, ctx: Ctx): boolean {
+    const drawings = this.model?.drawings;
+    if (!drawings) return false;
+    const path = this.relTarget(rAttr(ole, 'id'));
+    const bin = path ? this.pkg.bytes(path) : null;
+    const cdx = bin ? chemdrawCdx(bin) : null;
+    if (!cdx) return false;
+    const print = bytesHash(cdx);
+    const m = Object.values(drawings).find((d) => d.cdx === print && d.contents);
+    if (!m) return false;
+    const natural = shownSize({ w: m.w, h: m.h }, 1, this.textW);
+    const scale = Math.abs(natural.w - shown.w) < 0.75 || m.w <= 0 ? undefined : round(shown.w / m.w, 1e4);
+    const contents = structuredClone(m.contents);
+    // alt text: a structure's own, not the description by SMILES written when it has none
+    const descr = shape?.getAttribute('alt')?.trim() ?? '';
+    const alt = descr && !/^Chemical structure( \(SMILES\): | or scheme$)/.test(descr) && !contentsAlt(contents) ? { alt: descr } : {};
+    return this.emitObject(ctx, { kind: 'drawing', contents, scale, ...(m.ole ? { ole: m.ole } : {}), ...alt }, r) !== null || ctx.cell;
+  }
+
   private chemdraw(ole: Element, shown: { w: number; h: number }, r: RProps, ctx: Ctx): boolean {
     if (!this.deps.chemdraw) return false;
     const path = this.relTarget(rAttr(ole, 'id'));
@@ -2254,11 +2343,11 @@ class DocxReader {
     } catch {
       contents = null;
     }
-    return this.drawingAt(contents, shown, r, ctx);
+    return this.drawingAt(contents, shown, r, ctx, null, null, ole.getAttribute('ProgID') || undefined);
   }
 
-  /** A drawing in place of a picture, kept at the size the picture had. False when there is none. */
-  private drawingAt(contents: Contents | null, shown: { w: number; h: number }, r: RProps, ctx: Ctx, look?: FigureLook | null, float?: Float | null): boolean {
+  /** A drawing in place of a picture, kept at the size the picture had (saved as a ChemDraw object with `ole`, its program name). False when there is none. */
+  private drawingAt(contents: Contents | null, shown: { w: number; h: number }, r: RProps, ctx: Ctx, look?: FigureLook | null, float?: Float | null, ole?: string): boolean {
     if (!contents) return false;
     const own = this.deps.drawingSize?.(contents, this.drawingStyle);
     let scale: number | undefined;
@@ -2266,7 +2355,7 @@ class DocxReader {
       const natural = shownSize(own, 1, this.textW);
       if (Math.abs(natural.w - shown.w) > 0.01 * shown.w) scale = round(shown.w / own.w, 1e4);
     }
-    return this.emitObject(ctx, { kind: 'drawing', contents, scale, ...(look ? { look } : {}), ...(float ? { float } : {}) }, r) !== null || ctx.cell;
+    return this.emitObject(ctx, { kind: 'drawing', contents, scale, ...(look ? { look } : {}), ...(float ? { float } : {}), ...(ole ? { ole } : {}) }, r) !== null || ctx.cell;
   }
 
   // ---------------------------------------------------------------- tables

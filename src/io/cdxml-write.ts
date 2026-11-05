@@ -838,7 +838,13 @@ class CdxmlWriter {
     this.nodeCore(n, a);
     this.atomStereo(n, a, true);
     const sameLabel = a.label === o.label && a.z === o.z && a.charge === o.charge && a.isotope === o.isotope && !!a.hideCharge === !!o.hideCharge;
+    // (a label given another font, size or bold here is written again in it)
+    const sameLook = (a.font || '') === (o.font || '') && (a.s ?? 1) === (o.s ?? 1) && (a.face ?? -1) === (o.face ?? -1);
     const t = this.child(n, 't');
+    if (!sameLook && sameLabel && t) {
+      this.nodeLabel(n, a, a.label === null);
+      return;
+    }
     if (sameLabel && a.label !== null) {
       // A text label (abbreviation, R group…) keeps its text, styling and structure; only its placement changes.
       const inner = this.child(n, 'fragment');
@@ -1000,8 +1006,12 @@ class CdxmlWriter {
     // label or the file had them
     const bold = labelBold(this.doc.style, a);
     const italicUnder = (keepBits | (a.face ?? this.doc.style.labelFace ?? 0)) & 6;
+    // the label's own font, else the drawing's (the file's font is kept while it is one of those)
+    const want = a.font?.trim() || this.doc.style.labelFont || 'Arial';
+    const keptName = keepFont ? [...this.fontIds].find(([, id]) => id === keepFont)?.[0] : undefined;
+    const font = keepFont && (keptName === undefined || keptName === want.toLowerCase() || (!a.font && isSymbolFont(keptName))) ? keepFont : this.fontId(want);
     for (const r of runs) {
-      const s = this.el('s', { font: keepFont ?? this.fontId(this.doc.style.labelFont || 'Arial'), size: f2(size).replace(/\.00$/, ''), color: color ?? '0', face: (faceOf(r) ?? 0) | italicUnder | (bold ? 1 : 0) });
+      const s = this.el('s', { font, size: f2(size).replace(/\.00$/, ''), color: color ?? '0', face: (faceOf(r) ?? 0) | italicUnder | (bold ? 1 : 0) });
       s.textContent = r.text;
       t.appendChild(s);
     }
