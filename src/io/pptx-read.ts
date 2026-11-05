@@ -33,6 +33,7 @@ import type { DocStyle } from '../style';
 import { drawingInEmf } from '../render/emf';
 import { dataUrl, imageSize } from '../render/images';
 import { knownShape, tidyFx } from '../render/picture-fx';
+import { applyColorMods, dmlFraction, hslHex, linearHex } from './dml-color';
 import { readPictureFx } from './picture-xml';
 import { layoutText, caretPos, ASCENT } from '../text/layout';
 import { Master, SlideSize, LayoutId, type TemplateArt, type ArtLayer, type KeptRel, type KeptXmlPart, type NotesKept, defaultMaster, textStyles, slideDrawingStyle, slideBackground, slideColours, hasLayout, newLayoutId, deckLayouts, type LayoutDef, type PlaceholderBox, type SectionCount, type DeckSettings, type SlideHF, type DateFormat, showsNumber, showsFooter, showsDate } from '../deck/deck';
@@ -163,26 +164,7 @@ function hexToRgb(h: string): [number, number, number] {
 }
 const rgbHex = (r: number, g: number, b: number) => '#' + [r, g, b].map((v) => Math.round(Math.max(0, Math.min(255, v))).toString(16).padStart(2, '0')).join('');
 
-function toHsl(r: number, g: number, b: number): [number, number, number] {
-  r /= 255; g /= 255; b /= 255;
-  const max = Math.max(r, g, b), min = Math.min(r, g, b), l = (max + min) / 2;
-  if (max === min) return [0, 0, l];
-  const d = max - min;
-  const s = l > 0.5 ? d / (2 - max - min) : d / (max + min);
-  const h = max === r ? (g - b) / d + (g < b ? 6 : 0) : max === g ? (b - r) / d + 2 : (r - g) / d + 4;
-  return [h / 6, s, l];
-}
-function fromHsl(h: number, s: number, l: number): [number, number, number] {
-  if (!s) return [l * 255, l * 255, l * 255];
-  const q = l < 0.5 ? l * (1 + s) : l + s - l * s, p = 2 * l - q;
-  const f = (t: number) => {
-    t = (t + 1) % 1;
-    return 255 * (t < 1 / 6 ? p + (q - p) * 6 * t : t < 1 / 2 ? q : t < 2 / 3 ? p + (q - p) * (2 / 3 - t) * 6 : p);
-  };
-  return [f(h + 1 / 3), f(h), f(h - 1 / 3)];
-}
-
-/** The colour in a fill or colour element (srgbClr, schemeClr…, with PowerPoint's lighter/darker changes). */
+/** The colour in a fill or colour element (srgbClr, schemeClr…, with its changes: lighter, darker, more saturated…). */
 function colorIn(el: Element | null, theme: Theme, clrMap: Record<string, string>, ph: string | null = null): string | null {
   if (!el) return null;
   const c = kids(el).find((k) => /Clr$/.test(k.localName));
@@ -195,23 +177,12 @@ function colorIn(el: Element | null, theme: Theme, clrMap: Record<string, string
     case 'schemeClr': hex = v === 'phClr' ? ph : theme.colors[clrMap[v] ?? v] ?? null; break;
     case 'prstClr': hex = PRESET[v] ?? '000000'; break;
     case 'sysClr': hex = c.getAttribute('lastClr') ?? (v === 'window' ? 'FFFFFF' : '000000'); break;
-    case 'scrgbClr': hex = ['r', 'g', 'b'].map((k) => Math.round(Math.pow(Number(c.getAttribute(k) ?? 0) / 100000, 1 / 2.2) * 255).toString(16).padStart(2, '0')).join(''); break;
+    case 'scrgbClr': hex = linearHex(dmlFraction(c.getAttribute('r')), dmlFraction(c.getAttribute('g')), dmlFraction(c.getAttribute('b'))); break;
+    case 'hslClr': hex = hslHex(Number(c.getAttribute('hue') ?? 0), dmlFraction(c.getAttribute('sat')), dmlFraction(c.getAttribute('lum'))); break;
     default: return null;
   }
   if (!hex) return null;
-  let [r, g, b] = hexToRgb(hex);
-  for (const m of kids(c)) {
-    const f = Number(m.getAttribute('val') ?? 100000) / 100000;
-    if (m.localName === 'lumMod' || m.localName === 'lumOff') {
-      const [h, s, l] = toHsl(r, g, b);
-      [r, g, b] = fromHsl(h, s, Math.max(0, Math.min(1, m.localName === 'lumMod' ? l * f : l + f)));
-    } else if (m.localName === 'tint') {
-      [r, g, b] = [r, g, b].map((x) => x + (255 - x) * (1 - f)) as [number, number, number];
-    } else if (m.localName === 'shade') {
-      [r, g, b] = [r, g, b].map((x) => x * f) as [number, number, number];
-    }
-  }
-  return rgbHex(r, g, b);
+  return applyColorMods(hex, kids(c));
 }
 
 /** A styled table read back: cell fills and text colours that only repeat its style are dropped. */

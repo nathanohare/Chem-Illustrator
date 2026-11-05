@@ -5,6 +5,7 @@
 // (SpreadsheetML drawing, 20.5).
 
 import { xml, xmlAttr, hex6, kids, kid, rAttr } from './ooxml';
+import { applyColorMods } from './dml-color';
 import { colName, quoteSheet, MAX_COLS, MAX_ROWS, Range, colIndex } from '../sheet/refs';
 import { PageSetup, SHEET_PAPERS, paperFromCode, headerFooterText, readHeaderFooter, isDefaultSetup, DEFAULT_MARGINS, HeaderFooter } from '../sheet/page-setup';
 import { SheetObject, ShapeKind, objectLook, isLine, newObjectId } from '../sheet/sheet-objects';
@@ -245,7 +246,7 @@ KIND_OF.rtTriangle = 'triangle';
 
 const SCHEME: Record<string, number> = { lt1: 0, bg1: 0, dk1: 1, tx1: 1, lt2: 2, bg2: 2, dk2: 3, tx2: 3, accent1: 4, accent2: 5, accent3: 6, accent4: 7, accent5: 8, accent6: 9, hlink: 10, folHlink: 11 };
 
-/** A DrawingML colour (srgbClr, schemeClr, sysClr, prstClr with lumMod/lumOff) as #rrggbb. */
+/** A DrawingML colour (srgbClr, schemeClr, sysClr, prstClr, with its changes: lumMod, tint, shade, satMod…) as #rrggbb. */
 export function drawingColour(el: Element | null, theme: string[]): string | undefined {
   if (!el) return undefined;
   let hex: string | undefined;
@@ -255,28 +256,7 @@ export function drawingColour(el: Element | null, theme: string[]): string | und
   else if (el.localName === 'sysClr') hex = el.getAttribute('lastClr') ?? (v === 'window' ? 'FFFFFF' : '000000');
   else if (el.localName === 'prstClr') hex = ({ black: '000000', white: 'FFFFFF', red: 'FF0000', green: '008000', blue: '0000FF', yellow: 'FFFF00', gray: '808080' } as Record<string, string>)[v ?? ''];
   if (!hex || !/^[0-9a-f]{6}$/i.test(hex)) return undefined;
-  const mod = Number(kid(el, 'lumMod')?.getAttribute('val') ?? 100000) / 100000;
-  const off = Number(kid(el, 'lumOff')?.getAttribute('val') ?? 0) / 100000;
-  if (mod === 1 && off === 0) return '#' + hex.toLowerCase();
-  // lumMod and lumOff change the lightness in HSL
-  const rgb = [0, 2, 4].map((i) => parseInt(hex!.slice(i, i + 2), 16) / 255);
-  const mx = Math.max(...rgb), mn = Math.min(...rgb);
-  let h = 0, s = 0;
-  let l = (mx + mn) / 2;
-  if (mx !== mn) {
-    const d = mx - mn;
-    s = l > 0.5 ? d / (2 - mx - mn) : d / (mx + mn);
-    h = mx === rgb[0] ? (rgb[1] - rgb[2]) / d + (rgb[1] < rgb[2] ? 6 : 0) : mx === rgb[1] ? (rgb[2] - rgb[0]) / d + 2 : (rgb[0] - rgb[1]) / d + 4;
-    h /= 6;
-  }
-  l = Math.min(1, Math.max(0, l * mod + off));
-  const q = l < 0.5 ? l * (1 + s) : l + s - l * s, p = 2 * l - q;
-  const f = (t: number) => {
-    t = (t + 1) % 1;
-    return t < 1 / 6 ? p + (q - p) * 6 * t : t < 1 / 2 ? q : t < 2 / 3 ? p + (q - p) * (2 / 3 - t) * 6 : p;
-  };
-  const out = s === 0 ? [l, l, l] : [f(h + 1 / 3), f(h), f(h - 1 / 3)];
-  return '#' + out.map((x) => Math.round(x * 255).toString(16).padStart(2, '0')).join('');
+  return applyColorMods(hex, kids(el));
 }
 
 /** The colour of a fill or line element's content (solidFill → colour, noFill → 'none'). */

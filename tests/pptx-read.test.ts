@@ -198,9 +198,10 @@ describe('opening files made in PowerPoint', () => {
     const shapes = back.slides[0].contents.shapes;
     const rect = shapes.find((s) => s.kind === 'rect')!;
     expect(rect.filled).toBe(true);
-    // PowerPoint's default look: an accent fill with a darker outline, both kept
+    // PowerPoint's default look: an accent fill with a darker outline (accent 1 shaded 50% in
+    // linear RGB: PowerPoint's 2F528F), both kept
     expect(rect.fillColor).toBe('#4472c4');
-    expect(rect.color).toBe('#223962');
+    expect(rect.color).toBe('#2f528f');
     const arrow = back.slides[0].contents.arrows[0];
     // flipped: drawn from right to left, the head at its end
     expect(arrow.tail).toEqual({ x: 400, y: 300 });
