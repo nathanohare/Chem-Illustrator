@@ -34,7 +34,7 @@ import { chemPieces, showsChem } from '../sheet/cell-text';
 import { type TextRun, looksOf, lookOver, runsFrom, runsOf } from '../sheet/rich-text';
 import { DEFAULT_COL_W, DEFAULT_ROW_H, MAX_AUTO_ROW, structureHeight } from '../sheet/layout';
 import type { Contents } from '../model';
-import type { ExcelStyles } from '../sheet/workbook';
+import type { ExcelStyles, ExcelLook } from '../sheet/workbook';
 import type { DocStyle } from '../style';
 import { applyTint } from '../colours';
 import { chartXml, chartAnchorXml, readChartXml, CT_CHART, REL_CHART, C_NS, CX_NS, CT_CHARTEX, REL_CHARTEX, addChartExStyle } from './xlsx-chart';
@@ -362,9 +362,14 @@ class Styles {
     const { font, fill, border } = this.parts(s);
     const fmt = this.numFmt(s.numFmt);
     // an indent needs the text aligned to a side (left when it isn't set)
-    const horizontal = s.align ?? (s.indent ? 'left' : undefined);
-    const align = horizontal || s.valign || s.wrap || s.rotate
-      ? `<alignment${horizontal ? ` horizontal="${horizontal}"` : ''}${s.valign && s.valign !== 'bottom' ? ` vertical="${s.valign === 'middle' ? 'center' : 'top'}"` : ''}${s.rotate ? ` textRotation="${textRotation(s.rotate)}"` : ''}${s.wrap ? ' wrapText="1"' : ''}${s.indent && horizontal !== 'center' ? ` indent="${s.indent}"` : ''}/>`
+    // Excel's own alignment where it still shows as this one (centered across the selection…)
+    const ex = s.excel;
+    const keptH = ex?.horizontal && (SHOWN_H[ex.horizontal] ?? undefined) === s.align ? ex.horizontal : undefined;
+    const horizontal = keptH ?? s.align ?? (s.indent ? 'left' : undefined);
+    const vertical = s.valign === 'middle' ? (ex?.vertical ?? 'center') : s.valign === 'top' ? 'top' : undefined;
+    const align = horizontal || vertical || s.wrap || s.rotate || ex?.shrinkToFit || ex?.readingOrder
+      ? `<alignment${horizontal ? ` horizontal="${horizontal}"` : ''}${vertical ? ` vertical="${vertical}"` : ''}${s.rotate ? ` textRotation="${textRotation(s.rotate)}"` : ''}${s.wrap ? ' wrapText="1"' : ''}${s.indent && horizontal !== 'center' ? ` indent="${s.indent}"` : ''}` +
+        `${ex?.shrinkToFit ? ' shrinkToFit="1"' : ''}${ex?.readingOrder ? ` readingOrder="${ex.readingOrder}"` : ''}/>`
       : '';
     const xfId = s.cellStyle ? this.namedStyle(s.cellStyle) : 0;
     const protection = cellProtectionXml(s);
@@ -379,15 +384,22 @@ class Styles {
 
   /** The font, fill and border numbers for a look. */
   private parts(s: CellStyle): { font: number; fill: number; border: number } {
-    const fontLook = (l: CellStyle) => JSON.stringify([!!l.bold, !!l.italic, !!l.underline, l.color, l.font, l.size]);
+    const fontLook = (l: CellStyle) => JSON.stringify([!!l.bold, !!l.italic, !!l.underline, l.color, l.font, l.size, l.excel?.strike, l.excel?.vertAlign]);
     const font = fontLook(s) !== fontLook(this.normal)
-      ? this.index(this.fonts, `<font>${s.bold ? '<b/>' : ''}${s.italic ? '<i/>' : ''}${s.underline ? '<u/>' : ''}<sz val="${s.size ?? 11}"/>` +
+      ? this.index(this.fonts, `<font>${s.bold ? '<b/>' : ''}${s.italic ? '<i/>' : ''}${s.excel?.strike ? '<strike/>' : ''}${s.underline ? '<u/>' : ''}` +
+        `${s.excel?.vertAlign ? `<vertAlign val="${xmlAttr(s.excel.vertAlign)}"/>` : ''}<sz val="${s.size ?? 11}"/>` +
         `${s.color ? `<color rgb="FF${hex6(s.color)}"/>` : '<color theme="1"/>'}<name val="${xml(s.font ?? this.minor)}"/><family val="2"/>${s.font ? '' : '<scheme val="minor"/>'}</font>`)
       : 0;
-    const fill = s.fill ? this.index(this.fills, `<fill><patternFill patternType="solid"><fgColor rgb="FF${hex6(s.fill)}"/><bgColor indexed="64"/></patternFill></fill>`) : 0;
+    // a patterned fill as it was, while it still shows its color
+    const p = s.excel?.pattern;
+    const fill = p && (p.fg ?? p.bg) === s.fill
+      ? this.index(this.fills, `<fill><patternFill patternType="${xmlAttr(p.type)}">${p.fg ? `<fgColor rgb="FF${hex6(p.fg)}"/>` : ''}${p.bg ? `<bgColor rgb="FF${hex6(p.bg)}"/>` : ''}</patternFill></fill>`)
+      : s.fill ? this.index(this.fills, `<fill><patternFill patternType="solid"><fgColor rgb="FF${hex6(s.fill)}"/><bgColor indexed="64"/></patternFill></fill>`) : 0;
     const side = (name: Side) => {
       const b = s.borders?.[name];
-      return b ? `<${name} style="${borderName(b.style)}"><color rgb="FF${hex6(b.color ?? '#000000')}"/></${name}>` : `<${name}/>`;
+      // Excel's own border style where it still shows as this one (hair as thin…)
+      const was = s.excel?.borders?.[name];
+      return b ? `<${name} style="${was && BORDER_STYLES[was] === b.style ? was : borderName(b.style)}"><color rgb="FF${hex6(b.color ?? '#000000')}"/></${name}>` : `<${name}/>`;
     };
     const border = s.borders && Object.keys(s.borders).length
       ? this.index(this.borders, `<border>${side('left')}${side('right')}${side('top')}${side('bottom')}<diagonal/></border>`)
@@ -426,7 +438,7 @@ class Styles {
 
 /** What makes two cell looks the same style in the file (an empty look is style 0). */
 function xfKey(s: CellStyle): string {
-  return JSON.stringify([s.bold, s.italic, s.underline, s.color, s.fill, s.font, s.size, s.align, s.valign, s.wrap, s.numFmt, s.borders, s.indent, s.rotate, s.cellStyle]);
+  return JSON.stringify([s.bold, s.italic, s.underline, s.color, s.fill, s.font, s.size, s.align, s.valign, s.wrap, s.numFmt, s.borders, s.indent, s.rotate, s.cellStyle, s.excel]);
 }
 
 function borderName(b: BorderStyle): string {
@@ -1054,6 +1066,9 @@ function readColour(el: Element | null, theme: string[]): string | undefined {
   return '#' + (tint ? applyTint(hex, tint) : hex).toLowerCase();
 }
 
+/** Horizontal alignments shown as another here: centered across the selection or spread out as centered, justified and filled as general. */
+const SHOWN_H: Record<string, CellStyle['align'] | null> = { centerContinuous: 'center', distributed: 'center', justify: null, fill: null };
+
 const BORDER_STYLES: Record<string, BorderStyle> = {
   thin: 'thin', hair: 'thin', medium: 'medium', thick: 'thick', double: 'double', dashed: 'dashed', mediumDashed: 'dashed',
   dashDot: 'dashed', mediumDashDot: 'dashed', dashDotDot: 'dotted', mediumDashDotDot: 'dashed', slantDashDot: 'dashed', dotted: 'dotted',
@@ -1103,6 +1118,9 @@ function readStyles(doc: Document | null, theme: string[], faces: { minor: strin
     const face = faceOf(f) || baseFace;
     // the theme's body font is no font of the cell's own
     if (face.toLowerCase() !== faces.minor.toLowerCase()) st.font = face;
+    // raised, lowered or struck through: not shown here, written back
+    const va = val(f, 'vertAlign');
+    if (va === 'superscript' || va === 'subscript' || on(f, 'strike')) st.excel = { ...(va === 'superscript' || va === 'subscript' ? { vertAlign: va } : {}), ...(on(f, 'strike') ? { strike: true as const } : {}) };
     return st;
   });
   const fills: (string | undefined)[] = kids(kid(root, 'fills'), 'fill').map((f) => {
@@ -1111,12 +1129,29 @@ function readStyles(doc: Document | null, theme: string[], faces: { minor: strin
     if (!p || !type || type === 'none') return undefined;
     return readColour(kid(p, 'fgColor'), theme) ?? (type === 'solid' ? undefined : readColour(kid(p, 'bgColor'), theme));
   });
+  // patterned fills (shown as the plain fill), with their colors, to write back
+  const patterns: ExcelLook['pattern'][] = kids(kid(root, 'fills'), 'fill').map((f) => {
+    const p = kid(f, 'patternFill');
+    const type = p?.getAttribute('patternType');
+    if (!p || !type || type === 'none' || type === 'solid') return undefined;
+    const fg = readColour(kid(p, 'fgColor'), theme), bg = readColour(kid(p, 'bgColor'), theme);
+    return { type, ...(fg ? { fg } : {}), ...(bg ? { bg } : {}) };
+  });
   const borders: CellStyle['borders'][] = kids(kid(root, 'borders'), 'border').map((b) => {
     const out: Partial<Record<Side, Border>> = {};
     for (const side of ['left', 'right', 'top', 'bottom'] as Side[]) {
       const el = kid(b, side);
       const style = el?.getAttribute('style');
       if (el && style && style !== 'none') out[side] = { style: BORDER_STYLES[style] ?? 'thin', ...(readColour(kid(el, 'color'), theme) && readColour(kid(el, 'color'), theme) !== '#000000' ? { color: readColour(kid(el, 'color'), theme) } : {}) };
+    }
+    return Object.keys(out).length ? out : undefined;
+  });
+  // border styles shown as others here (hair as thin, dashDot as dashed…), to write back
+  const borderNames: ExcelLook['borders'][] = kids(kid(root, 'borders'), 'border').map((b) => {
+    const out: Partial<Record<Side, string>> = {};
+    for (const side of ['left', 'right', 'top', 'bottom'] as Side[]) {
+      const style = kid(b, side)?.getAttribute('style');
+      if (style && BORDER_STYLES[style] && BORDER_STYLES[style] !== style) out[side] = style;
     }
     return Object.keys(out).length ? out : undefined;
   });
@@ -1154,6 +1189,19 @@ function readStyles(doc: Document | null, theme: string[], faces: { minor: strin
     const prot = kid(x, 'protection');
     if (prot?.getAttribute('locked') === '0' || prot?.getAttribute('locked') === 'false') st.unlocked = true;
     if (isOn(prot?.getAttribute('hidden'))) st.formulaHidden = true;
+    // what shows here as the nearest thing, or not at all, written back as it was
+    const pattern = patterns[Number(x.getAttribute('fillId') ?? 0)], sides = borderNames[Number(x.getAttribute('borderId') ?? 0)];
+    const h = a?.getAttribute('horizontal'), v = a?.getAttribute('vertical'), order = Number(a?.getAttribute('readingOrder') ?? 0);
+    const ex: ExcelLook = {
+      ...st.excel,
+      ...(pattern ? { pattern } : {}),
+      ...(sides ? { borders: sides } : {}),
+      ...(h && SHOWN_H[h] !== undefined ? { horizontal: h } : {}),
+      ...(v === 'justify' || v === 'distributed' ? { vertical: v } : {}),
+      ...(isOn(a?.getAttribute('shrinkToFit')) ? { shrinkToFit: true as const } : {}),
+      ...(order === 1 || order === 2 ? { readingOrder: order } : {}),
+    };
+    if (Object.keys(ex).length) st.excel = ex;
     return Object.keys(st).some((k) => (st as Record<string, unknown>)[k] !== undefined) ? st : undefined;
   };
   const xfs = kids(kid(root, 'cellXfs'), 'xf').map(xfLook);

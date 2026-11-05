@@ -200,3 +200,49 @@ describe('built-in number formats', () => {
     expect(part(await writeXlsx(wb, pictures), 'xl/styles.xml')).toMatch(/<xf numFmtId="14" /);
   });
 });
+
+describe('formatting shown here as the nearest thing', () => {
+  const file = () => excelFile(
+    '<sheetData><row r="1"><c r="A1" s="1"><v>1</v></c><c r="B1" s="2"><v>2</v></c><c r="C1" s="3"><v>3</v></c><c r="D1" s="4"><v>4</v></c></row></sheetData>',
+    { styles: styles([
+      '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>',
+      '<xf numFmtId="0" fontId="0" fillId="2" borderId="0" xfId="0" applyFill="1"/>',
+      '<xf numFmtId="0" fontId="0" fillId="0" borderId="1" xfId="0" applyBorder="1"/>',
+      '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyAlignment="1"><alignment horizontal="centerContinuous" vertical="distributed" shrinkToFit="1" readingOrder="2"/></xf>',
+      '<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="0" applyFont="1"/>',
+    ], {
+      fonts: [FONT, '<font><strike/><vertAlign val="superscript"/><sz val="11"/><color theme="1"/><name val="Calibri"/><family val="2"/><scheme val="minor"/></font>'],
+      fills: '<fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="darkGrid"><fgColor rgb="FFFF0000"/><bgColor rgb="FFFFFF00"/></patternFill></fill></fills>',
+      borders: '<borders count="2"><border><left/><right/><top/><bottom/><diagonal/></border><border><left style="hair"><color rgb="FF000000"/></left><right style="dashDot"><color rgb="FF000000"/></right><top style="thin"><color rgb="FF000000"/></top><bottom/><diagonal/></border></borders>',
+    }) },
+  );
+
+  it('shows a pattern as its color, hairlines as thin, and centered across the selection as centered', async () => {
+    const s = (await readXlsx(file())).book.sheet;
+    expect(s.styleAt(0, 0)?.fill).toBe('#ff0000');
+    expect(s.styleAt(0, 1)?.borders).toMatchObject({ left: { style: 'thin' }, right: { style: 'dashed' }, top: { style: 'thin' } });
+    expect(s.styleAt(0, 2)).toMatchObject({ align: 'center', valign: 'middle' });
+  });
+
+  it('writes them back as the file had them', async () => {
+    const st = part(await writeXlsx((await readXlsx(file())).book, pictures), 'xl/styles.xml');
+    expect(st).toContain('<patternFill patternType="darkGrid"><fgColor rgb="FFFF0000"/><bgColor rgb="FFFFFF00"/></patternFill>');
+    expect(st).toMatch(/<left style="hair">.*?<right style="dashDot">.*?<top style="thin">/);
+    expect(st).toContain('<alignment horizontal="centerContinuous" vertical="distributed" shrinkToFit="1" readingOrder="2"/>');
+    expect(st).toMatch(/<font><strike\/><vertAlign val="superscript"\/><sz val="11"\/>/);
+  });
+
+  it('writes what was changed here as it now shows', async () => {
+    const { book } = await readXlsx(file());
+    const s = book.sheet;
+    book.edit('look', () => {
+      s.patchStyle({ r1: 0, c1: 0, r2: 0, c2: 0 }, { fill: '#00ff00' });
+      s.setBorders({ r1: 0, c1: 1, r2: 0, c2: 1 }, 'all', 'medium');
+      s.patchStyle({ r1: 0, c1: 2, r2: 0, c2: 2 }, { align: 'left' });
+    });
+    const st = part(await writeXlsx(book, pictures), 'xl/styles.xml');
+    expect(st).toContain('<patternFill patternType="solid"><fgColor rgb="FF00FF00"/>');
+    expect(st).toMatch(/<left style="medium">.*?<right style="medium">/);
+    expect(st).toContain('<alignment horizontal="left" vertical="distributed" shrinkToFit="1" readingOrder="2"/>');
+  });
+});

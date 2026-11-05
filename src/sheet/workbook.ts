@@ -75,6 +75,26 @@ export interface CellStyle {
   unlocked?: boolean;
   /** Format Cells > Protection > Hidden: Excel hides the cell's formula when its sheet is protected (kept for Excel). */
   formulaHidden?: boolean;
+  /** Formatting from an Excel file that shows here as the nearest thing, or not at all, kept to write back. */
+  excel?: ExcelLook;
+}
+
+/** Excel formatting this program shows another way (see CellStyle.excel). */
+export interface ExcelLook {
+  /** A patterned fill (darkGrid, lightUp…) and its colors: shown as its pattern color. */
+  pattern?: { type: string; fg?: string; bg?: string };
+  /** Border styles shown as others (hair as thin, dashDot as dashed…), by side. */
+  borders?: Partial<Record<Side, string>>;
+  /** Horizontal alignment shown as another (centerContinuous and distributed as center; justify and fill as general). */
+  horizontal?: string;
+  /** Vertical alignment shown as the middle (justify, distributed). */
+  vertical?: string;
+  shrinkToFit?: true;
+  /** Right to left (2) or left to right (1) whatever the text. */
+  readingOrder?: number;
+  /** The cell's font raised or lowered (superscript, subscript), or struck through. */
+  vertAlign?: string;
+  strike?: true;
 }
 
 /** Parts of an Excel file's styles kept to save back with it (see xlsx.ts). */
