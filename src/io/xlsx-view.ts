@@ -1,8 +1,8 @@
 // Excel's parts for the sheet finishing touches: turned text, how each sheet is viewed (Page
 // Layout, Page Break Preview, gridlines, headings, zoom), the outline (summary rows' places),
-// sparklines (the x14 extension Excel 2010 added to worksheets), custom views, and the workbook's
-// theme (colours and fonts). All follow ECMA-376 part 1 and Microsoft's published [MS-XLSX]
-// extensions.
+// sparklines (the x14 extension Excel 2010 added to worksheets), custom views, the workbook's
+// theme (colours and fonts), and what only Excel uses (protection), kept from the file read to
+// write back. All follow ECMA-376 part 1 and Microsoft's published [MS-XLSX] extensions.
 
 import { xml, xmlAttr, hex6, kids, kid } from './ooxml';
 import type { Sheet, Workbook } from '../sheet/workbook';
@@ -254,3 +254,62 @@ export function readWorkbookTheme(doc: Document | null): WorkbookTheme | null {
   if (sameTheme({ ...t, name: DEFAULT_THEME.name }, DEFAULT_THEME)) return null;
   return t;
 }
+
+// ---------------------------------------------------------------- what only Excel uses
+
+/**
+ * What a worksheet says that only Excel uses, kept as the file had it and written back in its
+ * place. Review > Protect Sheet (18.3.1.85, with its password's hash and salt) and Allow Edit
+ * Ranges (18.3.1.71) are kept for Excel; nothing here enforces them.
+ */
+export interface ExcelSheetKept {
+  protection?: string;
+  protectedRanges?: string;
+}
+
+/** What a workbook says that only Excel uses: Protect Workbook (18.2.29) and a password to modify or read-only recommended (18.2.12). */
+export interface ExcelBookKept {
+  protection?: string;
+  fileSharing?: string;
+}
+
+/**
+ * An element of the main namespace as XML text, without other programs' attributes and
+ * elements (a revision id, an extension), which would need declarations this file doesn't make.
+ */
+export function mainXml(el: Element): string {
+  const attrs = Array.from(el.attributes).filter((a) => !a.namespaceURI).map((a) => ` ${a.name}="${xmlAttr(a.value)}"`).join('');
+  let body = '';
+  for (let n = el.firstChild; n; n = n.nextSibling) {
+    if (n.nodeType === 1 && (n as Element).namespaceURI === el.namespaceURI) body += mainXml(n as Element);
+    else if (n.nodeType === 3 || n.nodeType === 4) body += xml(n.textContent ?? '');
+  }
+  return body ? `<${el.localName}${attrs}>${body}</${el.localName}>` : `<${el.localName}${attrs}/>`;
+}
+
+/** A worksheet's settings that only Excel uses (undefined when it has none). */
+export function readSheetKept(ws: Element): ExcelSheetKept | undefined {
+  const out: ExcelSheetKept = {};
+  const prot = kid(ws, 'sheetProtection');
+  if (prot) out.protection = mainXml(prot);
+  const ranges = kid(ws, 'protectedRanges');
+  if (ranges && kids(ranges, 'protectedRange').length) out.protectedRanges = mainXml(ranges);
+  return Object.keys(out).length ? out : undefined;
+}
+
+/** A workbook's settings that only Excel uses (undefined when it has none). */
+export function readBookKept(root: Element): ExcelBookKept | undefined {
+  const out: ExcelBookKept = {};
+  const prot = kid(root, 'workbookProtection');
+  if (prot) out.protection = mainXml(prot);
+  const sharing = kid(root, 'fileSharing');
+  if (sharing) out.fileSharing = mainXml(sharing);
+  return Object.keys(out).length ? out : undefined;
+}
+
+/** sheetProtection and protectedRanges, which go after sheetData. */
+export const sheetProtectionXml = (k: ExcelSheetKept | undefined): string => (k?.protection ?? '') + (k?.protectedRanges ?? '');
+
+/** A cell format's protection element (18.8.33), when it isn't Excel's default (locked, formula shown). */
+export const cellProtectionXml = (st: { unlocked?: boolean; formulaHidden?: boolean }): string =>
+  st.unlocked || st.formulaHidden ? `<protection${st.unlocked ? ' locked="0"' : ''}${st.formulaHidden ? ' hidden="1"' : ''}/>` : '';

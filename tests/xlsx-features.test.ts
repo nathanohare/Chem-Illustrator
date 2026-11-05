@@ -85,3 +85,44 @@ describe('values of formulas this program can\'t work out (X17)', () => {
     expect(cellXml(xml, 'D2')).toContain('<v>#NAME?</v>');
   });
 });
+
+describe('protection (X10)', () => {
+  const XR = 'http://schemas.microsoft.com/office/spreadsheetml/2014/revision';
+  const styles = '<fonts count="1"><font><sz val="11"/><name val="Calibri"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills>' +
+    '<borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>' +
+    '<cellXfs count="3"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>' +
+    '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyProtection="1"><protection locked="0"/></xf>' +
+    '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0" applyProtection="1"><protection hidden="1"/></xf></cellXfs>';
+  const file = () => excelBook([
+    ['Inventory', '<sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1" s="1"><v>2</v></c><c r="C1" s="2"><f>A1+B1</f><v>3</v></c></row></sheetData>' +
+      '<sheetProtection algorithmName="SHA-512" hashValue="aGFzaA==" saltValue="c2FsdA==" spinCount="100000" sheet="1" objects="1" scenarios="1" formatColumns="0"/>' +
+      `<protectedRanges><protectedRange xmlns:xr="${XR}" xr:uid="{00000000-0001-0000-0000-000000000000}" sqref="B1:B9" name="Amounts"/></protectedRanges>` +
+      '<autoFilter ref="A1:C1"/>'],
+  ], {
+    workbook: (list) => `<workbook xmlns="${MAIN}" xmlns:r="${R}"><fileSharing readOnlyRecommended="1" userName="Lab"/><workbookPr/>` +
+      `<workbookProtection workbookAlgorithmName="SHA-512" workbookHashValue="d2I=" workbookSaltValue="c2FsdA==" workbookSpinCount="100000" lockStructure="1"/><sheets>${list}</sheets></workbook>`,
+    parts: [{ path: 'xl/styles.xml', xml: `<styleSheet xmlns="${MAIN}">${styles}</styleSheet>`, rel: `${R}/styles` }],
+  });
+
+  it('keeps sheet and workbook protection, edit ranges, and unlocked and hidden cells', async () => {
+    const { book } = await readXlsx(file());
+    expect(book.sheet.styleAt(0, 1)).toEqual({ unlocked: true });
+    expect(book.sheet.styleAt(0, 2)).toEqual({ formulaHidden: true });
+    const saved = await writeXlsx(book, pictures);
+    const sheet = part(saved, 'xl/worksheets/sheet1.xml');
+    // in their places: after the cells, before the filter
+    expect(sheet).toContain('</sheetData><sheetProtection algorithmName="SHA-512" hashValue="aGFzaA==" saltValue="c2FsdA==" spinCount="100000" sheet="1" objects="1" scenarios="1" formatColumns="0"/>' +
+      '<protectedRanges><protectedRange sqref="B1:B9" name="Amounts"/></protectedRanges><autoFilter ');
+    const wb = part(saved, 'xl/workbook.xml');
+    expect(wb).toMatch(/<workbook [^>]*><fileSharing readOnlyRecommended="1" userName="Lab"\/><workbookPr\/><workbookProtection workbookAlgorithmName="SHA-512" workbookHashValue="d2I=" workbookSaltValue="c2FsdA==" workbookSpinCount="100000" lockStructure="1"\/><bookViews>/);
+    const st = part(saved, 'xl/styles.xml');
+    const xfs = /<cellXfs[^>]*>(.*?)<\/cellXfs>/.exec(st)![1].match(/<xf [^>]*\/>|<xf [^>]*>.*?<\/xf>/g)!;
+    const xfOf = (ref: string) => xfs[Number(new RegExp(`<c r="${ref}" s="(\\d+)"`).exec(sheet)?.[1] ?? 0)];
+    expect(xfOf('B1')).toMatch(/applyProtection="1"><protection locked="0"\/><\/xf>$/);
+    expect(xfOf('C1')).toMatch(/applyProtection="1"><protection hidden="1"\/><\/xf>$/);
+    // and again from our own file
+    const again = await writeXlsx((await readXlsx(saved)).book, pictures);
+    expect(part(again, 'xl/worksheets/sheet1.xml')).toContain('<sheetProtection algorithmName="SHA-512"');
+    expect(part(again, 'xl/workbook.xml')).toContain('lockStructure="1"');
+  });
+});

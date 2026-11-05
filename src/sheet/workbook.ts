@@ -8,6 +8,7 @@
 // the order they depend on each other; a formula that depends on itself shows #CIRC!.
 
 import type { KeptParts, KeptTree } from '../io/kept-parts';
+import type { ExcelSheetKept, ExcelBookKept } from '../io/xlsx-view';
 import type { Contents } from '../model';
 import type { DocStyle } from '../style';
 import { ACS_1996 } from '../style';
@@ -70,6 +71,10 @@ export interface CellStyle {
   rotate?: number;
   /** The cell style from the Cell Styles gallery (Good, Heading 1, Total…) the formatting came from. */
   cellStyle?: string;
+  /** Format Cells > Protection: the cell can be changed in Excel when its sheet is protected (kept for Excel; not enforced here). */
+  unlocked?: boolean;
+  /** Format Cells > Protection > Hidden: Excel hides the cell's formula when its sheet is protected (kept for Excel). */
+  formulaHidden?: boolean;
 }
 
 /** The macros of an .xlsm workbook, as its file held them. */
@@ -287,6 +292,8 @@ export class Sheet {
   readonly uid = nextSheetUid++;
   /** The name a macro-enabled workbook's code knows the sheet by (Excel's codeName), kept for its macros. */
   codeName?: string;
+  /** What an Excel file said about the sheet that only Excel uses (protection, its tab's colour…), kept to save back. */
+  excel?: ExcelSheetKept;
   cells = new Map<number, Cell>();
   /** Column widths and row heights set by hand, in pixels at 100% zoom. */
   colWidths = new Map<number, number>();
@@ -1262,6 +1269,8 @@ export class Workbook {
    * first. Kept as they were and saved back in the same order, so Excel can still update them.
    */
   externalLinks: KeptTree[] = [];
+  /** What an Excel file said about the workbook that only Excel uses (its protection, calculation settings), kept to save back. */
+  excel?: ExcelBookKept;
   chem: ChemHost | null = null;
   /**
    * Text typed into cells with a formula in it (CH2Cl2, Pd(PPh3)4) is shown as chemistry without

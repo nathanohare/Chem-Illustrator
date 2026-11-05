@@ -51,6 +51,7 @@ import { type DataTable, seenDataTableId } from '../sheet/what-if';
 import { type PivotTable, seenPivotId } from '../sheet/pivot';
 import { Persons, notesParts, readNotes, shownNotes, validationsXml, readValidations, NOTES_CT, NOTES_REL } from './xlsx-notes';
 import { textRotation, readTextRotation, sheetViewAttrs, readSheetViewOpts, outlinePrXml, outlineLevelAttrs, outlineAttrs, sparklinesExt, readSparklines, customWorkbookViewsXml, customSheetViewsXml, readCustomViews, themeXml, readWorkbookTheme } from './xlsx-view';
+import { readSheetKept, readBookKept, sheetProtectionXml, cellProtectionXml } from './xlsx-view';
 import { CELL_STYLES, cellStyleNamed, cellStylePatch, cellStyleBorders } from '../sheet/cell-styles';
 import type { WorkbookTheme } from '../sheet/themes';
 import { themeOf } from '../sheet/themes';
@@ -336,7 +337,7 @@ class Styles {
   /** The style index for a cell's formatting. */
   xf(st: CellStyle | undefined): number {
     const s = st ?? {};
-    const key = xfKey(s);
+    const key = xfKey(s) + (s.unlocked ? '|unlocked' : '') + (s.formulaHidden ? '|hidden' : '');
     const got = this.byKey.get(key);
     if (got !== undefined) return got;
     const { font, fill, border } = this.parts(s);
@@ -347,9 +348,10 @@ class Styles {
       ? `<alignment${horizontal ? ` horizontal="${horizontal}"` : ''}${s.valign && s.valign !== 'bottom' ? ` vertical="${s.valign === 'middle' ? 'center' : 'top'}"` : ''}${s.rotate ? ` textRotation="${textRotation(s.rotate)}"` : ''}${s.wrap ? ' wrapText="1"' : ''}${s.indent && horizontal !== 'center' ? ` indent="${s.indent}"` : ''}/>`
       : '';
     const xfId = s.cellStyle ? this.namedStyle(s.cellStyle) : 0;
+    const protection = cellProtectionXml(s);
     const x = `<xf numFmtId="${fmt}" fontId="${font}" fillId="${fill}" borderId="${border}" xfId="${xfId}"` +
       `${fmt ? ' applyNumberFormat="1"' : ''}${font ? ' applyFont="1"' : ''}${fill ? ' applyFill="1"' : ''}${border ? ' applyBorder="1"' : ''}` +
-      `${align ? ` applyAlignment="1">${align}</xf>` : '/>'}`;
+      `${align || protection ? `${align ? ' applyAlignment="1"' : ''}${protection ? ' applyProtection="1"' : ''}>${align}${protection}</xf>` : '/>'}`;
     this.xfs.push(x);
     const i = this.xfs.length - 1;
     this.byKey.set(key, i);
@@ -860,7 +862,7 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
       `<sheetViews><sheetView${sheetViewAttrs(own.viewOpts)}${si === book.active ? ' tabSelected="1"' : ''} workbookViewId="0">${pane}</sheetView></sheetViews>` +
       `<sheetFormatPr defaultRowHeight="15"${outlineLevelAttrs(s)}/>` +
       (colXml.length ? `<cols>${colXml.join('')}</cols>` : '') +
-      `<sheetData>${rowXml.join('')}</sheetData>${filterXml}${standIn ? '' : customSheetViewsXml(book, own)}${merges}${cfXml}${dvXml}${hyperlinks}` +
+      `<sheetData>${rowXml.join('')}</sheetData>${sheetProtectionXml(own.excel)}${filterXml}${standIn ? '' : customSheetViewsXml(book, own)}${merges}${cfXml}${dvXml}${hyperlinks}` +
       `${page.printOptions}${page.pageMargins}${page.pageSetup}${page.headerFooter}${page.breaks}${drawingXml}${tableParts}${sparkExt ? `<extLst>${sparkExt}</extLst>` : ''}</worksheet>`,
       CT.sheet);
     const rid = pkg.relate('xl/workbook.xml', RELS.worksheet, `worksheets/sheet${si + 1}.xml`);
@@ -922,7 +924,7 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
   });
   const allNames = [...filterNames, ...printTitleNames, ...nameXml, ...gridNames];
   pkg.add('xl/workbook.xml',
-    `${HEAD}<workbook xmlns="${MAIN}" xmlns:r="${RNS}"><workbookPr${book.date1904 ? ' date1904="1"' : ''}${vba?.codeName ? ` codeName="${xmlAttr(vba.codeName)}"` : ''}/>` +
+    `${HEAD}<workbook xmlns="${MAIN}" xmlns:r="${RNS}">${book.excel?.fileSharing ?? ''}<workbookPr${book.date1904 ? ' date1904="1"' : ''}${vba?.codeName ? ` codeName="${xmlAttr(vba.codeName)}"` : ''}/>${book.excel?.protection ?? ''}` +
     `<bookViews><workbookView activeTab="${book.active}"/></bookViews>` +
     `<sheets>${sheetEntries.join('')}</sheets>` +
     (linkIds.length ? `<externalReferences>${linkIds.map((id) => `<externalReference r:id="${id}"/>`).join('')}</externalReferences>` : '') +
@@ -1074,6 +1076,10 @@ function readStyles(doc: Document | null, theme: string[]): (CellStyle | undefin
       const rot = readTextRotation(a.getAttribute('textRotation'));
       if (rot) st.rotate = rot;
     }
+    // Format Cells > Protection, for Excel (cells are locked, formulas shown, unless it says otherwise)
+    const prot = kid(x, 'protection');
+    if (prot?.getAttribute('locked') === '0' || prot?.getAttribute('locked') === 'false') st.unlocked = true;
+    if (isOn(prot?.getAttribute('hidden'))) st.formulaHidden = true;
     return Object.keys(st).some((k) => (st as Record<string, unknown>)[k] !== undefined) ? st : undefined;
   });
 }
@@ -1193,6 +1199,7 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
   const notKept = new Set<string>();
   // dates counted from 1904 (the old Mac default) are held here counting from 1900, and saved back as they were
   const date1904 = isOn(kid(root, 'workbookPr')?.getAttribute('date1904'));
+  const bookKept = readBookKept(root);
 
   const relTarget = (type: string) => [...rels.values()].find((r) => r.type === type)?.target ?? null;
   const themeDoc = relTarget(RELS.theme) ? pkg.xml(relTarget(RELS.theme)!) : null;
@@ -1286,6 +1293,8 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
       const raw = new Map<number, Wrote>();
       const codeName = kid(ws, 'sheetPr')?.getAttribute('codeName');
       if (codeName) s.codeName = codeName;
+      // protection and the like, for Excel
+      s.excel = readSheetKept(ws);
       const sheetView = kid(ws, 'sheetViews', 'sheetView');
       const viewOpts = readSheetViewOpts(sheetView);
       if (viewOpts) s.setViewOpts(viewOpts);
@@ -1637,6 +1646,7 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
   // a filter goes back as it was: the rows it hid are hidden already
   if (filters.length) book.build(() => { for (const { s, f } of filters) s.restoreFilter(f); });
   book.active = Math.min(Math.max(0, activeTab), book.sheets.length - 1);
+  book.excel = bookKept;
   keepFileValues(book, formulaValues);
 
   if (foreignPictures) notKept.add(`${foreignPictures} picture${foreignPictures > 1 ? 's' : ''} or chart${foreignPictures > 1 ? 's' : ''}`);
