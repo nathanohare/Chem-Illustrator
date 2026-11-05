@@ -17,7 +17,7 @@ import { withStack, layoutText, type Glyphs, type InlineBox, type LaidLine, type
 import { fitParas, listMarkers, paraCount, splitParagraphs } from '../text/paragraphs';
 import { isCovered, rowSpanOf, spanOf } from '../table';
 import * as rt from '../richtext';
-import { drawingOwnSize, nestedTables, BOX_PAD, FLOAT_GAP, LINE_NUMBER_GAP, OBJECT_CHAR, columnsOf, fieldTexts, floatOf, lookExtent, lookOf, noteStyle, objectsInText, styleOf, FORM_SHADE, type DocObject, type DocText, type HeaderFooter, type NamedStyle, type PageSetup, type WrapKind } from './document';
+import { drawingOwnSize, nestedTables, BOX_PAD, LINE_NUMBER_GAP, OBJECT_CHAR, columnsOf, fieldTexts, floatOf, floatGaps, lookExtent, lookOf, noteStyle, objectsInText, styleOf, FORM_SHADE, type DocObject, type DocText, type HeaderFooter, type NamedStyle, type PageSetup, type WrapKind } from './document';
 import { pageNumText, samePaper, sectionOfParas, sectionsOf } from './sections';
 import { bibliography, type BibEntry } from './references';
 import { emptyTof, tocEntries, tocLines, tofEntries, type TocEntry } from './toc';
@@ -864,8 +864,8 @@ export class DocLayouter {
         bx = Math.max(0, Math.min(bx, page.w - bw));
         by = Math.max(0, Math.min(by, page.h - bh));
         objects.push({ id: r.obj!, page: pageIdx, x: ox + bx + el, y: pageTop(pageIdx) + by + et, w: s.w, h: s.h, line: lines.length, wrap: fl.wrap });
-        const g = fl.gap ?? FLOAT_GAP;
-        rects.push({ x1: bx - page.left - g, y1: by - page.top - g, x2: bx + bw - page.left + g, y2: by + bh - page.top + g, wrap: fl.wrap });
+        const g = floatGaps(fl);
+        rects.push({ x1: bx - page.left - g.l, y1: by - page.top - g.t, x2: bx + bw - page.left + g.r, y2: by + bh - page.top + g.b, wrap: fl.wrap });
       }
       const wl = rects.length ? wrapped(p, cursor, rects, colX[col]).lines : pl;
       if (wl !== pl) { pl = only?.firstLine?.has(p) ? wl.slice(0, 1) : wl; hs = pl.map(heightOf); }

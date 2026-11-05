@@ -278,6 +278,13 @@ export interface Float {
   yFrom?: 'para' | 'margin' | 'page';
   /** Room kept between the figure and the text round it, in points (Word's is 0.13 in). */
   gap?: number;
+  /**
+   * The room above, below and at the right instead, where it isn't `gap` (Word keeps each side's
+   * distance from text; its own figures keep none above and below).
+   */
+  gapTop?: number;
+  gapBottom?: number;
+  gapRight?: number;
   /** Which is drawn over which (Bring Forward, Send Backward): higher on top; unset, in the order of the text. */
   z?: number;
   /** Figures grouped together (Arrange > Group) share a number, and move together. */
@@ -290,6 +297,12 @@ export interface Float {
 
 /** The room text keeps from a floating figure unless set (Word's 0.13 inch). */
 export const FLOAT_GAP = 9;
+
+/** The room a floating figure keeps from the text round it on each side, in points. */
+export function floatGaps(fl: Float): { t: number; b: number; l: number; r: number } {
+  const g = fl.gap ?? FLOAT_GAP;
+  return { t: fl.gapTop ?? g, b: fl.gapBottom ?? g, l: g, r: fl.gapRight ?? g };
+}
 
 /** A text box's inner margins, in points (Word's: 0.1 in at the sides, 0.05 in above and below). */
 export const BOX_PAD = { x: 7.2, y: 3.6 };

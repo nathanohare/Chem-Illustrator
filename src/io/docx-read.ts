@@ -1045,11 +1045,18 @@ class DocxReader {
     const wrap = kind === 'wrapTopAndBottom' ? 'topBottom' as const
       : kind === 'wrapNone' ? (yes(anchor.getAttribute('behindDoc')) ? 'behind' as const : 'front' as const)
       : 'square' as const;
-    const dist = Math.max(fromEmu(anchor.getAttribute('distL') ?? '0'), fromEmu(anchor.getAttribute('distR') ?? '0'), fromEmu(anchor.getAttribute('distT') ?? '0'));
     const fl: Float = { wrap, x: round(x - l), y: round(y - t) };
     if (xFrom) fl.xFrom = xFrom;
     if (yFrom) fl.yFrom = yFrom;
-    if (Math.abs(dist - FLOAT_GAP) > 0.5) fl.gap = round(dist);
+    // the room kept from the text on each side (Word's own figures: 0.13 in at the sides, none above and below)
+    const dist = (k: string) => Math.max(0, fromEmu(anchor.getAttribute(k) ?? '0'));
+    const L = dist('distL');
+    if (Math.abs(L - FLOAT_GAP) > 0.5) fl.gap = round(L);
+    const g = fl.gap ?? FLOAT_GAP;
+    const T = dist('distT'), B = dist('distB'), R = dist('distR');
+    if (Math.abs(T - g) > 0.05) fl.gapTop = round(T);
+    if (Math.abs(B - g) > 0.05) fl.gapBottom = round(B);
+    if (Math.abs(R - g) > 0.05) fl.gapRight = round(R);
     // hidden in the Selection Pane; its group and name, kept with our data
     const pr = kid(anchor, 'docPr');
     if (yes(pr?.getAttribute('hidden') ?? null)) fl.hidden = true;

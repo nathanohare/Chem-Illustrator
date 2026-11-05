@@ -31,7 +31,7 @@ import { facesToEmbed, newGuid, obfuscate, type FontSource } from './font-embed'
 import { fromDataUrl } from '../render/images';
 import { embeddedPart } from './ole-object';
 import { BULLETS, fitParas, listInfo, paraCount, schemeOf, splitParagraphs } from '../text/paragraphs';
-import { BOX_PAD, COL_GAP, COMPOUND, END_FORMAT, FLOAT_GAP, FOOT_FORMAT, columnsOf, OBJECT_CHAR, SHADOWS, charStylesOf, watermarkPlace, fieldTexts, floatOf, lookExtent, lookOf, noteStyle, objectsInText, pruneObjects, EMPTY_FORM, styleOf, runStyleOf, type CharStyle, type DocObject, type DocText, type Embedded, type FigureFrame, type FigureLook, type HeaderFooter, type HfBody, type HfKey, type NamedStyle, type PageBorder, type PageSetup, type Watermark } from '../document/document';
+import { BOX_PAD, COL_GAP, COMPOUND, END_FORMAT, FOOT_FORMAT, columnsOf, OBJECT_CHAR, SHADOWS, charStylesOf, watermarkPlace, fieldTexts, floatOf, floatGaps, lookExtent, lookOf, noteStyle, objectsInText, pruneObjects, EMPTY_FORM, styleOf, runStyleOf, type CharStyle, type DocObject, type DocText, type Embedded, type FigureFrame, type FigureLook, type HeaderFooter, type HfBody, type HfKey, type NamedStyle, type PageBorder, type PageSetup, type Watermark } from '../document/document';
 import { ACS_LINE, GRID_LINE, bibHang, docCellAlign, shownSize } from '../document/doc-layout';
 import { sectionsOf, type Section } from '../document/sections';
 import { bibliography, piecesText, type Reference } from '../document/references';
@@ -833,12 +833,12 @@ class DocxWriter {
     const was = fl.name ? /<wp:docPr [^>]*?name="([^"]*)"/.exec(inner)?.[1] : undefined;
     if (fl.name && was !== undefined) inner = inner.replace(/(<wp:docPr [^>]*?name=")[^"]*"/, (_, a: string) => `${a}${xmlAttr(fl.name!)}"`);
     if (pr && (fl.group !== undefined || fl.name)) (this.model.floats ??= {})[Number(pr[1])] = { ...(fl.group !== undefined ? { group: fl.group } : {}), ...(fl.name ? { name: fl.name } : {}), ...(was !== undefined ? { was } : {}) };
-    const gap = emu(fl.gap ?? FLOAT_GAP);
+    const gap = floatGaps(fl);
     const [l, t] = lookExtent(lookOf(o));
     const h = fl.xFrom === 'page' ? 'page' : 'margin';
     const v = fl.yFrom === 'page' ? 'page' : fl.yFrom === 'margin' ? 'margin' : 'paragraph';
     const wrap = fl.wrap === 'square' ? '<wp:wrapSquare wrapText="largest"/>' : fl.wrap === 'topBottom' ? '<wp:wrapTopAndBottom/>' : '<wp:wrapNone/>';
-    return `<wp:anchor distT="${gap}" distB="${gap}" distL="${gap}" distR="${gap}" simplePos="0" relativeHeight="${251659264 + (fl.z !== undefined ? fl.z + 1 : this.docPr) * 1024}" behindDoc="${fl.wrap === 'behind' ? 1 : 0}" locked="0" layoutInCell="1" allowOverlap="1">` +
+    return `<wp:anchor distT="${emu(gap.t)}" distB="${emu(gap.b)}" distL="${emu(gap.l)}" distR="${emu(gap.r)}" simplePos="0" relativeHeight="${251659264 + (fl.z !== undefined ? fl.z + 1 : this.docPr) * 1024}" behindDoc="${fl.wrap === 'behind' ? 1 : 0}" locked="0" layoutInCell="1" allowOverlap="1">` +
       `<wp:simplePos x="0" y="0"/><wp:positionH relativeFrom="${h}"><wp:posOffset>${emu(fl.x + l)}</wp:posOffset></wp:positionH>` +
       `<wp:positionV relativeFrom="${v}"><wp:posOffset>${emu(fl.y + t)}</wp:posOffset></wp:positionV>${ext}${wrap}${inner}</wp:anchor>`;
   }
