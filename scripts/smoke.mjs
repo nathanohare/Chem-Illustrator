@@ -1,7 +1,8 @@
 // The browser smoke test run on every pull request (`npm run smoke`, after `npm run build`): starts
 // the built app in Chromium and goes through what everyone does first. It fails on any error the
 // page reports, on a step that doesn't do what it should, and on a menu too tall for a laptop's
-// window (each menu must fit in one column at 1280 × 720).
+// window (each menu must fit in one column at 1280 × 720, and every top menu and right-click menu
+// must fit a 1389 × 700 window without scrolling).
 import { spawn } from 'node:child_process';
 import { launch } from '../bench/browser.mjs';
 
@@ -186,6 +187,78 @@ try {
   await page.keyboard.press('Escape');
   await page.waitForTimeout(200);
   if (await page.evaluate(() => !!document.querySelector('dialog.settings-window[open]'))) fail('Esc did not close Settings');
+
+  step('every menu fits a 1389 × 700 window without scrolling: the top menus and the right-click menus');
+  await page.setViewportSize({ width: 1389, height: 700 });
+  await page.waitForTimeout(300);
+  /** The menu open now (the right-click menu, else the top menu showing): too tall if it scrolls or runs off the window. */
+  const tooTall = (what) => page.evaluate((what) => {
+    const m = document.querySelector('.context-menu, .menu.popup-menu, .text-menu')
+      ?? [...document.querySelectorAll('header > .menu-wrap > .menu')].find((x) => !x.hidden);
+    if (!m) return `the ${what} menu did not open`;
+    const r = m.getBoundingClientRect();
+    if (m.scrollHeight > m.clientHeight + 1 || r.bottom > innerHeight + 0.5) return `the ${what} menu is too tall for a 1389 × 700 window (${Math.round(m.scrollHeight)} px of items in ${Math.round(Math.min(m.clientHeight, innerHeight - r.top))} px)`;
+    return null;
+  }, what);
+  const close = async () => { await page.keyboard.press('Escape'); await page.keyboard.press('Escape'); await page.waitForTimeout(100); };
+  const showTab = async (mode) => {
+    await page.evaluate((mode) => window.__app.ws.activate(window.__app.ws.tabs.find((t) => t.mode === mode)), mode);
+    await page.waitForTimeout(400);
+  };
+  for (const mode of ['drawing', 'sheet', 'document', 'slides', 'design']) {
+    await showTab(mode);
+    for (const btn of await page.$$('header > .menu-wrap > button')) {
+      if (!(await btn.isVisible())) continue;
+      const name = (await btn.innerText()).trim();
+      await btn.click();
+      await page.waitForTimeout(100);
+      const bad = await tooTall(`${mode} ${name}`);
+      if (bad) fail(bad);
+      await close();
+    }
+  }
+  /** Right-click at (x, y) in the window and check the menu that opens. */
+  const rightClick = async (what, x, y) => {
+    await page.mouse.click(x, y, { button: 'right' });
+    await page.waitForTimeout(250);
+    const bad = await tooTall(what);
+    if (bad) fail(bad);
+    await close();
+  };
+  // the Canvas: empty space, an atom, and a whole structure picked
+  await page.evaluate(() => window.__app.command('new'));
+  await page.waitForTimeout(400);
+  const cv = await page.locator('#overlay').boundingBox();
+  await rightClick('Canvas empty-space right-click', cv.x + cv.width / 2, cv.y + cv.height / 2);
+  await page.click('[data-tool="ring-benzene"]');
+  await page.mouse.click(cv.x + cv.width / 2, cv.y + cv.height / 2);
+  await page.evaluate(() => window.__app.editor.setTool('select'));
+  const ringAtom = await page.evaluate(() => { const d = window.__app.editor.doc; return window.__app.renderer.toScreen(d.atoms.get([...d.atoms.keys()][0])); });
+  await page.mouse.click(cv.x + 20, cv.y + cv.height - 20);
+  await rightClick('Canvas atom right-click', cv.x + ringAtom.x, cv.y + ringAtom.y);
+  await page.evaluate(() => window.__app.command('select-all'));
+  await rightClick('Canvas selected-structure right-click', cv.x + ringAtom.x, cv.y + ringAtom.y);
+  /** The middle of the biggest canvas showing (the sheet's grid, the document's page, the slide). */
+  const middle = () => page.evaluate(() => {
+    const c = [...document.querySelectorAll('canvas')].filter((x) => x.offsetParent).sort((a, b) => b.clientWidth * b.clientHeight - a.clientWidth * a.clientHeight)[0];
+    const r = c.getBoundingClientRect();
+    return { x: r.x + Math.min(200, r.width / 2), y: r.y + Math.min(140, r.height / 2) };
+  });
+  await showTab('sheet');
+  const cell = await middle();
+  await page.mouse.click(cell.x, cell.y);
+  await rightClick('Spreadsheet cell right-click', cell.x, cell.y);
+  await showTab('document');
+  const text = await middle();
+  await page.mouse.click(text.x, text.y);
+  await page.keyboard.type('Aldol condensation');
+  await rightClick('Document text right-click', text.x, text.y);
+  await showTab('slides');
+  const slide = await page.locator('#overlay').boundingBox();
+  await rightClick('Presentation slide right-click', slide.x + slide.width / 2, slide.y + slide.height / 2);
+  await showTab('design');
+  const page2 = await page.locator('#overlay').boundingBox();
+  await rightClick('Design page right-click', page2.x + page2.width / 2, page2.y + page2.height / 2);
 
   for (const e of errors) fail(e);
 } catch (e) {

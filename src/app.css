@@ -2139,6 +2139,12 @@ dialog.reuse-slides { width: min(94vw, 860px); }
 .context-menu button[aria-expanded='true'] { background: var(--accent-soft); }
 .context-menu button:is([role='menuitemcheckbox'], [role='menuitemradio']) > span::before { content: ''; display: inline-block; width: 1.2em; }
 .context-menu button:is([role='menuitemcheckbox'], [role='menuitemradio'])[aria-checked='true'] > span::before { content: '✓'; }
+.context-menu button:disabled { color: var(--muted); }
+/* Cut, Copy, Paste, Delete in one row at the top: a picture and the name, the key in the tool tip */
+.context-menu .cm-row { display: flex; gap: 2px; }
+.context-menu .cm-row > button { flex: 1 1 auto; justify-content: center; align-items: center; gap: 4px; padding: 4px 6px; }
+.context-menu .cm-ic { display: inline-flex; width: 16px; height: 16px; }
+.context-menu .cm-ic > svg { width: 16px; height: 16px; }
 
 /* your own palettes, in every colour menu (Edit > Colour Palettes) */
 .palette-rows { display: flex; flex-direction: column; gap: 4px; max-height: 50vh; overflow-y: auto; }
