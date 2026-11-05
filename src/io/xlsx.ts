@@ -58,6 +58,7 @@ import type { CustomView } from '../sheet/views';
 import { seenSparkId } from '../sheet/sparklines';
 import { type CompoundCard } from '../sheet/compound';
 import { type Query, seenQueryId } from '../sheet/query';
+import { keepFileValues, fileValues, type FileValue } from './xlsx-cached';
 export { applyTint };
 
 /** Pictures of structures for Excel (the app draws them; tests use stand-ins). */
@@ -525,6 +526,8 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
   const lambdaNames = new Set(book.names.map((n) => n.name.toUpperCase()));
   const nameCase = book.nameCase();
   const persons = new Persons();
+  // Excel's own values for formulas this program can't work out, while they still hold
+  const saved = fileValues(book);
   pkg.defaultType('png', 'image/png');
   // drop-down lists too long for Excel to hold typed: their items on a hidden sheet, as Excel does itself
   const lists: { ref: string; text: string; items: string[] }[] = [];
@@ -601,7 +604,7 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
         const c = colOf(k);
         const cell = s.cell(r, c);
         const header = headerName.get(k);
-        const v = header ?? s.values.get(k) ?? null;
+        const v = header ?? saved(s, k) ?? s.values.get(k) ?? null;
         const style = s.styleAt(r, c);
         const ref = cellName(r, c);
         const own = cell?.style;
@@ -1269,6 +1272,8 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
     else if (usesUnknownFunction(text, nameSet)) unknownFormulas++;
   };
   let foreignPictures = 0;
+  // the values formulas had in the file, for those this program can't work out
+  const formulaValues = new Map<Sheet, Map<number, FileValue>>();
   const restored = { structures: 0, changed: 0 };
   book.build(() => {
     sheetEls.forEach((el, si) => {
@@ -1388,6 +1393,11 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
               if (R && (R.r2 > R.r1 || R.c2 > R.c1)) arrays.push({ R, r, c: col });
               // an array formula not marked as dynamic (cm, Excel 365's cell metadata) is a legacy one: it fills its block and no more
               if (isArray && !c.hasAttribute('cm')) legacyArray = R && R.r1 === r && R.c1 === col ? { rows: R.r2 - R.r1 + 1, cols: R.c2 - R.c1 + 1 } : { rows: 1, cols: 1 };
+              if (v !== null && value !== null) {
+                let list = formulaValues.get(s);
+                if (!list) formulaValues.set(s, (list = new Map()));
+                list.set(keyOf(r, col), { v: value, ...(t === 'e' ? { error: true } : {}) });
+              }
             }
           } else if (arrays.some((a) => inRange(a.R, r, col) && !(a.r === r && a.c === col))) {
             // spilled there: the formula fills it again
@@ -1627,6 +1637,7 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
   // a filter goes back as it was: the rows it hid are hidden already
   if (filters.length) book.build(() => { for (const { s, f } of filters) s.restoreFilter(f); });
   book.active = Math.min(Math.max(0, activeTab), book.sheets.length - 1);
+  keepFileValues(book, formulaValues);
 
   if (foreignPictures) notKept.add(`${foreignPictures} picture${foreignPictures > 1 ? 's' : ''} or chart${foreignPictures > 1 ? 's' : ''}`);
   if (unknownFormulas) warnings.push(`${unknownFormulas} formula${unknownFormulas > 1 ? 's use' : ' uses'} Excel functions this program can't work out yet.`);
