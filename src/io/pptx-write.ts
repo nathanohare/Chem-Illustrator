@@ -32,7 +32,7 @@ import { extractDrawing } from './clipboard';
 import { contentsAlt, titleOverlaps, roughCaptionBox } from '../accessibility';
 import type { Selection } from '../editor/editor';
 import { Package, NS, REL, emu, xml, xmlAttr, hex6, MediaFiles, structureAltText, bytesHash } from './ooxml';
-import { writeKeptParts, type KeptParts } from './kept-parts';
+import { appPropsXml, corePropsXml, writeKeptParts, type KeptParts } from './kept-parts';
 import { facesToEmbed, toEot, type FontSource } from './font-embed';
 import { dataUrl, fromDataUrl } from '../render/images';
 import { patternClear, patternInk, shadowLook } from '../render/fills';
@@ -543,8 +543,10 @@ class Writer {
     pkg.relate('', REL.officeDocument, 'ppt/presentation.xml');
     pkg.relate('', REL.coreProps, 'docProps/core.xml');
     pkg.relate('', REL.extendedProps, 'docProps/app.xml');
-    pkg.add('docProps/core.xml', this.core(), CT.core);
-    pkg.add('docProps/app.xml', `${HEAD}<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><Application>Chem Illustrator</Application><Slides>${n}</Slides><Notes>${deck.slides.filter((s) => s.notes.trim()).length}</Notes><PresentationFormat>${deck.size.w === 960 && deck.size.h === 540 ? 'Widescreen' : deck.size.w === 720 && deck.size.h === 540 ? 'On-screen Show (4:3)' : 'Custom'}</PresentationFormat></Properties>`, CT.app);
+    // the deck's properties (File > Info) as the file had them, brought up to date; a new deck is titled by its name
+    pkg.add('docProps/core.xml', corePropsXml(deck.kept?.docProps, { fresh: { title: this.opts.title ?? 'Slides', revision: '1' } }), CT.core);
+    const format = deck.size.w === 960 && deck.size.h === 540 ? 'Widescreen' : deck.size.w === 720 && deck.size.h === 540 ? 'On-screen Show (4:3)' : 'Custom';
+    pkg.add('docProps/app.xml', appPropsXml(deck.kept?.docProps, `<PresentationFormat>${format}</PresentationFormat><Slides>${n}</Slides><Notes>${deck.slides.filter((s) => s.notes.trim()).length}</Notes>`), CT.app);
 
     const P = 'ppt/presentation.xml';
     const masterRel = pkg.relate(P, REL.slideMaster, 'slideMasters/slideMaster1.xml');
@@ -645,13 +647,6 @@ class Writer {
       `</p:presentation>`, CT.presentation);
     writeKeptParts(pkg, deck.kept, { main: P, firstItem: 1 });
     return pkg.build();
-  }
-
-  private core(): string {
-    const now = new Date().toISOString().replace(/\.\d+Z$/, 'Z');
-    return `${HEAD}<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">` +
-      `<dc:title>${xml(this.opts.title ?? 'Slides')}</dc:title><cp:revision>1</cp:revision>` +
-      `<dcterms:created xsi:type="dcterms:W3CDTF">${now}</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">${now}</dcterms:modified></cp:coreProperties>`;
   }
 
   // ---------------------------------------------------------------- master and layouts

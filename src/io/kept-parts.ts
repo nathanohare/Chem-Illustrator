@@ -14,10 +14,14 @@
 // Written from the Office Open XML standard (ECMA-376 Part 1: custom XML data, custom file
 // properties, content controls; Part 2: packages) and Microsoft's published description of add-in
 // settings in documents ([MS-OWEXML]).
+//
+// The document's properties (File > Info: title, author, when it was made...) are kept the same
+// way: as the file had them, brought up to date where saving changes them, as Office does.
 
-import { kids, xml, type Package, type PackageReader } from './ooxml';
+import { REL, kids, xml, type Package, type PackageReader } from './ooxml';
 import { dataUrl, fromDataUrl } from '../render/images';
 import { CUSTOM_PROPS_FMTID } from './docx-base';
+import { reviewAuthor } from '../document/revisions';
 
 const R = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/';
 export const KEPT_REL = {
@@ -60,6 +64,15 @@ export interface KeptTree {
   rels: { from: string; type: string; target: string; external?: boolean }[];
 }
 
+/**
+ * The document's properties as the file had them: docProps/core.xml's (title, creator, created...)
+ * by element name, and the ones a person types in docProps/app.xml (Company, Manager...).
+ */
+export interface KeptProps {
+  core: Record<string, string>;
+  app: Record<string, string>;
+}
+
 export interface KeptParts {
   xml?: KeptXml[];
   /** Custom document properties (<property> elements), other than the ones this app writes itself. */
@@ -67,6 +80,7 @@ export interface KeptParts {
   /** Word's document variables (settings' w:docVars), as the element. */
   vars?: string;
   trees?: KeptTree[];
+  docProps?: KeptProps;
 }
 
 const serializer = () => new XMLSerializer();
@@ -120,7 +134,92 @@ export function readKeptParts(pkg: PackageReader, opts: KeptReadOptions): KeptPa
     }
   }
   if (trees.length) out.trees = trees;
+  const docProps = readDocProps(pkg);
+  if (docProps) out.docProps = docProps;
   return Object.keys(out).length ? out : undefined;
+}
+
+const CORE_NS = {
+  cp: 'http://schemas.openxmlformats.org/package/2006/metadata/core-properties',
+  dc: 'http://purl.org/dc/elements/1.1/',
+  dcterms: 'http://purl.org/dc/terms/',
+};
+/** The core properties (ECMA-376 Part 2 §8.3.2) with their namespaces' prefixes, in the order Office writes them. */
+const CORE_PROPS: [keyof typeof CORE_NS, string][] = [
+  ['dc', 'title'], ['dc', 'subject'], ['dc', 'creator'], ['cp', 'keywords'], ['dc', 'description'], ['cp', 'lastModifiedBy'],
+  ['cp', 'revision'], ['cp', 'lastPrinted'], ['dcterms', 'created'], ['dcterms', 'modified'], ['cp', 'category'],
+  ['cp', 'contentStatus'], ['dc', 'language'], ['dc', 'identifier'], ['cp', 'version'],
+];
+/** The extended properties a person types in (File > Properties); the rest are counts made afresh on each save. */
+const APP_KEPT = ['Template', 'Manager', 'Company', 'HyperlinkBase'];
+
+/** The file's document properties (null when it has none). */
+function readDocProps(pkg: PackageReader): KeptProps | null {
+  const root = (type: string): Element | null => {
+    const path = pkg.relOfType('', type);
+    try { return path ? pkg.xml(path)?.documentElement ?? null : null; } catch { return null; }
+  };
+  const core: Record<string, string> = {}, app: Record<string, string> = {};
+  for (const el of kids(root(REL.coreProps))) {
+    const v = el.textContent ?? '';
+    if (v.trim() && CORE_PROPS.some(([pre, name]) => name === el.localName && CORE_NS[pre] === el.namespaceURI)) core[el.localName] = v;
+  }
+  for (const el of kids(root(REL.extendedProps))) {
+    const v = el.textContent ?? '';
+    if (v.trim() && APP_KEPT.includes(el.localName)) app[el.localName] = v;
+  }
+  return Object.keys(core).length || Object.keys(app).length ? { core, app } : null;
+}
+
+/** The entries that have a value (a value or null), so that undefined ones keep what the file had. */
+const defined = (o: Record<string, string | null | undefined> = {}) => Object.fromEntries(Object.entries(o).filter(([, x]) => x !== undefined));
+
+const PROPS_HEAD = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n';
+
+export interface CorePropsOptions {
+  /** Properties set here (by element name): a value, or null to leave one out. Those not named (or undefined) are kept from the file. */
+  set?: Record<string, string | null | undefined>;
+  /** What a file with no properties of its own (a new one) starts with. */
+  fresh?: Record<string, string>;
+  /** Who is saving: the name changes are made under here (left out when there is none). */
+  by?: string;
+  /** The time of the save (now). */
+  now?: string;
+}
+
+/**
+ * docProps/core.xml for a save: the file's own properties kept, as Office keeps them, with the
+ * ones set here put in, and what Office brings up to date on each save: when the file was
+ * modified, who modified it and its revision number. A file with no creation date is made now.
+ */
+export function corePropsXml(kept: KeptProps | undefined, opts: CorePropsOptions = {}): string {
+  const now = opts.now ?? new Date().toISOString().replace(/\.\d+Z$/, 'Z');
+  const by = (opts.by ?? reviewAuthor()).trim();
+  const v: Record<string, string | null | undefined> = { ...(kept ? kept.core : opts.fresh), ...defined(opts.set) };
+  const rev = kept?.core.revision?.trim();
+  if (rev && /^\d{1,9}$/.test(rev)) v.revision = String(Number(rev) + 1);
+  v.lastModifiedBy = by || null;
+  v.created = v.created || now;
+  v.modified = now;
+  const body = CORE_PROPS.map(([pre, name]) => {
+    const val = v[name];
+    if (!val) return '';
+    const type = pre === 'dcterms' ? ' xsi:type="dcterms:W3CDTF"' : '';
+    return `<${pre}:${name}${type}>${xml(val)}</${pre}:${name}>`;
+  }).join('');
+  return `${PROPS_HEAD}<cp:coreProperties xmlns:cp="${CORE_NS.cp}" xmlns:dc="${CORE_NS.dc}" xmlns:dcterms="${CORE_NS.dcterms}" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">${body}</cp:coreProperties>`;
+}
+
+/**
+ * docProps/app.xml for a save: this app's name and `counts` (the program's own elements, such as
+ * Slides), with the properties a person types in (Company, Manager...) kept from the file; `set`
+ * (a value, or null to leave one out; undefined keeps the file's) wins over the file's.
+ */
+export function appPropsXml(kept: KeptProps | undefined, counts = '', set: Record<string, string | null | undefined> = {}): string {
+  const v: Record<string, string | null | undefined> = { ...kept?.app, ...defined(set) };
+  const tag = (k: string) => (v[k] ? `<${k}>${xml(v[k]!)}</${k}>` : '');
+  return `${PROPS_HEAD}<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">` +
+    `${tag('Template')}<Application>Chem Illustrator</Application>${counts}${APP_KEPT.slice(1).map(tag).join('')}</Properties>`;
 }
 
 /** A part and the XML parts it leads to, with their relationships; null when the part isn't there. */

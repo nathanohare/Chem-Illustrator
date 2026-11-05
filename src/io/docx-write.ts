@@ -55,7 +55,7 @@ import { addChart, C_NS } from './office-chart';
 import { CX_NS, CX1_NS } from './xlsx-chart';
 import { isChartEx } from '../sheet/chart';
 import type { ChartBox } from '../sheet/chart-box';
-import { writeKeptParts, type ContentControl } from './kept-parts';
+import { appPropsXml, corePropsXml, writeKeptParts, type ContentControl } from './kept-parts';
 import { cmlGuid, contentsSig, writeCml } from './cml';
 import {
   BIB_MARK, CHART_NAME, CITE_FIELD, DOCX_CT, W14_NS, W15_NS, DOCX_REL, DRAWING_NAME, FORMULA_STYLE, MODEL_NS, MC_NS, M_NS, PIC_NS, TABLE_MARK, W_NS, WORD_HIGHLIGHTS, WP_NS, WPS_NS, WPG_NS, twips, toWordDate, type DocxModel,
@@ -245,15 +245,12 @@ class DocxWriter {
     pkg.relate('', REL.officeDocument, main);
     pkg.relate('', REL.coreProps, 'docProps/core.xml');
     pkg.relate('', REL.extendedProps, 'docProps/app.xml');
-    const now = new Date().toISOString().replace(/\.\d+Z$/, 'Z');
-    // the document's properties (File > Properties), which fields and Word show
+    // the document's properties (File > Properties), which fields and Word show: the ones edited
+    // here as they are now, the rest (comments, category, status...) as the file had them
     const pr = this.t.props ?? {};
-    const name = pr.title || title;
-    const tag = (k: string, v: string | undefined) => (v ? `<${k}>${xml(v)}</${k}>` : '');
-    pkg.add('docProps/core.xml', `${HEAD}<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">` +
-      `${tag('dc:title', name)}${tag('dc:subject', pr.subject)}${tag('dc:creator', pr.author)}${tag('cp:keywords', pr.keywords)}${pr.author ? `<cp:lastModifiedBy>${xml(pr.author)}</cp:lastModifiedBy>` : ''}` +
-      `<dcterms:created xsi:type="dcterms:W3CDTF">${xml(pr.created ?? now)}</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">${now}</dcterms:modified></cp:coreProperties>`, DOCX_CT.core);
-    pkg.add('docProps/app.xml', `${HEAD}<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><Application>Chem Illustrator</Application>${tag('Company', pr.company)}</Properties>`, DOCX_CT.app);
+    const kept = this.t.kept?.docProps;
+    pkg.add('docProps/core.xml', corePropsXml(kept, { set: { title: pr.title || title || null, subject: pr.subject ?? null, creator: pr.author ?? null, keywords: pr.keywords ?? null, created: pr.created } }), DOCX_CT.core);
+    pkg.add('docProps/app.xml', appPropsXml(kept, '', { Company: pr.company ?? null }), DOCX_CT.app);
     // Zotero's document preferences (its style and settings) as custom document properties, with
     // other programs' data kept from the file read: custom XML (Chem4Word's structures written
     // afresh where they were changed here), custom properties and add-ins' settings
