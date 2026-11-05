@@ -52,6 +52,8 @@ function refsOf(book: Workbook, text: string, depth = 0): RefToken[] | null {
   const refs = formulaRefs(text);
   for (const t of toks) {
     if (t.t !== 'name' && t.t !== 'fn') continue;
+    // (what INDIRECT and OFFSET read is worked out, not written in the formula)
+    if (t.t === 'fn' && (t.v === 'INDIRECT' || t.v === 'OFFSET')) return null;
     const n = book.names.find((x) => x.name.toLowerCase() === t.v.toLowerCase());
     if (!n) continue;
     const more = depth < 4 ? refsOf(book, n.formula, depth + 1) : null;

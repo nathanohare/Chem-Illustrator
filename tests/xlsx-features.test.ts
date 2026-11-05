@@ -41,7 +41,7 @@ describe('values of formulas this program can\'t work out (X17)', () => {
   const file = () => excelBook([
     ['Data', '<sheetData>' +
       '<row r="1"><c r="A1"><v>2</v></c><c r="B1"><f>CUBEVALUE("Sales",A1)</f><v>42</v></c><c r="C1"><f>B1+1</f><v>43</v></c><c r="D1"><v>9</v></c></row>' +
-      '<row r="2"><c r="A2"><f>SUM(Data:Other!A1)</f><v>7</v></c><c r="B2" t="str"><f>PHONETIC(A1)</f><v>two x</v></c><c r="C2"><f>A1/2</f><v>1</v></c><c r="D2" t="e"><f>CUBEMEMBER("Sales",0)</f><v>#N/A</v></c></row>' +
+      '<row r="2"><c r="A2"><f>SUM(Data:Other!A1)</f><v>7</v></c><c r="E2"><f>CUBEVALUE("Sales",INDIRECT("A1"))</f><v>8</v></c><c r="B2" t="str"><f>PHONETIC(A1)</f><v>two x</v></c><c r="C2"><f>A1/2</f><v>1</v></c><c r="D2" t="e"><f>CUBEMEMBER("Sales",0)</f><v>#N/A</v></c></row>' +
       '</sheetData>'],
     ['Other', '<sheetData><row r="1"><c r="A1"><v>5</v></c></row></sheetData>'],
   ]);
@@ -71,6 +71,8 @@ describe('values of formulas this program can\'t work out (X17)', () => {
     expect(cellXml(xml, 'B1')).toContain('<v>42</v>');
     expect(cellXml(xml, 'C1')).toContain('<v>43</v>');
     expect(cellXml(xml, 'A2')).toBe('<c r="A2" t="e"><f>SUM(Data:Other!A1)</f><v>#NAME?</v></c>');
+    // (nor one reading a cell named only when it is worked out)
+    expect(cellXml(xml, 'E2')).toContain('<v>#NAME?</v>');
     // the cell it reads changed: Excel's value is out of date, and so is the one reading it
     book.edit('type', () => s.setInput(0, 0, '3'));
     book.recalc();
