@@ -6,7 +6,8 @@
 //   it afresh on every save, and the alt text is the person's to edit); a picture put in its
 //   place (Change Picture) comes in as that picture, with a warning; a crop or recolour made in
 //   Word is warned about;
-// - text bolded or shaded in a table in Word, its words unchanged, comes back as Word has it;
+// - a table is recognised by a hidden bookmark (not by its alt-text title, which Word shows and
+//   reads out), and text bolded or shaded in Word with its words unchanged comes back as Word has it;
 // - a chart changed to another type in Word comes back as that type.
 
 import { describe, it, expect } from 'vitest';
@@ -95,6 +96,23 @@ describe('tables in Word', () => {
     const o = Object.values(doc.objects).find((x) => x.kind === 'drawing');
     return o?.kind === 'drawing' ? o.contents.shapes.find((s) => s.kind === 'table')?.table ?? null : null;
   };
+
+  it('are not titled with an id: their own title is their alt text, and a hidden bookmark says which they are', async () => {
+    const p = await write();
+    const x = text(p, 'word/document.xml');
+    expect(x).not.toContain('Chem Illustrator table');
+    expect(x).toContain('<w:tblCaption w:val="Table 1. Screening"/>');
+    expect(x).toMatch(/<w:bookmarkStart w:id="\d+" w:name="_ChemTable_1"\/>/);
+    // the alt-text title changed in Word: still ours (its title as saved)
+    const t = await table(edited(p, (y) => y.replace('w:val="Table 1. Screening"', 'w:val="Yields of the screening reactions"')));
+    expect(t?.title?.map((r) => r.text).join('')).toBe('Table 1. Screening');
+  });
+
+  it('written before the bookmark are still found by their old alt-text title', async () => {
+    const p = await write();
+    const old = edited(p, (y) => y.replace(/<w:bookmarkStart w:id="\d+" w:name="_ChemTable_1"\/><w:bookmarkEnd w:id="\d+"\/>/, '').replace(/<w:tblCaption w:val="[^"]*"\/>/, '<w:tblCaption w:val="Chem Illustrator table 1"/>'));
+    expect((await table(old))?.title?.map((r) => r.text).join('')).toBe('Table 1. Screening');
+  });
 
   it('keep text bolded and cells shaded in Word, their words unchanged', async () => {
     const p = await write();

@@ -143,7 +143,10 @@ describe('saving Word files', () => {
   it('writes tables as Word tables with ACS rules, and structures as pictures with their SVG', async () => {
     const p = parts(await writeDocx(sample(), deps));
     const body = p['word/document.xml'];
-    expect(body).toContain('<w:tblCaption w:val="Chem Illustrator table 4"/>');
+    // which of ours it is goes in a hidden bookmark; its alt-text title is its own title
+    expect(body).toContain('w:name="_ChemTable_4"/>');
+    expect(body).toContain('<w:tblCaption w:val="Table 1. Optimization"/>');
+    expect(body).not.toContain('Chem Illustrator table');
     expect(body).toContain('<w:tblHeader/>');
     expect(body).toContain('<w:gridCol w:w="1200"/><w:gridCol w:w="800"/>');
     expect(body).toContain('name="Chem Illustrator drawing 1"');

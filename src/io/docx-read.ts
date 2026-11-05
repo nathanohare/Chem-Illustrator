@@ -40,7 +40,7 @@ import { shownSize } from '../document/doc-layout';
 import { coveringCell, layoutTable } from '../table';
 import { chemdrawCdx, isChemDraw, readEmbedded } from './ole-object';
 import { cmtIds, cmtString, type CommentNote, type CommentThread } from '../document/comments';
-import { BIB_MARK, CHART_NAME, CITE_FIELD, WORD_HIGHLIGHTS, DOCX_REL, W14_NS, W15_NS, W16CID_NS, W16CEX_NS, fromWordDate, DRAWING_NAME, FORMULA_STYLE, MODEL_NS, TABLE_NAME, W_NS, type DocxModel } from './docx-base';
+import { BIB_MARK, CHART_NAME, CITE_FIELD, WORD_HIGHLIGHTS, DOCX_REL, W14_NS, W15_NS, W16CID_NS, W16CEX_NS, fromWordDate, DRAWING_NAME, FORMULA_STYLE, MODEL_NS, TABLE_MARK, TABLE_NAME, W_NS, type DocxModel } from './docx-base';
 import { wordTablePrint } from './native-print';
 import { citationNumbers, cleanRef, type Piece as BibPiece, type Reference } from '../document/references';
 import { bibFieldApp, placeRef, readCiteField, readMendeleyTag, styleFromCsl, zoteroStyleOf, MANAGERS, type CiteLive, type CiteManager, type ManagerCite } from '../document/live-cites';
@@ -2056,13 +2056,29 @@ class DocxReader {
 
   // ---------------------------------------------------------------- tables
 
+  /**
+   * Which of our tables a Word table is (its id in our part), or null: by the hidden bookmark at
+   * the start of its first cell, or (files from before it) by its alt-text title.
+   */
+  private ourTableId(tbl: Element): number | null {
+    const first = kids(kids(tbl, 'tr')[0] ?? null).find((k) => k.localName === 'tc');
+    for (const p of kids(first ?? null, 'p')) {
+      for (const b of kids(p, 'bookmarkStart')) {
+        const m = new RegExp(`^${TABLE_MARK}(\\d+)$`).exec(b.getAttributeNS(W_NS, 'name') ?? '');
+        if (m) return Number(m[1]);
+      }
+    }
+    const cap = new RegExp(`^${TABLE_NAME} (\\d+)$`).exec(this.a(kid(kid(tbl, 'tblPr'), 'tblCaption')) ?? '');
+    return cap ? Number(cap[1]) : null;
+  }
+
   private table(tbl: Element): void {
     this.pendingNotes = null;
     const tblPr = kid(tbl, 'tblPr');
     // a table from Word (or one typed into here) is a table in the text; an ACS table drawn here
     // comes back as its drawing, and a table inside a cell as a drawn table
-    const cap0 = new RegExp(`^${TABLE_NAME} (\\d+)$`).exec(this.a(kid(tblPr, 'tblCaption')) ?? '');
-    if (!(cap0 && this.model?.tables?.[Number(cap0[1])])) { this.textTable(tbl); return; }
+    const ourId = this.ourTableId(tbl);
+    if (!(ourId !== null && this.model?.tables?.[ourId])) { this.textTable(tbl); return; }
     const rows = kids(tbl, 'tr');
     let cols = kids(kid(tbl, 'tblGrid'), 'gridCol').map((g) => this.tw(g, 'w') ?? 0);
     // the cells, each with how many grid columns it spans
@@ -2150,8 +2166,7 @@ class DocxReader {
     table.rows.forEach((row) => row.forEach((c, ci) => { if (c.align === table.align![ci]) delete c.align; }));
 
     // our own table: as it was made here, while its text is the same
-    const cap = new RegExp(`^${TABLE_NAME} (\\d+)$`).exec(this.a(kid(tblPr, 'tblCaption')) ?? '');
-    const mine = cap ? this.model?.tables?.[Number(cap[1])] : undefined;
+    const mine = this.model?.tables?.[ourId];
     let final = table;
     if (mine?.table && mine.text === tableText(table)) {
       final = structuredClone(mine.table);

@@ -58,7 +58,7 @@ import type { ChartBox } from '../sheet/chart-box';
 import { writeKeptParts, type ContentControl } from './kept-parts';
 import { cmlGuid, contentsSig, writeCml } from './cml';
 import {
-  BIB_MARK, CHART_NAME, CITE_FIELD, DOCX_CT, W14_NS, W15_NS, DOCX_REL, DRAWING_NAME, FORMULA_STYLE, MODEL_NS, MC_NS, M_NS, PIC_NS, TABLE_NAME, W_NS, WORD_HIGHLIGHTS, WP_NS, WPS_NS, WPG_NS, twips, toWordDate, type DocxModel,
+  BIB_MARK, CHART_NAME, CITE_FIELD, DOCX_CT, W14_NS, W15_NS, DOCX_REL, DRAWING_NAME, FORMULA_STYLE, MODEL_NS, MC_NS, M_NS, PIC_NS, TABLE_MARK, W_NS, WORD_HIGHLIGHTS, WP_NS, WPS_NS, WPG_NS, twips, toWordDate, type DocxModel,
 } from './docx-base';
 
 export interface DocxDeps {
@@ -1061,11 +1061,16 @@ class DocxWriter {
         : `<w:top ${none}/><w:left ${none}/><w:bottom ${none}/><w:right ${none}/><w:insideH ${none}/><w:insideV ${none}/>`;
     const width = tab.cols.reduce((a, b) => a + b, 0);
     const padX = twips(PAD_X * size), padY = twips(PAD_Y * size);
+    const title = tab.title?.length ? rt.plainText(tab.title).replace(/\s+/g, ' ').trim() : '';
+    // which of ours it is: a hidden bookmark at the start of its first cell
+    const markId = this.bookmarkId++;
+    let mark = `<w:bookmarkStart w:id="${markId}" w:name="${TABLE_MARK}${id}"/><w:bookmarkEnd w:id="${markId}"/>`;
     const tblPr = `<w:tblPr><w:tblW w:w="${twips(width)}" w:type="dxa"/><w:jc w:val="${align === 'right' ? 'right' : align === 'left' ? 'left' : 'center'}"/>` +
       `<w:tblBorders>${borders}</w:tblBorders><w:tblLayout w:type="fixed"/>` +
       `<w:tblCellMar><w:top w:w="${padY}" w:type="dxa"/><w:left w:w="${padX}" w:type="dxa"/><w:bottom w:w="${padY}" w:type="dxa"/><w:right w:w="${padX}" w:type="dxa"/></w:tblCellMar>` +
       `<w:tblLook w:val="0000" w:firstRow="0" w:lastRow="0" w:firstColumn="0" w:lastColumn="0" w:noHBand="1" w:noVBand="1"/>` +
-      `<w:tblCaption w:val="${TABLE_NAME} ${id}"/></w:tblPr>`;
+      // its alt-text title: the table's own title (which of ours it is goes in a hidden bookmark)
+      `${title ? `<w:tblCaption w:val="${xmlAttr(title)}"/>` : ''}</w:tblPr>`;
     const grid = `<w:tblGrid>${tab.cols.map((w) => `<w:gridCol w:w="${twips(w)}"/>`).join('')}</w:tblGrid>`;
     const cellPara = (runs: TextRun[], paras: ParaStyle[] | undefined, jc: Justify, k = 1): string => {
       const n = paraCount(rt.plainText(runs));
@@ -1085,8 +1090,9 @@ class DocxWriter {
         const w = tab.cols.slice(c, c + span).reduce((a, b) => a + b, 0);
         const cell = row[c] ?? { runs: [] };
         const tcBorders = tab.lines === 'acs' && lastHead && r < tab.rows.length - 1 ? `<w:tcBorders><w:bottom ${line}/></w:tcBorders>` : '';
-        cells.push(`<w:tc><w:tcPr><w:tcW w:w="${twips(w)}" w:type="dxa"/>${span > 1 ? `<w:gridSpan w:val="${span}"/>` : ''}${tcBorders}</w:tcPr>` +
-          `${cellPara(cell.runs, cell.paras, cellAlign(tab, r, c))}</w:tc>`);
+        const text = cellPara(cell.runs, cell.paras, cellAlign(tab, r, c)).replace('</w:pPr>', `</w:pPr>${mark}`);
+        mark = '';
+        cells.push(`<w:tc><w:tcPr><w:tcW w:w="${twips(w)}" w:type="dxa"/>${span > 1 ? `<w:gridSpan w:val="${span}"/>` : ''}${tcBorders}</w:tcPr>${text}</w:tc>`);
       }
       rows.push(`<w:tr>${r < tab.head ? '<w:trPr><w:tblHeader/></w:trPr>' : ''}${cells.join('')}</w:tr>`);
     });

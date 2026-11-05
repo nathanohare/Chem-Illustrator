@@ -93,6 +93,13 @@ export function fromWordDate(s: string): string {
 export const DRAWING_NAME = 'Chem Illustrator drawing';
 /** Alternative text Word's tables of ours carry. */
 export const TABLE_NAME = 'Chem Illustrator table';
+/**
+ * The hidden bookmark (its name starts with an underscore, so Word doesn't list it) at the start of
+ * one of our tables' first cell, `_ChemTable_3` for table 3 in our part: which of ours it is. Older
+ * files said so in the table's alt-text title (w:tblCaption "Chem Illustrator table 3"), which Word
+ * shows and reads out, and LibreOffice drops.
+ */
+export const TABLE_MARK = '_ChemTable_';
 /** The character style that marks chemical formulas (CH₂Cl₂), so they stay formulas here. */
 export const FORMULA_STYLE = 'ChemFormula';
 
