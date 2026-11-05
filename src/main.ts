@@ -11278,17 +11278,14 @@ async function runAnalysis(force: boolean): Promise<void> {
   const extras: Caption[][] = [];
   const seen = new Set<number>();
   const counted = new Set<number>();
-  // only some atoms of a structure picked: the box says so, or one carbon reads as CH4
-  let partial = false;
   for (const r of roots) {
     if (seen.has(r)) continue;
     const f = doc.fragmentOf(r);
     for (const x of f) seen.add(x);
     const ions = groupedIons(doc, f, editor.measure());
     for (const c of ions) counted.add(c.id);
-    const part = editor.sel.atoms.size ? new Set([...f].filter((x) => editor.sel.atoms.has(x))) : f;
-    if (part.size < f.size) partial = true;
-    frags.push(part);
+    // any atom picked analyses its whole structure (one carbon of a molecule is not CH4)
+    frags.push(f);
     extras.push(ions);
     if (frags.length >= 12) break;
   }
@@ -11348,7 +11345,7 @@ async function runAnalysis(force: boolean): Promise<void> {
   saySelection(results);
   // the ribbon's one line: the first structure's formula and weight (and how many more)
   const first = results.find((r) => !r.error && r.formula);
-  analysisBox.set(first ? formulaHtml(first.formula) + (results.length > 1 ? ` <span class="muted">+${results.length - 1}</span>` : '') : null, first ? first.mw.toFixed(2) : null, first ? first.exact.toFixed(4) : null, partial);
+  analysisBox.set(first ? formulaHtml(first.formula) + (results.length > 1 ? ` <span class="muted">+${results.length - 1}</span>` : '') : null, first ? first.mw.toFixed(2) : null, first ? first.exact.toFixed(4) : null);
   panel.innerHTML = results.map((r, i) => polymers[i] ? polymerHtml(r, polymers[i]!) : analysisHtml(r, i, adductSel.value, { stereo: r.error ? '' : stereoSummary(frags[i]), unknown: exports[i].unknownLabels, electrons: frags[i].size ? electronsHtml(countElectrons(doc, frags[i].values().next().value!)) : '', rGroups: rGroupNames(frags[i]), name: r.error || !r.smiles || rGroupNames(frags[i]).length ? '' : nameHtml(nameStates.get(r.smiles) ?? { kind: 'idle' }, i), pubchem: r.error || !r.smiles ? '' : pubchemHtml(pubchemStates.get(r.smiles) ?? { kind: 'idle' }, i), cas: r.error || !r.smiles ? undefined : casHtml(casStateOf(r.smiles), i) })).join('');
   updatePanels();
 }

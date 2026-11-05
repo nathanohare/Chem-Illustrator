@@ -1775,9 +1775,7 @@ body.mode-window .cr-warnings .cr-ok { color: #7ddc9a; }
 .canvas-ribbon.cr-classic .cr-analysis .cr-chev { grid-row: 1 / 4; grid-column: 2; align-self: center; }
 /* Simplified: one line, formula and weight */
 .canvas-ribbon.cr-simple .cr-analysis .cr-an-ex, .canvas-ribbon.cr-simple .cr-analysis .cr-an-k { display: none; }
-.cr-analysis .cr-an-ex.cr-an-part { font-family: var(--ui-font, inherit); font-style: italic; }
 /* the Simplified ribbon has room for one line: say "part" after the weight there */
-.canvas-ribbon.cr-simple .cr-analysis.partial .cr-an-mw::after { content: ' · part'; font-family: var(--ui-font, inherit); }
 /* a narrow window: the Classic box slims so it stays inside the ribbon (it was cut off at 1024 px) */
 @media (max-width: 1150px) { .canvas-ribbon.cr-classic button.cr-analysis { width: 136px; } }
 .cr-chev { margin-left: auto; color: var(--muted); display: inline-flex; }
