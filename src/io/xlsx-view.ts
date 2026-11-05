@@ -1,8 +1,9 @@
 // Excel's parts for the sheet finishing touches: turned text, how each sheet is viewed (Page
 // Layout, Page Break Preview, gridlines, headings, zoom), the outline (summary rows' places),
 // sparklines (the x14 extension Excel 2010 added to worksheets), custom views, the workbook's
-// theme (colours and fonts), and what only Excel uses (protection), kept from the file read to
-// write back. All follow ECMA-376 part 1 and Microsoft's published [MS-XLSX] extensions.
+// theme (colours and fonts), and what only Excel uses (protection, tab colours, right-to-left
+// sheets, where each sheet was scrolled to and what was selected, sort and calculation settings),
+// kept from the file read to write back. All follow ECMA-376 part 1 and Microsoft's published [MS-XLSX] extensions.
 
 import { xml, xmlAttr, hex6, kids, kid } from './ooxml';
 import type { Sheet, Workbook } from '../sheet/workbook';
@@ -261,17 +262,31 @@ export function readWorkbookTheme(doc: Document | null): WorkbookTheme | null {
 /**
  * What a worksheet says that only Excel uses, kept as the file had it and written back in its
  * place. Review > Protect Sheet (18.3.1.85, with its password's hash and salt) and Allow Edit
- * Ranges (18.3.1.71) are kept for Excel; nothing here enforces them.
+ * Ranges (18.3.1.72) are kept for Excel; nothing here enforces them.
  */
 export interface ExcelSheetKept {
   protection?: string;
   protectedRanges?: string;
+  /** sheetPr's tabColor (18.3.1.93), as the element. */
+  tabColor?: string;
+  /** The sheet view's attributes this program doesn't set itself: right to left, formulas shown, where it was scrolled to… (18.3.1.87). */
+  viewAttrs?: string;
+  /**
+   * The panes the view had (see paneKey), the scroll position of its frozen or split pane, and
+   * its selections (18.3.1.78): written back while the panes are the same.
+   */
+  panes?: { key: string; topLeft?: string; selection: string };
+  /** The sort Excel remembers for the sheet (18.3.1.92), and the error checks turned off for cells (18.3.1.51), as the elements. */
+  sortState?: string;
+  ignoredErrors?: string;
 }
 
 /** What a workbook says that only Excel uses: Protect Workbook (18.2.29) and a password to modify or read-only recommended (18.2.12). */
 export interface ExcelBookKept {
   protection?: string;
   fileSharing?: string;
+  /** calcPr's settings (18.2.2): manual calculation, iteration, precision as displayed, R1C1 references. */
+  calcAttrs?: string;
   /** Pictures placed in cells and other rich values: their parts and value metadata (see xlsx-rich.ts). */
   richValues?: RichValues;
 }
@@ -297,7 +312,49 @@ export function readSheetKept(ws: Element): ExcelSheetKept | undefined {
   if (prot) out.protection = mainXml(prot);
   const ranges = kid(ws, 'protectedRanges');
   if (ranges && kids(ranges, 'protectedRange').length) out.protectedRanges = mainXml(ranges);
+  const tab = kid(ws, 'sheetPr', 'tabColor');
+  if (tab) out.tabColor = mainXml(tab);
+  const sv = kid(ws, 'sheetViews', 'sheetView');
+  if (sv) {
+    const attrs = keptAttrs(sv, (n) => !VIEW_OWN.has(n));
+    if (attrs) out.viewAttrs = attrs;
+    const pane = kid(sv, 'pane');
+    const selection = kids(sv, 'selection').map(mainXml).join('');
+    const split = (n: string) => Number(pane?.getAttribute(n) ?? 0) || 0;
+    const key = !pane ? paneKey(0, 0) : /frozen/i.test(pane.getAttribute('state') ?? '') ? paneKey(split('ySplit'), split('xSplit'), true) : paneKey(split('ySplit'), split('xSplit'));
+    const topLeft = pane?.getAttribute('topLeftCell');
+    if (selection || topLeft) out.panes = { key, ...(topLeft ? { topLeft } : {}), selection };
+  }
+  const sort = kid(ws, 'sortState');
+  if (sort) out.sortState = mainXml(sort);
+  const ignored = kid(ws, 'ignoredErrors');
+  if (ignored && kids(ignored, 'ignoredError').length) out.ignoredErrors = mainXml(ignored);
   return Object.keys(out).length ? out : undefined;
+}
+
+/** sheetView's attributes this program writes itself. */
+const VIEW_OWN = new Set(['showGridLines', 'showRowColHeaders', 'showZeros', 'showOutlineSymbols', 'view', 'zoomScale', 'zoomScaleNormal',
+  'zoomScalePageLayoutView', 'zoomScaleSheetLayoutView', 'tabSelected', 'workbookViewId']);
+/** calcPr's attributes kept from the file (this program writes calcId and fullCalcOnLoad). */
+const CALC_KEPT = new Set(['calcMode', 'fullPrecision', 'calcOnSave', 'concurrentCalc', 'concurrentManualCount', 'forceFullCalc', 'iterate', 'iterateCount', 'iterateDelta', 'refMode']);
+
+/** An element's attributes (of no namespace) that pass `keep`, as XML text. */
+const keptAttrs = (el: Element, keep: (name: string) => boolean): string =>
+  Array.from(el.attributes).filter((a) => !a.namespaceURI && keep(a.name)).map((a) => ` ${a.name}="${xmlAttr(a.value)}"`).join('');
+
+/** Which panes a sheet view has: frozen rows and columns by their number, a split window by its bars. */
+export const paneKey = (rows: number, cols: number, frozen = false): string =>
+  !rows && !cols ? 'none' : frozen ? `frozen:${rows}:${cols}` : `split:${rows > 0}:${cols > 0}`;
+
+/**
+ * A sheet view's panes and selection as written here (`pane`), with the file's scroll position
+ * and selections in their place while the panes are the same (`key`).
+ */
+export function keptPanes(k: ExcelSheetKept | undefined, key: string, pane: string): string {
+  const p = k?.panes;
+  if (!p || p.key !== key) return pane;
+  const out = p.topLeft ? pane.replace(/(<pane [^>]*topLeftCell=")[^"]*"/, `$1${xmlAttr(p.topLeft)}"`) : pane;
+  return p.selection ? out.replace(/<selection [^>]*\/>/g, '') + p.selection : out;
 }
 
 /** A workbook's settings that only Excel uses (undefined when it has none). */
@@ -307,6 +364,9 @@ export function readBookKept(root: Element): ExcelBookKept | undefined {
   if (prot) out.protection = mainXml(prot);
   const sharing = kid(root, 'fileSharing');
   if (sharing) out.fileSharing = mainXml(sharing);
+  const calc = kid(root, 'calcPr');
+  const calcAttrs = calc ? keptAttrs(calc, (n) => CALC_KEPT.has(n)) : '';
+  if (calcAttrs) out.calcAttrs = calcAttrs;
   return Object.keys(out).length ? out : undefined;
 }
 

@@ -268,3 +268,43 @@ describe('features left out (X16)', () => {
       '1 sheet background picture', '1 Excel 4 macro sheet (opened as an ordinary sheet)', 'XML maps']) expect(list).toContain(item);
   });
 });
+
+describe('sheet views and settings (X20)', () => {
+  const file = () => excelBook([
+    ['Plan', '<sheetPr><tabColor rgb="FFC00000"/><pageSetUpPr fitToPage="1"/></sheetPr><sheetViews><sheetView rightToLeft="1" showFormulas="1" topLeftCell="C10" zoomScale="90" workbookViewId="0">' +
+      '<selection activeCell="D12" sqref="D12:E14"/></sheetView></sheetViews>' +
+      '<sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><v>2</v></c></row><row r="2"><c r="A2"><v>3</v></c></row></sheetData>' +
+      '<autoFilter ref="A1:B2"/><sortState ref="A2:B2"><sortCondition descending="1" ref="B2"/></sortState>' +
+      '<pageSetup firstPageNumber="5" useFirstPageNumber="1"/><ignoredErrors><ignoredError sqref="A1:B2" numberStoredAsText="1"/></ignoredErrors>'],
+    ['Frozen', '<sheetViews><sheetView workbookViewId="0"><pane ySplit="1" topLeftCell="A40" activePane="bottomLeft" state="frozen"/>' +
+      '<selection pane="bottomLeft" activeCell="B45" sqref="B45"/></sheetView></sheetViews><sheetData><row r="1"><c r="A1"><v>1</v></c></row></sheetData>' +
+      '<pageSetup firstPageNumber="1" useFirstPageNumber="1"/>'],
+  ], {
+    workbook: (list) => `<workbook xmlns="${MAIN}" xmlns:r="${R}"><workbookPr/><bookViews><workbookView activeTab="1"/></bookViews><sheets>${list}</sheets>` +
+      '<calcPr calcId="191029" calcMode="manual" iterate="1" iterateCount="50" fullPrecision="0"/></workbook>',
+  });
+
+  it('keeps tab colors, right-to-left sheets, formulas shown, the scroll position and selection', async () => {
+    const saved = await writeXlsx((await readXlsx(file())).book, pictures);
+    const plan = part(saved, 'xl/worksheets/sheet1.xml');
+    expect(plan).toContain('<sheetPr filterMode="1"><tabColor rgb="FFC00000"/><pageSetUpPr fitToPage="1"/></sheetPr>');
+    expect(plan).toMatch(/<sheetView zoomScale="90" zoomScaleNormal="90" rightToLeft="1" showFormulas="1" topLeftCell="C10" workbookViewId="0"><selection activeCell="D12" sqref="D12:E14"\/><\/sheetView>/);
+    // a frozen pane keeps where it was scrolled to, and its selection
+    const frozen = part(saved, 'xl/worksheets/sheet2.xml');
+    expect(frozen).toContain('<pane ySplit="1" topLeftCell="A40" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="B45" sqref="B45"/></sheetView>');
+  });
+
+  it('keeps the sort, ignored errors, the first page number and the calculation settings', async () => {
+    const { book } = await readXlsx(file());
+    const saved = await writeXlsx(book, pictures);
+    const plan = part(saved, 'xl/worksheets/sheet1.xml');
+    expect(plan).toMatch(/<autoFilter ref="A1:B2"><\/autoFilter><sortState ref="A2:B2"><sortCondition descending="1" ref="B2"\/><\/sortState>/);
+    expect(plan).toMatch(/<pageSetup [^>]*firstPageNumber="5"[^>]* useFirstPageNumber="1"\/>.*<ignoredErrors><ignoredError sqref="A1:B2" numberStoredAsText="1"\/><\/ignoredErrors><\/worksheet>/);
+    expect(part(saved, 'xl/worksheets/sheet2.xml')).toContain('<pageSetup firstPageNumber="1" useFirstPageNumber="1"/>');
+    expect(part(saved, 'xl/workbook.xml')).toContain('<calcPr calcId="191029" calcMode="manual" iterate="1" iterateCount="50" fullPrecision="0" fullCalcOnLoad="1"/>');
+    // panes changed here: this program's own selection
+    book.edit('freeze', () => book.sheets[1].setFrozen(2, 0));
+    const again = part(await writeXlsx(book, pictures), 'xl/worksheets/sheet2.xml');
+    expect(again).toContain('<pane ySplit="2" topLeftCell="A3" activePane="bottomLeft" state="frozen"/><selection pane="bottomLeft" activeCell="A3" sqref="A3"/>');
+  });
+});

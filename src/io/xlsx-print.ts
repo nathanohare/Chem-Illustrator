@@ -23,11 +23,12 @@ export function pageSetupXml(ps: PageSetup | null): { fitToPage: boolean; printO
   const attrs: string[] = [];
   if (ps.paper) attrs.push(`paperSize="${SHEET_PAPERS[ps.paper].code}"`);
   if (ps.scale && ps.scale !== 100) attrs.push(`scale="${Math.round(ps.scale)}"`);
-  if (ps.firstPage && ps.firstPage !== 1) attrs.push(`firstPageNumber="${ps.firstPage}"`);
+  // (a first page number of 1 from a file restarts the numbering at this sheet when the workbook is printed)
+  if (ps.firstPage !== undefined) attrs.push(`firstPageNumber="${ps.firstPage}"`);
   if (ps.fit) attrs.push(`fitToWidth="${ps.fit.wide}"`, `fitToHeight="${ps.fit.tall}"`);
   if (ps.order === 'over') attrs.push('pageOrder="overThenDown"');
   if (ps.orientation) attrs.push(`orientation="${ps.orientation}"`);
-  if (ps.firstPage && ps.firstPage !== 1) attrs.push('useFirstPageNumber="1"');
+  if (ps.firstPage !== undefined) attrs.push('useFirstPageNumber="1"');
   const hf = (tag: string, h: HeaderFooter | undefined) => {
     const t = headerFooterText(h);
     return t ? `<${tag}>${xml(t)}</${tag}>` : '';

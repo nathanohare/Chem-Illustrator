@@ -51,7 +51,7 @@ import { type DataTable, seenDataTableId } from '../sheet/what-if';
 import { type PivotTable, seenPivotId } from '../sheet/pivot';
 import { Persons, notesParts, readNotes, shownNotes, validationsXml, readValidations, NOTES_CT, NOTES_REL } from './xlsx-notes';
 import { textRotation, readTextRotation, sheetViewAttrs, readSheetViewOpts, outlinePrXml, outlineLevelAttrs, outlineAttrs, sparklinesExt, readSparklines, customWorkbookViewsXml, customSheetViewsXml, readCustomViews, themeXml, readWorkbookTheme } from './xlsx-view';
-import { readSheetKept, readBookKept, sheetProtectionXml, cellProtectionXml } from './xlsx-view';
+import { readSheetKept, readBookKept, sheetProtectionXml, cellProtectionXml, paneKey, keptPanes } from './xlsx-view';
 import { CELL_STYLES, cellStyleNamed, cellStylePatch, cellStyleBorders } from '../sheet/cell-styles';
 import type { WorkbookTheme } from '../sheet/themes';
 import { themeOf } from '../sheet/themes';
@@ -860,18 +860,21 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
     printTitleNames.push(...printNames(own.pageSetup, s.name, si));
     const code = vba && own.codeName ? ` codeName="${xmlAttr(own.codeName)}"` : '';
     const outlinePr = outlinePrXml(s);
-    const sheetPr = s.filter && !filterTable || page.fitToPage || outlinePr || code
-      ? `<sheetPr${code}${s.filter && !filterTable ? ' filterMode="1"' : ''}>${outlinePr}${page.fitToPage ? '<pageSetUpPr fitToPage="1"/>' : ''}</sheetPr>`
+    const tabColor = own.excel?.tabColor ?? '';
+    const sheetPr = s.filter && !filterTable || page.fitToPage || outlinePr || code || tabColor
+      ? `<sheetPr${code}${s.filter && !filterTable ? ' filterMode="1"' : ''}>${tabColor}${outlinePr}${page.fitToPage ? '<pageSetUpPr fitToPage="1"/>' : ''}</sheetPr>`
       : '';
+    // where the sheet was scrolled to and what was selected, and the like, as the file had them
+    const view = keptPanes(own.excel, fr || fc ? paneKey(fr, fc, true) : paneKey(sp?.rows ?? 0, sp?.cols ?? 0), pane);
     const sparkExt = standIn ? '' : sparklinesExt(s.sparklines, s.name);
     pkg.add(path,
       `${HEAD}<worksheet xmlns="${MAIN}" xmlns:r="${RNS}">` +
       `${sheetPr}<dimension ref="${used}"/>` +
-      `<sheetViews><sheetView${sheetViewAttrs(own.viewOpts)}${si === book.active ? ' tabSelected="1"' : ''} workbookViewId="0">${pane}</sheetView></sheetViews>` +
+      `<sheetViews><sheetView${sheetViewAttrs(own.viewOpts)}${own.excel?.viewAttrs ?? ''}${si === book.active ? ' tabSelected="1"' : ''} workbookViewId="0">${view}</sheetView></sheetViews>` +
       `<sheetFormatPr defaultRowHeight="15"${outlineLevelAttrs(s)}/>` +
       (colXml.length ? `<cols>${colXml.join('')}</cols>` : '') +
-      `<sheetData>${rowXml.join('')}</sheetData>${sheetProtectionXml(own.excel)}${filterXml}${standIn ? '' : customSheetViewsXml(book, own)}${merges}${cfXml}${dvXml}${hyperlinks}` +
-      `${page.printOptions}${page.pageMargins}${page.pageSetup}${page.headerFooter}${page.breaks}${drawingXml}${tableParts}${sparkExt ? `<extLst>${sparkExt}</extLst>` : ''}</worksheet>`,
+      `<sheetData>${rowXml.join('')}</sheetData>${sheetProtectionXml(own.excel)}${filterXml}${own.excel?.sortState ?? ''}${standIn ? '' : customSheetViewsXml(book, own)}${merges}${cfXml}${dvXml}${hyperlinks}` +
+      `${page.printOptions}${page.pageMargins}${page.pageSetup}${page.headerFooter}${page.breaks}${own.excel?.ignoredErrors ?? ''}${drawingXml}${tableParts}${sparkExt ? `<extLst>${sparkExt}</extLst>` : ''}</worksheet>`,
       CT.sheet);
     const rid = pkg.relate('xl/workbook.xml', RELS.worksheet, `worksheets/sheet${si + 1}.xml`);
     sheetEntries.push(`<sheet name="${xml(s.name)}" sheetId="${si + 1}" r:id="${rid}"/>`);
@@ -945,7 +948,7 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
     (linkIds.length ? `<externalReferences>${linkIds.map((id) => `<externalReference r:id="${id}"/>`).join('')}</externalReferences>` : '') +
     (allNames.length ? `<definedNames>${allNames.join('')}</definedNames>` : '') +
     // formulas are worked out again when Excel opens the file
-    `<calcPr calcId="191029" fullCalcOnLoad="1"/>` + customWorkbookViewsXml(book) +
+    `<calcPr calcId="191029"${book.excel?.calcAttrs ?? ''} fullCalcOnLoad="1"/>` + customWorkbookViewsXml(book) +
     (pivotCaches.length ? `<pivotCaches>${pivotCaches.join('')}</pivotCaches>` : '') + '</workbook>',
     opts.macros ? CT.workbookMacros : CT.workbook);
   if (vba) {
