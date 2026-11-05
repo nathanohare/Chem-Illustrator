@@ -24,7 +24,7 @@ function open(enterFinishes: boolean) {
   const ed = new CaptionEditor(h, { x: 0, y: 0 }, { runs: [{ text: 'ab' }] }, {}, (r) => { result = r; });
   const ta = host.querySelector('textarea')!;
   const key = (o: KeyboardEventInit) => ta.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true, ...o }));
-  const hint = () => host.querySelector('.cb-hint')!.textContent;
+  const hint = () => ed.hint;
   return { ed, key, hint, result: () => result };
 }
 

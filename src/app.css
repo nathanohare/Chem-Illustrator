@@ -547,7 +547,8 @@ body.slides-mode #canvas-host, body.design-mode #canvas-host { background: var(-
 .welcome-buttons .grow { flex: 1; }
 .energy-preview { display: block; width: 100%; height: 200px; margin: 6px 0; border: 1px solid var(--line); border-radius: var(--r-tab); background: #fff; }
 .energy-preview[hidden] { display: none; }
-.caption-bar.docked { top: 0; left: 0; right: 0; max-width: none; border-width: 0 0 1px; border-radius: 0; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08); }
+/* (docked: at the top left of the drawing, only as long as its buttons) */
+.caption-bar.docked { top: 0; left: 0; max-width: 100%; border-width: 0 1px 1px 0; border-radius: 0 0 var(--r-panel) 0; box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08); }
 .caption-bar[hidden] { display: none; }
 .cb-group { display: inline-flex; align-items: center; gap: 2px; }
 .cb-group + .cb-group { padding-left: 6px; border-left: 1px solid var(--line); }
@@ -558,7 +559,6 @@ body.slides-mode #canvas-host, body.design-mode #canvas-host { background: var(-
 .cb-font { width: 120px; padding: 2px 4px; font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-control); }
 .cb-size { width: 52px; padding: 2px 4px; font: inherit; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-control); }
 .cb-color { width: 30px; height: 22px; padding: 0 2px; border: 1px solid var(--line); border-radius: var(--r-control); background: var(--panel); }
-.cb-hint { color: var(--muted); font-size: var(--fs-xs); white-space: nowrap; }
 .caption-symbols { flex-basis: 100%; display: flex; flex-direction: column; gap: 2px; padding-top: 4px; border-top: 1px solid var(--line); }
 .caption-symbols[hidden] { display: none; }
 .cs-row { display: flex; flex-wrap: wrap; gap: 1px; }

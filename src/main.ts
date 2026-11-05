@@ -853,6 +853,12 @@ function showToolStatus(): void {
   // (the first tool is picked before the tabs exist: its hint comes once they do)
   if (!statusReady) { queueMicrotask(() => { statusReady = true; showToolStatus(); }); return; }
   if (stepHintOn || (ws.active.mode === 'sheet' || ws.active.mode === 'document') && !splitDrawing) return;
+  // while text is typed: the keys that work in it
+  if (typingKeys) {
+    const keys = typingKeys.split(' · ').map((k): [string, string] => { const i = k.indexOf(': '); return [k.slice(0, i), k.slice(i + 2)]; });
+    setStatus({ name: 'Typing', steps: [], numbered: false, at: -1, keys, full: typingKeys });
+    return;
+  }
   const name = editor.toolName, t = TOOLS[name];
   const sel = editor.sel;
   const one = sel.atoms.size + sel.bonds.size + sel.captions.size === 0 && sel.arrows.size + sel.shapes.size === 1;
@@ -865,6 +871,9 @@ function showToolStatus(): void {
   const h = toolHelp(name, t);
   setStatus({ name: toolLabel(name), steps: h.steps, numbered: h.steps.length > 1 && name !== 'select', at: Math.min(toolStep, h.steps.length - 1), keys: h.keys, full: h.what });
 }
+/** The keys that work in the text being typed ("Enter: new paragraph · …"), shown in the status bar; null when nothing is typed. */
+let typingKeys: string | null = null;
+CaptionEditor.onHint = (h) => { typingKeys = h; showToolStatus(); };
 /** The status bar's step-by-step hint: the tool, its steps (the one in hand marked), then its keys. */
 function setStatus(s: { name: string; steps: string[]; numbered: boolean; at: number; keys: [string, string][]; full: string }): void {
   const el = $('#hint');
