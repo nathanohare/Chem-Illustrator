@@ -286,7 +286,8 @@ export function readCiteField(instr: string, data?: string): ManagerCite | null 
   if (/^ADDIN\s+EN\.CITE(\s|$)/i.test(ins) && !/^ADDIN\s+EN\.CITE\.DATA/i.test(ins)) {
     const inline = ins.replace(/^ADDIN\s+EN\.CITE\s*/i, '');
     if (/^<EndNote\b/i.test(inline)) return fromEndNote(inline);
-    if (data) { try { return fromEndNote(fromBase64(data)); } catch { return null; } }
+    // (EndNote's field data often ends with a NUL after </EndNote>, which no XML parser takes)
+    if (data) { try { return fromEndNote(fromBase64(data).replace(/\0+$/, '')); } catch { return null; } }
   }
   return null;
 }

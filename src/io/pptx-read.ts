@@ -92,7 +92,15 @@ export interface PptxRead {
 
 /** A plain box or oval that needs a design shape to keep its look: a picture or gradient fill, or effects past a shadow. */
 function fancyFill(spPr: Element | null): boolean {
-  return !!(kid(spPr, 'blipFill') || kid(spPr, 'gradFill') || kid(spPr, 'sp3d', 'bevelT') || kids(kid(spPr, 'effectLst')).some((k) => k.localName !== 'outerShdw'));
+  return !!(kid(spPr, 'blipFill') || kid(spPr, 'gradFill') || kid(spPr, 'sp3d', 'bevelT') || kids(kid(spPr, 'effectLst')).some((k) => k.localName !== 'outerShdw')) || fillClear(spPr) > 0;
+}
+
+/** How see-through a shape's plain fill is (its colour's alpha, as Format Shape's Transparency sets it): 0 when solid. */
+function fillClear(spPr: Element | null): number {
+  const c = kids(kid(spPr, 'solidFill')).find((k) => /Clr$/.test(k.localName)) ?? null;
+  const a = kid(c, 'alpha')?.getAttribute('val');
+  const v = a == null ? 1 : Number(a) / 100000;
+  return Number.isFinite(v) && v < 1 ? +(1 - Math.max(0, v)).toFixed(3) : 0;
 }
 
 const EXT_MIME: Record<string, string> = Object.fromEntries(Object.entries(MIME_EXT).map(([m, e]) => [e, m]));
@@ -722,7 +730,7 @@ class Reader {
   private elementOnly(s: Part, layout: Part | null, el: Element, t: Xf, doc: Doc): void {
     switch (el.localName) {
       case 'sp': if (!this.ourConnector(s, el, t, doc) && !this.equation(s, layout, el, t, doc)) this.shape(s, layout, el, t, doc); break;
-      case 'pic': this.pictureEl(s, el, t, doc); break;
+      case 'pic': this.pictureEl(s, layout, el, t, doc); break;
       case 'cxnSp': if (!this.ourConnector(s, el, t, doc)) this.line(el, kid(el, 'spPr'), t, doc); break;
       case 'grpSp': {
         const x = kid(el, 'grpSpPr', 'xfrm');
@@ -984,8 +992,13 @@ class Reader {
     }
   }
 
-  private pictureEl(s: Part, el: Element, t: Xf, doc: Doc): void {
-    const box = boxOf(kid(el, 'spPr', 'xfrm'), t);
+  private pictureEl(s: Part, layout: Part | null, el: Element, t: Xf, doc: Doc): void {
+    // a picture put in a placeholder (the picture button in a content placeholder) can have no
+    // place of its own: it fills its layout's (or master's) placeholder, as a placeholder's text does
+    const own = kid(el, 'spPr', 'xfrm');
+    const ph = own ? null : phOf(el);
+    const xfrm = own ?? (ph ? this.inherited(layout, ph).map((e) => kid(e, 'spPr', 'xfrm')).find((x) => x) ?? null : null);
+    const box = boxOf(xfrm, own ? t : IDENTITY);
     if (!box) return;
     const tags = this.tagsOf(s.path, kid(el, 'nvPicPr', 'nvPr'));
     if (tags[TAG.highlight]) {
@@ -1354,6 +1367,8 @@ class Reader {
     const click = this.hlinkOf(kid(sp, 'nvSpPr', 'cNvPr', 'hlinkClick'));
     if (click) sh.link = click;
     if (look.fill) { sh.filled = true; sh.fillColor = look.fill; }
+    const clear = look.fill ? fillClear(spPr) : 0;
+    if (clear) sh.transparency = clear;
     const grad = kid(spPr, 'gradFill');
     const stops = grad ? kids(kid(grad, 'gsLst'), 'gs').sort((a, b) => Number(a.getAttribute('pos') ?? 0) - Number(b.getAttribute('pos') ?? 0)) : [];
     if (grad && stops.length >= 2) {

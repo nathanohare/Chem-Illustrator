@@ -15,7 +15,7 @@
 // as Excel left it.
 
 import { MAX_CELL_TEXT } from './sheet-sniff';
-import { Package, PackageReader, xml, xmlAttr, hex6, REL, kids, kid, rAttr, ZipTooBigError } from './ooxml';
+import { Package, PackageReader, xml, xmlAttr, hex6, REL, kids, kid, rAttr, PackageError } from './ooxml';
 import { readKeptParts, writeKeptParts } from './kept-parts';
 import { officeTarget, linkFromTarget } from '../links';
 import { Workbook, Sheet, Structure, CellStyle, ColumnDef, Filter, Condition, CompareOp, Border, BorderStyle, Side, makeStructure } from '../sheet/workbook';
@@ -24,7 +24,7 @@ import { normalizeFormula, shiftFormula } from '../sheet/formula';
 import { callsName, fileFormula, legacyFormula, needsDynamic, readFileFormula } from '../sheet/array-formulas';
 import { DefinedName, isBuiltInName } from '../sheet/names';
 import { FUNCTION_NAMES } from '../sheet/evaluate';
-import { readTyped, isError, CellError, Value, EXCEL_ERRORS } from '../sheet/values';
+import { readTyped, isError, CellError, Value } from '../sheet/values';
 import { PROPERTIES } from '../sheet/properties';
 import { ISOTOPE_FUNCTIONS } from '../sheet/isotopes';
 import { chemPieces, showsChem } from '../sheet/cell-text';
@@ -163,8 +163,16 @@ const XLFN = new Set(['AGGREGATE', 'BETA.DIST', 'BETA.INV', 'BINOM.DIST', 'BINOM
   'STDEV.P', 'STDEV.S', 'SWITCH', 'T.DIST', 'T.DIST.2T', 'T.DIST.RT', 'T.INV', 'T.INV.2T', 'T.TEST', 'TEXTJOIN', 'TEXTSPLIT', 'UNIQUE',
   'VAR.P', 'VAR.S', 'WEIBULL.DIST', 'XLOOKUP', 'XMATCH', 'XOR', 'Z.TEST', 'NETWORKDAYS.INTL', 'WORKDAY.INTL', 'LAMBDA', 'MAP', 'REDUCE',
   'SCAN', 'BYROW', 'BYCOL', 'MAKEARRAY', 'ISOMITTED', 'VSTACK', 'HSTACK', 'TAKE', 'DROP', 'CHOOSEROWS', 'CHOOSECOLS', 'TOCOL', 'TOROW',
-  'RANDARRAY', 'EXPAND', 'WRAPROWS', 'WRAPCOLS']);
-const XLWS = new Set(['FILTER', 'SORT', 'SORTBY']);
+  'RANDARRAY', 'EXPAND', 'WRAPROWS', 'WRAPCOLS', 'SORTBY']);
+// (SORTBY came later than these, and Excel writes it with only _xlfn.)
+const XLWS = new Set(['FILTER', 'SORT']);
+
+/**
+ * The errors a cell's value can be in the file. Excel keeps the newer ones (#SPILL!, #CALC!,
+ * #FIELD!…) as rich values with #VALUE! in the cell (MS-XLSX 2.3.6.1.3), so they are written as
+ * #VALUE! here; Excel works the formula out again on opening.
+ */
+const FILE_ERRORS = ['#NULL!', '#DIV/0!', '#VALUE!', '#REF!', '#NAME?', '#NUM!', '#N/A'];
 
 /** A formula (without its =) with Excel's prefixes on the newer functions, leaving text in quotes alone. */
 export function excelFunctionNames(f: string): string {
@@ -278,7 +286,7 @@ class Styles {
   private borders = ['<border><left/><right/><top/><bottom/><diagonal/></border>'];
   private formats = new Map<string, number>();
   private xfs = ['<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'];
-  private byKey = new Map<string, number>([['{}', 0]]);
+  private byKey = new Map<string, number>([[xfKey({}), 0]]);
   private dxfs: string[] = [];
 
   /** The number of a highlight look (conditional formatting). */
@@ -304,7 +312,7 @@ class Styles {
   /** The style index for a cell's formatting. */
   xf(st: CellStyle | undefined): number {
     const s = st ?? {};
-    const key = JSON.stringify([s.bold, s.italic, s.underline, s.color, s.fill, s.font, s.size, s.align, s.valign, s.wrap, s.numFmt, s.borders, s.indent, s.rotate, s.cellStyle]);
+    const key = xfKey(s);
     const got = this.byKey.get(key);
     if (got !== undefined) return got;
     const { font, fill, border } = this.parts(s);
@@ -370,6 +378,11 @@ class Styles {
   }
 }
 
+/** What makes two cell looks the same style in the file (an empty look is style 0). */
+function xfKey(s: CellStyle): string {
+  return JSON.stringify([s.bold, s.italic, s.underline, s.color, s.fill, s.font, s.size, s.align, s.valign, s.wrap, s.numFmt, s.borders, s.indent, s.rotate, s.cellStyle]);
+}
+
 function borderName(b: BorderStyle): string {
   return b === 'dashed' ? 'dashed' : b === 'dotted' ? 'dotted' : b;
 }
@@ -397,7 +410,8 @@ class Strings {
     const pieces = chem ? chemPieces(text) : null;
     const chemRich = !!pieces && pieces.some((p) => p.pos !== 'base' || p.italic);
     const fit = runs && runsOf({ input: text, runs }) ? runs : undefined;
-    const key = fit ? '2' + JSON.stringify([text, chem, fit, style?.bold, style?.italic, style?.underline, style?.color, style?.size, style?.font]) : (chemRich ? '1' : '0') + text;
+    const look = [style?.bold, style?.italic, style?.underline, style?.color, style?.size, style?.font];
+    const key = fit ? '2' + JSON.stringify([text, chem, fit, ...look]) : chemRich ? '1' + JSON.stringify([text, ...look]) : '0' + text;
     const got = this.byKey.get(key);
     if (got !== undefined) return got;
     const t = (s: string) => `<t${/^\s|\s$|\n/.test(s) ? ' xml:space="preserve"' : ''}>${xml(excelEscape(s))}</t>`;
@@ -413,8 +427,10 @@ class Strings {
       const merged = runsFrom(text, looks) ?? [{ text }];
       this.list.push(`<si>${merged.map((r) => `<r>${this.runLook(lookOver(style, r))}${t(r.text)}</r>`).join('')}</si>`);
     } else {
+      // a lowered or raised piece with its cell's whole look as well: Excel fills a run's missing
+      // font and size with its own defaults (11 pt), not the cell's
       this.list.push(chemRich
-        ? `<si>${pieces!.map((p) => `<r>${p.pos !== 'base' || p.italic ? `<rPr>${p.italic ? '<i/>' : ''}${p.pos !== 'base' ? `<vertAlign val="${p.pos === 'sub' ? 'subscript' : 'superscript'}"/>` : ''}</rPr>` : ''}${t(p.text)}</r>`).join('')}</si>`
+        ? `<si>${pieces!.map((p) => `<r>${p.pos !== 'base' || p.italic ? this.runLook(lookOver(style, { ...(p.italic ? { italic: true } : {}), ...(p.pos !== 'base' ? { pos: p.pos } : {}) })) : ''}${t(p.text)}</r>`).join('')}</si>`
         : `<si>${t(text)}</si>`);
     }
     this.byKey.set(key, this.list.length - 1);
@@ -608,7 +624,7 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
         } else if (isError(v)) {
           const code = (v as CellError).code;
           wrote = code;
-          body = `<c r="${ref}"${sAttr} t="e">${f}<v>${EXCEL_ERRORS.includes(code) ? code : '#VALUE!'}</v></c>`;
+          body = `<c r="${ref}"${sAttr} t="e">${f}<v>${FILE_ERRORS.includes(code) ? code : '#VALUE!'}</v></c>`;
         } else {
           wrote = excelCellText(v as string);
           body = f
@@ -648,7 +664,7 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
                 `<xdr:twoCellAnchor editAs="oneCell">` +
                 `<xdr:from><xdr:col>${from.col}</xdr:col><xdr:colOff>${from.colOff * PX}</xdr:colOff><xdr:row>${from.row}</xdr:row><xdr:rowOff>${from.rowOff * PX}</xdr:rowOff></xdr:from>` +
                 `<xdr:to><xdr:col>${end.i}</xdr:col><xdr:colOff>${Math.round(end.off * PX)}</xdr:colOff><xdr:row>${endR.i}</xdr:row><xdr:rowOff>${Math.round(endR.off * PX)}</xdr:rowOff></xdr:to>` +
-                `<xdr:pic><xdr:nvPicPr><xdr:cNvPr id="${n}" name="Structure ${ref}" descr="${xml(smiles)}"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr>` +
+                `<xdr:pic><xdr:nvPicPr><xdr:cNvPr id="${n}" name="Structure ${ref}" descr="${xmlAttr(smiles)}"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr>` +
                 `<xdr:blipFill><a:blip r:embed="${id}"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill>` +
                 `<xdr:spPr><a:xfrm><a:off x="${(x + 1) * PX}" y="${(y + 1) * PX}"/><a:ext cx="${(w - 2) * PX}" cy="${(h - 2) * PX}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic>` +
                 `<xdr:clientData/></xdr:twoCellAnchor>`,
@@ -1126,7 +1142,7 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
   try {
     pkg = new PackageReader(bytes);
   } catch (e) {
-    throw e instanceof ZipTooBigError ? e : new Error('This is not an Excel workbook (or it is damaged).');
+    throw e instanceof PackageError ? e : new Error('This is not an Excel workbook (or it is damaged).');
   }
   const wbPath = pkg.relOfType('', REL.officeDocument) ?? 'xl/workbook.xml';
   const wbDoc = pkg.xml(wbPath);

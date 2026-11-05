@@ -149,6 +149,25 @@ const readValue = (f: string | null | undefined): number | string => {
   return t !== '' && Number.isFinite(Number(t)) ? Number(t) : t;
 };
 
+/** Is a cell rule's operand a number or text in quotes (what a 'cells' rule holds)? */
+const isLiteral = (f: string): boolean => {
+  const t = f.trim();
+  return /^"(?:[^"]|"")*"$/s.test(t) || (t !== '' && Number.isFinite(Number(t)));
+};
+
+const OP_SIGNS: Partial<Record<CfOp, string>> = { gt: '>', ge: '>=', lt: '<', le: '<=', eq: '=', ne: '<>' };
+
+/** A cellIs rule as a formula rule: its first cell compared with the operands (between takes them either way round). */
+function cellIsFormula(op: CfOp, first: string, formulas: string[]): string | null {
+  const [a, b] = formulas.map((f) => f.trim());
+  if (!a) return null;
+  if (op === 'between' || op === 'notBetween') {
+    if (!b) return null;
+    return op === 'between' ? `=AND(${first}>=MIN(${a},${b}),${first}<=MAX(${a},${b}))` : `=OR(${first}<MIN(${a},${b}),${first}>MAX(${a},${b}))`;
+  }
+  return `=${first}${OP_SIGNS[op]}(${a})`;
+}
+
 /** The conditional formatting of a worksheet, highest priority first. Rules this program can't hold are counted in `skipped`. */
 export function readCondFormats(ws: Element, dxfs: CfLook[], colour: (el: Element | null) => string | undefined): { rules: CondFormat[]; skipped: number } {
   const found: { priority: number; cf: CondFormat }[] = [];
@@ -189,7 +208,15 @@ export function readCondFormats(ws: Element, dxfs: CfLook[], colour: (el: Elemen
         }
         case 'cellIs': {
           const op = BACK_OPS[c.getAttribute('operator') ?? ''];
-          if (op) rule = { kind: 'cells', op, value: readValue(formulas[0]), ...(formulas[1] !== undefined ? { value2: readValue(formulas[1]) } : {}), look };
+          if (!op) break;
+          if (formulas.every(isLiteral)) {
+            rule = { kind: 'cells', op, value: readValue(formulas[0]), ...(formulas[1] !== undefined ? { value2: readValue(formulas[1]) } : {}), look };
+          } else {
+            // compared with a cell or a formula ("greater than $B$1"): the same test as a formula rule,
+            // from the first cell as Excel works it out (a cell rule here holds only a number or text)
+            const formula = cellIsFormula(op, cellName(ranges[0].r1, ranges[0].c1), formulas);
+            if (formula) rule = { kind: 'formula', formula, look };
+          }
           break;
         }
         case 'containsText': case 'notContainsText': case 'beginsWith': case 'endsWith': {
