@@ -13130,7 +13130,8 @@ const navMap = new Navigator(host, renderer, () => orientPrefs, {
 });
 const edgeArrows = new EdgeArrows(host, renderer, () => editor.requestScene());
 editor.underlay = (ctx) => {
-  if (!drawingShown()) return;
+  // a structure drawn in its box (a cell's, a document's or a window's) stays white right to the box's edge
+  if (!drawingShown() || cellEdit) return;
   const p = gridPage();
   // with the page grid, whole pages show what is in use, so the tint round the drawing is left off
   if (p && pageLook.grid) paintPages(ctx, pageLook, renderer, p, pageExtent(p, doc.bounds()), pagesInUse(p), dark.on, dark.on ? null : darkSurround);
@@ -13144,7 +13145,8 @@ editor.walls = () => { const p = gridPage(); return p ? wallRect(p) : null; };
 /** Each frame: the navigator and the edge arrows follow the view and the drawing. */
 function updateOrientation(): void {
   const on = drawingShown();
-  navMap.update(on);
+  // (no Document Map over a structure's box: the box is small, and Fit shows the whole structure)
+  navMap.update(on && !cellEdit);
   edgeArrows.update(on && orientPrefs.edgeArrows ? arrowTargets() : null, doc.version, navMap.box());
 }
 
