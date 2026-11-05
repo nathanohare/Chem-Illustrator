@@ -181,13 +181,16 @@ describe('copying to ChemDraw', () => {
     expect(pairs(moved).length).toBeLessThan(pairs(want).length);
   });
 
-  it('leaves the gap ChemDraw leaves at a near miss, on screen too', () => {
+  it('leaves no gap at a near miss ChemDraw draws straight past, on screen too', () => {
     const { doc } = readCdxml(readFileSync('tests/fixtures/chemdraw-clipboard/clip-props.cd.cdxml', 'utf8'));
-    const half = doc.style.marginWidth + doc.style.lineWidth;
-    // a bond with near misses and nothing crossing it outright
-    const lone = [...doc.bonds.values()].filter((b) => b.crossing?.length && !crossingBonds(doc, b).length && crossingGaps(doc, b, half).length);
+    const reach = doc.style.marginWidth + doc.style.lineWidth / 2;
+    // a bond with near misses and nothing crossing it outright (ChemDraw draws this one whole)
+    const lone = [...doc.bonds.values()].filter((b) => b.crossing?.length && !crossingBonds(doc, b).length);
     expect(lone.length).toBeGreaterThan(0);
-    for (const b of lone) expect(crossingGapsCached(doc, b, half)).toEqual(crossingGaps(doc, b, half));
+    for (const b of lone) {
+      expect(crossingGaps(doc, b, reach)).toEqual([]);
+      expect(crossingGapsCached(doc, b, reach)).toEqual([]);
+    }
   });
 
   it('writes highlights as ChemDraw\'s highlightColor, and reads them back the same', () => {
