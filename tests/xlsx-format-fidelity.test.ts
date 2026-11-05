@@ -295,3 +295,19 @@ describe('named cell styles', () => {
     expect(st).not.toContain('name="Normal"');
   });
 });
+
+describe('row heights', () => {
+  it("keeps the sheet's default row height", async () => {
+    const { book } = await readXlsx(excelFile('<sheetFormatPr defaultRowHeight="14.25"/><sheetData><row r="1"><c r="A1"><v>1</v></c></row></sheetData>'));
+    expect(part(await writeXlsx(book, pictures), 'xl/worksheets/sheet1.xml')).toContain('<sheetFormatPr defaultRowHeight="14.25"/>');
+    expect(part(await writeXlsx(new Workbook(), pictures), 'xl/worksheets/sheet1.xml')).toContain('<sheetFormatPr defaultRowHeight="15"/>');
+  });
+
+  it('writes a row grown to fit its wrapped text as one Excel fits again, and a row set by hand as set', async () => {
+    const wb = new Workbook();
+    wb.edit('rows', () => { wb.sheet.setInput(0, 0, 'long text'); wb.sheet.setInput(1, 0, 'x'); wb.sheet.setRowHeight(1, 40); });
+    const xml = part(await writeXlsx(wb, { ...pictures, rowHeights: () => new Map([[0, 40]]) }), 'xl/worksheets/sheet1.xml');
+    expect(xml).toContain('<row r="1" ht="30">');
+    expect(xml).toContain('<row r="2" ht="30" customHeight="1">');
+  });
+});

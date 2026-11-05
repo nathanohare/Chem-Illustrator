@@ -639,11 +639,13 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
     // sizes: set by hand, else grown to fit structures (and wrapped text, measured by the grid)
     const colW = (c: number) => (s.hiddenCols.has(c) ? 0 : s.colWidths.get(c) ?? DEFAULT_COL_W);
     const auto = new Map<number, number>(deps.rowHeights?.(s) ?? []);
+    // rows grown for a structure's picture keep their height in Excel (its text can't show how tall the picture is)
+    const pictureRows = new Set<number>();
     for (const [k, c] of s.cells) {
       if (!c.structure) continue;
       const r = rowOf(k);
       const h = Math.min(MAX_AUTO_ROW, Math.ceil(structureHeight(deps.box(c.structure, book.drawingStyle), s.colWidths.get(colOf(k)) ?? DEFAULT_COL_W)));
-      if (h > DEFAULT_ROW_H) auto.set(r, Math.max(auto.get(r) ?? 0, h));
+      if (h > DEFAULT_ROW_H) { auto.set(r, Math.max(auto.get(r) ?? 0, h)); pictureRows.add(r); }
     }
     const rowH = (r: number) => (s.hiddenRows.has(r) ? 0 : s.rowHeights.get(r) ?? auto.get(r) ?? DEFAULT_ROW_H);
     ms.autoRows = [...auto].filter(([r]) => !s.rowHeights.has(r));
@@ -787,8 +789,10 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
           }
         }
       }
+      // a row grown to fit its wrapped text is one Excel fits again when the text changes (no customHeight)
       const custom = s.rowHeights.get(r) ?? auto.get(r);
-      const attrs = `${custom !== undefined ? ` ht="${ptFromPx(custom)}" customHeight="1"` : ''}${s.hiddenRows.has(r) ? ' hidden="1"' : ''}${outlineAttrs(s.rowLevels, s.hiddenRows, r, !!s.outline?.summaryAbove)}`;
+      const fixed = s.rowHeights.has(r) || pictureRows.has(r);
+      const attrs = `${custom !== undefined ? ` ht="${ptFromPx(custom)}"${fixed ? ' customHeight="1"' : ''}` : ''}${s.hiddenRows.has(r) ? ' hidden="1"' : ''}${outlineAttrs(s.rowLevels, s.hiddenRows, r, !!s.outline?.summaryAbove)}`;
       if (cells.length || attrs) rowXml.push(`<row r="${r + 1}"${attrs}>${cells.join('')}</row>`);
     }
 
@@ -949,7 +953,7 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
       `${HEAD}<worksheet xmlns="${MAIN}" xmlns:r="${RNS}">` +
       `${sheetPr}<dimension ref="${used}"/>` +
       `<sheetViews><sheetView${sheetViewAttrs(own.viewOpts)}${own.excel?.viewAttrs ?? ''}${si === book.active ? ' tabSelected="1"' : ''} workbookViewId="0">${view}</sheetView></sheetViews>` +
-      `<sheetFormatPr defaultRowHeight="15"${outlineLevelAttrs(s)}/>` +
+      `<sheetFormatPr defaultRowHeight="${own.fileRowHeight?.pt ?? 15}"${own.fileRowHeight?.custom ? ' customHeight="1"' : ''}${outlineLevelAttrs(s)}/>` +
       (colXml.length ? `<cols>${colXml.join('')}</cols>` : '') +
       `<sheetData>${rowXml.join('')}</sheetData>${sheetProtectionXml(own.excel)}${filterXml}${own.excel?.sortState ?? ''}${standIn ? '' : customSheetViewsXml(book, own)}${merges}${cfXml}${dvXml}${hyperlinks}` +
       `${page.printOptions}${page.pageMargins}${page.pageSetup}${page.headerFooter}${page.breaks}${own.excel?.ignoredErrors ?? ''}${drawingXml}${tableParts}${sparkExt ? `<extLst>${sparkExt}</extLst>` : ''}</worksheet>`,
@@ -1487,6 +1491,9 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
 
       // columns
       const fmtPr = kid(ws, 'sheetFormatPr');
+      // the height of rows with none of their own (14.25 in an Aptos Narrow workbook), to save back
+      const defH = Number(fmtPr?.getAttribute('defaultRowHeight') ?? NaN);
+      if (defH > 0 && defH < 410) s.fileRowHeight = { pt: defH, ...(isOn(fmtPr?.getAttribute('customHeight')) ? { custom: true as const } : {}) };
       let defW = fmtPr?.getAttribute('defaultColWidth') ? pxFromWidth(Number(fmtPr.getAttribute('defaultColWidth')))
         // a base width in digits, with padding and gridline, rounded up to 8 pixels (18.3.1.81)
         : fmtPr?.getAttribute('baseColWidth') ? Math.ceil((Number(fmtPr.getAttribute('baseColWidth')) * 7 + 5) / 8) * 8 : DEFAULT_COL_W;

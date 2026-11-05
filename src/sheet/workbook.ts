@@ -340,6 +340,8 @@ export class Sheet {
   codeName?: string;
   /** What an Excel file said about the sheet that only Excel uses (protection, its tab's colour…), kept to save back. */
   excel?: ExcelSheetKept;
+  /** The height in points an Excel file gave rows with none of their own (set by hand when `custom`), saved back with it. */
+  fileRowHeight?: { pt: number; custom?: true };
   cells = new Map<number, Cell>();
   /** Column widths and row heights set by hand, in pixels at 100% zoom. */
   colWidths = new Map<number, number>();
