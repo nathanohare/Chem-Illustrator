@@ -14,7 +14,7 @@ import './app.css';
 import type { MethylStyle } from './chem/hydrogens';
 import { STANDARD_COLOURS, usedColours } from './colours';
 import { ICONS } from './icons';
-import { Toolboxes, lockIcon, sideFolded, commandButton, defaultToolboxes, menuCommands, boxIds, boxGrid, boxTitle, flyGrid, isEditable, withoutGoneItems, isOwnBox, overflowOf, CONTEXT_BOXES, type ContextBox, type Pickable, type ToolboxDef, type ToolboxState } from './ui/toolboxes';
+import { Toolboxes, lockIcon, sideFolded, boxLocked, commandButton, defaultToolboxes, menuCommands, boxIds, boxGrid, boxTitle, flyGrid, isEditable, withoutGoneItems, isOwnBox, overflowOf, CONTEXT_BOXES, type ContextBox, type Pickable, type ToolboxDef, type ToolboxState } from './ui/toolboxes';
 import { gridItems, inBlock, oneColumn, shownGrid, wrapped, type Grid, type Shown } from './ui/toolbox-grid';
 import { ToolboxEditor } from './ui/toolbox-editor';
 import { RibbonEditor } from './ui/ribbon-editor';
@@ -799,23 +799,26 @@ function showChemPanes(): void {
 const rulerPrefs: RulerPrefs = { units: 'in', from: 'centre' };
 /** A guide being dragged: which, and the guides as they are while it moves. */
 let guideDrag: { which: { axis: 'x' | 'y'; i: number }; view: SlideView } | null = null;
-/** View > Alignment Guides: moved things snap into line with other things and the page, on or off for each kind of tab. */
-const guidesOn: Record<'drawing' | 'slides' | 'design', boolean> = { drawing: false, slides: true, design: true };
+/**
+ * Smart guides (moved things snap into line with other things and the page, with pink lines), on
+ * or off for presentations (View > Grid Settings) and designs (the ribbon's Guides box). Canvases
+ * have the Guides toolbox instead.
+ */
+const guidesOn: Record<'slides' | 'design', boolean> = { slides: true, design: true };
 const guideMode = (): keyof typeof guidesOn | null => {
   const m = ws.active.mode;
-  return m === 'drawing' || m === 'slides' || m === 'design' ? m : null;
+  return m === 'slides' || m === 'design' ? m : null;
 };
 /** The Guides toolbox, while it is shown (it shows the drawing's guides). */
 let guidesToolbox: { refresh(): void } | null = null;
 /** The Text Formatting toolbox's buttons, while it is shown (they show which are on). */
 let textToolbox: { refresh(): void } | null = null;
-/** Turn the guides on or off for the kind of tab showing, and tick the menus. */
+/** Turn the smart guides on or off for the kind of tab showing, and show the drawing's guides in the Guides toolbox. */
 function showGuides(): void {
   guidesToolbox?.refresh();
   textToolbox?.refresh();
   const m = guideMode();
   editor.smartGuides = !!m && guidesOn[m];
-  $('[data-cmd="alignment-guides"]')?.setAttribute('aria-checked', String(editor.smartGuides));
   if (m === 'design') $<HTMLInputElement>('#dz-guides').checked = guidesOn.design;
 }
 
@@ -7854,7 +7857,7 @@ window.addEventListener('keydown', (e) => {
 
 /** Menu commands that work the same whatever shows. */
 const ANY_TAB = new Set(['references', 'compound-library', 'knowledge-base', 'ligand-library', 'toolbox-text', 'toolbox-guides', 'insert-compound', 'add-to-compound-library', 'library-location', 'find-structure-files', 'new-from-template', 'check-accessibility', 'format-painter', 'insert-symbol', 'edit-palettes', 'preferences', 'export-settings', 'import-settings', 'customize-ribbon', 'toolbox-main', 'toolbox-structure', 'toolbox-arrange', 'toolbox-templates', 'toolbox-colours', 'toolbox-highlight', 'toolbox-custom', 'toolbox-schemes', 'toolbox-diagrams', 'toolbox-tables', 'toolbox-biopolymers', 'toolbox-perspective', 'fold-side', 'customize-toolbox', 'customize-quick-bar', 'lock-toolboxes', 'reset-toolboxes', 'new', 'new-slides', 'new-design', 'new-sheet', 'new-document', 'open', 'save', 'save-as', 'autosave', 'version-history', 'recover-work', 'keep-options', 'close-tab', 'next-tab', 'prev-tab', 'undo', 'redo',
-  'drawing-style', 'navigation-settings', 'dark-page', 'dark-colours', 'alignment-guides', 'hotkeys', 'typing-spelling', 'mode-colours', 'dev-tools', ...STRESS_SIZES.map((n) => `stress-${n}`), 'scroll-bars', 'title-bar-in-menu', 'collapse-ribbon', 'ui-scale-in', 'ui-scale-out', 'ui-scale-reset', ...UI_SCALES.map((v) => `ui-scale-${Math.round(v * 100)}`), 'text-bar-docked', 'text-bar-floating', 'text-bar-hidden', 'theme-system', 'theme-light', 'theme-dark', 'theme-darkgray', 'density-snug', 'density-cozy', 'density-normal', 'density-standard', 'density-large', 'shadows-light', 'shadows-strong', 'shadows-off', 'icons-mode', 'icons-kind', 'shape-ink-accent', 'focus-view', 'one-column-tools', 'group-tips', 'tool-tips', 'touch-mode-auto', 'touch-mode-on', 'touch-mode-off', 'atom-keypad', 'pen-sketch', 'show-stereo', 'clipboard-formats', 'split-view', 'command-search', 'next-region', 'prev-region', 'print',
+  'drawing-style', 'navigation-settings', 'dark-page', 'dark-colours', 'hotkeys', 'typing-spelling', 'mode-colours', 'dev-tools', ...STRESS_SIZES.map((n) => `stress-${n}`), 'scroll-bars', 'title-bar-in-menu', 'collapse-ribbon', 'ui-scale-in', 'ui-scale-out', 'ui-scale-reset', ...UI_SCALES.map((v) => `ui-scale-${Math.round(v * 100)}`), 'text-bar-docked', 'text-bar-floating', 'text-bar-hidden', 'theme-system', 'theme-light', 'theme-dark', 'theme-darkgray', 'density-snug', 'density-cozy', 'density-normal', 'density-standard', 'density-large', 'shadows-light', 'shadows-strong', 'shadows-off', 'icons-mode', 'icons-kind', 'shape-ink-accent', 'focus-view', 'one-column-tools', 'group-tips', 'tool-tips', 'touch-mode-auto', 'touch-mode-on', 'touch-mode-off', 'atom-keypad', 'pen-sketch', 'show-stereo', 'clipboard-formats', 'split-view', 'command-search', 'next-region', 'prev-region', 'print',
   'assistant', 'help', 'about', 'user-guide', 'help-here', 'send-feedback', 'report-problem', 'copy-diagnostics', 'open-log-folder', 'open-inspector', 'check-updates']);
 
 // ---------------------------------------------------------------- accessibility (Review > Check Accessibility, Alt Text…)
@@ -8558,14 +8561,6 @@ const COMMANDS: Record<string, () => unknown> = {
   'tool-sketch': () => { editor.setTool(editor.toolName === 'sketch' ? 'bond-single' : 'sketch'); },
   'pen-sketch': () => { editor.options.penSketch = !editor.options.penSketch; $('[data-cmd="pen-sketch"]')?.setAttribute('aria-checked', String(editor.options.penSketch)); storeSettings(); },
   'dark-page': () => { showDark(!dark.on); storeSettings(); },
-  'alignment-guides': () => {
-    const m = guideMode();
-    if (!m) { flash('Alignment guides are for canvases, presentations and designs. In a document, figures line up with the text.'); return; }
-    guidesOn[m] = !guidesOn[m];
-    showGuides();
-    storeSettings();
-    flash(guidesOn[m] ? 'Alignment guides on: moved things snap into line with structures, text and shapes (hold Alt to move freely).' : 'Alignment guides off.');
-  },
   'dark-colours': () => settingsWindow.open('dark'),
   'zoom-in': () => editor.zoomBy(1.25),
   'zoom-out': () => editor.zoomBy(0.8),
@@ -8622,7 +8617,8 @@ const COMMANDS: Record<string, () => unknown> = {
   'toolbox-biopolymers': () => { contextBoxes.byHand('biopolymers'); },
   'toolbox-perspective': () => { contextBoxes.byHand('perspective'); },
   // the panel taken out as a toolbox folds up to its title bar; at the right it folds to a strip
-  'fold-side': () => foldSide(!sideIsFolded()),
+  // resting as a strip with nothing to show: brought out; otherwise closed all the way, or opened again
+  'fold-side': () => { if (sideResting()) { sideForced = 'open'; restSidePanel(); return; } foldSide(!sideIsFolded()); },
   'customize-toolbox': () => openCustomToolbox(),
   'customize-quick-bar': () => quickBar?.edit(),
   'customize-ribbon': () => ribbonEditor.open(RIBBON_OF_MODE[ws.active.mode]),
@@ -11764,7 +11760,7 @@ function drawingMenu(): MenuItem[] {
   const texts = selectedSpecies().length > 0;
   const shapes = [...s.shapes].map((id) => doc.shapes.get(id)).filter((x): x is Shape => !!x);
   const design = ws.active.mode === 'design';
-  const view: MenuItem = { label: 'View', items: [{ cmd: 'zoom-in' }, { cmd: 'zoom-out' }, { cmd: 'zoom-fit' }, { cmd: 'zoom-selection' }, { cmd: 'zoom-actual' }, null, { cmd: 'show-stereo' }, { cmd: 'group-tips' }, { cmd: 'tool-tips' }, { cmd: 'scroll-bars' }, { cmd: 'alignment-guides' }, null, { cmd: 'dark-page' }, { cmd: 'dark-colours' }] };
+  const view: MenuItem = { label: 'View', items: [{ cmd: 'zoom-in' }, { cmd: 'zoom-out' }, { cmd: 'zoom-fit' }, { cmd: 'zoom-selection' }, { cmd: 'zoom-actual' }, null, { cmd: 'show-stereo' }, { cmd: 'group-tips' }, { cmd: 'tool-tips' }, { cmd: 'scroll-bars' }, null, { cmd: 'dark-page' }, { cmd: 'dark-colours' }] };
   if (!any) {
     return [
       { cmd: 'paste' }, { cmd: 'paste-smiles' }, { cmd: 'select-all' }, null,
@@ -12499,7 +12495,7 @@ const SPECIAL_BOXES: Record<string, (body: HTMLElement, vertical: boolean) => vo
   // The side panel (Style, Warnings, Analysis; Format in documents, Cell in sheets) is a toolbox,
   // docked at the right to start with. Its arrow goes with it, so it shows even when the title bar is
   // locked away.
-  details: (body) => { body.before($('#side-fold')); body.append(sideContent); },
+  details: (body) => { body.before($('#side-strip'), $('#side-fold')); body.append(sideContent); },
   text: (body, vertical) => { textToolbox = buildTextToolbox(body, vertical, textToolboxHooks); },
   guides: (body, vertical) => { guidesToolbox = buildGuidesToolbox(body, vertical, guidesToolboxHooks); },
   // the Smart Scheme species list, docked (it floats beside the scheme otherwise)
@@ -12518,10 +12514,8 @@ const guidesToolboxHooks: GuidesToolboxHooks = {
   },
   centre: () => { const a = editor.viewArea(); return { x: (a.x1 + a.x2) / 2, y: (a.y1 + a.y2) / 2 }; },
   units: () => rulerPrefs.units,
-  smart: () => guidesOn.drawing,
-  setSmart: (on) => { guidesOn.drawing = on; showGuides(); storeSettings(); },
 };
-editor.onGuides = () => { ws.noteChange(); guidesToolbox?.refresh(); };
+editor.onGuides = () => { ws.noteKeptChange(); guidesToolbox?.refresh(); };
 
 const DOC_TOGGLES: Partial<Record<string, string>> = { bold: 'doc-bold', italic: 'doc-italic', underline: 'doc-underline', sub: 'doc-sub', sup: 'doc-sup', formula: 'doc-formula' };
 const DOC_ALIGN: Record<string, string> = { left: 'doc-align-left', center: 'doc-align-center', right: 'doc-align-right', justify: 'doc-justify' };
@@ -12580,7 +12574,7 @@ const toolboxes = new Toolboxes(toolboxDefs, {
   folded: (id) => (id === 'details' ? sideIsFolded() : undefined),
   fold: (id) => { if (id !== 'details') return false; command('fold-side'); return true; },
   say: (text) => flash(text),
-  rendered: () => fitTools(),
+  rendered: () => { fitTools(); restSidePanel(); },
 });
 contextBoxes.ready = true;
 
@@ -12661,13 +12655,25 @@ function fitTools(): void {
     const over = () => (floating ? box.scrollHeight > box.clientHeight + 1 : across ? c.scrollWidth > dock.clientWidth - 16 : tall() > room + 1);
     for (let f = (across ? s.cols : s.rows) - 1; f >= 1 && over(); f--) layCells(c, f);
   }
+  settleDocks();
   fadeDocks();
+}
+/**
+ * Let the docks down the sides measure their width afresh. A dock squeezed or overfilled for a
+ * moment while its toolboxes were built and wrapped took a scroll bar, and the browser kept that
+ * bar's width after the bar went: the toolbox stayed wider and the work moved over (a jump).
+ */
+function settleDocks(): void {
+  const docks = [...document.querySelectorAll<HTMLElement>('.dock-v')];
+  for (const d of docks) d.style.overflowY = 'hidden';
+  void document.body.offsetWidth;
+  for (const d of docks) d.style.removeProperty('overflow-y');
 }
 function fadeDocks(): void {
   for (const d of document.querySelectorAll<HTMLElement>('.dock-v')) d.classList.toggle('more-below', d.scrollTop + d.clientHeight < d.scrollHeight - 2);
 }
 for (const d of document.querySelectorAll<HTMLElement>('.dock-v')) d.addEventListener('scroll', fadeDocks, { passive: true });
-addEventListener('resize', () => { fitTools(); autoFoldRibbon(); });
+addEventListener('resize', () => { fitTools(); autoFoldRibbon(); restSidePanel(); });
 
 /** The ribbon folded or whole as you last chose it (Ctrl+F1, View > Ribbon > Collapse the Ribbon). */
 let ribbonChosen = false;
@@ -12701,9 +12707,94 @@ function placeSidePanel(): void {
   fold.textContent = '×';
   fold.title = 'Close the side panel (Ctrl+Alt+B, or the panel button at the bottom right, opens it again)';
   fold.setAttribute('aria-label', fold.title);
+  restSidePanel();
 }
 $('#side-fold').addEventListener('click', () => command('fold-side'));
 $('#status-side').addEventListener('click', () => command('fold-side'));
+
+/*
+ * While the side panel has nothing to show (nothing selected, and no Warnings, Analysis, Layers,
+ * Comments or Animation pane open), it rests as a thin strip at the right edge, docked there or
+ * floating. Something selected, or a click on the strip, brings it out: docked, over the edge of
+ * the work rather than beside it, so the drawing never moves or changes size as the selection
+ * changes. Documents and spreadsheets always have their Format or Cell pane, so it never rests there.
+ */
+const sideStrip = $<HTMLButtonElement>('#side-strip');
+/** The strip clicked: the panel out though it has nothing to show ('open'), or put away though it has ('closed'), until the selection changes. */
+let sideForced: 'open' | 'closed' | null = null;
+let sideSelKey = '';
+
+/** The panes the side panel shows now. */
+const sidePanes = (): HTMLElement[] => [...sideContent.children].filter((el): el is HTMLElement => el instanceof HTMLElement && !el.hidden && getComputedStyle(el).display !== 'none');
+
+/** The side panel has only the Style pane's "Select something" to show. */
+const sideHasNothing = (): boolean => sidePanes().every((el) => el.id === 'style-section' && el.classList.contains('empty'));
+
+/**
+ * The side panel rests as a strip when it has nothing to show and comes out over the work: when
+ * it is open, docked at the right (its place locked) or floating, and shows only the Style pane.
+ * Another pane turned on (Warnings, Analysis, Layers, Comments, Animation; a document's Format or a
+ * sheet's Cell) keeps it open beside the work, as before.
+ */
+function sideCanRest(): boolean {
+  const p = toolboxState.places.details;
+  if (!p?.shown || sideIsFolded() || !(p.dock === 'float' || (p.dock === 'right' && boxLocked(toolboxState, 'details')))) return false;
+  return sidePanes().every((el) => el.id === 'style-section');
+}
+
+/** The side panel resting as a strip now. */
+const sideResting = (): boolean => !!$('.toolbox[data-id="details"]')?.classList.contains('side-rest');
+
+/** Rest the side panel as a strip, or bring it out, as what it has to show and the strip say. */
+function restSidePanel(): void {
+  const box = document.querySelector<HTMLElement>('.toolbox[data-id="details"]');
+  if (!box) return;
+  const s = editor.sel;
+  const key = `${ws.active.id}|${s.atoms.size}.${s.bonds.size}.${s.captions.size}.${s.arrows.size}.${s.shapes.size}|${[s.atoms, s.bonds, s.captions, s.arrows, s.shapes].map((x) => x.values().next().value ?? '').join('.')}`;
+  // (a new selection, or another tab, ends what a click on the strip asked for)
+  if (key !== sideSelKey) { sideSelKey = key; sideForced = null; }
+  const auto = sideCanRest();
+  const nothing = auto && sideHasNothing();
+  const rest = auto && (sideForced === 'closed' || (nothing && sideForced !== 'open'));
+  const over = auto && !rest && box.classList.contains('vertical') && !box.classList.contains('floating');
+  box.classList.toggle('side-auto', auto);
+  box.classList.toggle('side-rest', rest);
+  box.classList.toggle('side-over', over);
+  sideStrip.setAttribute('aria-expanded', String(auto && !rest));
+  sideStrip.title = rest ? 'Show the side panel (Ctrl+Alt+B): its Style settings come out here when something is selected' : 'Put the side panel away to its strip';
+  sideStrip.setAttribute('aria-label', rest ? 'Show the side panel' : 'Put the side panel away');
+  if (over) {
+    // out over the work, beside the strip, as tall as the dock leaves
+    const r = sideStrip.getBoundingClientRect(), dock = box.parentElement!.getBoundingClientRect();
+    box.style.setProperty('--so-right', `${Math.round(innerWidth - r.left + 4)}px`);
+    box.style.setProperty('--so-top', `${Math.round(r.top)}px`);
+    box.style.setProperty('--so-h', `${Math.max(120, Math.round(dock.bottom - r.top - 6))}px`);
+  }
+  if (rest && box.classList.contains('floating')) {
+    // floating: the strip at the top of the work's right edge
+    const w = $('#work').getBoundingClientRect();
+    box.style.setProperty('--sr-right', `${Math.round(innerWidth - w.right)}px`);
+    box.style.setProperty('--sr-top', `${Math.round(w.top + 8)}px`);
+  }
+}
+sideStrip.addEventListener('click', () => {
+  sideForced = sideResting() ? 'open' : 'closed';
+  restSidePanel();
+});
+// a panel brought out by the strip with nothing to show goes back on a click elsewhere or Escape
+document.addEventListener('pointerdown', (e) => {
+  if (sideForced !== 'open' || !sideHasNothing()) return;
+  const t = e.target as HTMLElement;
+  if (t.closest?.('.toolbox[data-id="details"]')) return;
+  sideForced = null;
+  restSidePanel();
+}, true);
+window.addEventListener('keydown', (e: KeyboardEvent) => {
+  if (e.key === 'Escape' && sideForced === 'open') { sideForced = null; restSidePanel(); }
+});
+// what the panel shows changes with the selection, the tab and the panes turned on: rest it or bring it out to match
+new MutationObserver(() => restSidePanel()).observe(sideContent, { subtree: true, childList: true, attributes: true, attributeFilter: ['hidden', 'class'] });
+new MutationObserver(() => restSidePanel()).observe(document.body, { attributes: true, attributeFilter: ['class'] });
 
 /** Below this window width the side panel folds by itself, so the drawing keeps its room. */
 const NARROW_WINDOW = 1200;
@@ -13706,7 +13797,7 @@ const buildHint = new BuildHint({
 });
 editor.onOverlay = () => { smartPane.place(); buildHint.place(); };
 editor.onSmartAdded = (frame, cap) => smartPane.focusCaption(frame, cap);
-editor.onChange = () => { welcomeWatch?.(); showToolStatus(); showRibbonContext(); smartPane.refresh(); buildHint.refresh(); if (ws.active.mode === 'slides' || ws.active.mode === 'design') { textRibbonNow()?.refresh(); showContextTabs(); } textToolbox?.refresh(); animUi?.selectionChanged(); updateStereo(); scheduleAnalysis(); updatePanels(); ws.noteChange(); stylePanel.refresh(); void refreshDescriptors(); scheduleLabelCheck(); };
+editor.onChange = () => { welcomeWatch?.(); showToolStatus(); showRibbonContext(); smartPane.refresh(); buildHint.refresh(); if (ws.active.mode === 'slides' || ws.active.mode === 'design') { textRibbonNow()?.refresh(); showContextTabs(); } textToolbox?.refresh(); animUi?.selectionChanged(); updateStereo(); scheduleAnalysis(); updatePanels(); ws.noteChange(); stylePanel.refresh(); restSidePanel(); void refreshDescriptors(); scheduleLabelCheck(); };
 chem.onReady = () => {
   (window as any).__chemReadyMs = performance.now() - startMs;
   sheetChem.flush();

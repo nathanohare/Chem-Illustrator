@@ -1576,6 +1576,10 @@ body.doc-reading #doc-pane.nav-open > :not(#doc-nav) { margin-left: 0; }
 .rb-panel[hidden] { display: none; }
 /* one height for every tab of a ribbon: its tallest tab's (src/ui/ribbon-fit.ts) */
 .ribbon > .rb-panel { min-height: var(--rb-panel-h, 0); }
+/* while a ribbon is fitted and measured it keeps its height (set on it), so nothing below it moves;
+   its tabs' buttons keep their own heights inside it, to be measured */
+.ribbon.rb-measuring { overflow: hidden; }
+.ribbon.rb-measuring > .rb-panel { flex-shrink: 0; }
 /* the ˄ at the end of the tabs: collapse the ribbon to its tabs (Ctrl+F1) */
 .rb-tabs .rb-collapse { margin: 0 0 0 auto; align-self: center; width: 22px; height: 20px; padding: 0; border: 0; border-radius: var(--r-control); background: transparent; color: rgba(255, 255, 255, 0.86); font-size: var(--fs-md); line-height: 1; }
 .rb-tabs .rb-collapse:hover { background: rgba(255, 255, 255, 0.14); color: #fff; }
@@ -3499,6 +3503,26 @@ body:not(.slides-mode, .design-mode, .sheet-mode, .doc-mode) #side-content > :is
 #status-side:hover { color: var(--text); border-color: var(--line); }
 #status-side[aria-pressed='true'] { color: var(--accent); }
 #status-side[aria-pressed='false'] .sp-fill { opacity: 0; }
+/* with nothing to show, the side panel rests as a strip at the right edge (src/main.ts restSidePanel) */
+#side-strip { display: none; }
+.toolbox[data-id='details'].side-auto > #side-strip {
+  display: flex; flex-direction: column; align-items: center; gap: 6px; width: 22px; padding: 6px 0;
+  border: 1px solid transparent; border-radius: var(--r-control); background: none; color: var(--muted); font-size: var(--fs-xs);
+}
+#side-strip:hover { color: var(--text); background: var(--accent-soft); }
+#side-strip[aria-expanded='true'] { color: var(--accent); }
+#side-strip[aria-expanded='true'] > svg { transform: scaleX(-1); }
+#side-strip .ss-label { writing-mode: vertical-rl; white-space: nowrap; letter-spacing: 0.02em; }
+.toolbox[data-id='details'].side-rest > :not(#side-strip) { display: none !important; }
+/* docked and brought out: the strip keeps its place and the panel comes out over the work beside it */
+.dock-v > .toolbox[data-id='details'].side-over > .tb-body {
+  position: fixed; z-index: 26; top: var(--so-top); right: var(--so-right); max-height: var(--so-h);
+  padding: 4px 6px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-panel); box-shadow: var(--sh-float);
+}
+.dock-v > .toolbox[data-id='details'].side-over > #side-fold { position: fixed; z-index: 27; top: calc(var(--so-top) + 3px); right: calc(var(--so-right) + 8px); }
+/* floating: the strip shows only while it rests, at the top of the work's right edge */
+.toolbox[data-id='details'].floating.side-auto:not(.side-rest) > #side-strip { display: none; }
+.toolbox[data-id='details'].floating.side-rest { left: auto !important; top: var(--sr-top) !important; right: var(--sr-right); padding: 0; border-right: 0; border-radius: var(--r-panel) 0 0 var(--r-panel); overflow: visible; }
 /* a dock holding only the closed side panel takes no room */
 .dock:not(.drop):not(:has(> :not(.toolbox[data-id='details'].collapsed))) { display: none; }
 .gal-svg .gal-ab { font: 600 7px var(--font-ui, sans-serif); fill: var(--ink, currentColor); }

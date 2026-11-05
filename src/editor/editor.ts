@@ -6511,7 +6511,7 @@ export class Editor {
   /** Typing into a text box finished, leaving it with text (for reading it as chemistry). */
   onCaptionDone: (id: number) => void = () => {};
 
-  /** Smart guides: things moved snap into line with other structures, text, shapes and the page (View > Alignment Guides; Alt turns them off while dragging). */
+  /** Smart guides: things moved snap into line with other structures, text, shapes and the page (presentations and designs; Alt turns them off while dragging). */
   smartGuides = false;
   /** The drawing's guides changed (added, moved, taken away): the file has changed, and the Guides toolbox shows it. */
   onGuides: () => void = () => {};

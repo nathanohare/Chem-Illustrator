@@ -310,6 +310,16 @@ export class Workspace {
     }
   }
 
+  /**
+   * Something a drawing's file keeps outside its undo history changed (its guides): the tab has
+   * unsaved changes, and AutoSave and recovery copies have something new.
+   */
+  noteKeptChange(tab: Tab = this.active): void {
+    if (tab.mode !== 'drawing') return;
+    tab.changes++;
+    if (!tab.dirty) { tab.dirty = true; this.hooks.changed(); }
+  }
+
   // ---------------------------------------------------------------- windows of a document
 
   /** The tabs that own their files (not the extra windows of a document): saved, AutoSaved, kept for recovery. */
