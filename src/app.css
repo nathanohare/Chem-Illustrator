@@ -1675,11 +1675,6 @@ body.slides-mode #canvas-ribbon, body.design-mode #canvas-ribbon, body.sheet-mod
 .canvas-ribbon .rb-group > .rb-row { flex: 1 1 auto; }
 .canvas-ribbon .cr-rows { display: grid; grid-auto-flow: column; grid-template-rows: repeat(3, 23px); gap: 1px 2px; align-content: center; }
 .canvas-ribbon button.cr-minor { display: inline-flex; align-items: center; justify-content: center; width: 26px; min-width: 26px; height: 23px; padding: 0; color: var(--accent); }
-/* (option B: no group names; the three rows a little taller to fill the same height) */
-.canvas-ribbon.cr-no-names .rb-label { display: none; }
-.canvas-ribbon.cr-no-names .cr-rows { grid-template-rows: repeat(3, 26px); }
-.canvas-ribbon.cr-no-names button.cr-minor { height: 26px; }
-.canvas-ribbon.cr-no-names .cr-font .cb-row { height: 26px; }
 /* Clipboard: as the Spreadsheet's; Font: the typing bar's basics in two rows, as the Spreadsheet's Font group */
 .canvas-ribbon .cr-clipboard { align-items: stretch; }
 .canvas-ribbon .cr-font { display: flex; flex-direction: column; justify-content: center; gap: 4px; }
