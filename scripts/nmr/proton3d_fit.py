@@ -21,10 +21,11 @@ TERMS = ['ring', 'co', 'cc', 'triple', 'field', 'field2', 'steric', 'stericH', '
 SINGLE_WEIGHT = 0.3   # weight of a diastereotopic CH2 listed with one shift (target split 0)
 RIDGE = 1e-2
 MAX = 1.5             # cap on the split, ppm
-# The loss cannot tell which proton is downfield, so the overall sign is fixed by terms whose
-# direction is known: a proton in the plane of an aromatic ring (positive ring term) and a
-# sterically compressed proton are both deshielded.
-KNOWN_SIGN = {'ring': 1.0, 'steric': 1.0}
+# The loss cannot tell which proton is downfield, so the overall sign is fixed by a case with a
+# known direction: in a chair, the axial proton (close to the 1,3-diaxial hydrogens, large stericH)
+# is upfield of the equatorial one by about 0.5 ppm (Pretsch, Structure Determination of Organic
+# Compounds). Checked on locked chairs (trans-decalin, tert-butylcyclohexanes, 5a-androstane).
+KNOWN_SIGN = {'stericH': -1.0}
 
 
 def load(path):
