@@ -348,6 +348,10 @@ export interface TextRun {
   link?: string;
   /** Character spacing: points added after each character (less than 0 is condensed), as PowerPoint's Character Spacing. */
   spacing?: number;
+  /** Slides: a PowerPoint field (slidenum, datetime1…) that PowerPoint fills in; this is the text it last showed. */
+  field?: string;
+  /** The text's language (a tag such as de-DE), for spelling, when not US English: kept from PowerPoint. */
+  lang?: string;
   /** Small capitals: lower-case letters shown as smaller capitals (documents). */
   smallCaps?: boolean;
   /** All capitals: letters shown as capitals, the text itself unchanged (documents). */
@@ -475,8 +479,12 @@ export interface ParaStyle {
   tabs?: TabStop[];
   /** Documents: a numbered list's multilevel scheme (1. a. i. when left out; see paragraphs.ts LIST_SCHEMES). */
   scheme?: string;
-  /** Documents: a bulleted list item's own bullet (from the bullet library), in place of its level's. */
+  /** A bulleted list item's own bullet (from the bullet library, or a slide's from PowerPoint), in place of its level's. */
   bullet?: string;
+  /** Slides: a numbered item's numbering as PowerPoint's (its buAutoNum type, such as alphaUcParenR), in place of its level's. */
+  numType?: string;
+  /** Slides: the number a numbered list starts at (PowerPoint's Start at), when not 1. */
+  startAt?: number;
   /**
    * Documents: lines round the paragraph (Home > Borders), as Word's paragraph borders. Paragraphs
    * one after another with the same borders share one box, with `between` drawn between them.
@@ -700,6 +708,11 @@ export interface Arrow {
   piece?: number;
   /** Part of a ChemDraw object from PowerPoint: saved back to PowerPoint as that object, which opens in ChemDraw (OleMark). */
   ole?: OleMark;
+  /**
+   * A line with an arrowhead drawn in PowerPoint (read from a slide): saved back as a PowerPoint
+   * line of its own, not into a structure's picture, while it is an arrow PowerPoint can draw.
+   */
+  ppt?: boolean;
   id: number;
   /** The group it belongs to (Format > Group); things with the same number move and select together. */
   grp?: number;
@@ -852,6 +865,11 @@ export interface Shape {
   piece?: number;
   /** Part of a ChemDraw object from PowerPoint: saved back to PowerPoint as that object, which opens in ChemDraw (OleMark). */
   ole?: OleMark;
+  /**
+   * A box, oval or line drawn in PowerPoint (read from a slide, where it was a shape of its own):
+   * saved back to PowerPoint as its own shape, never into a structure's picture beside it.
+   */
+  ppt?: boolean;
   id: number;
   /** The group it belongs to (Format > Group); things with the same number move and select together. */
   grp?: number;
