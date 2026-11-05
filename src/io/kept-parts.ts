@@ -62,7 +62,8 @@ export interface KeptTree {
   path: string;
   /** Each part: XML as text, anything else (a picture) as a data URL. */
   parts: { path: string; xml?: string; data?: string; type?: string }[];
-  rels: { from: string; type: string; target: string; external?: boolean }[];
+  /** Their relationships, with the ids the parts' XML refers to them by. */
+  rels: { from: string; type: string; target: string; external?: boolean; id?: string }[];
 }
 
 /**
@@ -106,6 +107,8 @@ export interface KeptReadOptions {
   ownProp?: (name: string) => boolean;
   /** Keep the main part's theme (Word and Excel). */
   theme?: boolean;
+  /** Other parts hanging from the main part, by relationship type, kept whole with the parts they lead to (Word's building blocks, its list of people). */
+  trees?: string[];
 }
 
 /** Everything another program left in the file that this app doesn't read; undefined when there is none. */
@@ -137,7 +140,7 @@ export function readKeptParts(pkg: PackageReader, opts: KeptReadOptions): KeptPa
   const trees: KeptTree[] = [];
   for (const [from, part] of [['', ''], ['main', opts.main]] as const) {
     for (const r of pkg.rels(part).values()) {
-      if (r.external || (r.type !== KEPT_REL.addinPanes && r.type !== KEPT_REL.addin)) continue;
+      if (r.external || (r.type !== KEPT_REL.addinPanes && r.type !== KEPT_REL.addin && !(from === 'main' && opts.trees?.includes(r.type)))) continue;
       const tree = readTree(pkg, r.target);
       if (tree) trees.push({ from, type: r.type, path: r.target, ...tree });
     }
@@ -256,8 +259,8 @@ export function readTree(pkg: PackageReader, start: string): Pick<KeptTree, 'par
     const isXml = /\.xml$/i.test(path) || /xml$/i.test(type ?? '');
     parts.push({ path, ...(isXml ? { xml: pkg.text(path) ?? '' } : { data: dataUrl(bytes, type ?? 'application/octet-stream') }), ...(type ? { type } : {}) });
     if (!isXml) return;
-    for (const r of pkg.rels(path).values()) {
-      rels.push({ from: path, type: r.type, target: r.target, ...(r.external ? { external: true } : {}) });
+    for (const [id, r] of pkg.rels(path)) {
+      rels.push({ from: path, type: r.type, target: r.target, ...(r.external ? { external: true } : {}), ...(id ? { id } : {}) });
       if (!r.external) visit(r.target);
     }
   };
@@ -311,10 +314,19 @@ export function writeKeptParts(pkg: Package, kept: KeptParts | undefined, opts: 
 /** Write a kept part and the parts it leads to, and relate it from where it hangs: the relationship's id (null when its path is taken). */
 export function writeTree(pkg: Package, tree: KeptTree, main: string): string | null {
   if (pkg.has(tree.path)) return null;
-  for (const p of tree.parts) pkg.add(p.path, p.xml ?? fromDataUrl(p.data ?? 'data:application/octet-stream,').bytes, p.type);
+  // a part whose name the saved file already uses (a picture in word/media) goes under a name of its own
+  const at = new Map<string, string>();
+  for (const p of tree.parts) {
+    let path = p.path;
+    for (let n = 1; pkg.has(path) || [...at.values()].includes(path); n++) path = p.path.replace(/(\.[^./]*)?$/, (ext) => `_kept${n}${ext}`);
+    at.set(p.path, path);
+  }
+  for (const p of tree.parts) pkg.add(at.get(p.path)!, p.xml ?? fromDataUrl(p.data ?? 'data:application/octet-stream,').bytes, p.type);
+  // (with the ids the parts' XML refers to them by)
   for (const r of tree.rels) {
-    if (r.external) pkg.relate(r.from, r.type, r.target, true);
-    else if (tree.parts.some((p) => p.path === r.target)) pkg.relate(r.from, r.type, relativeTarget(r.from, r.target));
+    const from = at.get(r.from) ?? r.from;
+    if (r.external) pkg.relate(from, r.type, r.target, true, r.id);
+    else if (at.has(r.target)) pkg.relate(from, r.type, relativeTarget(from, at.get(r.target)!), false, r.id);
   }
   const from = tree.from === 'main' ? main : '';
   return pkg.relate(from, tree.type, from ? relativeTarget(from, tree.path) : tree.path);

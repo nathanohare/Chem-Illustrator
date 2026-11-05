@@ -102,6 +102,9 @@ const JUSTIFY: Record<string, Justify> = { left: 'left', start: 'left', center: 
 /** VML (Word 2003's drawings, and the fallback Word writes for its newer shapes): the elements that draw something. */
 const VML_NS = 'urn:schemas-microsoft-com:vml';
 const VML_SHAPES = new Set(['shape', 'rect', 'roundrect', 'oval', 'line', 'polyline', 'arc', 'curve', 'image']);
+/** Word's building blocks kept in the file (Quick Parts: its glossary document), and the people who wrote its comments. */
+const GLOSSARY_REL = 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/glossaryDocument';
+const PEOPLE_REL = 'http://schemas.microsoft.com/office/2011/relationships/people';
 const EXT_MIME: Record<string, string> = { wmf: 'image/x-wmf', emf: 'image/x-emf', tif: 'image/tiff', tiff: 'image/tiff' };
 
 const WARN = {
@@ -779,7 +782,8 @@ class DocxReader {
 
   /** Other programs' data, kept as it is; Chem4Word's structures by their id. */
   private readKept(): void {
-    this.kept = readKeptParts(this.pkg, { main: this.main, ours: (root) => root.namespaceURI === MODEL_NS, ownProp: (name) => /^ZOTERO_PREF_\d+$/.test(name), theme: true });
+    // (with Word's building blocks stored in the file, and its list of the people who commented)
+    this.kept = readKeptParts(this.pkg, { main: this.main, ours: (root) => root.namespaceURI === MODEL_NS, ownProp: (name) => /^ZOTERO_PREF_\d+$/.test(name), theme: true, trees: [GLOSSARY_REL, PEOPLE_REL] });
     for (const x of this.kept?.xml ?? []) {
       const guid = cmlGuid(x.xml);
       if (guid) this.cml.set(guid, x.xml);
@@ -1448,7 +1452,8 @@ class DocxReader {
       const text = paras.map((p) => [...p.getElementsByTagNameNS(this.W, '*')]
         .map((e) => (e.localName === 't' ? e.textContent ?? '' : e.localName === 'tab' ? '\t' : e.localName === 'br' ? '\n' : '')).join('')).join('\n');
       const last = paras[paras.length - 1];
-      notes.set(id, { author: this.a(c, 'author') ?? '', date: fromWordDate(this.a(c, 'date') ?? ''), text, para: last?.getAttributeNS(W14_NS, 'paraId') ?? '' });
+      const kept = this.commentParas(c);
+      notes.set(id, { author: this.a(c, 'author') ?? '', date: fromWordDate(this.a(c, 'date') ?? ''), text, para: last?.getAttributeNS(W14_NS, 'paraId') ?? '', ...(kept ? { word: { paras: kept, text } } : {}) });
     }
     // Word 365 keeps each comment's time in UTC too, by a lasting id found from its paragraph id
     const part = (rel: string) => { const at = this.pkg.relOfType(this.main, rel); return at ? this.pkg.xml(at)?.documentElement ?? null : null; };
@@ -1458,6 +1463,9 @@ class DocxReader {
     for (const n of notes.values()) {
       const at = new Date(utc.get(durable.get(n.para) ?? '') ?? '');
       if (!isNaN(at.getTime())) n.date = at.toISOString();
+      // (its lasting id, which Word keeps from save to save)
+      const did = durable.get(n.para);
+      if (did && /^[0-9A-F]{8}$/i.test(did)) n.word = { ...n.word, id: did };
     }
     // which comment each reply answers, and which are resolved
     const parent = new Map<string, string>(), done = new Set<string>();
@@ -1475,7 +1483,7 @@ class DocxReader {
     const replies = new Set<number>();
     for (const [id, n] of notes) {
       if (n.para && parent.has(n.para) && byPara.has(parent.get(n.para)!)) { replies.add(id); continue; }
-      comments[id] = { author: n.author, date: n.date, text: n.text, ...(done.has(n.para) ? { done: true } : {}) };
+      comments[id] = { author: n.author, date: n.date, text: n.text, ...(n.word ? { word: n.word } : {}), ...(done.has(n.para) ? { done: true } : {}) };
     }
     for (const id of [...notes.keys()].sort((a, b) => a - b)) {
       if (!replies.has(id)) continue;
@@ -1484,9 +1492,32 @@ class DocxReader {
       let top = byPara.get(parent.get(n.para)!)!;
       for (let k = 0; replies.has(top) && k < 50; k++) top = byPara.get(parent.get(notes.get(top)!.para)!)!;
       const c = comments[top];
-      if (c) (c.replies ??= []).push({ author: n.author, date: n.date, text: n.text });
+      if (c) (c.replies ??= []).push({ author: n.author, date: n.date, text: n.text, ...(n.word ? { word: n.word } : {}) });
     }
     return { comments, replies };
+  }
+
+  /**
+   * A comment's paragraphs as Word wrote them (bold, italics, subscripts in it), less their
+   * paragraph ids (given afresh on saving); null when its text has no formatting, or it holds more
+   * than paragraphs, or anything that goes through the comments part's relationships (a link, a picture).
+   */
+  private commentParas(c: Element): string[] | null {
+    const blocks = kids(c);
+    if (!blocks.length || blocks.some((b) => b.localName !== 'p' || b.namespaceURI !== W_NS || b.prefix !== 'w')) return null;
+    // (only when its text has formatting: plain text is written as it is)
+    const looks = Array.from(c.getElementsByTagNameNS(W_NS, 'r')).some((r) => kid(r, 't') && kids(kid(r, 'rPr')).some((k) => k.localName !== 'rStyle'));
+    if (!looks) return null;
+    const out: string[] = [];
+    for (const b of blocks) {
+      const q = b.cloneNode(true) as Element;
+      q.removeAttributeNS(W14_NS, 'paraId');
+      q.removeAttributeNS(W14_NS, 'textId');
+      const x = elementXml(q).replaceAll(` xmlns:w="${W_NS}"`, '');
+      if (x.includes('officeDocument/2006/relationships') || !x.startsWith('<w:p')) return null;
+      out.push(x);
+    }
+    return out;
   }
 
   private emitObject(ctx: Ctx, o: DocObject, r: RProps, keepPos = false): number | null {

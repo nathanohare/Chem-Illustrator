@@ -40,6 +40,8 @@ export const DOCX_CT = {
   font: 'application/vnd.openxmlformats-officedocument.obfuscatedFont',
   comments: 'application/vnd.openxmlformats-officedocument.wordprocessingml.comments+xml',
   commentsExtended: 'application/vnd.openxmlformats-officedocument.wordprocessingml.commentsExtended+xml',
+  commentsIds: 'application/vnd.openxmlformats-officedocument.wordprocessingml.commentsIds+xml',
+  commentsExtensible: 'application/vnd.openxmlformats-officedocument.wordprocessingml.commentsExtensible+xml',
   footnotes: 'application/vnd.openxmlformats-officedocument.wordprocessingml.footnotes+xml',
   endnotes: 'application/vnd.openxmlformats-officedocument.wordprocessingml.endnotes+xml',
 };

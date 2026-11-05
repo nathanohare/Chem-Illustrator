@@ -85,14 +85,18 @@ export class Package {
     this.defaults.set(ext, type);
   }
 
-  /** Relate `from` (a part path, or '' for the package) to `target`; returns the relationship id. */
-  relate(from: string, type: string, target: string, external = false): string {
+  /**
+   * Relate `from` (a part path, or '' for the package) to `target`; returns the relationship id.
+   * `keepId` is the id a part kept from a file read uses for it (its XML refers to it).
+   */
+  relate(from: string, type: string, target: string, external = false, keepId?: string): string {
     const list = this.rels.get(from) ?? [];
     this.rels.set(from, list);
     // the same target and type share one relationship
-    const same = list.find((r) => r.type === type && r.target === target);
+    const same = keepId ? undefined : list.find((r) => r.type === type && r.target === target);
     if (same) return same.id;
-    const id = `rId${list.length + 1}`;
+    let id = keepId && !list.some((r) => r.id === keepId) ? keepId : `rId${list.length + 1}`;
+    for (let n = list.length + 2; list.some((r) => r.id === id); n++) id = `rId${n}`;
     list.push({ id, type, target, external });
     return id;
   }

@@ -43,7 +43,7 @@ import { INDEX_INDENT, authorities, indexInstr, indexItems, taInstr, toaInstr, t
 import { ALG_SIDS, type Protection } from '../document/protect';
 import { parseFmt, parseRev } from '../document/revisions';
 import { officeTarget } from '../links';
-import { cmtIds, initials, placedComments, type CommentThread } from '../document/comments';
+import { cmtIds, initials, placedComments, type CommentNote, type CommentThread } from '../document/comments';
 import { toOmml } from '../document/math';
 import { documentMeasure } from '../text/font-measure';
 import { arialWidth } from '../text-metrics';
@@ -58,7 +58,7 @@ import type { ChartBox } from '../sheet/chart-box';
 import { appPropsXml, corePropsXml, writeKeptParts, type ContentControl } from './kept-parts';
 import { cmlGuid, contentsSig, writeCml } from './cml';
 import {
-  BIB_MARK, CHART_NAME, CITE_FIELD, DOCX_CT, W14_NS, W15_NS, DOCX_REL, DRAWING_NAME, FORMULA_STYLE, MODEL_NS, MC_NS, M_NS, PIC_NS, TABLE_MARK, W_NS, WORD_HIGHLIGHTS, WP_NS, WPS_NS, WPG_NS, twips, toWordDate, type DocxModel,
+  BIB_MARK, CHART_NAME, CITE_FIELD, DOCX_CT, W14_NS, W15_NS, W16CID_NS, W16CEX_NS, DOCX_REL, DRAWING_NAME, FORMULA_STYLE, MODEL_NS, MC_NS, M_NS, PIC_NS, TABLE_MARK, W_NS, WORD_HIGHLIGHTS, WP_NS, WPS_NS, WPG_NS, twips, toWordDate, type DocxModel,
 } from './docx-base';
 
 export interface DocxDeps {
@@ -438,15 +438,25 @@ class DocxWriter {
    */
   private commentParts(main: string): void {
     let para = 0x10000000;
-    const notes: string[] = [], ex: string[] = [];
-    const note = (id: number, c: { author: string; date: string; text: string }, parent: string | null, done: boolean): string => {
+    const notes: string[] = [], ex: string[] = [], cids: string[] = [], cex: string[] = [];
+    const note = (id: number, c: CommentNote, parent: string | null, done: boolean): string => {
+      // a comment from a Word file whose text wasn't changed here: its paragraphs as Word wrote them (with their formatting)
+      const kept = c.word?.paras?.length && c.word.text === c.text ? c.word.paras : null;
       const lines = c.text.split('\n');
-      const ids = lines.map(() => (para++).toString(16).toUpperCase());
-      const ps = lines.map((line, i) => `<w:p w14:paraId="${ids[i]}" w14:textId="77777777">${i === 0 ? '<w:r><w:annotationRef/></w:r>' : ''}${run('', line)}</w:p>`);
+      const ids = (kept ?? lines).map(() => (para++).toString(16).toUpperCase());
+      const ps = kept ? kept.map((p, i) => p.replace(/^<w:p\b/, `<w:p w14:paraId="${ids[i]}" w14:textId="77777777"`))
+        : lines.map((line, i) => `<w:p w14:paraId="${ids[i]}" w14:textId="77777777">${i === 0 ? '<w:r><w:annotationRef/></w:r>' : ''}${run('', line)}</w:p>`);
       const last = ids[ids.length - 1];
       const date = c.date ? ` w:date="${xml(toWordDate(c.date))}"` : '';
       notes.push(`<w:comment w:id="${id}" w:author="${xml(c.author || 'Author')}"${date} w:initials="${xml(initials(c.author) || 'A')}">${ps.join('')}</w:comment>`);
       ex.push(`<w15:commentEx w15:paraId="${last}"${parent ? ` w15:paraIdParent="${parent}"` : ''} w15:done="${done ? 1 : 0}"/>`);
+      // Word 365's lasting id for the comment, and its time in UTC
+      const did = c.word?.id && /^[0-9A-F]{8}$/i.test(c.word.id) ? c.word.id.toUpperCase() : null;
+      const utc = new Date(c.date);
+      if (did) {
+        cids.push(`<w16cid:commentId w16cid:paraId="${last}" w16cid:durableId="${did}"/>`);
+        if (!isNaN(utc.getTime())) cex.push(`<w16cex:commentExtensible w16cex:durableId="${did}" w16cex:dateUtc="${utc.toISOString().replace(/\.\d+Z$/, 'Z')}"/>`);
+      }
       return last;
     };
     for (const [id, { c, replies }] of this.cmts) {
@@ -458,6 +468,14 @@ class DocxWriter {
     this.pkg.add('word/comments.xml', `${HEAD}<w:comments xmlns:w="${W_NS}" xmlns:w14="${W14_NS}" xmlns:mc="${MC_NS}" mc:Ignorable="w14">${notes.join('')}</w:comments>`, DOCX_CT.comments);
     this.pkg.relate(main, DOCX_REL.commentsExtended, 'commentsExtended.xml');
     this.pkg.add('word/commentsExtended.xml', `${HEAD}<w15:commentsEx xmlns:w15="${W15_NS}" xmlns:mc="${MC_NS}">${ex.join('')}</w15:commentsEx>`, DOCX_CT.commentsExtended);
+    if (cids.length) {
+      this.pkg.relate(main, DOCX_REL.commentsIds, 'commentsIds.xml');
+      this.pkg.add('word/commentsIds.xml', `${HEAD}<w16cid:commentsIds xmlns:w16cid="${W16CID_NS}">${cids.join('')}</w16cid:commentsIds>`, DOCX_CT.commentsIds);
+    }
+    if (cex.length) {
+      this.pkg.relate(main, DOCX_REL.commentsExtensible, 'commentsExtensible.xml');
+      this.pkg.add('word/commentsExtensible.xml', `${HEAD}<w16cex:commentsExtensible xmlns:w16cex="${W16CEX_NS}">${cex.join('')}</w16cex:commentsExtensible>`, DOCX_CT.commentsExtensible);
+    }
   }
 
   private async paragraph(main: string, ps: ParaStyle, runs: TextRun[], listNum: number, index = -1, sectXml = ''): Promise<string> {
