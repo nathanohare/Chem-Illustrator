@@ -18,6 +18,11 @@ export interface Revision {
   author: string;
   /** When, as an ISO date and time (Word's w:date). */
   date: string;
+  /**
+   * Text moved: the move's name (Word's w:name on its move ranges), the same on the deletion where
+   * it was (moved from) and the insertion where it went (moved to), so Word shows them as one move.
+   */
+  move?: string;
 }
 
 /** The name put on changes made here (Edit > Settings, or asked the first time tracking is turned on). */
@@ -39,14 +44,14 @@ export const revisionDate = (d = new Date()): string => d.toISOString().replace(
 
 /** A revision as stored on a run. */
 export function revText(r: Revision): string {
-  return `${r.kind}|${r.author.replace(/\|/g, '/')}|${r.date}`;
+  return `${r.kind}|${r.author.replace(/\|/g, '/')}|${r.date}${r.move ? `|${r.move.replace(/\|/g, '/')}` : ''}`;
 }
 
 /** A run's revision, or null. */
 export function parseRev(s: string | undefined): Revision | null {
   if (!s) return null;
-  const [kind, author = '', date = ''] = s.split('|');
-  return kind === 'ins' || kind === 'del' ? { kind, author, date } : null;
+  const [kind, author = '', date = '', move] = s.split('|');
+  return kind === 'ins' || kind === 'del' ? { kind, author, date, ...(move ? { move } : {}) } : null;
 }
 
 /** Something with text in runs and a style for each paragraph (a document, or a part of one). */

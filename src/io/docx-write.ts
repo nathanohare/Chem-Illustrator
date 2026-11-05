@@ -299,7 +299,7 @@ class DocxWriter {
     const t = this.t;
     const n = paraCount(rt.plainText(t.runs));
     const paras = fitParas(t.paras, n);
-    const runsOf = splitParagraphs(t.runs);
+    const runsOf = this.splitParas(t.runs);
     const lists = listInfo(paras);
     // tracked changes on the paragraph marks (a line break typed or deleted while tracking)
     const markRev: (string | undefined)[] = [];
@@ -336,7 +336,7 @@ class DocxWriter {
         // Word joins two tables with nothing between them into one: an empty paragraph keeps them
         // apart. Two floating tables are placed apart and stay two tables, as Word writes them (a label sheet's).
         if (lastWasTable && !(lastFloats && only.table.float)) out.push('<w:p><w:pPr><w:spacing w:before="0" w:after="0"/></w:pPr></w:p>');
-        out.push(await this.docTable(main, only.table, ps.align ?? styleOf(t, ps).align));
+        out.push(this.cmtRound(runs[0], await this.docTable(main, only.table, ps.align ?? styleOf(t, ps).align)));
         lastWasTable = true;
         lastFloats = !!only.table.float;
         close();
@@ -391,6 +391,34 @@ class DocxWriter {
   // tracked changes count apart from the bookmarks (Word wants each id used once)
   private revId = 10001;
 
+  /** Where moved text's ranges start and end (Word pairs a move's two ends by its ranges' name): the markers before and after a run. */
+  private moveEdges = new WeakMap<TextRun, { before?: string; after?: string }>();
+  /** Moved text inside its ranges (written as Word's moveFrom and moveTo; elsewhere as a deletion or insertion). */
+  private moved = new WeakSet<TextRun>();
+
+  /** Text split into paragraphs, with the ranges round each stretch of moved text (which may run over paragraphs) worked out. */
+  private splitParas(runs: TextRun[]): TextRun[][] {
+    const out = splitParagraphs(runs);
+    const all = out.flat();
+    const keyOf = (r: TextRun | undefined) => { const v = parseRev(r?.rev); return v?.move ? `${v.kind}|${v.move}` : ''; };
+    let id = 0;
+    all.forEach((r, i) => {
+      const key = keyOf(r);
+      if (!key) return;
+      const v = parseRev(r.rev)!;
+      const tag = v.kind === 'del' ? 'moveFrom' : 'moveTo';
+      this.moved.add(r);
+      const edge: { before?: string; after?: string } = {};
+      if (keyOf(all[i - 1]) !== key) {
+        id = this.revId++;
+        edge.before = `<w:${tag}RangeStart w:id="${id}" w:name="${xml(v.move!)}" w:author="${xml(v.author || 'Author')}"${v.date ? ` w:date="${xml(v.date)}"` : ''}/>`;
+      }
+      if (keyOf(all[i + 1]) !== key) edge.after = `<w:${tag}RangeEnd w:id="${id}"/>`;
+      if (edge.before || edge.after) this.moveEdges.set(r, edge);
+    });
+    return out;
+  }
+
   /** A tracked change's attributes for Word. */
   private revAttrs(rev: string): string {
     const v = parseRev(rev)!;
@@ -398,9 +426,11 @@ class DocxWriter {
   }
 
   /** A run's Word XML inside its tracked change (deleted text is Word's w:delText). */
-  private tracked(rev: string | undefined, body: string): string {
+  private tracked(rev: string | undefined, body: string, run?: TextRun): string {
     const v = parseRev(rev);
     if (!v || !body) return body;
+    // moved text: Word's moveTo and moveFrom (whose text stays w:t)
+    if (v.move && run && this.moved.has(run)) return `<w:${v.kind === 'del' ? 'moveFrom' : 'moveTo'} ${this.revAttrs(rev!)}>${body}</w:${v.kind === 'del' ? 'moveFrom' : 'moveTo'}>`;
     if (v.kind === 'ins') return `<w:ins ${this.revAttrs(rev!)}>${body}</w:ins>`;
     const del = body.replace(/<w:t( [^>]*)?>/g, '<w:delText$1>').replace(/<\/w:t>/g, '</w:delText>')
       .replace(/<w:instrText( [^>]*)?>/g, '<w:delInstrText$1>').replace(/<\/w:instrText>/g, '</w:delInstrText>');
@@ -432,6 +462,17 @@ class DocxWriter {
       if (left <= 0 && this.cmtOpen.has(id)) out += this.cmtEnd(id);
     }
     return out;
+  }
+
+  /** A table's Word XML with the comments on the whole table round its text: from its first paragraph to its last. */
+  private cmtRound(r: TextRun, tbl: string): string {
+    const start = this.cmtBefore(r), end = this.cmtAfter(r);
+    if (!start && !end) return tbl;
+    const first = /<w:p(?=[ >])[^>]*>(?:<w:pPr>[\s\S]*?<\/w:pPr>)?/.exec(tbl);
+    const last = tbl.lastIndexOf('</w:p>');
+    if (!first || last < 0) return tbl;
+    const at = first.index + first[0].length;
+    return tbl.slice(0, at) + start + tbl.slice(at, last) + end + tbl.slice(last);
   }
 
   private cmtEnd(id: number): string {
@@ -537,6 +578,8 @@ class DocxWriter {
     const isCompound = (id: number) => { const o = this.t.objects[id]; return o?.kind === 'seq' && o.name === COMPOUND; };
     const seqs = runs.filter((r) => r.obj !== undefined && this.bookmarks.has(r.obj) && !isCompound(r.obj)).map((r) => r.obj!);
     const out: string[] = [];
+    // the end of a move's range, put after the run it ends with
+    const moveEnds: string[] = [];
     let open: { id: number; seq: number } | null = null;
     if (seqs.length) {
       open = { id: this.bookmarkId++, seq: seqs[0] };
@@ -572,20 +615,23 @@ class DocxWriter {
     for (const r of runs) {
       controlTo(r.cc);
       linkTo(r.link);
+      const move = this.moveEdges.get(r);
+      if (move?.before) out.push(move.before);
+      if (move?.after) moveEnds.push(move.after);
       out.push(this.cmtBefore(r));
-      if (r.obj === undefined) { out.push(this.tracked(r.rev, this.textRuns(r, st)), this.cmtAfter(r)); continue; }
+      if (r.obj === undefined) { out.push(this.tracked(r.rev, this.textRuns(r, st), r), this.cmtAfter(r), ...moveEnds.splice(0)); continue; }
       const o = this.t.objects[r.obj];
       if (o?.kind === 'math') {
         const m = `<m:oMath>${toOmml(o.tex)}</m:oMath>`;
-        out.push(display ? `<m:oMathPara>${m}</m:oMathPara>` : m, this.cmtAfter(r));
+        out.push(display ? `<m:oMathPara>${m}</m:oMathPara>` : m, this.cmtAfter(r), ...moveEnds.splice(0));
         continue;
       }
       const mark = this.bookmarks.has(r.obj) && isCompound(r.obj) ? this.bookmarkId++ : null;
       if (mark !== null) out.push(`<w:bookmarkStart w:id="${mark}" w:name="${this.bookmarks.get(r.obj)}"/>`);
-      out.push(this.tracked(r.rev, await this.objectRun(main, r, st)));
+      out.push(this.tracked(r.rev, await this.objectRun(main, r, st), r));
       if (mark !== null) out.push(`<w:bookmarkEnd w:id="${mark}"/>`);
       if (open && r.obj === open.seq) { out.push(`<w:bookmarkEnd w:id="${open.id}"/>`); open = null; }
-      out.push(this.cmtAfter(r));
+      out.push(this.cmtAfter(r), ...moveEnds.splice(0));
     }
     controlTo(undefined);
     linkTo(undefined);
@@ -763,7 +809,7 @@ class DocxWriter {
       for (const [id, n] of mine) {
         const o = t.objects[id];
         if (o?.kind !== 'note') continue;
-        const runsOf = splitParagraphs(o.runs);
+        const runsOf = this.splitParas(o.runs);
         const paras = fitParas(o.paras, paraCount(rt.plainText(o.runs)));
         const ps = paras.map((p, i) => {
           const pPr: string[] = [`<w:pStyle w:val="${style}"/>`];
@@ -887,7 +933,7 @@ class DocxWriter {
   private async textBox(main: string, id: number, o: Extract<DocObject, { kind: 'textbox' }>, rPr: string): Promise<string> {
     const n = paraCount(rt.plainText(o.runs));
     const paras = fitParas(o.paras, n);
-    const runsOf = splitParagraphs(o.runs);
+    const runsOf = this.splitParas(o.runs);
     const ps: string[] = [];
     for (let p = 0; p < n; p++) ps.push(await this.paragraph(main, paras[p], runsOf[p] ?? [], 0));
     const N = styleOf(this.t, {});
@@ -1143,7 +1189,7 @@ class DocxWriter {
     const tblPr = `<w:tblPr><w:tblW w:w="${twips(width)}" w:type="dxa"/><w:jc w:val="${align === 'right' ? 'right' : align === 'left' ? 'left' : 'center'}"/>` +
       `<w:tblBorders>${borders}</w:tblBorders><w:tblLayout w:type="fixed"/>` +
       `<w:tblCellMar><w:top w:w="${padY}" w:type="dxa"/><w:left w:w="${padX}" w:type="dxa"/><w:bottom w:w="${padY}" w:type="dxa"/><w:right w:w="${padX}" w:type="dxa"/></w:tblCellMar>` +
-      `<w:tblLook w:val="0000" w:firstRow="0" w:lastRow="0" w:firstColumn="0" w:lastColumn="0" w:noHBand="1" w:noVBand="1"/>` +
+      `<w:tblLook w:val="0600" w:firstRow="0" w:lastRow="0" w:firstColumn="0" w:lastColumn="0" w:noHBand="1" w:noVBand="1"/>` +
       // its alt-text title: the table's own title (which of ours it is goes in a hidden bookmark)
       `${title ? `<w:tblCaption w:val="${xmlAttr(title)}"/>` : ''}</w:tblPr>`;
     const grid = `<w:tblGrid>${tab.cols.map((w) => `<w:gridCol w:w="${twips(w)}"/>`).join('')}</w:tblGrid>`;
@@ -1198,7 +1244,7 @@ class DocxWriter {
     const tblPr = `<w:tblPr>${styled ? `<w:tblStyle w:val="${tab.style}"/>` : ''}${tableFloatXml(tab.float)}${tableWidthXml(tab)}<w:jc w:val="${align === 'right' ? 'right' : align === 'center' ? 'center' : 'left'}"/>` +
       `${tab.indent ? `<w:tblInd w:w="${twips(tab.indent)}" w:type="dxa"/>` : ''}${styled ? '' : `<w:tblBorders>${borders}</w:tblBorders>`}${tab.autofit ? '' : '<w:tblLayout w:type="fixed"/>'}` +
       marginsXml('tblCellMar', tab.pad ?? DEFAULT_MARGINS) +
-      `${styled ? tableLookXml(tab) : '<w:tblLook w:val="0000" w:firstRow="0" w:lastRow="0" w:firstColumn="0" w:lastColumn="0" w:noHBand="1" w:noVBand="1"/>'}</w:tblPr>`;
+      `${styled ? tableLookXml(tab) : '<w:tblLook w:val="0600" w:firstRow="0" w:lastRow="0" w:firstColumn="0" w:lastColumn="0" w:noHBand="1" w:noVBand="1"/>'}</w:tblPr>`;
     const gridXml = `<w:tblGrid>${tab.cols.map((w) => `<w:gridCol w:w="${twips(w)}"/>`).join('')}</w:tblGrid>`;
     const rows: string[] = [];
     for (let r = 0; r < tab.rows.length; r++) {
@@ -1232,7 +1278,7 @@ class DocxWriter {
         const n = paraCount(rt.plainText(cell.runs));
         const ps = fitParas(cell.paras, n);
         const ca = docCellAlign(tab, r, c);
-        const parts = splitParagraphs(cell.runs);
+        const parts = this.splitParas(cell.runs);
         const paras: string[] = [];
         let lastTable = false;
         for (let i = 0; i < n; i++) {
@@ -1347,7 +1393,7 @@ class DocxWriter {
   /** A header or footer with pictures, tables or formatted text: its paragraphs as Word's (its pictures related from its own part), with the watermark. */
   private async hfBodyXml(part: string, kind: 'header' | 'footer', body: HfBody, pg: PageSetup): Promise<string> {
     const t = this.t;
-    const runsOf = splitParagraphs(body.runs);
+    const runsOf = this.splitParas(body.runs);
     const ps = fitParas(body.paras, runsOf.length);
     const out: string[] = [];
     for (let p = 0; p < runsOf.length; p++) {
@@ -1547,6 +1593,8 @@ function runProps(r: TextRun, st: NamedStyle, x: { formula?: boolean; pos?: 'bas
   if (!!r.strike !== !!cs?.strike) out.push(r.strike ? '<w:strike/>' : '<w:strike w:val="0"/>');
   if (r.noProof) out.push('<w:noProof/>');
   if (x.vanish) out.push('<w:vanish/>');
+  // raised or lowered from the line, in half-points
+  if (r.raise) out.push(`<w:position w:val="${Math.round(r.raise * 2)}"/>`);
   const color = r.color ?? st.color;
   if ((color ?? '') !== (st.color ?? '')) out.push(`<w:color w:val="${color ? hex6(color) : 'auto'}"/>`);
   // character spacing (twentieths of a point) and kerning taken off
@@ -1703,10 +1751,10 @@ function formField(o: Extract<DocObject, { kind: 'form' }>, rPr: string, names: 
     `${result ? `<w:r>${pr}<w:fldChar w:fldCharType="separate"/></w:r>${run(rPr, result)}` : ''}<w:r>${pr}<w:fldChar w:fldCharType="end"/></w:r><w:bookmarkEnd w:id="${mark}"/>`;
 }
 
-/** A run of text (tabs as Word's tabs). */
+/** A run of text (tabs as Word's tabs, optional hyphens as its soft hyphens). */
 function run(rPr: string, text: string): string {
   if (!text) return '';
-  const body = text.split('\t').map((s, i) => (i > 0 ? '<w:tab/>' : '') + (s ? `<w:t xml:space="preserve">${xml(s)}</w:t>` : '')).join('');
+  const body = text.split(/([\t\u00ad])/).map((s) => (s === '\t' ? '<w:tab/>' : s === '\u00ad' ? '<w:softHyphen/>' : s ? `<w:t xml:space="preserve">${xml(s)}</w:t>` : '')).join('');
   return `<w:r>${rPr ? `<w:rPr>${rPr}</w:rPr>` : ''}${body}</w:r>`;
 }
 

@@ -282,7 +282,8 @@ function segments(runs: TextRun[], defaultSize: number, n: number): { segs: Seg[
     if (r.obj !== undefined) {
       // each object character is a piece of its own (a field in superscript, a citation, shows its text raised)
       const size = r.sub || r.sup ? base * 0.75 : base;
-      const dy = r.sub ? base * 0.22 : r.sup ? -base * 0.42 : 0;
+      // a run raised or lowered by some points (Word's position) moves on top of that
+      const dy = (r.sub ? base * 0.22 : r.sup ? -base * 0.42 : 0) - (r.raise ?? 0);
       for (const ch of r.text) {
         if (ch === '\n') { off++; p++; if (p < n) sizes[p] = base; continue; }
         if (p < n) segs[p].push({ text: ch, start: off, size, base, dy, family, style, color: r.color, underline: r.underline, strike: r.strike, highlight: r.highlight, obj: r.obj });
@@ -295,7 +296,7 @@ function segments(runs: TextRun[], defaultSize: number, n: number): { segs: Seg[
     for (const part of parts) {
       const small = part.pos !== 'base';
       const size = small ? base * 0.75 : base;
-      const dy = part.pos === 'sub' ? base * 0.22 : part.pos === 'sup' ? -base * 0.42 : 0;
+      const dy = (part.pos === 'sub' ? base * 0.22 : part.pos === 'sup' ? -base * 0.42 : 0) - (r.raise ?? 0);
       const chunks = part.text.split('\n');
       chunks.forEach((t, i) => {
         if (i > 0) {
@@ -346,6 +347,10 @@ function breakPoints(text: string, around: ReadonlySet<number> = new Set()): num
 }
 
 interface Word { start: number; end: number; body: number; spaces: number }
+
+/** Word's soft (optional) hyphen: no width, and a hyphen only where a line breaks at it. */
+const SHY = '\u00ad';
+const unshy = (t: string): string => (t.includes(SHY) ? t.split(SHY).join('') : t);
 
 export function layoutText(f: TextFrame, defaultSize: number, measure: Measure): TextLayout {
   if (f.fit === 'shrink' && f.boxH && f.boxH > 0) return shrunk(f, defaultSize, measure);
@@ -463,7 +468,7 @@ function layoutPlain(f: TextFrame, defaultSize: number, measure: Measure): TextL
       }
     }
     const segWidth = (s: Seg, a: number, b: number): number =>
-      s.hide ? 0 : s.obj !== undefined || s.tab ? (b > a ? s.w ?? 0 : 0) : measure(s.text.slice(a, b), s.size, s.family, s.style) + (s.spacing ? s.spacing * (b - a) : 0);
+      s.hide ? 0 : s.obj !== undefined || s.tab ? (b > a ? s.w ?? 0 : 0) : measure(unshy(s.text.slice(a, b)), s.size, s.family, s.style) + (s.spacing ? s.spacing * (b - a) : 0);
 
     // the width of part of the paragraph (offsets within it), piece by piece
     const widthOf = (a: number, b: number): number => {
@@ -561,8 +566,26 @@ function layoutPlain(f: TextFrame, defaultSize: number, measure: Measure): TextL
       cur = null;
     };
     const segAt = (at: number): Seg | undefined => pSegs.find((s) => s.start - paraStart <= at && at < s.start - paraStart + s.text.length);
+    /** The last soft hyphen in a word that leaves the start of it on the line; undefined when the word has none. */
+    const softBreak = (w: Word, room: number): { at: number; width: number; hyphen: Glyphs } | null | undefined => {
+      const text = pText.slice(w.start, w.end);
+      if (!text.includes(SHY)) return undefined;
+      const body = text.trimEnd().length;
+      for (let k = body - 2; k >= 1; k--) {
+        if (text[k] !== SHY) continue;
+        const s = segAt(w.start + k);
+        if (!s || s.obj !== undefined || s.tab) continue;
+        const hw = measure('-', s.size, s.family, s.style);
+        const width = widthOf(w.start, w.start + k + 1) + hw;
+        if (width <= room + 1e-6) return { at: w.start + k + 1, width, hyphen: { text: '-', start: 0, x: 0, w: hw, dy: s.dy, size: s.size, family: s.family, style: s.style, color: s.color, decor: true } };
+      }
+      return null;
+    };
     /** Where to break a word that doesn't fit on the line (`room` left after the line so far), with the hyphen to draw; null to leave it whole. */
     const hyphenBreak = (w: Word, room: number): { at: number; width: number; hyphen: Glyphs } | null => {
+      // an optional hyphen the writer put in (Word's soft hyphen) breaks the word there, hyphenation on or off
+      const shy = softBreak(w, room);
+      if (shy !== undefined) return shy;
       const hy = f.hyphenate;
       if (!hy || room <= hy.zone || (hy.limit > 0 && hyphensInRow >= hy.limit)) return null;
       const m = /^(\p{L}+)([^\p{L}\d\s]*)\s*$/u.exec(pText.slice(w.start, w.end));
