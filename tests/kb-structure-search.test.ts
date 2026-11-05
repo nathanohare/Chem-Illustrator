@@ -6,7 +6,8 @@
 import { afterEach, beforeAll, describe, expect, it } from 'vitest';
 import { createRequire } from 'node:module';
 import { libraryMatches, structureLibrary, substructureMatches } from '../src/chem/props';
-import { KnowledgeBaseWindow, type KnowledgeBaseHost } from '../src/ui/knowledge-base';
+import { KnowledgeBaseWindow, type KbDrawing, type KnowledgeBaseHost } from '../src/ui/knowledge-base';
+import type { Contents } from '../src/model';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let RDKit: any;
@@ -128,4 +129,112 @@ describe('the Knowledge Base window, searched by structure', { timeout: 30000 },
     await openOn(kb, 'Solvents');
     expect([...document.querySelectorAll('.kb-window button')].some((b) => b.textContent === 'Use Selected')).toBe(false);
   });
+
+  describe('drawn in the Draw window', () => {
+    const drawing = (n: number) => ({ atoms: Array.from({ length: n }, (_, i) => ({ id: i + 1 })), bonds: [], captions: [], arrows: [], shapes: [] }) as unknown as Contents;
+
+    /** The drawing tools, as the program lends them: what was drawn is set by the test. */
+    function tools(selection: Contents | string = 'Select a structure in the drawing before opening Draw.') {
+      const calls: string[] = [];
+      let tool: string | number = 'bond-single';
+      let session: ((c: Contents | null) => void) | null = null;
+      const t = {
+        calls,
+        now: null as Contents | null,
+        area: null as (() => DOMRect | null) | null,
+        start: (c, area, done) => { calls.push(`start ${c?.atoms.length ?? 0}`); t.now = c; t.area = area; session = done; },
+        finish: (keep) => { calls.push(`finish ${keep}`); const s = session; session = null; s?.(keep ? t.now ?? drawing(0) : null); },
+        tool: (x) => { tool = x; calls.push(`tool ${x}`); },
+        current: () => tool,
+        selection: () => selection,
+        smiles: async (c) => (c.atoms.length === 6 ? { smiles: 'c1ccccc1' } : 'The structure couldn\'t be read (check its valences).'),
+      } satisfies KbDrawing & Record<string, unknown>;
+      return t;
+    }
+    const win = () => document.querySelector<HTMLElement>('.kb-window .kb-draw');
+    const press = (label: string, inside: ParentNode = document) => [...inside.querySelectorAll<HTMLButtonElement>('button')].find((b) => b.textContent === label || b.title === label)!.click();
+
+    it('opens over the table with bond, ring and atom buttons that pick the drawing tools', async () => {
+      const t = tools();
+      const kb = new KnowledgeBaseWindow(host({ drawing: t }));
+      await openOn(kb, 'Solvents');
+      const head = document.querySelector('.kb-window .kb-head')!;
+      expect([...head.querySelectorAll('button')].map((b) => b.textContent)).toEqual(['Draw…']);
+      press('Draw…');
+      expect(win()).not.toBeNull();
+      expect(t.calls).toEqual(['start 0']);
+      expect(t.area!()).not.toBeNull();
+      press('Benzene ring', win()!);
+      press('N', win()!);
+      expect(t.calls.slice(1)).toEqual(['tool ring-benzene', 'tool 7']);
+      expect([...win()!.querySelectorAll('.kb-draw-tools button.on')].map((b) => b.textContent)).toEqual(['N']);
+    });
+
+    it('searches for what was drawn, and opens with it again', async () => {
+      const t = tools();
+      const kb = new KnowledgeBaseWindow(host({ drawing: t }));
+      await openOn(kb, 'Solvents');
+      press('Draw…');
+      t.now = drawing(6);
+      press('Search', win()!);
+      await until(() => shown()[1] === 'Benzene');
+      expect(win()).toBeNull();
+      expect(document.querySelector<HTMLInputElement>('.kb-window input[type=search]')!.value).toBe('c1ccccc1');
+      press('Draw…');
+      expect(t.calls.at(-1)).toBe('start 6');
+    });
+
+    it('keeps the window open when nothing is drawn, and says why a drawing can\'t be searched', async () => {
+      const said: string[] = [];
+      const t = tools();
+      const kb = new KnowledgeBaseWindow(host({ drawing: t, flash: (m) => said.push(m) }));
+      await openOn(kb, 'Solvents');
+      press('Draw…');
+      press('Search', win()!);
+      await until(() => said.length === 1);
+      expect(said[0]).toMatch(/Draw a structure/);
+      expect(win()).not.toBeNull();
+      t.now = drawing(3);
+      press('Search', win()!);
+      await until(() => said.length === 2);
+      expect(said[1]).toMatch(/couldn't be read/);
+      expect(document.querySelector<HTMLInputElement>('.kb-window input[type=search]')!.value).toBe('');
+    });
+
+    it('cancels without searching, and stops drawing when the Knowledge Base closes', async () => {
+      const t = tools();
+      const kb = new KnowledgeBaseWindow(host({ drawing: t }));
+      await openOn(kb, 'Solvents');
+      press('Draw…');
+      t.now = drawing(6);
+      press('Cancel', win()!);
+      expect(win()).toBeNull();
+      expect(document.querySelector<HTMLInputElement>('.kb-window input[type=search]')!.value).toBe('');
+      press('Draw…');
+      expect(t.calls.at(-1)).toBe('start 0');
+      kb.close();
+      expect(t.calls.at(-1)).toBe('finish false');
+    });
+
+    it('starts again empty (Clear) or from the structure selected in the drawing (Use Selected)', async () => {
+      const said: string[] = [];
+      const none = tools();
+      const kb = new KnowledgeBaseWindow(host({ drawing: none, flash: (m) => said.push(m) }));
+      await openOn(kb, 'Solvents');
+      press('Draw…');
+      press('Use Selected', win()!);
+      expect(said[0]).toMatch(/Select a structure/);
+      kb.close();
+      const t = tools(drawing(6));
+      const kb2 = new KnowledgeBaseWindow(host({ drawing: t }));
+      await openOn(kb2, 'Solvents');
+      press('Draw…');
+      press('Use Selected', win()!);
+      expect(t.calls).toEqual(['start 0', 'finish false', 'start 6']);
+      press('Clear', win()!);
+      expect(t.calls.slice(3)).toEqual(['finish false', 'start 0']);
+      expect(win()).not.toBeNull();
+    });
+  });
 });
+

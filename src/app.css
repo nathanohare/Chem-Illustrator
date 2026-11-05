@@ -1345,6 +1345,19 @@ body.drawing-in-place #canvas-host .navigator, body.drawing-in-place #canvas-hos
 body.drawing-in-place #doc-pane { opacity: 1; }
 body.drawing-in-place #structure-bar { position: fixed; margin: 0; transform: translateX(-50%); }
 body.drawing-in-place #structure-bar .muted { display: none; }
+/* the Knowledge Base's Draw window: the drawing area sits exactly over the window's box (placed
+   from script), above the window; the window's own buttons stand in for the bar */
+body.kb-drawing #canvas-host, body.kb-drawing.floating-drawing #canvas-host {
+  display: block;
+  position: fixed;
+  z-index: 60;
+  margin: 0;
+  border: 0;
+  border-radius: 0;
+  box-shadow: none;
+}
+body.kb-drawing #structure-bar, body.kb-drawing .welcome-card { display: none; }
+body.kb-drawing #canvas-host .navigator, body.kb-drawing #canvas-host .edge-arrows { display: none; }
 #structure-bar {
   grid-area: host;
   align-self: start;
@@ -1936,6 +1949,21 @@ dialog.kb-window { position: fixed; inset: 56px 0 auto 0; margin: 0 auto; z-inde
 .kb-mx-swatch.one { margin-left: 10px; }
 .kb-table th.narrow, .kb-table td.narrow { width: 1%; white-space: nowrap; }
 .kb-table td.prose { min-width: 26ch; max-width: 46ch; white-space: normal; line-height: 1.35; }
+/* Draw…: a window over the table with the drawing tools (the drawing area itself is placed over .kb-draw-box) */
+.kb-draw { position: absolute; z-index: 2; left: 50%; top: 96px; transform: translateX(-50%); width: min(620px, calc(100% - 32px)); display: flex; flex-direction: column; background: var(--panel); border: 1px solid var(--line); box-shadow: 0 10px 30px rgb(0 0 0 / 0.3); }
+.kb-draw-head { display: flex; align-items: center; gap: 6px; padding: 3px 4px 3px 10px; border-bottom: 1px solid var(--line); }
+.kb-draw-title { margin: 0; font-size: var(--fs-md, 14px); }
+.kb-draw-head > button { margin-left: auto; border: 0; background: none; padding: 2px 6px; }
+.kb-draw-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; padding: 3px 6px; border-bottom: 1px solid var(--line); }
+.kb-draw-tools button { width: 28px; height: 28px; padding: 0; display: inline-flex; align-items: center; justify-content: center; border: 1px solid transparent; background: none; color: var(--text); }
+.kb-draw-tools button svg { width: 22px; height: 22px; }
+.kb-draw-tools button.kb-draw-atom { width: auto; min-width: 24px; font-weight: 600; }
+.kb-draw-tools button:hover { background: var(--accent-soft); }
+.kb-draw-tools button.on { border-color: var(--accent); background: var(--accent-soft); }
+.kb-draw-sep { width: 1px; height: 20px; background: var(--line); margin: 0 4px; }
+.kb-draw-box { height: 260px; background: #fff; }
+.kb-draw-foot { display: flex; gap: 6px; padding: 6px 8px; border-top: 1px solid var(--line); }
+.kb-draw-gap { flex: 1; }
 /* a table that fits the window: its sentences wrap into the height its drawings give each row */
 .kb-table.kb-fit { width: 100%; }
 .kb-table.kb-fit td.prose { min-width: 14ch; font-size: var(--fs-sm); }
