@@ -20,7 +20,7 @@ export function formulaHtml(f: string): string {
 }
 
 /** An adduct label with its charge raised: [M+H]<sup>+</sup>. */
-function adductHtml(label: string): string {
+export function adductHtml(label: string): string {
   return esc(label).replace(/\](\d*[+-])$/, (_, c) => `]<sup>${c.replace('-', '−')}</sup>`);
 }
 
