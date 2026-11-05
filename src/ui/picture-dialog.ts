@@ -75,7 +75,7 @@ export function pictureFormat(o: PictureFormatOptions): Promise<PictureFormatRes
     const note = document.createElement('p');
     note.className = 'muted';
     note.textContent = (o.count ?? 1) > 1
-      ? `For the ${o.count} pictures picked (cropping goes to the first). The pictures themselves stay as they are, so any of this can be taken off again.`
+      ? `Applies to the ${o.count} selected pictures (cropping applies to the first). The originals are unchanged, so all of this can be removed later.`
       : 'The picture itself stays as it is, so any of this can be taken off again. Saved as PowerPoint\'s and Word\'s own picture settings.';
     const preview = document.createElement('canvas');
     preview.className = 'bg-preview pic-preview';

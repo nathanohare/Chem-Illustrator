@@ -1709,7 +1709,7 @@ export class SheetMode {
     const ion = got.ion.trim() || '[M+H]+';
     const min = Number(got.min);
     const peaks = listedPeaks(iso, ion, Number.isFinite(min) && min >= 0 ? min : 0.5);
-    if (isError(peaks)) { this.host.flash(peaks.detail || 'The isotope pattern could not be worked out.', 8000); return; }
+    if (isError(peaks)) { this.host.flash(peaks.detail || 'The isotope pattern couldn\'t be calculated.', 8000); return; }
     // to the right of the table the active cell is in, where the cells are empty
     const region = s.currentRegion(r, c);
     const found = got.found === 'true';

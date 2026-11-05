@@ -160,10 +160,10 @@ export function editSlideRefs(input: SlideRefsInput): Promise<SlideRefsResult | 
     cancel.type = 'button';
     const apply = el('button', '', 'Apply');
     apply.type = 'button';
-    apply.title = input.picked > 1 ? `The look for the ${input.picked} slides picked only` : 'The look for this slide only';
+    apply.title = input.picked > 1 ? `Apply to the ${input.picked} selected slides only` : 'The look for this slide only';
     const all = el('button', 'primary', 'Apply to All');
     all.type = 'submit';
-    all.title = 'The look for every slide (the check marks are for the slides picked)';
+    all.title = 'Apply to all slides (check marks are for the selected slides)';
     const spacer = el('span', 'spacer');
     buttons.append(manage, spacer, cancel, apply, all);
     form.append(

@@ -174,7 +174,7 @@ export function editCustomShows(shows: CustomShow[], slides: SlideName[]): Promi
     close.type = 'submit';
     const play = el('button', undefined, 'Show');
     play.type = 'button';
-    play.title = 'Play the custom show picked';
+    play.title = 'Play the selected custom show';
     buttons.append(play, close);
     form.append(body, buttons);
     fill();
@@ -205,7 +205,7 @@ function editCustomShow(c: CustomShow, slides: SlideName[]): Promise<CustomShow 
     const mid = el('div', 'cs-side');
     const addB = el('button', undefined, 'Add ▶');
     addB.type = 'button';
-    addB.title = 'Put the slides picked on the left into the show, at its end';
+    addB.title = 'Add the slides selected on the left to the end of the show';
     mid.append(addB);
     const inShow = el('select', 'cs-list');
     inShow.size = 10;
@@ -216,7 +216,7 @@ function editCustomShow(c: CustomShow, slides: SlideName[]): Promise<CustomShow 
     for (const x of [up, down, out]) { x.type = 'button'; right.append(x); }
     up.title = 'Earlier in the show';
     down.title = 'Later in the show';
-    out.title = 'Take the slide picked out of the show';
+    out.title = 'Remove the selected slide from the show';
     const col = (label: string, list: HTMLElement) => { const x = el('div', 'cs-col'); x.append(el('div', 'muted small', label), list); return x; };
     body.append(col('Slides in the deck', inDeck), mid, col('Slides in the custom show', inShow), right);
     const fill = (at?: number) => {

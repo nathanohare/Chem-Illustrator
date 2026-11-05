@@ -372,7 +372,7 @@ export class StylePanel {
       list.append(b);
     }
     this.body.appendChild(list);
-    this.note(r.step?.manual ? 'Chosen by hand.' : r.step ? 'Kept with the arrow (from the file, or when it was last tidied).' : 'Worked out from where things sit.');
+    this.note(r.step?.manual ? 'Chosen by hand.' : r.step ? 'Kept with the arrow (from the file, or when it was last tidied).' : 'Determined from object positions.');
     if (hooks.others()) {
       const opts: Opt<string>[] = [['', 'Choose…'], ['reactants', 'Starting materials'], ['products', 'Products'], ['above', 'Above the arrow'], ['below', 'Below the arrow'], ['none', 'Not part of this step']];
       this.select('Set Selection As', opts, '', (v) => { if (v) hooks.setRole(r.id, v as Role | 'none'); },);
@@ -593,13 +593,13 @@ export class StylePanel {
         this.check('Color', c.view.colour, (v) => view({ colour: v }));
         this.check('Atom labels', c.view.labels, (v) => view({ labels: v }));
       }
-      this.help('Turn it, change the ellipsoids or see the crystal data in the window; drag a corner to resize it.');
+      this.help('Rotate it, change the ellipsoids or view the crystal data in the window; drag a corner to resize.');
       const row = document.createElement('div');
       row.className = 'style-buttons';
       const b = document.createElement('button');
       b.type = 'button';
       b.textContent = 'Edit Crystal Structure…';
-      b.title = 'Turn it, change how it is drawn, see the crystal data (or double-click it)';
+      b.title = 'Rotate, change the display style, or view crystal data (or double-click it)';
       b.addEventListener('click', () => this.plate?.edit(sh.id));
       row.append(b);
       this.body.append(row);
@@ -847,7 +847,7 @@ export class StylePanel {
     const part = cur?.id === s.id ? cur.part : null;
     const cell = part && typeof part !== 'string' && t.rows[part.r] && part.c < t.cols.length ? part : null;
     this.heading('Table');
-    this.note(cell ? `Row ${cell.r + 1}, column ${cell.c + 1}${cell.r < t.head ? ' (a heading)' : ''}. Double-click a cell to type; Tab goes on to the next one.`
+    this.note(cell ? `Row ${cell.r + 1}, column ${cell.c + 1}${cell.r < t.head ? ' (a heading)' : ''}. Double-click a cell to edit; Tab moves to the next.`
       : 'Click a cell to choose its row and column; double-click it to type.');
     const buttons = (list: [string, string, (() => void) | null][]) => {
       const box = document.createElement('div');
@@ -960,7 +960,7 @@ export class StylePanel {
     if (r.species) this.note(`Chemistry: ${speciesSummary(r.species)}. It counts in the formula, mass and SMILES of what it is selected with.`);
     else if (r.why === 'arrow') this.help('Text above or below a reaction arrow stays text. Choose Chemical to count it.');
     else if (r.why === 'unread' && r.forced) this.note('Set to Chemical, but this text can\'t be read as chemistry.');
-    else if (r.why === 'tied') this.help('Text tied to a structure stays text.');
+    else if (r.why === 'tied') this.help('Text attached to a structure stays text.');
   }
 
   /** Where a caption tied to a structure sits, what descriptors it shows; tie or untie it. */
@@ -1343,7 +1343,7 @@ export class StylePanel {
     const n = centres.length + dbls.length;
     this.heading(n > 1 ? 'Stereo labels' : centres.length ? 'Stereocenter' : 'Double bond');
     const found = [...centres.map((a) => info?.atom(a.id)), ...dbls.map((b) => info?.bond(b.id))].filter(Boolean);
-    if (found.length) this.note(`Worked out: ${found.join(', ')}`);
+    if (found.length) this.note(`Calculated: ${found.join(', ')}`);
     if (centres.some((a) => info?.undecided?.('a', a.id)) || dbls.some((b) => info?.undecided?.('b', b.id))) {
       this.note('An R, Ar or unreadable group decides the order here, so the CIP rules can’t give a label. Type one below if you want it.');
     }

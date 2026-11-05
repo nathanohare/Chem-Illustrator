@@ -99,7 +99,7 @@ export function atomWarnings(doc: Doc, a: Atom): string[] {
   const ext = a.label && toMetal && labelDonates(a.label, Math.max(0, bonds - toMetal)) ? Math.max(0, bonds - toMetal) : bonds;
   if (a.label) {
     if (bracketsUnbalanced(a.label)) out.push(`The brackets in “${a.label}” don't pair up.`);
-    else if (!labelGraph(a.label, ext)) out.push(`“${a.label}” can't be read as chemistry, so it's left out of the formula and mass.`);
+    else if (!labelGraph(a.label, ext)) out.push(`“${a.label}” can't be read as chemistry, so it's excluded from the formula and mass.`);
     else {
       // (the label's first atom may give the metal a lone pair: THF's O, DMSO's S)
       // (a bridging OMe or Cl may go past its valence by its bonds to metals)

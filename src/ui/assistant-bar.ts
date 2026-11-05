@@ -259,7 +259,7 @@ export class AssistantBar {
   /** No AI model linked yet. */
   private setup(): void {
     const d = h('div', 'ai-it ai-setup');
-    d.append(h('p', '', 'The Assistant uses an AI model of your own: Claude, ChatGPT or Gemini with your API key, or a model on this computer (Ollama or LM Studio) so that nothing leaves it.'));
+    d.append(h('p', '', 'The Assistant uses your own AI model: Claude, ChatGPT or Gemini with your API key, or a local model (Ollama or LM Studio) so nothing leaves this computer.'));
     d.append(button('Link an AI Model…', () => void this.host.openSettings().then(() => this.refresh()), 'primary'));
     this.msgs.prepend(d);
   }
@@ -272,10 +272,10 @@ export class AssistantBar {
     const ul = h('ul');
     for (const t of [
       `Questions go to ${aiName(p)}${local ? ', on this computer: nothing leaves it.' : ', over the internet. It is billed to your account there, and its own terms say what it keeps.'}`,
-      'Each question carries only what "Will send" lists under the box (such as the selected structure as SMILES, or the selected text). Click any of them to leave it out. Other files, other tabs, file names and your key are never sent.',
+      'Each question sends only what\'s listed under “Will send” (such as the selected structure\'s SMILES or the selected text). Click an item to exclude it. Other files, tabs, file names and your key are never sent.',
       'The Assistant only proposes. Nothing on the page changes until you click Accept, and Undo takes it back.',
       `Every question sent is kept in a Request Log ${requestLogPlace()}, which you can read or clear.`,
-      ...(local ? [] : ['For unpublished structures, tick Local only and use a model on this computer.']),
+      ...(local ? [] : ['For unpublished structures, check Local only and use a model on this computer.']),
     ]) ul.append(h('li', '', t));
     d.append(ul);
     const row = h('div', 'ai-actions');

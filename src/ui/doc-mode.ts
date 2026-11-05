@@ -742,11 +742,11 @@ export class DocumentMode {
       }
       case 'table-select': this.stopBox(true); break;
       case 'table-merge':
-        if (!canMerge(t, r, c, 'right')) { this.host.flash(c + span >= t.cols.length ? 'There is no cell to the right to merge with.' : 'The cell to the right covers other rows: merge cells that line up.'); return; }
+        if (!canMerge(t, r, c, 'right')) { this.host.flash(c + span >= t.cols.length ? 'There is no cell to the right to merge with.' : 'The cell to the right spans other rows: only aligned cells can be merged.'); return; }
         this.setTable(id, mergeRight(t, r, c), 'Merge cells', { r, c });
         break;
       case 'table-merge-down':
-        if (!canMerge(t, r, c, 'down')) { this.host.flash(r + rowSpanOf(t, r, c) >= t.rows.length ? 'There is no cell below to merge with.' : 'The cell below is a different width: merge cells that line up.'); return; }
+        if (!canMerge(t, r, c, 'down')) { this.host.flash(r + rowSpanOf(t, r, c) >= t.rows.length ? 'There is no cell below to merge with.' : 'The cell below is a different width: only aligned cells can be merged.'); return; }
         this.setTable(id, mergeDown(t, r, c), 'Merge cells', { r, c });
         break;
       case 'table-split': this.setTable(id, splitCell(t, r, c), 'Split cells', { r, c }); break;
@@ -4169,7 +4169,7 @@ export class DocumentMode {
     const cur = f.t.objects[id];
     if (cur?.kind !== 'picture' || !cur.embed) return;
     const embed = withFile(cur.embed, { name, bytes });
-    if (!embed) { this.host.flash(`The changes to ${name} can't be put back in this kind of object.`); return; }
+    if (!embed) { this.host.flash(`Changes to ${name} can't be saved back into this type of object.`); return; }
     const pic = this.host.objectPicture && !embed.icon ? await this.host.objectPicture(name, bytes, !!embed.icon) : null;
     const now = f.t.objects[id];
     if (now?.kind !== 'picture' || !now.embed) return;
@@ -4541,7 +4541,7 @@ export class DocumentMode {
   private async askTocLevels(now: number, ok: string): Promise<number | null> {
     const got = await ask('Table of Contents', [
       { name: 'levels', label: 'Show headings down to', value: String(now), options: [{ value: '1', label: 'Heading 1' }, { value: '2', label: 'Heading 2' }, { value: '3', label: 'Heading 3' }] },
-    ], { ok, note: 'The contents update by themselves as headings change or move to other pages. In Word, right-click them and choose Update Field after editing there.' });
+    ], { ok, note: 'The table of contents updates automatically as headings change or move. In Word, right-click ▸ Update Field after editing there.' });
     return got ? Math.max(1, Math.min(3, Number(got.levels) || 3)) : null;
   }
 
@@ -4592,7 +4592,7 @@ export class DocumentMode {
   private async askTofName(now: string, ok: string): Promise<string | null> {
     const got = await ask('Table of Figures', [
       { name: 'name', label: 'Captions listed', value: now, options: TOF_NAMES.map((n) => ({ value: n, label: n ? `${n} captions` : 'All captions (figures, schemes, tables, charts)' })) },
-    ], { ok, note: 'It lists each caption with its page number and updates by itself as captions change or move. In Word, right-click it and choose Update Field after editing there.' });
+    ], { ok, note: 'Lists each caption with its page number and updates automatically. In Word, right-click ▸ Update Field after editing there.' });
     return got ? got.name : null;
   }
 
@@ -5027,7 +5027,7 @@ export class DocumentMode {
     const ed = this.ed;
     const got = await ask('New Style', [
       { name: 'name', label: 'Name', value: '' , placeholder: 'Experimental heading' },
-      { name: 'kind', label: 'Style type', value: ed.collapsed ? 'para' : 'char', options: [{ value: 'para', label: 'Paragraph (the whole paragraph’s look and spacing)' }, { value: 'char', label: 'Character (the look of the words picked)' }] },
+      { name: 'kind', label: 'Style type', value: ed.collapsed ? 'para' : 'char', options: [{ value: 'para', label: 'Paragraph (the whole paragraph’s look and spacing)' }, { value: 'char', label: 'Character (formatting of the selected words)' }] },
     ], { ok: 'Create Style', note: 'The new style takes the look of the text the caret is in, and is given to it. Change it later with Modify; every paragraph or word in it follows.' });
     this.focus();
     if (!got || this.file !== f || !got.name.trim()) return;

@@ -507,7 +507,7 @@ export function captionChemWarning(doc: Doc, c: Caption, m?: Measure): string | 
     const has = sp.written ? `is written ${chargeSign(sp.written)}` : 'has no charge written';
     return `Invalid valence: “${sp.body}” ${has}. ${what} carries a ${chargeSign(sp.expected)} charge: add it, or turn on Settings ▸ Drawing ▸ Add charges to common counterions.`;
   }
-  if (!r.species && r.forced && c.chem && r.why === 'unread') return `“${plainText(c.runs).trim()}” is set to Chemical but can't be read as chemistry, so it's left out of the formula and mass.`;
+  if (!r.species && r.forced && c.chem && r.why === 'unread') return `“${plainText(c.runs).trim()}” is set to Chemical but can't be read as chemistry, so it's excluded from the formula and mass.`;
   return null;
 }
 

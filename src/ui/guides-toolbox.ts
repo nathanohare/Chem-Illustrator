@@ -115,7 +115,7 @@ export function buildGuidesToolbox(body: HTMLElement, vertical: boolean, h: Guid
   box.type = 'checkbox';
   box.addEventListener('change', () => change({ snapOff: box.checked ? undefined : true }));
   snapRow.append(box, d.createTextNode('Toggle object snapping'));
-  snapRow.title = 'What you drag snaps onto the guides and their ticks. Hold Alt while dragging to move freely.';
+  snapRow.title = 'Snap dragged objects to guides and tick marks. Hold Alt to move freely.';
   body.append(snapRow);
 
   // snapping

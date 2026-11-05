@@ -57,7 +57,7 @@ export function askEquation(opts: { tex: string; display?: boolean; font: string
     d.setAttribute('aria-label', 'Equation');
     const form = document.createElement('form');
     form.innerHTML = `<h2>Equation</h2>
-      <p class="muted">Type it as LaTeX, as in journal templates: <code>x^2</code>, <code>k_{obs}</code>, <code>\\frac{a}{b}</code>, <code>\\alpha</code>. Letters come out in italic; use <code>\\mathrm{…}</code> for element symbols and <code>\\text{…}</code> for words and units. ${opts.app ?? 'Word'} opens it as its own equation.</p>
+      <p class="muted">Type LaTeX: <code>x^2</code>, <code>k_{obs}</code>, <code>\\frac{a}{b}</code>, <code>\\alpha</code>. Letters are italic; use <code>\\mathrm{…}</code> for element symbols and <code>\\text{…}</code> for words and units. ${opts.app ?? 'Word'} opens it as a separate equation.</p>
       <div class="eq-palette" role="toolbar" aria-label="Pieces"></div>
       <div class="eq-palette eq-symbols" role="toolbar" aria-label="Greek letters and signs"></div>
       <textarea name="tex" rows="3" spellcheck="false" aria-label="Equation (LaTeX)"></textarea>

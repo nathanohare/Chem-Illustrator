@@ -45,7 +45,7 @@ export class ArrangeDialog {
     h.textContent = 'Arrange Scheme';
     const note = document.createElement('p');
     note.className = 'muted';
-    note.textContent = 'Lays out the selected scheme (or the whole drawing). Structures that aren\'t in a step yet are joined on in reading order with new arrows. Click a layout to try it.';
+    note.textContent = 'Lays out the selected scheme (or the whole drawing). Structures not yet in a step are added in reading order with new arrows. Click a layout to preview it.';
     const grid = document.createElement('div');
     grid.className = 'arrange-grid';
     grid.setAttribute('role', 'radiogroup');

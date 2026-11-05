@@ -330,7 +330,7 @@ export class SheetData {
       for (const h of hits) if (replaceCell(h.s, h.r, h.c, o, o.replace)) n++;
     }, this.view.place());
     this.view.refresh();
-    status.textContent = n ? `All done. ${n} replacement${n === 1 ? '' : 's'} made.` : hits.length ? 'The cells found are worked out by formulas or hold structures, so nothing was replaced.' : `Nothing found for "${o.text}".`;
+    status.textContent = n ? `All done. ${n} replacement${n === 1 ? '' : 's'} made.` : hits.length ? 'The matching cells contain formulas or structures, so nothing was replaced.' : `Nothing found for "${o.text}".`;
     this.host.flash(status.textContent);
   }
 

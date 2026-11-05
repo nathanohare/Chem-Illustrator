@@ -129,7 +129,7 @@ export function toggleSmartFormat(anchor: HTMLElement, o: FormatPopOptions): voi
   headLab.append(hl, headSel);
   row(num('arrowWidth', 'Line', 'Arrow line width'), headLab);
   row(num('headLength', 'Head length', 'Arrowhead length (its width keeps in step)'),
-    num('arrowLength', 'Shortest', o.cycle ? 'A cycle\'s arrows go round its loop, so their length comes from the loop' : 'The shortest an arrow gets; arrows still grow to fit their text', o.cycle));
+    num('arrowLength', 'Shortest', o.cycle ? 'A cycle\'s arrows go around its loop, so their length comes from the loop' : 'The shortest an arrow gets; arrows still grow to fit their text', o.cycle));
 
   section('Spacing');
   row(num('structGap', 'Arrow to species', 'Gap between an arrow\'s ends and the species'), num('textGap', 'Arrow to text', 'Gap between an arrow and the text above or below it'));

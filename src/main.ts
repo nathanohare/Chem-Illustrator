@@ -539,7 +539,7 @@ const PERSPECTIVE_TOOLS: PaletteDef = {
   palette: 'perspective',
   title: 'Perspective',
   items: [
-    { name: 'perspective', title: 'Perspective: drag a structure to turn it in 3-D as a flat sheet, the way it is drawn (Shift: 15° steps)' },
+    { name: 'perspective', title: 'Perspective: drag a structure to tilt it in 3-D as a flat sheet (Shift: 15° steps)' },
     { name: 'perspective-3d', title: '3-D Perspective: drag a structure to turn its real 3-D shape, built from the drawing; wedges and bold bonds say which shape is meant (Shift: 15° steps)' },
   ],
   columns: 2,
@@ -1870,11 +1870,11 @@ editor.perspectiveHost = {
 let lastTurn3d = { x: '0', y: '30', z: '0', shape: 'real' };
 /** Turn in 3-D…: the selected structures turned by angles typed in, in their real shape or as a flat sheet. */
 async function turn3dDialog(): Promise<void> {
-  if (!editor.sel.atoms.size) { flash('Select a structure to turn in 3-D.'); return; }
+  if (!editor.sel.atoms.size) { flash('Select a structure to rotate in 3-D.'); return; }
   const r = await ask('3-D Rotation', [
     { name: 'x', label: 'About X (left–right)', value: lastTurn3d.x, unit: 'degrees', type: 'number', help: 'Positive tips the top toward you.' },
     { name: 'y', label: 'About Y (up–down)', value: lastTurn3d.y, unit: 'degrees', type: 'number', help: 'Positive brings the left side toward you.' },
-    { name: 'z', label: 'About Z (in the page)', value: lastTurn3d.z, unit: 'degrees', type: 'number', help: 'Positive turns it clockwise.' },
+    { name: 'z', label: 'About Z (in the page)', value: lastTurn3d.z, unit: 'degrees', type: 'number', help: 'Positive values rotate clockwise.' },
     { name: 'shape', label: 'Turn', value: lastTurn3d.shape, options: [{ value: 'real', label: 'The real 3-D shape' }, { value: 'flat', label: 'The drawing as a flat sheet' }] },
   ], { ok: 'Turn', note: 'Drag with the Perspective tools to turn by eye.' });
   if (!r) return;
@@ -1904,7 +1904,7 @@ async function depthShadingDialog(): Promise<void> {
     { name: 'curve', label: 'Fade', value: s.curve, options: [{ value: 'linear', label: 'Even (linear)' }, { value: 'eased', label: 'Eased (slow at front and back)' }] },
     { name: 'thin', label: 'Thin the lines with depth too', type: 'checkbox', value: String(s.thin) },
     { name: 'thinTo', label: 'Line width at the back', type: 'number', unit: '% of the usual', value: String(Math.round(s.thinTo * 100)) },
-  ], { ok: 'Apply', note: `The usual look is black in front to ${DEFAULT_DEPTH_SHADE.far} gray behind, evenly, lines kept their width. Pictures you copy or export keep the shading.` });
+  ], { ok: 'Apply', note: `Default: black in front fading evenly to ${DEFAULT_DEPTH_SHADE.far} gray behind, line widths unchanged. Copied and exported pictures keep the shading.` });
   if (!r) return;
   const pct = Number(r.thinTo);
   Object.assign(depthShadePrefs, {
@@ -2292,7 +2292,7 @@ async function redoNewman(id: number): Promise<void> {
     const choice: NewmanChoice = { reversed: false, kind: d.kind, source: d.source === 'drawn' ? 'drawn' : 'stable', index: 0, turn: d.turn, method, mark: !!d.mark, linked: true };
     editor.putNewmanProjection(newmanData(w, choice, conf, front, back, d.look), { id, mark: d.mark ? d.mark.color : null, amend: true });
   } catch (e) {
-    flash(`The Newman projection could not be worked out again: ${(e as Error).message}`);
+    flash(`The Newman projection couldn't be recalculated: ${(e as Error).message}`);
   }
 }
 /** Settings ▸ Newman Projections. */
@@ -3310,7 +3310,7 @@ async function defineNickname(): Promise<void> {
   const g = selectedGroup(doc, editor.sel.atoms);
   if ('error' in g) { flash(g.error, 6000); return; }
   const got = await ask('Define Abbreviation', [{ name: 'name', label: 'Abbreviation', value: '' }],
-    { ok: 'Define', note: `Select a group that hangs off a structure by one bond. Its abbreviation can then be typed as an atom label (like Boc or TBS), with the formula and mass worked out. The group is ${g.smiles}.` });
+    { ok: 'Define', note: `Select a group attached to a structure by one bond. Its abbreviation can then be typed as an atom label (like Boc or TBS), with formula and mass calculated. The group is ${g.smiles}.` });
   const name = got?.name.trim();
   if (!name) return;
   if (isBuiltInNickname(name)) { flash(`“${name}” is already an abbreviation. Choose another name.`, 6000); return; }
@@ -6152,7 +6152,7 @@ async function referencesSlide(): Promise<void> {
   const existing = d.slides.findIndex((s) => s.refList);
   if (existing >= 0) { d.go(existing); void referencesSlideOptions(); return; }
   const got = await ask('References Slide', [{ name: 'which', label: 'List', value: 'shown', options: [{ value: 'shown', label: 'The references shown on slides, in the order they appear' }, { value: 'all', label: 'Every reference in the presentation' }] }], {
-    ok: 'Insert', note: 'A slide at the end, titled References, listing them in full in the presentation\'s citation style. It keeps itself up to date as you check references on slides or edit them. Number them through the presentation (References on Slide > Numbers) to match the slide lines.',
+    ok: 'Insert', note: 'Adds a References slide at the end, listing all references in the presentation\'s citation style and updating as you add them. Use References on Slide > Numbers to match the numbering on slides.',
   });
   if (!got || deckNow() !== d) return;
   d.insertRefsSlide(d.slides.length, { which: got.which === 'all' ? 'all' : 'shown' });
@@ -6683,7 +6683,7 @@ async function autoAnimateSteps(): Promise<void> {
     { name: 'first', label: 'The first species comes in on the first click too', value: String(autoSteps.first), type: 'checkbox' },
     ...(canvas ? [{ name: 'camera', label: 'Camera Follow', value: cameraNow, options: cameraOptions, help: route
       ? 'A keyframe for each step, the view moving along the route as it is built. This slide already has keyframes: a copy keeps them, as this slide (hidden from the show, so you can go back to it); replacing them puts the steps\' keyframes in their place.'
-      : 'A keyframe for each step, the view moving along the route as it is built.' }] : []),
+      : 'One keyframe per step, with the view following the route as it is built.' }] : []),
   ], { ok: 'Animate', note: `${steps} step${steps > 1 ? 's' : ''} found. Each click brings the next arrow with its conditions, then what it makes. The animations are ordinary ones: change them in the Animation Pane.`, preview: { title: 'Preview: the first clicks', draw: (v) => stepPreview(sdoc, pieces, v) } });
   if (!got || deckNow() !== d || d.index !== i) return;
   const camera = got.camera ?? (autoSteps.camera ? 'on' : 'off');
@@ -6783,7 +6783,7 @@ function present(fromHere: boolean, notes = false, how: { custom?: number; windo
   const order = showOrder(d.slides, setup, d.settings.customShows ?? [], how.custom ?? setup.custom);
   if (order && !order.length) { flash('The show has no slides to play: every slide it names is hidden or gone (Slide Show > Set Up Show).'); return; }
   const kiosk = setup.type === 'kiosk' && !how.rehearse && !how.windowed;
-  if (kiosk && !d.slides.some((s) => s.transition?.advanceAfter)) flash('At a kiosk the show goes on only by the slides\' times: give them times with Rehearse Timings (or Transitions > After). Esc ends the show.', 9000);
+  if (kiosk && !d.slides.some((s) => s.transition?.advanceAfter)) flash('In kiosk mode, slides advance only by their timings. Set them with Rehearse Timings (or Transitions > After). Esc ends the show.', 9000);
   const opts: ShowOptions = {
     order, noAnimation: setup.noAnimation, noNarration: setup.noNarration, manual: setup.manual, loop: setup.loop, kiosk,
     windowed: how.windowed || (setup.type === 'window' && !notes && !how.rehearse), rehearse: how.rehearse, record: how.record,
@@ -6811,7 +6811,7 @@ function clearShowTimings(which: 'slide' | 'all'): void {
   if (!d) return;
   const ix = clearTargets(d, which);
   if (!d.clearTimings(ix, which === 'all' ? 'Clear timings on all slides' : 'Clear timings')) { flash(which === 'all' ? 'No slide has a time to clear.' : 'This slide has no time to clear.'); return; }
-  flash(which === 'all' ? 'Timings cleared: every slide goes on with a click.' : 'Timing cleared: the slide goes on with a click.');
+  flash(which === 'all' ? 'Timings cleared: all slides advance on click.' : 'Timing cleared: the slide advances on click.');
 }
 
 /** Slide Show > Clear > Narration: the recorded sounds come off the slides (their times stay). */
@@ -7166,7 +7166,7 @@ async function printNow(): Promise<void> {
   if (pg) {
     const v = await ask('Print', [
       { name: 'layout', label: 'Print', value: printChoices.layout, options: [{ value: 'pages', label: 'One sheet for each page, at actual size' }, { value: 'one', label: 'The whole drawing on one sheet' }] },
-      { name: 'skip', label: 'Leave out pages with nothing on them', type: 'checkbox', value: String(printChoices.skip !== 'false') },
+      { name: 'skip', label: 'Skip blank pages', type: 'checkbox', value: String(printChoices.skip !== 'false') },
     ], { ok: 'Next', note: 'The paper and its size are in File > Page Setup.' });
     if (!v) return;
     Object.assign(printChoices, v);
@@ -8379,7 +8379,7 @@ async function shapePictureFill(): Promise<void> {
 /** Shape Fill > No Picture: back to the shapes' own fill colour. */
 function shapeNoPictureFill(): void {
   const shapes = pickedGeo().filter((s) => s.picFill);
-  if (!shapes.length) { flash('None of the shapes picked has a picture fill.'); return; }
+  if (!shapes.length) { flash('None of the selected shapes has a picture fill.'); return; }
   doc.edit('Picture fill', () => { for (const s of shapes) doc.updateShape(s.id, { picFill: undefined }); });
   editor.changed();
 }
@@ -10206,7 +10206,7 @@ async function generalPreferences(): Promise<void> {
     { name: 'matchStructure', label: 'New bonds match the structure they\'re added to', type: 'checkbox', value: String(matchStructure.on),
       help: 'Bonds, rings and chains added to a structure take its own bond length, line widths and colors, so a structure drawn with other settings stays consistent. Off: they always take the document\'s drawing settings.' },
     { name: 'straightenLinear', label: 'Straighten alkynes and allenes when a bond becomes triple', type: 'checkbox', value: String(straightenLinear.on),
-      help: 'Making a bond triple (or giving an allene carbon its second double bond) swings the smaller side around so the sp carbon\'s two bonds lie in a straight line. Off: atoms stay where they are. New bonds always go straight on.' },
+      help: 'When a bond becomes triple (or an allene carbon gets its second double bond), move the smaller side so the sp carbon\'s bonds are linear. Off: atoms stay put. New bonds are always drawn linear.' },
     { name: 'convertChemDraw', label: 'Redraw ChemDraw objects in Word files as they open', type: 'checkbox', value: String(!!docRead.convertChemDraw),
       help: 'Off: they keep the look they had in Word and become drawings when you edit one. On: each is redrawn here in the document\'s drawing style.' },
     { name: 'docxStructures', label: 'Save structures in Word files as', value: officeStructures.docx, options: STRUCTURES_AS, help: STRUCTURES_AS_HELP },
@@ -10249,10 +10249,10 @@ function setRibbonLook(look: Settings['canvasRibbon']): void {
 async function toolboxPreferences(): Promise<void> {
   const r = await ask('Toolboxes and Ribbon', [
     { name: 'look', label: 'Canvas ribbon', value: ribbonLook, options: [{ value: 'classic', label: 'Classic: two rows of buttons' }, { value: 'simple', label: 'Simplified: one row' }],
-      help: 'Both keep the tabs and fold away with the arrow at the right of the tabs.' },
+      help: 'Both keep the tabs and collapse with the arrow at the right end of the tabs.' },
     { name: 'cells', label: 'Button cells', value: toolCells, options: [{ value: 'off', label: 'None' }, { value: 'grid', label: 'Grid lines' }, { value: 'raised', label: 'Raised buttons' }, { value: 'both', label: 'Grid lines and raised buttons' }],
       help: 'Gives each toolbox button a cell of its own, so the buttons are easier to tell apart and to hit.' },
-    { name: 'tips', label: 'Detailed tooltips: hold the mouse on a tool to see what it does and what Alt, Shift and Ctrl change', type: 'checkbox', value: String(toolTip.enabled) },
+    { name: 'tips', label: 'Detailed tooltips: show what each tool does and what Alt, Shift and Ctrl change', type: 'checkbox', value: String(toolTip.enabled) },
   ], { ok: 'Save' });
   if (!r) return;
   setToolCells((['grid', 'raised', 'both'].includes(r.cells) ? r.cells : 'off') as Settings['toolCells']);
@@ -10278,7 +10278,7 @@ async function personalPreferences(): Promise<void> {
       options: [{ value: 'esc', label: 'Esc (Enter starts a new line), as in ChemDraw' }, { value: 'enter', label: `Enter (${alt} starts a new line)` }],
       help: 'Everywhere you draw: Canvas, structures in documents and spreadsheets, and text boxes on slides. Ctrl+Enter always finishes, and Shift+Enter always breaks the line.' },
     { name: 'alkylLook', label: 'Alkyl groups written as', value: alkylPrefs.look, options: ALKYL_LOOK_CHOICES,
-      help: 'For the n-, i-, s- and t- of Pr and Bu (tBu, iPr, nBu, sBu, iBu), wherever they sit in a label or text (OtBu, N(iPr)2, KOtBu). Atom labels and text boxes take the look as you finish typing them; you are asked whether to change the ones already in the drawing. A dash is never put in or taken out where the letters would read as an element (PtBu3 stays as it is).' },
+      help: 'Applies to the n-, i-, s- and t- prefixes of Pr and Bu anywhere in labels or text (OtBu, N(iPr)2). New labels use it when you finish typing; you\'ll be asked about existing ones. A dash is never added or removed where it would read as an element (PtBu3).' },
     { name: 'warnLook', label: 'Mark problems on the drawing with', value: renderer.warnLook, options: [
       { value: 'box', label: 'A thin red box' }, { value: 'soft', label: 'A soft red disc' }, { value: 'circle', label: 'A red circle' },
       { value: 'dashed', label: 'A dashed red circle' }, { value: 'corners', label: 'Red corner marks' }],
@@ -10498,14 +10498,14 @@ async function importSettingsFile(say: (text: string) => void = flash): Promise<
   if (!read) { say(`${got.name} isn't a Chem Illustrator settings file (use one saved with Export Settings).`); return; }
   applySettings(read.settings);
   storeSettings();
-  say(read.only === 'hotkeys' ? `Using the keys from ${got.name}.` : `Using the settings from ${got.name}: keys, toolboxes, preferences, templates, abbreviations, styles and palettes. Your recent files stay as they were.`);
+  say(read.only === 'hotkeys' ? `Using the keys from ${got.name}.` : `Now using the settings from ${got.name}: shortcuts, toolboxes, preferences, templates, abbreviations, styles and palettes. Recent files are unchanged.`);
 }
 
 /** Settings > Import and Export: both, with a word on what goes in the file. */
 function settingsTransfer(): void {
   const d = document.createElement('dialog');
   d.className = 'ask settings-transfer';
-  d.innerHTML = `<h2 data-info="One file holds every setting: hotkeys, toolboxes (and what is in them), preferences, your templates, abbreviations, drawing styles, color palettes, slide themes and highlight styles. Export it to keep a copy, or to set up another computer or a new install the same way; Import uses one. Recent files stay on each computer.">Import and Export Settings</h2>
+  d.innerHTML = `<h2 data-info="One file holds all settings: shortcuts, toolboxes, preferences, templates, abbreviations, drawing styles, palettes, slide themes and highlight styles. Export to back up or move to another computer; Import to load one. Recent files aren't included.">Import and Export Settings</h2>
     <div class="ask-buttons"><button type="button" data-act="export">Export Settings…</button><button type="button" data-act="import">Import Settings…</button><button type="button" class="primary" data-act="close">Close</button></div>
     <p class="muted small" aria-live="polite"></p>`;
   const say = (t: string) => { d.querySelector('p.small')!.textContent = t; };
@@ -11876,7 +11876,7 @@ function attachPointAtom(): number | null {
 /** Right-click > Attachment Point > Wavy Bond, Star, Numbered or Remove. */
 function attachPointCommand(kind: 'Wavy' | 'Star' | 'Numbered' | null): void {
   const id = attachPointAtom();
-  if (id === null) { flash('Right-click the atom the attachment point goes on (a ring carbon gets a new bond out to it).'); return; }
+  if (id === null) { flash('Right-click the atom that gets the attachment point (a ring carbon gets a new bond to it).'); return; }
   editor.setAttachPoint(id, kind);
 }
 
@@ -12308,7 +12308,7 @@ function paintThings(sel: { atoms: Set<number>; bonds: Set<number>; captions: Se
   if (any) editor.doc.edit('Format Painter', () => { n = paintObjects(editor.doc, sel, look); });
   if (n) { editor.changed(); brush.used(); }
   else if (!any) brush.used();
-  else flash('That has no look to take from what was picked up (a table or chart keeps its own).');
+  else flash('Nothing to apply: the copied object has no formatting to paste (tables and charts keep their own).');
 }
 
 brush.onChange = () => {
@@ -12509,7 +12509,7 @@ structureStart.addEventListener('click', () => {
 structureStart.addEventListener('pointerenter', () => {
   const sheet = ws.active.mode === 'sheet';
   const cell = sheet ? $<HTMLInputElement>('#sh-name').value : '';
-  structureStart.title = sheet ? `Insert Structure: draw a structure in the active cell${cell ? ` (${cell})` : ''}. Double-click a structure to change it` : 'Insert Structure: draw a structure or scheme to put in the text at the caret (or change the picked drawing)';
+  structureStart.title = sheet ? `Insert Structure: draw a structure in the active cell${cell ? ` (${cell})` : ''}. Double-click a structure to change it` : 'Insert Structure: draw a structure or scheme at the cursor (or edit the selected drawing)';
 });
 structureStart.title = 'Insert Structure';
 structureStart.setAttribute('aria-label', 'Insert Structure');

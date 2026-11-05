@@ -45,7 +45,7 @@ export class HotkeysDialog {
         <input type="search" placeholder="Find an action or a key" aria-label="Find an action or a key" />
       </div>
       <div class="hk-board"></div>
-      <p class="muted">Click <b>+</b> next to an action and press the key you want for it. Click <b>×</b> on a key to take it away. Keys are case-sensitive: <kbd>f</kbd> and <kbd>Shift+F</kbd> are different keys.</p>
+      <p class="muted">Click <b>+</b> next to an action and press the shortcut you want. Click <b>×</b> on a shortcut to remove it. Shortcuts are case-sensitive: <kbd>f</kbd> and <kbd>Shift+F</kbd> differ.</p>
       <label class="hk-opt small"><input type="checkbox" data-opt="keep" /><span>After <kbd>1</kbd> or <kbd>0</kbd> on the atom under the mouse, keep the highlight there, as ChemDraw does (pressing 1 three times adds three bonds). Off: the highlight moves to the new atom, so 1 1 1 draws a chain.</span></label>
       <label class="hk-opt small"><input type="checkbox" data-opt="sticky" /><span>Keep the highlight a key sets in place while the mouse moves off into empty space, as ChemDraw does (it gives way when the mouse rests on another atom or bond). Off: the highlight follows the mouse as soon as it moves.</span></label>
       <p class="hk-status" role="status" aria-live="polite"></p>
@@ -206,7 +206,7 @@ export class HotkeysDialog {
       b.className = 'link';
       b.dataset.act = 'reset';
       b.textContent = DEFAULT_KEYS[ctx] && Object.values(DEFAULT_KEYS[ctx]).includes(action) ? 'Reset' : 'Remove';
-      b.title = b.textContent === 'Reset' ? "Put back ChemDraw's keys for this action" : 'Take away the keys you added';
+      b.title = b.textContent === 'Reset' ? "Restore ChemDraw's shortcuts for this action" : 'Remove the shortcuts you added';
       reset.append(b);
     }
     return tr;
