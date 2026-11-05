@@ -187,7 +187,7 @@ import { TypingDialog } from './ui/typing-dialog';
 import { ModeColoursDialog, ModeColours, DEFAULT_MODE_COLOURS, applyModeColours as applyModeColoursOnly, modeColour } from './ui/mode-colours';
 import { typingPrefs, setTypingPrefs, onTypingPrefs } from './text/typing';
 import { NicknameChooser } from './ui/nickname-chooser';
-import { ask, type Field } from './ui/ask';
+import { ask, askChoice, type Field } from './ui/ask';
 import { ACTION_LINKS, geoShapeStyle } from './design/geo';
 import { BuildHint } from './ui/build-hint';
 import { alkylPreview, bondEndSwatch, chargeSwatch, navigationPreview, pageGridPreview, readingPreview, stylePreview } from './ui/settings-previews';
@@ -3854,6 +3854,15 @@ const docRead: DocxReadDeps = {
     return pic ? { w: pic.box.x2 - pic.box.x1, h: pic.box.y2 - pic.box.y1 } : null;
   },
   tableDrawing,
+  // a reference manager's bibliography: kept as Word had it, or worked out here (asked each time)
+  keepBibliography: async (app) => {
+    const name = app === 'endnote' ? 'EndNote' : app === 'zotero' ? 'Zotero' : 'Mendeley';
+    const got = await askChoice(`Keep ${name} Bibliography?`,
+      `Keep this document's citations and bibliography as ${name} formatted them, or restyle them in the document's citation style?`,
+      [{ value: 'restyle', label: 'Restyle' }, { value: 'keep', label: 'Keep', primary: true }], 'keep',
+      'Restyling renumbers the citations and rebuilds the bibliography here, which can change entries (DOIs, links, lettered numbers such as 2c). Kept, they stay exactly as they are until you change a citation; then they are restyled.');
+    return got === 'keep';
+  },
 };
 
 const ws: Workspace = new Workspace(doc, {
@@ -5930,7 +5939,7 @@ const INDEX_KEY = 'library/file-index.json';
 
 /** How files found in a folder are read: with the app's own readers, ChemDraw objects in Word files read as structures. */
 const folderReaders: FileReaders = {
-  document: async (bytes, name) => (await (await import('./io/doc-files')).readDocumentFile(bytes, name, { ...docRead, convertChemDraw: true })).doc,
+  document: async (bytes, name) => (await (await import('./io/doc-files')).readDocumentFile(bytes, name, { ...docRead, convertChemDraw: true, keepBibliography: undefined })).doc,
   sheet: async (bytes, name) => (await (await import('./io/sheet-files')).readSheetFile(bytes, name, sheetFiles)).book,
   slides: async (bytes) => (await import('./io/pptx-read')).readPptx(bytes).slides.map((s) => s.contents),
 };

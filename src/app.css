@@ -781,6 +781,8 @@ dialog.ask { min-width: min(92vw, 340px); }
 .ask-row.ask-wide { grid-template-columns: 1fr; align-items: start; }
 .ask-row textarea { width: 32em; max-width: 70vw; resize: vertical; font-family: ui-monospace, Consolas, monospace; }
 .ask-buttons { display: flex; justify-content: flex-end; gap: 6px; margin: 10px 0 0; }
+/* a question with a button for each answer (askChoice): its message kept to a readable width */
+.ask-form > .ask-message { max-width: 30em; margin: 0; }
 dialog.link-dialog { width: min(92vw, 520px); }
 dialog.link-dialog .ask-row { grid-template-columns: 8.5em 1fr auto; }
 dialog.link-dialog .ask-buttons .spacer { flex: 1; }
