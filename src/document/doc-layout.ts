@@ -1156,17 +1156,20 @@ export class DocLayouter {
         if (down > 1) merged.push({ r, c, down });
         else h = Math.max(h, tall(lay) + m.top + m.bottom);
       }
+      // a row's own height (Word's row height): at least that tall, or exactly
+      const own = tb.rowH?.[r];
+      if (own && own.h > 0) h = own.exact ? own.h : Math.max(h, own.h);
       hs.push(h);
       cells.push(out);
       pads.push(ms);
     });
-    // a merged cell taller than its rows: the last of them grows (as in Word)
+    // a merged cell taller than its rows: the last of them grows (as in Word), unless its height is exact
     merged.sort((a, b) => a.r + a.down - (b.r + b.down));
     for (const m of merged) {
       const p = pads[m.r][m.c];
       const need = tall(cells[m.r][m.c]) + p.top + p.bottom;
       const have = sum(hs.slice(m.r, m.r + m.down));
-      if (need > have) hs[m.r + m.down - 1] += need - have;
+      if (need > have && !tb.rowH?.[m.r + m.down - 1]?.exact) hs[m.r + m.down - 1] += need - have;
     }
     const drop = cells.map((out, r) => out.map((l, c) => {
       if (!l) return 0;

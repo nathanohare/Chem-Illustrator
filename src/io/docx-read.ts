@@ -13,13 +13,13 @@
 // typed into here, and a table of figures (a TOC field for captions) as one worked out here.
 
 import { COVER_MARK } from '../document/quick-parts';
-import type { AuthorityMark, CellBorders, Contents, IndexMark, Justify, ParaBorders, ParaStyle, PictureFx, TabStop, TableCell, TableData, TextRun } from '../model';
+import type { AuthorityMark, CellBorders, Contents, IndexMark, Justify, ParaBorders, ParaStyle, PictureFx, RowHeight, TabStop, TableCell, TableData, TextRun } from '../model';
 import { parseIndex, parseTa, parseToa, parseXe } from '../document/index-toa';
 import { ALG_SIDS, type ProtectKind, type Protection } from '../document/protect';
 import { tidyFx } from '../render/picture-fx';
 import { readPictureFx } from './picture-xml';
 import { DEFAULT_MARGINS, builtInStyle, type TableStyleDef } from '../document/table-styles';
-import { keepDirectBorders, readBorder, readBorders, readLook as readTableLook, readMargins, readTableFloat, readTableStyle, readTableWidth, sameStyle, styleIsRich } from './docx-table-styles';
+import { keepDirectBorders, readBorder, readBorders, readLook as readTableLook, readMargins, readRowHeight, readTableFloat, readTableStyle, readTableWidth, sameStyle, styleIsRich } from './docx-table-styles';
 import { cleanBorders } from '../document/para-borders';
 import { ACS_1996, type DocStyle } from '../style';
 import * as rt from '../richtext';
@@ -2213,11 +2213,14 @@ class DocxReader {
     const styleId = style ? this.tableStyleOf(style) : null;
     // what the table's style (or Word's default one) gives its cells' paragraphs
     const paraLook = this.cellLookOf(style, !!styleId);
+    // each row's height, as Word sets it
+    const heights: (RowHeight | null)[] = [];
     const was = this.inCell;
     this.inCell = true;
     try {
       for (const tr of rows) {
         const trPr = kid(tr, 'trPr');
+        heights.push(readRowHeight(trPr, this.a.bind(this)));
         if (counting && kid(trPr, 'tblHeader') && this.on(kid(trPr, 'tblHeader'))) head++;
         else counting = false;
         const row: Cell[] = [];
@@ -2302,6 +2305,9 @@ class DocxReader {
       if (look) table.look = look;
       if ((look?.header ?? true) && !table.head) table.head = 1;
     }
+    // heading rows that only look like headings (no Repeat Header Rows in Word): not repeated when saved either
+    if (!head && table.head) table.noRepeat = true;
+    if (heights.some(Boolean)) table.rowH = heights;
     // where Word places it and how wide, kept for saving: floating, its width, its indent and AutoFit
     const float = readTableFloat(tblPr, this.a.bind(this));
     if (float) table.float = float;

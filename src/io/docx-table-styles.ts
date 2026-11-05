@@ -2,9 +2,9 @@
 // in styles.xml (w:style w:type="table", with a w:tblStylePr for each part it formats; ECMA-376
 // part 1, 17.7.6), a table's choice of parts as w:tblLook, lines as w:tblBorders and
 // w:tcBorders, and margins as w:tblCellMar and w:tcMar. Also a table's place and size as Word
-// keeps them: a floating table's w:tblpPr and its w:tblW.
+// keeps them: a floating table's w:tblpPr, its w:tblW, and each row's w:trHeight.
 
-import type { BorderLine, BorderSide, CellBorders, CellMargins, TableData, TableFloat, TableLook } from '../model';
+import type { BorderLine, BorderSide, CellBorders, CellMargins, RowHeight, TableData, TableFloat, TableLook } from '../model';
 import { kid, kids } from './ooxml';
 import { twips } from './docx-base';
 import { coveringCell } from '../table';
@@ -277,7 +277,7 @@ export function keepDirectBorders(t: TableData, table: Partial<Record<StyleEdge,
   };
 }
 
-// ---------------------------------------------------------------- place and width
+// ---------------------------------------------------------------- place, width and row heights
 
 const ANCHORS: readonly string[] = ['text', 'margin', 'page'];
 const X_SPECS: readonly string[] = ['left', 'center', 'right', 'inside', 'outside'];
@@ -346,3 +346,21 @@ export function tableWidthXml(t: TableData): string {
   return `<w:tblW w:w="${twips(t.cols.reduce((x, y) => x + y, 0))}" w:type="dxa"/>`;
 }
 
+/**
+ * A row's height (w:trHeight, 17.4.80): at least that tall, or exactly with hRule exact. Word
+ * takes a missing hRule as atLeast (MS-OI29500 2.1.180); auto (or no height) leaves the row to its text.
+ */
+export function readRowHeight(trPr: Element | null, a: Attr): RowHeight | null {
+  const el = kid(trPr, 'trHeight');
+  if (!el) return null;
+  const h = pts(el, 'val', a);
+  const rule = a(el, 'hRule');
+  if (!h || h <= 0 || rule === 'auto') return null;
+  return rule === 'exact' ? { h, exact: true } : { h };
+}
+
+/** A row's w:trHeight, with its rule written out (the standard's default is auto, Word's atLeast). */
+export function rowHeightXml(h: RowHeight | null | undefined): string {
+  if (!h || !(h.h > 0)) return '';
+  return `<w:trHeight w:val="${Math.min(31680, Math.max(1, twips(h.h)))}" w:hRule="${h.exact ? 'exact' : 'atLeast'}"/>`;
+}

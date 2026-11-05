@@ -17,7 +17,7 @@ import type { CellBorders, Contents, Justify, ParaStyle, PictureFx, TableData, T
 import { bakedPart } from '../render/picture-fx';
 import { blipEffectsXml, imgPropsXml, pictureGeomXml } from './picture-xml';
 import { DEFAULT_MARGINS, builtInStyle } from '../document/table-styles';
-import { borderXml, bordersXml, lookXml as tableLookXml, marginsXml, tableFloatXml, tableStyleXml, tableWidthXml } from './docx-table-styles';
+import { borderXml, bordersXml, lookXml as tableLookXml, marginsXml, rowHeightXml, tableFloatXml, tableStyleXml, tableWidthXml } from './docx-table-styles';
 import { BORDER_SPACE, cleanBorders } from '../document/para-borders';
 import { fieldInstr } from '../document/fields';
 import type { DocStyle } from '../style';
@@ -1162,7 +1162,9 @@ class DocxWriter {
         if (lastTable || !paras.length) paras.push('<w:p/>');
         cells.push(`<w:tc><w:tcPr>${tcPr.join('')}</w:tcPr>${paras.join('')}</w:tc>`);
       }
-      rows.push(`<w:tr>${r < tab.head ? '<w:trPr><w:tblHeader/></w:trPr>' : ''}${cells.join('')}</w:tr>`);
+      // its height, and whether it repeats at the top of each page as a heading row
+      const trPr = rowHeightXml(tab.rowH?.[r]) + (r < tab.head && !tab.noRepeat ? '<w:tblHeader/>' : '');
+      rows.push(`<w:tr>${trPr ? `<w:trPr>${trPr}</w:trPr>` : ''}${cells.join('')}</w:tr>`);
     }
     return `<w:tbl>${tblPr}${gridXml}${rows.join('')}</w:tbl>`;
   }

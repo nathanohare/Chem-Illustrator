@@ -1295,6 +1295,10 @@ export interface TableData {
   look?: TableLook;
   /** Documents: the margins of every cell (Word's default cell margins), when not the standard ones. */
   pad?: CellMargins;
+  /** Documents: each row's height, row by row (Word's row height); a row without one is as tall as its text. */
+  rowH?: (RowHeight | null)[];
+  /** Documents: the heading rows only look like headings; they aren't repeated at the top of each page (Word's Repeat Header Rows off). */
+  noRepeat?: boolean;
   /** Documents: the width Word gives the table, when not its columns' total: a share of the text's width (in percent) or as its contents need ('auto'). */
   width?: 'auto' | { pct: number };
   /** Documents: how far the table is moved in from the left margin, in points (Word's Indent from left). */
@@ -1303,6 +1307,12 @@ export interface TableData {
   autofit?: boolean;
   /** Documents: a table Word places on the page with the text going round it (a floating table); kept for Word, shown in its line here. */
   float?: TableFloat;
+}
+
+/** A row's height in a document's table, in points: at least that tall (the text may make it taller), or exactly that tall. */
+export interface RowHeight {
+  h: number;
+  exact?: boolean;
 }
 
 /**

@@ -6,6 +6,7 @@
 
 import type { ParaStyle, TableData, TextRun } from '../model';
 import * as rt from '../richtext';
+import { rowHeights } from '../table';
 import { fitParas, paraCount, splitParagraphs } from '../text/paragraphs';
 import { OBJECT_CHAR, type DocText } from './document';
 
@@ -135,5 +136,6 @@ export function sortTableRows(tb: TableData, o: SortOptions): TableData {
   const body = tb.rows.slice(head);
   const texts = body.map((row) => row.map((c) => sortText(c.runs)).join('\u0001'));
   const order = sortOrder(texts, { ...o, sep: '\u0001' });
-  return { ...tb, rows: [...tb.rows.slice(0, head), ...order.map((i) => body[i])] };
+  // (each row keeps its height)
+  return { ...tb, rows: [...tb.rows.slice(0, head), ...order.map((i) => body[i])], ...rowHeights(tb, (h) => h.splice(head, h.length - head, ...order.map((i) => h[head + i]))) };
 }
