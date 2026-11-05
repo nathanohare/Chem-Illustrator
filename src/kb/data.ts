@@ -31,7 +31,9 @@ export const GLOSSARY_TABLE: KbTable = {
 export const BUILT_IN_TABLES: KbTable[] = [REAGENT_SAFETY, SOLVENTS_TABLE, MISCIBILITY_TABLE, ACIDS_TABLE, PHYSICAL_CONSTANTS, PKA_TABLE, HAMMETT_TABLE, GLOSSARY_TABLE];
 
 /** Big tables loaded when the window first opens, kept out of the program's start-up. */
-export const LATER_TABLES: (() => Promise<KbTable>)[] = [];
+export const LATER_TABLES: (() => Promise<KbTable>)[] = [
+  async () => (await import('./pka')).PKA_VALUES_TABLE,
+];
 
 /** More rows for built-in tables, loaded the same way: the big Reagent Safety table. */
 export const LATER_ROWS: { table: string; rows: () => Promise<Record<string, Cell>[]> }[] = [

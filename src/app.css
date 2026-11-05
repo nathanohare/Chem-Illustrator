@@ -1940,6 +1940,7 @@ dialog.kb-window { position: fixed; inset: 56px 0 auto 0; margin: 0 auto; z-inde
 .kb-table.kb-fit { width: 100%; }
 .kb-table.kb-fit td.prose { min-width: 14ch; font-size: var(--fs-sm); }
 .kb-table.kb-fit td.kb-links { white-space: normal; min-width: 8ch; }
+.kb-table.kb-fit td.kb-links a { white-space: nowrap; }
 .kb-window abbr[title] { text-decoration: underline dotted var(--muted); text-underline-offset: 2px; cursor: help; }
 .kb-empty { padding: 12px; margin: 0; }
 /* a structure search: "This compound" over the same one, "Containing it" over the rest */
