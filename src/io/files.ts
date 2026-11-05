@@ -31,10 +31,12 @@ export const CDX: FileType = { description: 'ChemDraw drawing', extension: 'cdx'
 /** ChemDraw style sheets: a drawing file (CDX or CDXML inside) kept for its settings. Opened, never saved. */
 export const CDS: FileType = { description: 'ChemDraw style sheet', extension: 'cds', mime: 'chemical/x-cdx' };
 export const PPTX: FileType = { description: 'PowerPoint presentation', extension: 'pptx', mime: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' };
+/** PowerPoint files that open as decks but save as .pptx: macro-enabled presentations, templates and slide shows. */
+export const SLIDES_OPEN_ONLY = ['pptm', 'potx', 'potm', 'ppsx', 'ppsm'];
 export const XLSX: FileType = { description: 'Excel workbook', extension: 'xlsx', mime: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' };
 export const XLSM: FileType = { description: 'Excel macro-enabled workbook', extension: 'xlsm', mime: 'application/vnd.ms-excel.sheet.macroEnabled.12' };
-/** Spreadsheets that open as sheets but save as .xlsx: old Excel workbooks and OpenDocument spreadsheets. */
-export const SHEET_OPEN_ONLY = ['xls', 'ods'];
+/** Spreadsheets that open as sheets but save as .xlsx: old Excel workbooks, OpenDocument spreadsheets and Excel templates. */
+export const SHEET_OPEN_ONLY = ['xls', 'ods', 'xltx', 'xltm'];
 export const CSV: FileType = { description: 'CSV (comma-separated values)', extension: 'csv', mime: 'text/csv' };
 export const DOCX: FileType = { description: 'Word document', extension: 'docx', mime: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' };
 export const RTF: FileType = { description: 'Rich Text Format', extension: 'rtf', mime: 'application/rtf' };

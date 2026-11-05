@@ -126,6 +126,7 @@ const WARN = {
   pictureWatermark: 'A picture watermark was left out (text watermarks are kept).',
   drawingChanged: 'Some structures were changed in Word (Change Picture) or copied in from another file, so they came in as pictures.',
   drawingCrop: 'Cropping and color changes made in Word to some structures were left off (the structures stay editable).',
+  macros: 'This document has macros (VBA). They are never run here, and they are left out when it is saved.',
 };
 
 type Pos = 'base' | 'sub' | 'sup';
@@ -303,6 +304,8 @@ class DocxReader {
     this.readNumbering();
     this.readModel();
     this.readKept();
+    // a .docm's (or macro-enabled template's) macros, which a .docx can't hold
+    if ([...pkg.rels(this.main).values()].some((r) => r.type === REL.vbaProject)) this.warn('macros');
     // the sections: each paragraph's section properties end a section, the body's the last
     // (not those kept in a tracked change's record of what they were)
     const sects = Array.from(root.getElementsByTagNameNS(this.W, 'sectPr')).filter((e) => e.parentElement?.localName !== 'sectPrChange');

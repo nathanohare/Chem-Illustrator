@@ -353,6 +353,8 @@ class Reader {
     const pres = main ? this.r.xml(main) : null;
     if (!main || !pres) throw new Error('This is not a PowerPoint file (it has no presentation in it).');
     const root = pres.documentElement;
+    // a .pptm's (or macro-enabled template's) macros, which a .pptx can't hold
+    if ([...this.r.rels(main).values()].some((r) => r.type === REL.vbaProject)) this.warnings.add('This presentation has macros (VBA). They are never run here, and they are left out when it is saved.');
     const sz = kid(root, 'sldSz');
     if (sz) this.size = { w: Math.round(fromEmu(sz.getAttribute('cx'))), h: Math.round(fromEmu(sz.getAttribute('cy'))) };
     this.defaultText = kid(root, 'defaultTextStyle');

@@ -37,6 +37,8 @@ export const REL = {
   viewProps: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/viewProps',
   tableStyles: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/tableStyles',
   font: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/font',
+  /** Macros (VBA), in .docm, .pptm and .xlsm files and their templates. */
+  vbaProject: 'http://schemas.microsoft.com/office/2006/relationships/vbaProject',
 };
 
 /** Escape text for XML (also the characters XML 1.0 can't hold at all, which are dropped). */
