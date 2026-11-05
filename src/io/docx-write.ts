@@ -1143,7 +1143,7 @@ class DocxWriter {
     const tblPr = `<w:tblPr><w:tblW w:w="${twips(width)}" w:type="dxa"/><w:jc w:val="${align === 'right' ? 'right' : align === 'left' ? 'left' : 'center'}"/>` +
       `<w:tblBorders>${borders}</w:tblBorders><w:tblLayout w:type="fixed"/>` +
       `<w:tblCellMar><w:top w:w="${padY}" w:type="dxa"/><w:left w:w="${padX}" w:type="dxa"/><w:bottom w:w="${padY}" w:type="dxa"/><w:right w:w="${padX}" w:type="dxa"/></w:tblCellMar>` +
-      `<w:tblLook w:val="0000" w:firstRow="0" w:lastRow="0" w:firstColumn="0" w:lastColumn="0" w:noHBand="1" w:noVBand="1"/>` +
+      `<w:tblLook w:val="0600" w:firstRow="0" w:lastRow="0" w:firstColumn="0" w:lastColumn="0" w:noHBand="1" w:noVBand="1"/>` +
       // its alt-text title: the table's own title (which of ours it is goes in a hidden bookmark)
       `${title ? `<w:tblCaption w:val="${xmlAttr(title)}"/>` : ''}</w:tblPr>`;
     const grid = `<w:tblGrid>${tab.cols.map((w) => `<w:gridCol w:w="${twips(w)}"/>`).join('')}</w:tblGrid>`;
@@ -1198,7 +1198,7 @@ class DocxWriter {
     const tblPr = `<w:tblPr>${styled ? `<w:tblStyle w:val="${tab.style}"/>` : ''}${tableFloatXml(tab.float)}${tableWidthXml(tab)}<w:jc w:val="${align === 'right' ? 'right' : align === 'center' ? 'center' : 'left'}"/>` +
       `${tab.indent ? `<w:tblInd w:w="${twips(tab.indent)}" w:type="dxa"/>` : ''}${styled ? '' : `<w:tblBorders>${borders}</w:tblBorders>`}${tab.autofit ? '' : '<w:tblLayout w:type="fixed"/>'}` +
       marginsXml('tblCellMar', tab.pad ?? DEFAULT_MARGINS) +
-      `${styled ? tableLookXml(tab) : '<w:tblLook w:val="0000" w:firstRow="0" w:lastRow="0" w:firstColumn="0" w:lastColumn="0" w:noHBand="1" w:noVBand="1"/>'}</w:tblPr>`;
+      `${styled ? tableLookXml(tab) : '<w:tblLook w:val="0600" w:firstRow="0" w:lastRow="0" w:firstColumn="0" w:lastColumn="0" w:noHBand="1" w:noVBand="1"/>'}</w:tblPr>`;
     const gridXml = `<w:tblGrid>${tab.cols.map((w) => `<w:gridCol w:w="${twips(w)}"/>`).join('')}</w:tblGrid>`;
     const rows: string[] = [];
     for (let r = 0; r < tab.rows.length; r++) {
@@ -1547,6 +1547,8 @@ function runProps(r: TextRun, st: NamedStyle, x: { formula?: boolean; pos?: 'bas
   if (!!r.strike !== !!cs?.strike) out.push(r.strike ? '<w:strike/>' : '<w:strike w:val="0"/>');
   if (r.noProof) out.push('<w:noProof/>');
   if (x.vanish) out.push('<w:vanish/>');
+  // raised or lowered from the line, in half-points
+  if (r.raise) out.push(`<w:position w:val="${Math.round(r.raise * 2)}"/>`);
   const color = r.color ?? st.color;
   if ((color ?? '') !== (st.color ?? '')) out.push(`<w:color w:val="${color ? hex6(color) : 'auto'}"/>`);
   // character spacing (twentieths of a point) and kerning taken off
@@ -1703,10 +1705,10 @@ function formField(o: Extract<DocObject, { kind: 'form' }>, rPr: string, names: 
     `${result ? `<w:r>${pr}<w:fldChar w:fldCharType="separate"/></w:r>${run(rPr, result)}` : ''}<w:r>${pr}<w:fldChar w:fldCharType="end"/></w:r><w:bookmarkEnd w:id="${mark}"/>`;
 }
 
-/** A run of text (tabs as Word's tabs). */
+/** A run of text (tabs as Word's tabs, optional hyphens as its soft hyphens). */
 function run(rPr: string, text: string): string {
   if (!text) return '';
-  const body = text.split('\t').map((s, i) => (i > 0 ? '<w:tab/>' : '') + (s ? `<w:t xml:space="preserve">${xml(s)}</w:t>` : '')).join('');
+  const body = text.split(/([\t\u00ad])/).map((s) => (s === '\t' ? '<w:tab/>' : s === '\u00ad' ? '<w:softHyphen/>' : s ? `<w:t xml:space="preserve">${xml(s)}</w:t>` : '')).join('');
   return `<w:r>${rPr ? `<w:rPr>${rPr}</w:rPr>` : ''}${body}</w:r>`;
 }
 

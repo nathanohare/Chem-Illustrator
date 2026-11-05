@@ -71,6 +71,8 @@ export function textPieces(text: string, widths: number[]): { symbol: boolean; c
   const out: { symbol: boolean; codes: number[]; dx: number }[] = [];
   let x = 0;
   [...text].forEach((ch, i) => {
+    // a soft hyphen draws nothing (the hyphen at a line break is a glyph of its own)
+    if (ch === '\u00ad') { x += widths[i] ?? 0; return; }
     let code = winAnsi(ch), symbol = false;
     if (code === null && SYMBOL[ch] !== undefined) { code = SYMBOL[ch]; symbol = true; }
     // a narrow no-break space and other spaces count as spaces; anything else unknown shows as "?"
@@ -88,6 +90,8 @@ export function keptPieces(text: string, widths: number[], fonts: EmbeddedFont[]
   const out: { font: EmbeddedFont | null; text: string; widths: number[]; dx: number }[] = [];
   let x = 0;
   [...text].forEach((ch, i) => {
+    // a soft hyphen draws nothing (the hyphen at a line break is a glyph of its own)
+    if (ch === '\u00ad') { x += widths[i] ?? 0; return; }
     const c = ch.codePointAt(0)!;
     const font = fonts.find((f) => f.font.glyph(c) !== 0) ?? null;
     const last = out[out.length - 1];
