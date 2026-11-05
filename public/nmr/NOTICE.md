@@ -18,7 +18,8 @@ same licences and credits.
 
 `nmr-net.dat` holds five small graph networks (weights only) trained by `scripts/nmr/train_net.py`
 on the same NMRShiftDB2 and CC BY/CC0 NMRBank data, plus unassigned peak lists from NMRexp; they
-are a produced work of those sources and carry the same credits.
+are a produced work of those sources and carry the same credits. They also give the gap between
+the two protons of a CH2 and read the drawing's stereochemistry (feature set 2).
 
 - **NMRexp** (Zenodo, doi 10.5281/zenodo.17296666, CC BY 4.0): experimental 1H and 13C peak lists
   with structures, extracted from the supporting information of published articles. Contains data
