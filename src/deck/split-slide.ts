@@ -96,8 +96,9 @@ export function splitSlide(doc: Doc, measure: Measure = arialMeasure): SlidePart
     if (sh.smart || sh.holder) { items.push({ box: shapeBox(sh), chem: true, add: (s) => s.shapes.add(sh.id), shape: sh, ...(sh.piece !== undefined ? { piece: sh.piece } : {}) }); continue; }
     // design shapes stay PowerPoint shapes even beside structures (boxes round a structure, flasks under one)
     if (sh.kind === 'geo') { geos.push(sh); continue; }
-    // ring fills sit under their structure, in its picture
-    const chem = sh.kind === 'bracket' || sh.kind === 'symbol' || sh.kind === 'ring';
+    // ring fills sit under their structure, in its picture (and so does an orbital's sphere or
+    // ring, whose settings its picture's ChemDraw data keeps)
+    const chem = sh.kind === 'bracket' || sh.kind === 'symbol' || sh.kind === 'ring' || (sh.kind === 'oval' && !!sh.orb);
     if (sh.hidden && !chem) { geos.push(sh); continue; }
     items.push({ box: shapeBox(sh), chem, add: (s) => s.shapes.add(sh.id), shape: sh, ...(sh.piece !== undefined ? { piece: sh.piece } : {}) });
   }

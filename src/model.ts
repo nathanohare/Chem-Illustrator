@@ -830,6 +830,20 @@ export interface StepRoles {
   manual?: boolean;
 }
 
+/**
+ * What a part of an orbital remembers (Shape.orb): the orbital's type, phases and which phase is
+ * shaded, and which of its shapes this one is (its place in orbitalShapes' list). Where it is, which
+ * way it points and how big it is are read from the shapes themselves, so turning, moving or
+ * resizing it by hand is kept when it is changed.
+ */
+export interface OrbitalTag {
+  kind: string;
+  look: string;
+  flip?: boolean;
+  colours?: [string, string];
+  part: number;
+}
+
 /** Lines or dots over a fill (Style panel > Pattern). */
 export type Pattern = 'hatch' | 'backhatch' | 'crosshatch' | 'horizontal' | 'vertical' | 'grid' | 'dots' | 'dense-dots';
 
@@ -858,6 +872,8 @@ export interface Shape {
   geo?: string;
   /** ChemDraw's orbital (an oval it draws as an orbital lobe or s orbital): its OrbitalType, kept for writing back. */
   orbital?: string;
+  /** A part of an orbital drawn with Chemistry ▸ Orbital (chem/orbitals.ts): how it was asked for, so it can be changed later. */
+  orb?: OrbitalTag;
   /** Text inside a design shape: wraps to the shape's text area and moves with it. */
   text?: { runs: TextRun[]; paras?: ParaStyle[] };
   /** Text inside a design shape: across (centred unless set) and up and down (middle unless set). */

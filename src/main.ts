@@ -167,8 +167,7 @@ import { stoichiometryBook, type StoichRow, type StoichRole } from './chem/stoic
 import { isReactionSmiles, isRxn, parseRxn, reactionSmiles, rxnBlock, splitReactionSmiles } from './chem/reaction-io';
 import { showBalance } from './ui/balance-dialog';
 import { withoutCharge } from './chem/formula';
-import { makePin, shapeAxis } from './chem/pins';
-import { ORBITAL_KINDS, ORBITAL_LOOKS, orbitalShapes, shapeCentre, type OrbitalKind, type OrbitalLook } from './chem/orbitals';
+import { ORBITAL_KINDS, ORBITAL_LOOKS, angleOfDir, openDirection, orbitalAtom, orbitalShapes, orbitalsAmong, putOrbital, readAngle, readOrbital, redrawOrbital, takenDirections, type OrbitalKind, type OrbitalLook, type OrbitalSpec } from './chem/orbitals';
 import { BATCH_FORMATS, BATCH_INPUTS, readBatchFile, smilesLine, uniqueName, writeBatchItem, type BatchDeps, type BatchFormat } from './io/batch-convert';
 import { zipSync } from 'fflate';
 import { labelsOf, schemePrefs, setSchemePrefs, SPACING, type SchemePrefs } from './chem/scheme-layout';
@@ -188,7 +187,7 @@ import { TypingDialog } from './ui/typing-dialog';
 import { ModeColoursDialog, ModeColours, DEFAULT_MODE_COLOURS, applyModeColours as applyModeColoursOnly, modeColour } from './ui/mode-colours';
 import { typingPrefs, setTypingPrefs, onTypingPrefs } from './text/typing';
 import { NicknameChooser } from './ui/nickname-chooser';
-import { ask } from './ui/ask';
+import { ask, type Field } from './ui/ask';
 import { ACTION_LINKS, geoShapeStyle } from './design/geo';
 import { BuildHint } from './ui/build-hint';
 import { alkylPreview, bondEndSwatch, chargeSwatch, navigationPreview, pageGridPreview, readingPreview, stylePreview } from './ui/settings-previews';
@@ -500,6 +499,7 @@ const SYMBOLS: PaletteDef = {
     { name: 'sym-radical-anion', title: 'Radical anion (•−): click an atom or a bracket; an atom becomes a radical with a − charge' },
     { name: 'sym-dagger', title: 'Dagger (†), for a footnote or a compound' },
     { name: 'sym-ddagger', title: 'Double dagger (‡) for a transition state' },
+    { name: 'sym-lobe', title: 'Single orbital lobe: click an atom to put one in its most open space, or press on the atom and drag around it to aim it (Alt: 15° steps). Uses the phases and size last picked in the Orbital window; double-click it to change it' },
   ],
 };
 
@@ -1324,6 +1324,7 @@ async function plateFigure(kind: PlateKind | null, id: number | null, file?: { n
   if (got) editor.putPlateAt(got, pasteCentre(), now ? id! : undefined, deckNow()?.size);
 }
 editor.onPlate = (id) => void plateFigure(null, id);
+editor.onOrbital = () => void editOrbital();
 
 /** What the crystal structure window needs from here: a CIF file to open, and the clipboard. */
 function crystalOptions(file?: { name: string; text: string }) {
@@ -1343,11 +1344,13 @@ function crystalOptions(file?: { name: string; text: string }) {
   };
 }
 
-/** How the last orbital was asked for, so the next starts the same way. */
-const orbitalChoice: Record<string, string> = { kind: 'p', look: 'shaded', size: '1.1', angle: 'auto', flip: 'false' };
+/** How the last orbital was asked for, so the next starts the same way (and the single-lobe button's phases and size). */
+const orbitalChoice: Record<string, string> = { kind: 'p', look: 'shaded', size: '1.1', angle: 'Auto', flip: 'false' };
+editor.lobeLook = () => ({ look: (ORBITAL_LOOKS.some((k) => k.value === orbitalChoice.look) ? orbitalChoice.look : 'shaded') as OrbitalLook, size: orbitalSize(orbitalChoice.size), flip: orbitalChoice.flip === 'true' });
 
-/** Which way an orbital on this atom points when left to choose: hybrids away from its bonds, others up. */
+/** Which way an orbital on this atom points when left to choose: hybrids away from its bonds, a single lobe into the most open space, others up. */
 function orbitalAngle(kind: OrbitalKind, atom: Atom | undefined): number {
+  if (atom && kind === 'lobe') return angleOfDir(openDirection(takenDirections(doc, atom.id)));
   if (!atom || (kind !== 'sp' && kind !== 'sp2' && kind !== 'sp3')) return 0;
   let vx = 0, vy = 0;
   for (const n of doc.neighbors(atom.id)) { const d = Math.hypot(n.x - atom.x, n.y - atom.y) || 1; vx -= (n.x - atom.x) / d; vy -= (n.y - atom.y) / d; }
@@ -1355,45 +1358,119 @@ function orbitalAngle(kind: OrbitalKind, atom: Atom | undefined): number {
   return (Math.atan2(vx, -vy) * 180) / Math.PI;
 }
 
+/** A lobe length typed in bond lengths, kept to a sensible range. */
+const orbitalSize = (text: string | undefined): number => Math.max(0.2, Math.min(5, Number(text) || 1.1));
+
+/** The Orbital window's settings as an orbital to draw, on `atom` (or pointing up off it). */
+function orbitalSpec(v: Record<string, string>, atom: Atom | undefined): OrbitalSpec {
+  const kind = (ORBITAL_KINDS.some((k) => k.value === v.kind) ? v.kind : 'p') as OrbitalKind;
+  const a = readAngle(v.angle);
+  return { kind, look: (ORBITAL_LOOKS.some((k) => k.value === v.look) ? v.look : 'shaded') as OrbitalLook, angle: a === 'auto' ? orbitalAngle(kind, atom) : a, size: orbitalSize(v.size) * doc.style.bondLength, ...(v.flip === 'true' ? { flip: true } : {}) };
+}
+
+/** A picture of an orbital as the window will draw it: on its atom with the atom's bonds, as it will look there. */
+function orbitalPreview(spec: OrbitalSpec, atom: Atom | undefined, at?: Vec): Node {
+  const x = new Doc();
+  x.style = { ...doc.style };
+  x.edit('Preview', () => {
+    let c = at ?? { x: 0, y: 0 };
+    if (atom) {
+      const a = x.addAtom(atom.x, atom.y, atom.z);
+      x.updateAtom(a.id, { label: atom.label, charge: atom.charge });
+      for (const n of doc.neighbors(atom.id)) { const m = x.addAtom(n.x, n.y, n.z); x.updateAtom(m.id, { label: n.label }); x.addBond(a.id, m.id); }
+      c = atom;
+    }
+    for (const sh of orbitalShapes(spec, c)) x.addShape(sh);
+  });
+  const pic = recordPicture(x, 4);
+  const box = document.createElement('div');
+  box.className = 'orbital-preview';
+  box.innerHTML = pic ? pictureSvg(pic).replace(/^<\?xml[^>]*>\s*/, '') : '';
+  return box;
+}
+
+/** The Orbital window's boxes, filled in from `v`. */
+function orbitalFields(v: Record<string, string>): Field[] {
+  return [
+    { name: 'kind', label: 'Orbital', value: v.kind, options: ORBITAL_KINDS },
+    { name: 'look', label: 'Phases', value: v.look, options: ORBITAL_LOOKS },
+    { name: 'angle', label: 'Pointing', value: v.angle, unit: '°', suggestions: ['Auto', '0', '45', '90', '135', '180', '225', '270', '315'], help: 'Degrees clockwise from straight up. Auto points hybrids away from the bonds, a single lobe into the most open space, and the others straight up.' },
+    { name: 'size', label: 'Lobe length', value: v.size, type: 'number', unit: 'bond lengths' },
+    { name: 'flip', label: 'Swap the phases', value: v.flip, type: 'checkbox' },
+  ];
+}
+
 /** Chemistry ▸ Orbitals: an orbital on each selected atom (or in the middle of the view), its lobes stuck to the atom. */
 async function insertOrbital(quick: boolean): Promise<void> {
   finishTyping();
   const atoms = [...editor.sel.atoms].map((id) => doc.atoms.get(id)).filter((a): a is Atom => !!a && !a.multi);
   if (quick && !atoms.length) { flash('Select the atoms of the π system first (drag around them, or Shift-click each).'); return; }
-  let v: Record<string, string> = { ...orbitalChoice, kind: 'p', angle: 'auto' };
+  let v: Record<string, string> = { ...orbitalChoice, kind: 'p', angle: 'Auto' };
   if (!quick) {
-    const got = await ask('Orbital', [
-      { name: 'kind', label: 'Orbital', value: orbitalChoice.kind, options: ORBITAL_KINDS },
-      { name: 'look', label: 'Phases', value: orbitalChoice.look, options: ORBITAL_LOOKS },
-      { name: 'angle', label: 'Pointing', value: orbitalChoice.angle, options: [
-        { value: 'auto', label: 'By itself (hybrids away from the bonds, others up)' }, { value: '0', label: 'Up' }, { value: '90', label: 'Right' }, { value: '180', label: 'Down' }, { value: '270', label: 'Left' }, { value: '45', label: 'Up and right (45°)' }, { value: '315', label: 'Up and left (45°)' },
-      ] },
-      { name: 'size', label: 'Lobe length', value: orbitalChoice.size, type: 'number', unit: 'bond lengths' },
-      { name: 'flip', label: 'Swap the phases', value: orbitalChoice.flip, type: 'checkbox' },
-    ], { ok: 'Insert', note: atoms.length ? `One on each of the ${atoms.length} selected atom${atoms.length > 1 ? 's' : ''}; the lobes stay with the atoms.` : 'Select atoms first to put one on each; otherwise it goes in the middle of the view.' });
+    const got = await ask('Orbital', orbitalFields(orbitalChoice), { ok: 'Insert', preview: { title: 'Preview', draw: (vals) => orbitalPreview(orbitalSpec(vals, atoms[0]), atoms[0]) }, note: atoms.length ? `One on each of the ${atoms.length} selected atom${atoms.length > 1 ? 's' : ''}; the lobes stay with the atoms. Double-click one later to change it.` : 'Select atoms first to put one on each; otherwise it goes in the middle of the view. Double-click one later to change it.' });
     if (!got) return;
     Object.assign(orbitalChoice, got);
     v = got;
   }
-  const L = doc.style.bondLength;
-  const kind = v.kind as OrbitalKind;
-  const size = Math.max(0.2, Math.min(5, Number(v.size) || 1.1)) * L;
   const made: number[] = [];
-  doc.edit(kind === 'p' && quick ? 'p Orbitals' : 'Orbital', () => {
-    let top = 0;
-    for (const m of [doc.atoms, doc.captions, doc.arrows, doc.shapes] as Map<number, { grp?: number }>[]) for (const e of m.values()) if (e.grp !== undefined && e.grp > top) top = e.grp;
-    for (const at of atoms.length ? atoms : [undefined]) {
-      const c = at ?? pasteCentre();
-      const angle = v.angle === 'auto' ? orbitalAngle(kind, at) : Number(v.angle) || 0;
-      const grp = ++top;
-      for (const sh of orbitalShapes({ kind, look: v.look as OrbitalLook, angle, size, flip: v.flip === 'true' }, c)) {
-        const pin = at ? makePin(doc, 'atom', [at.id], shapeCentre(sh), shapeAxis(sh)) ?? undefined : undefined;
-        made.push(doc.addShape({ ...sh, grp, ...(pin ? { pin } : {}) }).id);
-      }
-    }
+  doc.edit(v.kind === 'p' && quick ? 'p Orbitals' : 'Orbital', () => {
+    for (const at of atoms.length ? atoms : [undefined]) made.push(...putOrbital(doc, orbitalSpec(v, at), at ?? pasteCentre(), at?.id));
   });
   editor.sel = { atoms: new Set(), bonds: new Set(), captions: new Set(), arrows: new Set(), shapes: new Set(made) };
   editor.changed();
+}
+
+/** The orbitals selected (each as its parts). */
+const selectedOrbitals = (): Shape[][] => orbitalsAmong(doc, editor.sel.shapes);
+
+/**
+ * Draw orbitals again with some settings changed (the Style panel's rows, the Edit Orbital
+ * window): each keeps the settings not changed, its own angle and size among them, and stays
+ * selected.
+ */
+function restyleOrbitals(list: Shape[][], patch: Partial<OrbitalSpec>, autoAngle = false): void {
+  const made: number[] = [];
+  doc.edit(list.length > 1 ? 'Change Orbitals' : 'Change Orbital', () => {
+    for (const parts of list) {
+      const now = readOrbital(parts);
+      if (!now) continue;
+      const spec: OrbitalSpec = { ...now.spec, ...patch };
+      if (!spec.flip) delete spec.flip;
+      // Auto: each points its own way on its own atom
+      if (autoAngle) { const at = orbitalAtom(doc, parts); spec.angle = orbitalAngle(spec.kind, at !== undefined ? doc.atoms.get(at) : undefined); }
+      made.push(...redrawOrbital(doc, parts, spec));
+    }
+  });
+  editor.sel = { ...editor.sel, shapes: new Set([...[...editor.sel.shapes].filter((id) => doc.shapes.has(id)), ...made]) };
+  editor.changed();
+}
+
+/** Edit Orbital… (or a double-click on one): the Orbital window with the selected orbitals' settings, to draw them again. */
+async function editOrbital(): Promise<void> {
+  finishTyping();
+  const list = selectedOrbitals();
+  if (!list.length) { flash('Select an orbital first.'); return; }
+  const first = readOrbital(list[0]);
+  if (!first) return;
+  const atomId = orbitalAtom(doc, list[0]);
+  const atom = atomId !== undefined ? doc.atoms.get(atomId) : undefined;
+  const was: Record<string, string> = { kind: first.spec.kind, look: first.spec.look, angle: String(Math.round(first.spec.angle * 10) / 10), size: String(Math.round((first.spec.size / doc.style.bondLength) * 100) / 100), flip: String(!!first.spec.flip) };
+  const got = await ask(list.length > 1 ? `Edit ${list.length} Orbitals` : 'Edit Orbital', orbitalFields(was), {
+    ok: 'Apply',
+    preview: { title: 'Preview', draw: (vals) => orbitalPreview({ ...orbitalSpec(vals, atom), ...(vals.size === was.size ? { size: first.spec.size } : {}) }, atom, first.at) },
+    note: list.length > 1 ? 'Only the settings you change are applied to each orbital; each keeps its own angle and size unless you change them.' : 'Draws the orbital again with these settings, on the same atom.',
+  });
+  if (!got) return;
+  // only what was changed: several orbitals each keep their own angle and size
+  const patch: Partial<OrbitalSpec> = {};
+  if (got.kind !== was.kind) patch.kind = got.kind as OrbitalKind;
+  if (got.look !== was.look) patch.look = got.look as OrbitalLook;
+  if (got.flip !== was.flip) patch.flip = got.flip === 'true';
+  if (got.size !== was.size) patch.size = orbitalSize(got.size) * doc.style.bondLength;
+  if (got.angle !== was.angle) { const a = readAngle(got.angle); if (a !== 'auto') patch.angle = a; }
+  orbitalChoice.look = got.look; orbitalChoice.flip = got.flip; orbitalChoice.size = got.size;
+  const auto = readAngle(got.angle) === 'auto';
+  if (Object.keys(patch).length || auto) restyleOrbitals(list, patch, auto);
 }
 
 /** A diagram drawn as an SVG picture, for the diagram window's preview and its layout buttons. */
@@ -8756,6 +8833,7 @@ const COMMANDS: Record<string, () => unknown> = {
   orbital: () => void insertOrbital(false),
   gel: () => void plateFigure('gel', null),
   'crystal-structure': () => void plateFigure('crystal', null),
+  'edit-orbital': () => void editOrbital(),
   'edit-plate': () => { const id = editor.selectedPlate(); if (id === null) flash('Select a lab figure (TLC plate, gel, MO diagram or crystal structure) first.'); else void plateFigure(null, id); },
   'insert-diagram': () => void smartDiagram(null),
   'edit-diagram': () => { const id = editor.selectedDiagram(); if (id === null) flash('Select a diagram first.'); else void smartDiagram(id); },
@@ -11813,6 +11891,7 @@ function drawingMenu(): MenuItem[] {
     ...(editor.selectedTorsion() !== null ? [{ cmd: 'edit-torsion' }, { cmd: 'copy-torsion-data' }, null] : []),
     ...(editor.selectedNewman() !== null ? [{ cmd: 'edit-newman' }, ...(doc.shapes.get(editor.selectedNewman()!)?.newman?.link ? [{ cmd: 'unlink-newman' }] : []), null] : []),
     ...(editor.selectedPlate() !== null ? [{ cmd: 'edit-plate' }, null] : []),
+    ...(selectedOrbitals().length ? [{ cmd: 'edit-orbital' }, null] : []),
     ...(editor.selectedDiagram() !== null ? [{ cmd: 'edit-diagram' }, { cmd: 'diagram-to-shapes' }, null] : []),
     ...(atoms || texts ? [{ label: 'Copy As', items: [{ cmd: 'copy-smiles' }, { cmd: 'copy-mol' }, { cmd: 'copy-cdxml' }] }, null] : []),
     ...(s.captions.size ? [readAsMenu(), ...(texts && !atoms ? [{ cmd: 'expand-label', label: 'Expand to Structure' }, { cmd: 'expand-label-full', label: 'Expand to Full Structure' }] : []), null] : []),
@@ -12016,6 +12095,10 @@ stylePanel.diagram = {
 stylePanel.plate = {
   edit: (id) => void plateFigure(null, id),
   restyle: (id, patch) => { const d = doc.shapes.get(id)?.plate; if (d) editor.putPlateAt({ ...d, ...patch }, pasteCentre(), id); },
+};
+stylePanel.orbital = {
+  edit: () => void editOrbital(),
+  restyle: (ids, patch) => restyleOrbitals(orbitalsAmong(doc, ids), patch),
 };
 stylePanel.energy = {
   edit: (id) => void energyDiagram(id),
