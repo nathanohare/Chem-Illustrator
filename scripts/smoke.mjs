@@ -111,19 +111,47 @@ try {
   await page.evaluate(() => window.__app.ws.activate(window.__app.ws.tabs.find((t) => t.mode === 'drawing')));
   await page.waitForTimeout(200);
 
+  step('the Drawing Tools toolbox is two columns wide in every mode, scrolling when the window is too short');
+  const columns = await page.evaluate(async () => {
+    const ws = window.__app.ws, out = [];
+    const frame = () => new Promise((ok) => requestAnimationFrame(() => requestAnimationFrame(ok)));
+    for (const tab of [...ws.tabs]) {
+      ws.activate(tab);
+      await frame();
+      if (tab.mode === 'sheet' || tab.mode === 'document') continue;
+      const box = document.querySelector('.toolbox[data-id="main"]'), body = box?.querySelector('.tb-body');
+      const cells = box?.querySelector('.tb-cells');
+      if (!cells || !box.offsetParent) { out.push({ mode: tab.mode, cols: 0 }); continue; }
+      const b = box.getBoundingClientRect();
+      out.push({ mode: tab.mode, cols: getComputedStyle(cells).gridTemplateColumns.split(' ').length, bottom: b.bottom, h: innerHeight, page: document.documentElement.scrollHeight, scrolls: body.scrollHeight > body.clientHeight });
+    }
+    ws.activate(ws.tabs.find((t) => t.mode === 'drawing'));
+    return out;
+  });
+  for (const x of columns) {
+    if (x.cols !== 2) fail(`the Drawing Tools toolbox in a ${x.mode} tab is ${x.cols} columns wide, not two`);
+    else if (x.bottom > x.h || x.page > x.h) fail(`the Drawing Tools toolbox in a ${x.mode} tab runs past the window's foot (${Math.round(x.bottom)} px of ${x.h})`);
+  }
+  if (!columns.some((x) => x.scrolls)) fail('at 1280 × 720 the Drawing Tools toolbox should scroll inside itself');
+  await page.waitForTimeout(200);
+
   step('the Drawing Tools toolbox keeps its docked width when it floats');
   const widths = await page.evaluate(async () => {
     const tb = window.__app.toolboxes;
     const w = () => document.querySelector('.toolbox[data-id="main"] .tb-cells').getBoundingClientRect().width;
     const box = () => document.querySelector('.toolbox[data-id="main"]').getBoundingClientRect().width;
+    // (its scroll bar's room, while it scrolls)
+    const bar = () => { const b = document.querySelector('.toolbox[data-id="main"] > .tb-body'); return b.offsetWidth - b.clientWidth; };
     tb.setLocked(false);
     tb.put('main', { dock: 'float', x: 300, y: 120 });
     await new Promise((ok) => requestAnimationFrame(ok));
-    const got = { cells: w(), box: box() };
+    const got = { cells: w(), box: box(), bar: bar(), bottom: document.querySelector('.toolbox[data-id="main"]').getBoundingClientRect().bottom };
     tb.reset();
     return got;
   });
-  if (widths.box > widths.cells + 20) fail(`the floating Drawing Tools toolbox is ${Math.round(widths.box)} px wide for ${Math.round(widths.cells)} px of buttons`);
+  if (widths.box > widths.cells + widths.bar + 20) fail(`the floating Drawing Tools toolbox is ${Math.round(widths.box)} px wide for ${Math.round(widths.cells)} px of buttons and a ${widths.bar} px scroll bar`);
+  if (widths.cells > 100) fail(`the floating Drawing Tools toolbox has ${Math.round(widths.cells)} px of buttons across: more than two columns`);
+  if (widths.bottom > 720) fail('the floating Drawing Tools toolbox runs past the window\'s foot');
 
   step('typing on the Canvas, the Home tab\'s Font and Paragraph groups stand in for the bar above the text');
   await page.evaluate(() => window.__app.editor.setTool('text'));
