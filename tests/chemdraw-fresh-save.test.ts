@@ -7,6 +7,7 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 import { zlibSync } from 'fflate';
 import { emfInWmf } from '../src/render/wmf-read';
+import { bondWidths, doubleBondGap } from '../src/style';
 import { cdxToCdxml, cdxmlToCdx } from '../src/io/cdx';
 import { describe, it, expect } from 'vitest';
 import { readCdxml } from '../src/io/cdxml';
@@ -282,5 +283,17 @@ describe('pictures ChemDraw packs in a CDX', () => {
     expect(emfInWmf(wmf)).toEqual(e);
     expect(shown(page(`WindowsMetafile="${hex(wmf)}"`)).src?.startsWith('data:image/x-emf')).toBe(true);
     expect(emfInWmf(new Uint8Array(40))).toBeNull();
+  });
+});
+
+describe('a bond with its own widths', () => {
+  // ChemDraw spaces a double bond's lines by the bond's own BondLength (465 double bonds measured in a real file)
+  it('spaces a double bond by its own bond length, not the line width scale', () => {
+    const { doc } = readCdxml('<?xml version="1.0" encoding="UTF-8" ?><CDXML BondLength="14.40" BondSpacing="18" LineWidth="0.60" BoldWidth="2" MarginWidth="1.60"><page id="1"><fragment id="2"><n id="3" p="0 0"/><n id="4" p="18 0"/><b id="5" B="3" E="4" Order="2" LineWidth="1" MarginWidth="2" BoldWidth="2.50" BondLength="18"/></fragment></page></CDXML>');
+    const b = [...doc.bonds.values()][0];
+    const w = bondWidths(doc.style, b);
+    expect(w.lineWidth).toBeCloseTo(1, 5);
+    expect(w.marginWidth).toBe(2);
+    expect(doubleBondGap({ ...doc.style, bondLength: w.bondLength })).toBeCloseTo(3.24, 5);
   });
 });

@@ -10,7 +10,7 @@ import { centredSpots, fullStyle, highlightPieces, highlightSizes, movePieces, t
 import { highlightFx, layerPaints, needsFx, patternMarks, regionOf, rgba, unionOf, type FxLayer, type FxPaint, type FxStep, type HighlightFx, type Region, shapeShadow } from './highlight-fx';
 import { ellipseArc, isCircleRing, ringCircle, ringsThroughBond, type RingCircle } from '../chem/aromatic';
 import { chainArc, piLooksOf } from '../chem/hapto';
-import { crossingGapsCached } from '../chem/crossing';
+import { crossingGapsCached, type FrontLine } from '../chem/crossing';
 import { FADE, tint } from '../colours';
 import { Vec, Rect, sub, add, mul, norm, perp, len, dot, exitParam, passParam, angleOf, arcCenter, fromAngle, turnedCorners, DEG } from '../geom';
 import { atomMargin, bondEndPrefs, bondWidths, docMapLook, doubleBondGap, labelBold, wedgeWidth } from '../style';
@@ -367,6 +367,22 @@ export class Renderer {
     return this.bondInfo(doc, b).side;
   }
 
+  /** The lines a bond draws, for the gap it leaves in a bond behind it. */
+  private frontLines(doc: Doc, o: Bond): FrontLine[] {
+    const ds = doc.style, w = bondWidths(ds, o);
+    const p = doc.atoms.get(o.a1)!, q = doc.atoms.get(o.a2)!;
+    const extra = o.display === 'bold' || o.display === 'hash' ? (w.boldWidth - w.lineWidth) / 2 : 0;
+    if (o.order === 2 || (o.order === 1.5 && !o.circle)) {
+      const info = this.bondInfo(doc, o);
+      if (!info.pi) {
+        const n = perp(norm(sub(q, p))), gap = doubleBondGap({ ...ds, bondLength: w.bondLength }) + extra;
+        const shifted = (by: number): FrontLine => ({ a: add(p, mul(n, by)), b: add(q, mul(n, by)), extra });
+        return info.side ? [shifted(0), shifted(info.side * gap)] : [shifted(gap / 2), shifted(-gap / 2)];
+      }
+    }
+    return [{ a: p, b: q, extra }];
+  }
+
   private bondInfo(doc: Doc, b: Bond): BondCache {
     let c = this.bondCache.get(b.id);
     if (c) return c;
@@ -375,7 +391,7 @@ export class Renderer {
     if ((b.order === 1 || b.order === 2 || (b.order === 1.5 && !b.circle)) && (b.display ?? 'solid') === 'solid') {
       const looks = piLooksOf(doc, b);
       if (looks.length) {
-        const gap = doubleBondGap(doc.style) * (b.s ?? 1);
+        const gap = doubleBondGap({ ...doc.style, bondLength: bondWidths(doc.style, b).bondLength });
         c.pi = looks.flatMap((lk) => {
           if (lk.kind === 'ring') return [{ circle: ringCircle(doc, lk.ring) }];
           const pieces = chainArc(lk.chain.map((id) => doc.atoms.get(id)!), gap);
@@ -1179,7 +1195,7 @@ export class Renderer {
       he = (wedgeWidth({ ...ds, boldWidth: w.boldWidth })) / 2;
     } else if (b.display === 'bold' && (single || (b.order === 2 && this.bondInfo(doc, b).side !== 0))) {
       hs = he = w.boldWidth / 2;
-      if (crossingGapsCached(doc, b, w.marginWidth + ds.lineWidth).length) return null;
+      if (crossingGapsCached(doc, b, w.marginWidth + w.lineWidth / 2, (o) => this.frontLines(doc, o)).length) return null;
     } else return null;
     const [s, e] = this.bondEnds(doc, p, q);
     return len(sub(e, s)) < 0.01 ? null : { s, e, hs, he };
@@ -1267,7 +1283,7 @@ export class Renderer {
     const k = b.s ?? 1;
     const ds = doc.style;
     const w = bondWidths(ds, b);
-    const st = { ...ds, lineWidth: w.lineWidth, boldWidth: w.boldWidth, hashSpacing: w.hashSpacing, bondLength: ds.bondLength * k };
+    const st = { ...ds, lineWidth: w.lineWidth, boldWidth: w.boldWidth, hashSpacing: w.hashSpacing, bondLength: w.bondLength };
     const [s, e] = this.bondEnds(doc, p, q);
     const d = sub(e, s);
     const l = len(d);
@@ -1276,7 +1292,7 @@ export class Renderer {
     const nrm = perp(dir);
     const gap = doubleBondGap(st);
     // a bond behind a bond that crosses it has a gap there
-    const gaps = crossingGapsCached(doc, b, w.marginWidth + ds.lineWidth);
+    const gaps = crossingGapsCached(doc, b, w.marginWidth + w.lineWidth / 2, (o) => this.frontLines(doc, o));
     const pq = sub(q, p), pq2 = dot(pq, pq) || 1;
     const along = (x: Vec) => dot(sub(x, p), pq) / pq2;
     // Square or part-round ends (a setting): thin lines are cut square, each free end gets its
