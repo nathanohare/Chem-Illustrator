@@ -63,3 +63,46 @@ describe('right-click menu highlight', () => {
     expect(document.activeElement).toBe(row('Copy As'));
   });
 });
+
+// The Document's and Spreadsheet's right-click menus are this menu too: their own actions, keys
+// beside them, a row of Cut/Copy/Paste/Delete, and the keys back at the caret after Escape.
+describe('right-click menu actions, rows and Escape', () => {
+  afterEach(() => closeContextMenu());
+  const tick = () => new Promise((r) => setTimeout(r, 0));
+
+  it('runs an action of its own, shows its key and keeps a disabled one from running', () => {
+    const ran: string[] = [];
+    showContextMenu(10, 10, [
+      { label: 'Clear Contents', run: () => ran.push('clear'), key: 'Delete' },
+      { label: 'Reset to Calculated', run: () => ran.push('reset'), disabled: true },
+      { label: 'Paste Special…', run: () => ran.push('special'), cmd: 'paste-special' },
+    ], { run: () => {}, key: (cmd) => (cmd === 'paste-special' ? 'Ctrl+Alt+V' : undefined) });
+    const buttons = [...document.querySelectorAll<HTMLButtonElement>('.context-menu button')];
+    expect(buttons.map((b) => b.textContent)).toEqual(['Clear ContentsDelete', 'Reset to Calculated', 'Paste Special…Ctrl+Alt+V']);
+    expect(buttons[1].disabled).toBe(true);
+    buttons[0].click();
+    expect(ran).toEqual(['clear']);
+    expect(document.querySelector('.context-menu')).toBeNull();
+  });
+
+  it('puts a row of buttons in one line, each running its command', () => {
+    const ran: string[] = [];
+    showContextMenu(10, 10, [{ row: [{ cmd: 'cut', label: 'Cut' }, { cmd: 'copy', label: 'Copy' }] }, null, { cmd: 'select-all', label: 'Select All' }], { run: (cmd) => ran.push(cmd), key: (cmd) => (cmd === 'cut' ? 'Ctrl+X' : undefined) });
+    const row = document.querySelector('.context-menu .cm-row')!;
+    const buttons = [...row.querySelectorAll<HTMLButtonElement>('button')];
+    expect(buttons.map((b) => b.textContent)).toEqual(['Cut', 'Copy']);
+    expect(buttons[0].title).toBe('Cut (Ctrl+X)');
+    expect(document.activeElement).toBe(buttons[0]);
+    buttons[1].click();
+    expect(ran).toEqual(['copy']);
+  });
+
+  it('calls back when Escape shuts it', async () => {
+    let back = 0;
+    showContextMenu(10, 10, [{ label: 'Paste', run: () => {} }], { run: () => {}, escaped: () => { back++; } });
+    await tick();
+    document.activeElement!.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true, cancelable: true }));
+    expect(document.querySelector('.context-menu')).toBeNull();
+    expect(back).toBe(1);
+  });
+});

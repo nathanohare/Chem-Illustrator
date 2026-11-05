@@ -212,9 +212,12 @@ export class Toolbar {
     });
     document.body.appendChild(f);
     const r = pal.button.getBoundingClientRect();
+    // beside the toolbox the palette is in (clear of its scroll bar), or beside the button
+    const box = pal.button.closest('.toolbox')?.getBoundingClientRect();
+    const right = box ? Math.max(r.right, box.right - 4) : r.right, leftEdge = box ? Math.min(r.left, box.left + 4) : r.left;
     const top = Math.min(r.top, window.innerHeight - f.offsetHeight - 8);
     // (to the left of a palette in a toolbox at the right)
-    const left = r.right + 6 + f.offsetWidth > window.innerWidth - 4 ? r.left - 6 - f.offsetWidth : r.right + 6;
+    const left = right + 6 + f.offsetWidth > window.innerWidth - 4 ? leftEdge - 6 - f.offsetWidth : right + 6;
     f.style.left = `${Math.max(4, left)}px`;
     f.style.top = `${Math.max(8, top)}px`;
     this.flyout = f;

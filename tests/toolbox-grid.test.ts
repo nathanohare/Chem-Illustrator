@@ -117,8 +117,8 @@ describe('toolbox grids in the settings', () => {
     const st = defaultToolboxes();
     const main = boxGrid(st, 'main', ['tool:select', 'tool:eraser', 'sep', 'tool:bond-single']);
     expect([main.cols, main.rows, main.lines]).toEqual([2, 2, [1]]);
-    const changed = withGrid(st, 'main', { cols: 3, rows: 1, cells: ['tool:select', null, 'tool:eraser'] });
-    expect(boxGrid(changed, 'main', ['tool:select']).cells).toEqual(['tool:select', null, 'tool:eraser']);
+    const changed = withGrid(st, 'main', { cols: 2, rows: 2, cells: ['tool:select', null, null, 'tool:eraser'] });
+    expect(boxGrid(changed, 'main', ['tool:select']).cells).toEqual(['tool:select', null, null, 'tool:eraser']);
     // Reset brings back the toolbox as it comes
     expect(withItemsReset(changed, 'main').grids?.main).toBeUndefined();
     // a new toolbox of your own starts as an empty 4 × 3, and its grid goes with it
@@ -146,8 +146,9 @@ describe('toolbox grids in the settings', () => {
     expect(back.flyGrids).toEqual(st.flyGrids);
     expect(overflowOf(back, 'structure')).toBe('wrap');
     expect(overflowOf(back, 'main')).toBe('scroll');
-    // unset: the drawing tools wrap as they always have, the rest scroll
-    expect(overflowOf(defaultToolboxes(), 'main')).toBe('wrap');
+    // the drawing tools always scroll (they stay two columns wide), even if set to wrap; the rest scroll unless set
+    expect(overflowOf(defaultToolboxes(), 'main')).toBe('scroll');
+    expect(overflowOf({ ...defaultToolboxes(), overflow: { main: 'wrap' } }, 'main')).toBe('scroll');
     expect(overflowOf(defaultToolboxes(), 'arrange')).toBe('scroll');
     // a grid for a toolbox that isn't there, or can't be laid out, is dropped
     expect(parseToolboxes({ grids: { nowhere: { cols: 1, rows: 1, cells: ['cmd:x'] }, templates: { cols: 1, rows: 1, cells: [] } } }).grids).toBeUndefined();
@@ -191,5 +192,26 @@ describe('one column', () => {
     const g = { cols: 2, rows: 3, cells: ['tool:a', 'tool:b', 'tool:c', null, 'tool:d', 'tool:e'], lines: [2] };
     expect(oneColumn(g)).toEqual({ cols: 1, rows: 5, cells: ['tool:a', 'tool:b', 'tool:c', 'tool:d', 'tool:e'], lines: [3] });
     expect(oneColumn({ cols: 1, rows: 2, cells: ['x', 'y'] })).toEqual({ cols: 1, rows: 2, cells: ['x', 'y'] });
+  });
+});
+
+describe('two columns at most for the drawing tools', () => {
+  it('closes a wider grid up into two columns, each group on rows of its own with its line', async () => {
+    const { narrowed } = await import('../src/ui/toolbox-grid');
+    const g = { cols: 3, rows: 3, cells: ['a', 'b', 'c', 'd', null, null, 'e', 'f', 'g'], lines: [2] };
+    expect(narrowed(g, 2)).toEqual({ cols: 2, rows: 4, cells: ['a', 'b', 'c', 'd', 'e', 'f', 'g', null], lines: [2] });
+    // already narrow enough: the same grid, gaps and all
+    const two = { cols: 2, rows: 2, cells: ['a', null, null, 'b'] };
+    expect(narrowed(two, 2)).toBe(two);
+    expect(narrowed({ cols: 4, rows: 1, cells: [null, null, null, null] }, 2)).toEqual({ cols: 2, rows: 1, cells: [null, null] });
+  });
+
+  it('shows a saved drawing tools grid wider than two columns in two, and leaves other toolboxes alone', () => {
+    const wide = { cols: 6, rows: 2, cells: ['tool:select', 'tool:eraser', 'tool:text', null, null, null, 'tool:bond-single', null, null, null, null, null], lines: [1] };
+    const st = withGrid(withGrid(defaultToolboxes(), 'main', wide), 'structure', { ...wide, cells: wide.cells.map((k) => k && k.replace('tool:', 'cmd:')) });
+    expect(boxGrid(st, 'main')).toEqual({ cols: 2, rows: 3, cells: ['tool:select', 'tool:eraser', 'tool:text', null, 'tool:bond-single', null], lines: [2] });
+    expect(boxGrid(st, 'structure').cols).toBe(6);
+    // as it comes, the drawing tools are two columns
+    expect(boxGrid(defaultToolboxes(), 'main', ['tool:a', 'tool:b', 'tool:c', 'sep', 'tool:d']).cols).toBe(2);
   });
 });

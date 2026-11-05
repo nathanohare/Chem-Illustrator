@@ -61,7 +61,7 @@ export const CANVAS_TABS: RibbonTab[] = [
     id: 'arrange', title: 'Arrange', groups: [
       { name: 'Align', items: [c('align-left', 'Align Left'), c('align-hcenter', 'Align Center'), c('align-right', 'Align Right'), c('align-top', 'Align Top'), c('align-vcenter', 'Align Middle'), c('align-bottom', 'Align Bottom')] },
       { name: 'Distribute', items: [c('distribute-h', 'Distribute Horizontally'), c('distribute-v', 'Distribute Vertically'), c('arrange-row', 'Arrange in a Row'), c('arrange-column', 'Arrange in a Column'), c('arrange-grid', 'Arrange in a Grid…')] },
-      { name: 'Turn', items: [c('flip-h', 'Flip Horizontal'), c('flip-v', 'Flip Vertical'), c('rotate-cw', 'Rotate Right 90°'), c('rotate-ccw', 'Rotate Left 90°'), c('rotate-dialog', 'Rotate…')] },
+      { name: 'Rotate', items: [c('flip-h', 'Flip Horizontal'), c('flip-v', 'Flip Vertical'), c('rotate-cw', 'Rotate Right 90°'), c('rotate-ccw', 'Rotate Left 90°'), c('rotate-dialog', 'Rotate…')] },
       { name: 'Order', items: [c('shape-front', 'Bring to Front'), c('shape-forward', 'Bring Forward'), c('shape-back', 'Send to Back'), c('shape-backward', 'Send Backward')] },
     ],
   },
