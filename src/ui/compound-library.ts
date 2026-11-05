@@ -181,7 +181,7 @@ export class CompoundLibraryWindow {
     });
     this.insertBtn = button('Insert', 'Put the compound picked into the file showing, as it was drawn (Enter)', () => this.insert(), true);
     d.append(
-      el('div', { className: 'refs-head' }, withInfo(el('h2', { textContent: 'Compound Library' }), 'Your own compounds, kept between sessions and shared by every file: each one\'s number, structure, names and notes, and the files it appears in (noted as files are saved and opened). Insert puts one into the drawing, slide, document or cell showing.'), this.search),
+      el('div', { className: 'refs-head' }, withInfo(el('h2', { textContent: 'Compound Library' }), 'Your compounds, shared across all files: number, structure, names, notes, and the files each appears in. Insert adds one to the current drawing, slide, document or cell.'), this.search),
       el('div', { className: 'refs-filter' }, el('span', { textContent: 'Show' }), this.tagSel,
         el('span', { className: 'compound-query' },
           button('Contains Drawn Structure', 'Show only the compounds that contain the structure selected in the drawing (a substructure search)', () => void this.findDrawn()),
@@ -262,7 +262,7 @@ export class CompoundLibraryWindow {
     this.queryNote.textContent = this.query ? `Containing ${this.query.smiles}: ${this.query.ids.size} found.` : '';
     const into = this.host.insertsInto();
     this.insertBtn.disabled = !into || this.selected.size !== 1;
-    this.insertBtn.title = into ? `Put the compound picked into ${into}, as it was drawn (Enter)` : 'Show a drawing, slide, document or spreadsheet to insert into';
+    this.insertBtn.title = into ? `Insert the selected compound into ${into} as drawn (Enter)` : 'Show a drawing, slide, document or spreadsheet to insert into';
     this.problem.textContent = this.lib.problem;
     this.problem.hidden = !this.lib.problem;
   }
@@ -376,7 +376,7 @@ export class CompoundLibraryWindow {
       return { ...c, cas: x.cas, notes: x.notes, synonyms: x.synonyms, modified: now };
     }) }));
     const bad = made.filter((m) => !m).length;
-    if (bad) this.host.flash(`${bad} record${bad === 1 ? '' : 's'} of ${f.name} could not be read as structures and ${bad === 1 ? 'was' : 'were'} left out.`, 7000);
+    if (bad) this.host.flash(`${bad} record${bad === 1 ? '' : 's'} of ${f.name} couldn't be read as structures and ${bad === 1 ? 'was' : 'were'} skipped.`, 7000);
   }
 
   private async exportSdf(): Promise<void> {

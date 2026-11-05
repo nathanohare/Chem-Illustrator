@@ -300,8 +300,8 @@ export async function optionsDialog(p: KeepPrefs, where: string, desktop: boolea
       { value: 'ignore', label: 'Do nothing' },
     ] },
     ...(desktop ? [
-      { name: 'lockFiles', label: 'Mark files I have open with a small hidden lock file, as Word and LibreOffice do, so others (and other copies of this app) can see', type: 'checkbox' as const, value: String(p.lockFiles) },
-      { name: 'warnOpenElsewhere', label: 'Tell me when a file I have open is also open somewhere else, or OneDrive made a conflict copy of it', type: 'checkbox' as const, value: String(p.warnOpenElsewhere) },
+      { name: 'lockFiles', label: 'Create a hidden lock file for open files, like Word, so others can see they\'re in use', type: 'checkbox' as const, value: String(p.lockFiles) },
+      { name: 'warnOpenElsewhere', label: 'Warn me when an open file is also open elsewhere, or OneDrive creates a conflict copy', type: 'checkbox' as const, value: String(p.warnOpenElsewhere) },
     ] : []),
   ], { ok: 'Save', note: `A Save always adds a version. Recovery copies and versions are kept in ${where}.` });
   // room for the longer labels (the window is in the page as soon as ask() is called)

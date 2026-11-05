@@ -108,7 +108,7 @@ export class StylesPane {
       b.className = 'sp-item';
       b.setAttribute('role', 'option');
       b.setAttribute('aria-pressed', String(on));
-      b.title = kind === 'para' ? `${name}: a paragraph style (click to give it to the paragraphs picked)` : `${name}: a character style (click to give it to the words picked)`;
+      b.title = kind === 'para' ? `${name}: paragraph style (click to apply to the selected paragraphs)` : `${name}: character style (click to apply to the selected text)`;
       const n = document.createElement('span');
       n.className = 'sp-name';
       n.textContent = name;

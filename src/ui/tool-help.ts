@@ -35,7 +35,7 @@ const BY_NAME: Record<string, ToolHelp> = {
     steps: ['Draw', 'Lift to convert'],
     keys: [],
   },
-  connector: { what: 'Drag from one shape\'s blue dot to another\'s: the connector sticks to both and follows them when they move.', steps: ['Drag from dot to dot'], keys: [] },
+  connector: { what: 'Drag from one shape\'s blue connection point to another\'s; the connector stays attached as the shapes move.', steps: ['Drag from dot to dot'], keys: [] },
   'connector-elbow': { what: 'Drag from one shape\'s blue dot to another\'s: the connector bends square and follows the shapes when they move.', steps: ['Drag from dot to dot'], keys: [] },
   chain: {
     what: 'Drag from empty space or an atom; the number shows how many bonds. Click to type how many atoms; Alt+click repeats the last number.',
@@ -43,9 +43,9 @@ const BY_NAME: Record<string, ToolHelp> = {
     keys: [['Alt', 'Repeat last length']],
   },
   text: { what: 'Click an atom to type a label (OMe, CO2Et, NHBoc…), or click empty space for a caption.', steps: ['Click an atom or empty space', 'Type; Esc to finish'], keys: [['Ctrl', 'Follow a link']] },
-  element: { what: 'Click atoms to make them the element picked in the periodic table, or empty space to add one.', steps: ['Pick an element', 'Click atoms'], keys: [] },
+  element: { what: 'Click atoms to change them to the element selected in the periodic table, or empty space to add one.', steps: ['Pick an element', 'Click atoms'], keys: [] },
   'bond-hapto': {
-    what: 'Drag from a metal into a ring (η⁵, η⁶) or onto a bond (η²), or the other way. Click inside a ring or on a bond for a new metal M there; select an allyl or diene, then click the metal. Click a hapto bond to draw it to each atom.',
+    what: 'Drag from a metal to a ring (η⁵, η⁶) or a bond (η²), or the reverse. Click a ring or bond to add a new metal; or select an allyl or diene, then click the metal. Click a hapto bond to draw it to each atom.',
     steps: ['Drag from a metal to a ring or π-bond'],
     keys: [],
   },
@@ -58,7 +58,7 @@ const BY_NAME: Record<string, ToolHelp> = {
   fragment: { what: 'Drag a line across the bonds to break (or click one bond). Each piece gets a caption with its formula and exact mass, which you can edit.', steps: ['Drag across the bonds to break'], keys: [] },
 };
 
-const CURVE_WHAT = 'Drag from where the electrons start to where they go. They start at a lone pair, bond, radical or charge and go to an atom, a bond, or the gap where a new bond forms; swing out to one side to bend that way. Or click where it starts, click points it goes through, and click where it ends. Ctrl+drag (or the pen) draws it freehand. The arrow sticks to the structure. Drag the middle dot (an S: its diamonds, or its line) to change the curve.';
+const CURVE_WHAT = 'Drag from where the electrons start (lone pair, bond, radical or charge) to where they go (atom, bond, or the gap where a bond forms); drag sideways to bend the curve. Or click the start, any points along the way, and the end. Ctrl+drag or a pen draws freehand. Drag the middle handle to reshape.';
 const GEO_HELP: ToolHelp = {
   what: 'Click on the page to put the shape down, or drag to draw it at any size (Shift keeps its shape). Double-click a shape to type in it.',
   steps: ['Click or drag', 'Double-click to type'],
@@ -100,7 +100,7 @@ export function toolHelp(name: string, t: Tool | undefined): ToolHelp {
       return { what: 'Drag a box to put brackets around it, or click a structure to bracket it.', steps: ['Click a structure, or drag a box'], keys: [] };
     case 'template':
       return {
-        what: 'Click empty space to place it (drag to turn it), a bond to fuse it on, or an atom to join it there (Alt: the other way: by a new bond, or sharing the atom).',
+        what: 'Click empty space to place it (drag to rotate), a bond to fuse it, or an atom to attach it (Alt: attach by a new bond, or spiro at the atom).',
         steps: ['Click a space, bond or atom', 'Drag to turn'],
         keys: [['Alt', 'Join the other way'], ['Tab', 'Next fit (Shift+Tab: back)']],
       };
@@ -115,9 +115,9 @@ export function toolHelp(name: string, t: Tool | undefined): ToolHelp {
     case 'perspective':
       return {
         what: t.real
-          ? 'Drag a structure to turn its real 3-D shape, built from the drawing; wedges and bold bonds say which shape is meant.'
-          : 'Drag a structure to turn it in 3-D as a flat sheet, the way it is drawn.',
-        steps: ['Drag a structure to turn it'],
+          ? 'Drag a structure to rotate its 3-D shape; wedges and bold bonds set which shape is meant.'
+          : 'Drag a structure to tilt it in 3-D as a flat sheet.',
+        steps: ['Drag a structure to rotate it'],
         keys: [['Shift', 'Snap to 15°']],
       };
     case 'pen':

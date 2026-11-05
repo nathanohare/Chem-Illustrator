@@ -30,7 +30,7 @@ export function pickSlideTemplate(m: Master, size: SlideSize, defaultId: string 
     h.textContent = 'Slide Templates';
     const note = document.createElement('p');
     note.className = 'muted';
-    note.textContent = 'A template sets the fonts, colors, background and shapes of every slide. Your text, structures, logo, footer and slide numbers stay as they are, and Slide Master changes any part of the look afterwards.';
+    note.textContent = 'A template sets fonts, colors, background and shapes for every slide. Your content, logo, footer and slide numbers stay; use Slide Master to change the look afterward.';
     foldIntoInfo(note, h);
     const tools = document.createElement('div');
     tools.className = 'st-tools';

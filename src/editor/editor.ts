@@ -990,7 +990,7 @@ export class Editor {
   setKeyHot(h: Hit): void {
     if (h && !this.hotHinted) {
       this.hotHinted = true;
-      this.say('The highlighted atom takes the next key: 1 grows a bond, 2 a C=O, 6 a ring, letters set labels. Arrow keys move the highlight; Space selects the molecule, Enter comes back.');
+      this.say('Press a key to act on the highlighted atom: 1 adds a bond, 2 a C=O, 6 a ring, letters set labels. Arrow keys move the highlight; Space selects the molecule, Enter returns.');
     }
     this.keyHot = h;
     this.keyHotHover = this.hover;
@@ -2853,7 +2853,7 @@ export class Editor {
     const doc = this.doc, m = this.measure();
     const here = tailEnd(doc, pushEndAt(doc, m, p), p);
     this.route = { from: here, at: [here.kind === 'point' ? p : endCentre(doc, here)], dirs: [null] };
-    this.onHint('Click where the arrow should go through, then click the atom or bond it points at (or double-click, or press Enter, to end it there). Drag from a point to set the way the arrow runs through it. Backspace takes back a point; Esc stops.');
+    this.onHint('Click each point the arrow passes through, then click the target atom or bond (or double-click or press Enter to end). Drag a point to set the arrow\'s direction there. Backspace removes a point; Esc cancels.');
     this.requestOverlay();
   }
 
@@ -4228,7 +4228,7 @@ export class Editor {
       if (this.doc !== doc || doc.version !== version) return;
       doc.undo();
       this.afterUndo();
-      this.onNotice('From that angle a stereocenter can\'t be drawn so it reads right, so the turn was taken back. Turn it a little less (or more).', 7000);
+      this.onNotice('A stereocenter can\'t be drawn clearly from that angle, so the rotation was undone. Try a slightly smaller or larger angle.', 7000);
     });
   }
 

@@ -106,7 +106,7 @@ export function chooseRefsToInsert(groups: RefGroup[], byDoi: () => Promise<Refe
     ok.type = 'submit';
     buttons.append(doi, manageBtn, el('span', 'spacer'), cancel, ok);
     form.append(
-      withInfo(el('h2', '', 'Insert Reference'), 'References from the open files, put here as formatted text in the style picked. Check them in the order you want them.'),
+      withInfo(el('h2', '', 'Insert Reference'), 'References from open files, inserted as formatted text in the chosen style. Check them in the order you want.'),
       list, row('Style', styleSel), row('Write each as', formSel), numRow, preview, buttons,
     );
     form.addEventListener('change', show);

@@ -356,7 +356,7 @@ export class AnimateDialog {
     let hover: { side: 'A' | 'B'; key: string } | null = null;
     const pane = this.pairPane;
     pane.replaceChildren();
-    const intro = el('p', 'muted', 'Click an atom on the left, then the atom it becomes on the right. Click a paired atom on the left again to unpair it. Your pairs are kept; the rest is matched automatically unless you check the box. Red bonds break and green bonds form. Numbers are blue for pairs you chose, gray for pairs matched automatically and orange for atoms with no partner.');
+    const intro = el('p', 'muted', 'Click an atom on the left, then its match on the right; click a paired atom again to unpair it. Unpaired atoms are matched automatically unless you check the box. Red bonds break, green bonds form. Blue: your pairs; gray: automatic; orange: unmatched.');
     const row = el('div', 'animate-pair-canvases');
     const cA = el('canvas', 'animate-pair-canvas');
     const cB = el('canvas', 'animate-pair-canvas');
@@ -689,7 +689,7 @@ export class AnimateDialog {
       if (v) {
         this.hooks.putOnSlide(v);
         this.close();
-        this.hooks.flash('The clip is on the slide. It plays by itself in the slide show, and in PowerPoint once saved as .pptx.');
+        this.hooks.flash('The clip is on the slide. It plays automatically in the slide show, and in PowerPoint once saved as .pptx.');
         return;
       }
       // no video encoder here: an animated GIF plays in PowerPoint too
@@ -699,7 +699,7 @@ export class AnimateDialog {
       const f = this.frames();
       this.clip = keep;
       if (!f) return;
-      this.say('This computer can\'t make videos, so the clip goes on the slide as an animated GIF…');
+      this.say('This computer can\'t create videos, so the clip was added as an animated GIF…');
       const gif = await encodeGif(f.n, async (i) => { if (i % 8 === 0) await tick(); return f.at(i); }, gifDelayMs(this.timing.fps));
       const first = f.at(0).canvas;
       const still = await new Promise<Blob | null>((r) => first.toBlob(r, 'image/png'));

@@ -204,7 +204,7 @@ export class DocIndexUI {
       { name: 'italic', label: 'Page number in italic', type: 'checkbox', value: 'false' },
       { name: 'all', label: 'Mark All: every paragraph where the main entry\'s text comes up', type: 'checkbox', value: 'false' },
       ...(here.length ? [{ name: 'remove', label: 'Take this paragraph\'s entries off instead', type: 'checkbox' as const, value: 'false', help: `Marked here: ${here.map((x) => x.sub ? `${x.main}: ${x.sub}` : x.main).join('; ')}` }] : []),
-    ], { ok: 'Mark', note: 'The entry is kept on its paragraph, so it moves with the text; References > Insert Index lists the entries A to Z with their pages, and updates by itself.' });
+    ], { ok: 'Mark', note: 'The entry stays with its paragraph. References > Insert Index lists entries A to Z with page numbers and updates automatically.' });
     this.host.focus();
     if (!got || this.host.file() !== f) return;
     if (got.remove === 'true') {
@@ -255,7 +255,7 @@ export class DocIndexUI {
       { name: 'cols', label: 'Columns', value: String(now.cols ?? 2), options: ['1', '2', '3', '4'].map((v) => ({ value: v, label: v })) },
       { name: 'right', label: 'Right align page numbers (after dots)', type: 'checkbox', value: String(!!now.right) },
       { name: 'letters', label: 'A letter over each letter\'s entries', type: 'checkbox', value: String(!!now.letters) },
-    ], { ok, note: 'It lists the entries marked with References > Mark Entry, A to Z, and updates by itself as entries are marked or move to other pages. In Word, right-click it and choose Update Field after editing there.' });
+    ], { ok, note: 'Lists entries marked with References > Mark Entry, A to Z, and updates automatically. In Word, right-click ▸ Update Field after editing there.' });
     if (!got) return null;
     const cols = Math.max(1, Math.min(4, Number(got.cols) || 1));
     return { kind: 'index', ...(cols > 1 ? { cols } : {}), ...(got.right === 'true' ? { right: true } : {}), ...(got.letters === 'true' ? { letters: true } : {}) };
@@ -365,7 +365,7 @@ export class DocIndexUI {
     const got = await ask('Table of Authorities', [
       { name: 'cat', label: 'Category', value: String(now.cat), options: [{ value: '0', label: 'All' }, ...TOA_CATEGORIES.map((c, i) => ({ value: String(i + 1), label: c }))] },
       { name: 'passim', label: 'Use passim (for citations on five pages or more)', type: 'checkbox', value: String(!!now.passim) },
-    ], { ok, note: 'It lists the citations marked with References > Mark Citation, each category under its heading, and updates by itself. In Word, right-click it and choose Update Field after editing there.' });
+    ], { ok, note: 'Lists citations marked with References > Mark Citation by category, and updates automatically. In Word, right-click ▸ Update Field after editing there.' });
     if (!got) return null;
     return { kind: 'toa', cat: Math.max(0, Number(got.cat) || 0), ...(got.passim === 'true' ? { passim: true } : {}) };
   }

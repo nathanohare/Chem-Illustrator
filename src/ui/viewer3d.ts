@@ -45,7 +45,7 @@ const TIER_NAMES: Record<Tier, string> = { quick: 'Quick', search: 'Full Search'
 const TIER_TIPS: Record<Tier, string> = {
   quick: 'About a dozen likely shapes, each relaxed with the MMFF94s+ force field. Takes seconds.',
   search: 'Hundreds of starting shapes, each relaxed with MMFF94s+, duplicates removed. Finds shapes Quick misses; under a minute for most molecules.',
-  xtb: 'The lowest few re-optimized with GFN2-xTB, a fast quantum-chemical method: more trustworthy energies than a force field. Minutes; desktop app, with xtb installed.',
+  xtb: 'Re-optimizes the lowest conformers with GFN2-xTB, a fast quantum-chemical method, for more reliable energies than a force field. Takes minutes; desktop app with xtb installed.',
 };
 
 /** The model's background: light grey, so white hydrogens stand out. */
@@ -206,12 +206,12 @@ export class Viewer3d {
     const place = document.createElement('button');
     place.type = 'button';
     place.textContent = 'Place on Page';
-    place.title = 'Turn the drawn structure to match this view (an undoable step); wedges and crossings follow the depth. If atoms would land on top of each other, the model is turned the least it takes to keep them apart.';
+    place.title = 'Rotate the drawn structure to match this view (undoable); wedges and crossings follow depth. Overlapping atoms are separated with the smallest extra rotation.';
     place.addEventListener('click', () => this.place());
     const best = document.createElement('button');
     best.type = 'button';
     best.textContent = 'Best View';
-    best.title = 'Turn the model to the view that draws most cleanly: no atoms on top of each other, fewest crossing bonds';
+    best.title = 'Turn the model to the view that draws most cleanly (no atoms on top of each other, fewest crossing bonds)';
     best.addEventListener('click', () => {
       if (!this.model) return;
       this.rot = cleanestView(this.base(), this.skeleton(), this.drawn);
@@ -721,7 +721,7 @@ export class Viewer3d {
     if (!t || !this.model) return;
     const got = await ask('Full Search', [
       { name: 'starts', label: 'Starting conformers', value: String(DEFAULT_SEARCH.starts), type: 'number', help: 'More finds more conformers but takes longer (each is relaxed with MMFF94s+).' },
-      { name: 'window', label: 'Energy window', value: String(DEFAULT_SEARCH.window), type: 'number', unit: 'kcal/mol', help: 'Conformers higher than this above the lowest are left out.' },
+      { name: 'window', label: 'Energy window', value: String(DEFAULT_SEARCH.window), type: 'number', unit: 'kcal/mol', help: 'Conformers more than this above the lowest are discarded.' },
       { name: 'rmsd', label: 'Same shape within', value: String(DEFAULT_SEARCH.rmsd), type: 'number', unit: 'Å RMSD', help: 'Heavy atoms, after fitting one onto the other.' },
     ], { ok: 'Search' });
     if (!got) return;

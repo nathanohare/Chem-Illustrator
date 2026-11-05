@@ -375,7 +375,7 @@ export class ToolboxEditor {
         b.className = 'tbe-rule' + (lines.has(r) ? ' on' : '');
         b.disabled = r === 0;
         if (r) {
-          b.title = lines.has(r) ? 'Take away the line above this row' : 'Put a thin line above this row, to set a group apart';
+          b.title = lines.has(r) ? 'Remove the line above this row' : 'Put a thin line above this row, to set a group apart';
           b.setAttribute('aria-label', b.title);
           b.setAttribute('aria-pressed', String(lines.has(r)));
           b.addEventListener('click', () => this.setGrid(withLine(this.grid(), r, !lines.has(r))));
@@ -401,7 +401,7 @@ export class ToolboxEditor {
     } else {
       const key = this.keyOf(k);
       const it = this.hooks.describe(key);
-      cell.title = `${it.label}. Drag to another cell (two swap), or out to take it away${key.startsWith('pal:') ? '; click to lay out its tools' : ''}. Ctrl+arrow keys move it, Delete takes it out.`;
+      cell.title = `${it.label}. Drag to another cell to swap, or out to remove${key.startsWith('pal:') ? '; click to lay out its tools' : ''}. Ctrl+arrow keys move it; Delete removes it.`;
       cell.setAttribute('aria-label', `${it.label}, row ${r}, column ${c}`);
       const t = document.createElement('div');
       t.className = 'tbe-tile' + (key.startsWith('pal:') ? ' folder' : '');

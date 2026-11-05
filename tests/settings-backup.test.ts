@@ -38,7 +38,7 @@ describe('settings that are damaged are not lost', () => {
     const notes: string[] = [];
     const got = await loadSettings((m) => notes.push(m), api);
     expect(got.nicknames).toEqual({});
-    expect(notes[0]).toMatch(/no good copy/);
+    expect(notes[0]).toMatch(/no backup was found/);
   });
 
   it('a first start (no file) is quiet', async () => {
