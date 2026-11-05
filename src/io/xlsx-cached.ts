@@ -1,6 +1,7 @@
 // The values Excel saved for formulas this program can't work out (a function it lacks, a 3D or
 // table reference): each is kept from the file read, and written back as its formula's value
-// while the formula and the cells it reads are as they were. Excel works every formula out
+// while the formula and the cells it reads are as they were (and so are those of the other cells
+// a legacy array formula fills). Excel works every formula out
 // again on opening, but previews, phone viewers and scripts show the saved value (ECMA-376
 // part 1, 18.3.1.96: a cell's v is its last calculated value), and would otherwise see this
 // program's #NAME? where Excel had a number.
@@ -20,6 +21,8 @@ interface Kept {
   value: Value;
   /** What the cells the formula reads held when the file was read (null: its references can't be read here). */
   sig: number | null;
+  /** A legacy array formula's: the values of the other cells of its block, by their place from its cell. */
+  block?: { dr: number; dc: number; value: Value }[];
 }
 
 /** Kept values by the cell they belong to: an edited cell is a new one, and has none. */
@@ -43,6 +46,31 @@ function inputsSig(book: Workbook): number {
     for (const [k, c] of s.cells) h = (h + hash(`${i}|${k}|${c.input ?? ''}|${c.structure?.id ?? ''}`)) >>> 0;
   });
   return h;
+}
+
+const valueOf = (fv: FileValue): Value => (fv.error ? new CellError(String(fv.v)) : fv.v);
+
+/** Whether the file's value is other than the error worked out here. */
+const differs = (v: Value, now: Value | undefined): boolean => isError(now) && !(isError(v) && v.code === now.code);
+
+/** The other cells of a legacy array formula's block whose values in the file differ from the errors worked out here. */
+function blockValues(s: Sheet, k: number, size: { rows: number; cols: number }, list: Map<number, FileValue>): Kept['block'] {
+  const r0 = rowOf(k), c0 = colOf(k);
+  const out: NonNullable<Kept['block']> = [];
+  const take = (x: number, fv: FileValue) => {
+    const dr = rowOf(x) - r0, dc = colOf(x) - c0;
+    if (x === k || dr < 0 || dc < 0 || dr >= size.rows || dc >= size.cols) return;
+    const value = valueOf(fv);
+    if (differs(value, s.values.get(x))) out.push({ dr, dc, value });
+  };
+  if (size.rows * size.cols <= list.size) {
+    for (let dr = 0; dr < size.rows; dr++) for (let dc = 0; dc < size.cols; dc++) {
+      const x = keyOf(r0 + dr, c0 + dc);
+      const fv = list.get(x);
+      if (fv) take(x, fv);
+    }
+  } else for (const [x, fv] of list) take(x, fv);
+  return out.length ? out : undefined;
 }
 
 /** The references a formula reads, with those of the names it uses (null when it can't be read here). */
@@ -97,7 +125,8 @@ class Reader {
 
 /**
  * After a file is read and worked out: keep the file's value for each formula that gives an
- * error here but had another value in the file. `values` are the formula cells' values in the file.
+ * error here but had another value in the file. `values` are the formula cells' values in the
+ * file, with those of the other cells legacy array formulas fill.
  */
 export function keepFileValues(book: Workbook, values: Map<Sheet, Map<number, FileValue>>): void {
   const reader = new Reader(book);
@@ -107,11 +136,12 @@ export function keepFileValues(book: Workbook, values: Map<Sheet, Map<number, Fi
       const cell = s.cells.get(k);
       const now = s.values.get(k);
       if (!cell?.input?.startsWith('=') || !isError(now)) continue;
-      const value: Value = fv.error ? new CellError(String(fv.v)) : fv.v;
-      if (isError(value) && value.code === now.code) continue;
+      const value = valueOf(fv);
+      const block = cell.array && cell.array.rows * cell.array.cols > 1 ? blockValues(s, k, cell.array, list) : undefined;
+      if (!differs(value, now) && !block) continue;
       const refs = refsOf(book, cell.input);
       if (!refs) unreadable = true;
-      kept.set(cell, { value, sig: refs ? reader.sig(s, refs) : null });
+      kept.set(cell, { value, sig: refs ? reader.sig(s, refs) : null, ...(block ? { block } : {}) });
     }
   }
   if (unreadable) bookSigs.set(book, inputsSig(book));
@@ -163,10 +193,30 @@ export function fileValues(book: Workbook): (s: Sheet, k: number) => Value | und
     done.set(cell, ok);
     return ok;
   };
+  // the cells of legacy array formulas' blocks with kept values, by sheet: their formula's cell, and the value
+  let members: Map<Sheet, Map<number, [number, Value]>> | null = null;
+  const memberOf = (s: Sheet, k: number) => {
+    if (!members) {
+      members = new Map();
+      for (const sh of book.sheets) {
+        const m = new Map<number, [number, Value]>();
+        for (const [at, c] of sh.cells) {
+          const block = kept.get(c)?.block;
+          if (!block || !c.array) continue;
+          for (const b of block) if (b.dr < c.array.rows && b.dc < c.array.cols) m.set(keyOf(rowOf(at) + b.dr, colOf(at) + b.dc), [at, b.value]);
+        }
+        if (m.size) members.set(sh, m);
+      }
+    }
+    return members.get(s)?.get(k);
+  };
   return (s, k) => {
+    if (!isError(s.values.get(k))) return undefined;
     const cell = s.cells.get(k);
     const entry = cell ? kept.get(cell) : undefined;
-    if (!entry || !isError(s.values.get(k))) return undefined;
-    return valid(s, k) ? entry.value : undefined;
+    if (entry) return valid(s, k) ? entry.value : undefined;
+    // a cell its array formula fills (while nothing has been typed there)
+    const m = cell?.input ? undefined : memberOf(s, k);
+    return m && isError(s.values.get(m[0])) && valid(s, m[0]) ? m[1] : undefined;
   };
 }

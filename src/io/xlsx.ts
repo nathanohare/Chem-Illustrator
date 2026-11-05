@@ -1442,7 +1442,12 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
               }
             }
           } else if (arrays.some((a) => inRange(a.R, r, col) && !(a.r === r && a.c === col))) {
-            // spilled there: the formula fills it again
+            // spilled there: the formula fills it again (the file's value is kept for one this program can't work out)
+            if (v !== null && value !== null) {
+              let list = formulaValues.get(s);
+              if (!list) formulaValues.set(s, (list = new Map()));
+              list.set(keyOf(r, col), { v: value, ...(t === 'e' ? { error: true } : {}) });
+            }
             if (style) s.setCell(r, col, { style });
             continue;
           }

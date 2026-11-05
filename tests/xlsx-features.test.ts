@@ -86,6 +86,22 @@ describe('values of formulas this program can\'t work out (X17)', () => {
     xml = part(await writeXlsx(book, pictures), 'xl/worksheets/sheet1.xml');
     expect(cellXml(xml, 'D2')).toContain('<v>#NAME?</v>');
   });
+
+  it('keeps the values of every cell a legacy array formula fills', async () => {
+    const bytes = excelBook([['Data', '<sheetData><row r="1"><c r="A1"><v>2</v></c><c r="B1"><f t="array" ref="B1:B3">CUBEVALUE("Sales",A1)</f><v>42</v></c></row>' +
+      '<row r="2"><c r="B2"><v>43</v></c></row><row r="3"><c r="B3" t="e"><v>#N/A</v></c></row></sheetData>']]);
+    const { book } = await readXlsx(bytes);
+    expect(book.sheet.value(1, 1)).toMatchObject({ code: '#NAME?' });
+    let xml = part(await writeXlsx(book, pictures), 'xl/worksheets/sheet1.xml');
+    expect(cellXml(xml, 'B1')).toBe('<c r="B1"><f t="array" ref="B1:B3">CUBEVALUE(&quot;Sales&quot;,A1)</f><v>42</v></c>');
+    expect(cellXml(xml, 'B2')).toBe('<c r="B2"><v>43</v></c>');
+    expect(cellXml(xml, 'B3')).toBe('<c r="B3" t="e"><v>#N/A</v></c>');
+    // what it reads changed: all of them are out of date
+    book.edit('type', () => book.sheet.setInput(0, 0, '3'));
+    book.recalc();
+    xml = part(await writeXlsx(book, pictures), 'xl/worksheets/sheet1.xml');
+    expect(cellXml(xml, 'B2')).toBe('<c r="B2" t="e"><v>#NAME?</v></c>');
+  });
 });
 
 describe('protection (X10)', () => {
