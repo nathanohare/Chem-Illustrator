@@ -90,6 +90,10 @@ describe('text effects in Word files', () => {
     expect(body).toContain('<w14:alpha w14:val="30000"/>');
     expect(body).toMatch(/<w14:textFill [^>]*><w14:noFill\/>/);
   });
+  it('marks them ignorable, as Word does, so a program that doesn\'t know them skips them', async () => {
+    const body = strFromU8(unzipSync(await writeDocx(sample(), deps))['word/document.xml']);
+    expect(body).toMatch(/^[^]*?<w:document [^>]*xmlns:w14="http:\/\/schemas\.microsoft\.com\/office\/word\/2010\/wordml"[^>]*mc:Ignorable="w14 w15"/);
+  });
   it('reads them back', async () => {
     const { doc: t } = await readDocx(await writeDocx(sample(), deps));
     const fx = t.runs.find((r) => r.text === 'effects');

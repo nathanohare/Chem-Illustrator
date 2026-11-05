@@ -92,6 +92,9 @@ const SYMBOL_BULLETS: Record<string, string> = { '\uf0b7': '•', '\uf0a7': '■
 /** VML's named colours a watermark may use. */
 const VML_COLOURS: Record<string, string> = { silver: '#c0c0c0', gray: '#808080', grey: '#808080', black: '#000000', white: '#ffffff', red: '#ff0000', blue: '#0000ff', green: '#008000', yellow: '#ffff00', navy: '#000080', maroon: '#800000', teal: '#008080', purple: '#800080', olive: '#808000', lime: '#00ff00', aqua: '#00ffff', fuchsia: '#ff00ff' };
 const JUSTIFY: Record<string, Justify> = { left: 'left', start: 'left', center: 'center', right: 'right', end: 'right', both: 'justify', distribute: 'justify' };
+/** VML (Word 2003's drawings, and the fallback Word writes for its newer shapes): the elements that draw something. */
+const VML_NS = 'urn:schemas-microsoft-com:vml';
+const VML_SHAPES = new Set(['shape', 'rect', 'roundrect', 'oval', 'line', 'polyline', 'arc', 'curve', 'image']);
 const EXT_MIME: Record<string, string> = { wmf: 'image/x-wmf', emf: 'image/x-emf', tif: 'image/tiff', tiff: 'image/tiff' };
 
 const WARN = {
@@ -153,7 +156,7 @@ interface WStyle { id: string; type: string; name: string; basedOn?: string; nex
 interface Level { fmt: string; text: string; p: PProps }
 interface Piece { runs: TextRun[]; pageBreak: boolean; soft: boolean; colBreak?: boolean; /** Index entries and marked citations in it (XE and TA fields). */ xe?: IndexMark[]; ta?: AuthorityMark[] }
 interface Ctx { base: RProps; pieces: Piece[]; cell: boolean }
-interface Field { instr: string; phase: 'instr' | 'result'; swallow: boolean; /** The field's own data (w:fldData, base64): EndNote's citations. */ data?: string; text: string; props: RProps; done: boolean; ref?: { id: number; mark: string; text: string; above?: boolean; page?: boolean }; toc?: boolean; /** A form field's settings (w:ffData), and the form field made of it. */ ff?: Element; form?: number; /** A HYPERLINK field: the link open before it, put back at its end. */ before?: { link: string | undefined } }
+interface Field { instr: string; phase: 'instr' | 'result'; swallow: boolean; /** The field's own data (w:fldData, base64): EndNote's citations. */ data?: string; text: string; props: RProps; /** How its result's first text looks, which is what Word shows (EndNote sets superscript only there). */ shown?: RProps; done: boolean; ref?: { id: number; mark: string; text: string; above?: boolean; page?: boolean }; toc?: boolean; /** A form field's settings (w:ffData), and the form field made of it. */ ff?: Element; form?: number; /** A HYPERLINK field: the link open before it, put back at its end. */ before?: { link: string | undefined } }
 interface OutPara { ps: ParaStyle; runs: TextRun[]; mark: rt.RunStyle; style: string; contextual: boolean; table?: boolean; bib?: string; markRev?: string }
 
 /** Open a Word file. Throws only when the file is not a Word file at all. */
@@ -905,7 +908,8 @@ class DocxReader {
   private alternate(el: Element): Element | null {
     // Word 2010's text boxes (wps) are read from the choice itself; their fallback is an older shape
     const choice = kid(el, 'Choice');
-    if (choice && /(^|\s)wps(\s|$)/.test(choice.getAttribute('Requires') ?? '') && choice.getElementsByTagNameNS('*', 'txbx').length) return choice;
+    // (so are its shapes without text: their fallback is a VML rect, line or oval, never read)
+    if (choice && /(^|\s)wps(\s|$)/.test(choice.getAttribute('Requires') ?? '') && choice.getElementsByTagNameNS('*', 'wsp').length) return choice;
     // one of our diagrams as a group of shapes (Word puts an older shape in place of our picture when it saves)
     if (choice && /(^|\s)wpg(\s|$)/.test(choice.getAttribute('Requires') ?? '') && Array.from(choice.getElementsByTagNameNS('*', 'docPr')).some((d) => new RegExp(`^${DRAWING_NAME} \\d+$`).test(this.model?.floats?.[Number(d.getAttribute('id'))]?.was ?? d.getAttribute('name') ?? ''))) return choice;
     // Word 2016's newer charts (histograms, box charts): their fallback is only a picture
@@ -957,6 +961,7 @@ class DocxReader {
     const shown = pr?.getAttribute('name');
     if (kept?.was !== undefined && shown && shown !== kept.was) fl.name = shown;
     else if (kept?.name) fl.name = kept.name;
+    else if (!kept && shown && ownName(pr, anchor)) fl.name = shown;
     // which is drawn over which: worked out once every figure is read
     const rh = Number(anchor.getAttribute('relativeHeight'));
     if (Number.isFinite(rh)) this.stack.push({ fl, rh });
@@ -1398,6 +1403,7 @@ class DocxReader {
       const f = this.fields[this.fields.length - 1];
       if (!f) return;
       f.phase = 'result';
+      f.shown = this.resultLook(c, ctx);
       this.startField(f, ctx);
     } else if (type === 'end') {
       const f = this.fields.pop();
@@ -1410,6 +1416,18 @@ class DocxReader {
       if (f.form !== undefined) this.formEnded(f);
       if (f.before) this.link = f.before.link;
     }
+  }
+
+  /** How a field's result looks: its first run of text after the separator, in the same paragraph. */
+  private resultLook(sep: Element, ctx: Ctx): RProps | undefined {
+    const own = sep.parentElement;
+    for (let el: Element | null = own; el; el = el.nextElementSibling) {
+      if (el.localName !== 'r') continue;
+      const ks = kids(el);
+      if (el !== own && ks.some((k) => k.localName === 'fldChar')) return undefined;
+      if (ks.some((k) => k.localName === 't')) return merge<RProps>(ctx.base, this.readRPr(kid(el, 'rPr')));
+    }
+    return undefined;
   }
 
   private simpleField(el: Element, ctx: Ctx): void {
@@ -1498,7 +1516,7 @@ class DocxReader {
     // a citation from Zotero, Mendeley or EndNote: its items become the document's references
     const managed = /^ADDIN\s/i.test(ins) ? readCiteField(ins, f.data) : null;
     if (managed && !ctx.cell) {
-      if (this.managedCite(managed, ctx, f.props)) f.swallow = true;
+      if (this.managedCite(managed, ctx, f.shown ?? f.props)) f.swallow = true;
       return;
     }
     // a reference manager's bibliography: ours, worked out here, in its place
@@ -1683,7 +1701,7 @@ class DocxReader {
     const shown = { w: fromEmu(ext?.getAttribute('cx')), h: fromEmu(ext?.getAttribute('cy')) };
     // a figure named in the Selection Pane: which of ours it is goes by the name it would have had
     const pr = kid(box, 'docPr');
-    const name = this.model?.floats?.[Number(pr?.getAttribute('id'))]?.was ?? pr?.getAttribute('name') ?? '';
+    const name = this.model?.floats?.[Number(pr?.getAttribute('id'))]?.was ?? ownName(pr, box) ?? pr?.getAttribute('name') ?? '';
     // alt text: a structure's own, not the description by SMILES written when it has none
     const descr = kid(box, 'docPr')?.getAttribute('descr')?.trim() ?? '';
     const alt = descr && !/^Chemical structure( \(SMILES\): | or scheme$)/.test(descr) ? { alt: descr } : {};
@@ -1825,10 +1843,13 @@ class DocxReader {
       embed = ole && img ? this.embedded(ole, prog) : null;
       if (ole && !embed) this.warn('ole');
     }
+    // (VML's other shapes, and a group's pictures after the first, aren't read: say so)
+    const drawn = Array.from(el.getElementsByTagNameNS(VML_NS, '*')).filter((k) => VML_SHAPES.has(k.localName));
     if (!img) {
-      if (shape || Array.from(el.getElementsByTagNameNS('*', 'textbox')).length) this.warn('shapes');
+      if (drawn.length || Array.from(el.getElementsByTagNameNS('*', 'textbox')).length) this.warn('shapes');
       return;
     }
+    if (drawn.some((k) => k.localName !== 'shape') || el.getElementsByTagNameNS(VML_NS, 'imagedata').length > 1) this.warn('shapes');
     this.picture(this.relTarget(rAttr(img, 'id')), shown, r, ctx, null, null, embed ? { embed } : {});
   }
 
@@ -2350,6 +2371,7 @@ class DocxReader {
     let rich = false;
     let page: { zone: number; prefix: string } | null = null;
     let after = '';
+    let lines = 0;
     for (const p of Array.from(root.getElementsByTagNameNS(this.W, 'p'))) {
       const { p: props } = this.paraProps(kid(p, 'pPr'));
       let zone = props.align === 'center' ? 1 : props.align === 'right' ? 2 : 0;
@@ -2407,9 +2429,11 @@ class DocxReader {
         }
       };
       visit(p);
+      if (texts.some((t) => t.trim())) lines++;
       texts.forEach((t, i) => { const s = t.trim(); if (s) zones[i] = zones[i] ? `${zones[i]} ${s}` : s; });
     }
-    if (root.getElementsByTagNameNS(this.W, 'tbl').length) rich = true;
+    // (text on more than one line is kept as it is, not run together on one)
+    if (lines > 1 || root.getElementsByTagNameNS(this.W, 'tbl').length) rich = true;
     if (after.trim() && !rich) this.warn('pageText');
     return { zones, page, rich };
   }
@@ -2641,4 +2665,17 @@ function usedControls(runs: TextRun[], paras: ParaStyle[], all: Record<string, C
   const controls: Record<string, ContentControl> = {};
   for (const id of used) if (all[id]) controls[id] = all[id];
   return { controls };
+}
+
+/**
+ * One of our drawings named in the Selection Pane, whose wp:docPr id no longer names it in our
+ * part (Word gave it a new id: copied, or numbered afresh): its picture's own name inside
+ * (pic:cNvPr, which Word keeps as written while wp:docPr carries the name shown) says which of
+ * ours it is. Null when wp:docPr's name says so itself, or the picture isn't named as ours.
+ */
+function ownName(pr: Element | null, box: Element): string | null {
+  const ours = new RegExp(`^${DRAWING_NAME} \\d+$`);
+  if (ours.test(pr?.getAttribute('name') ?? '')) return null;
+  const inner = kid(box, 'graphic', 'graphicData', 'pic', 'nvPicPr', 'cNvPr')?.getAttribute('name') ?? '';
+  return ours.test(inner) ? inner : null;
 }

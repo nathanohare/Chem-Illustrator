@@ -3,7 +3,7 @@
 // axes and legend, and reading charts made in Excel back in. Each series keeps its cell
 // references and a copy of its numbers (for programs that don't work them out).
 
-import { xml, hex6, kid, kids, type Package } from './ooxml';
+import { xml, xmlAttr, hex6, kid, kids, type Package } from './ooxml';
 import type { Chart, ChartAxis, ChartKind, Series, SeriesData, SeriesFit, ErrorBars, MarkerShape, Bins, BoxOptions } from '../sheet/chart';
 import { seenChartId, isChartEx, isLevelled, comboAs, onSecondAxis } from '../sheet/chart';
 import type { FitKind } from '../sheet/fit';
@@ -394,7 +394,7 @@ export function readChartExXml(doc: Document, at: Chart['at'], w: number, h: num
 export function chartAnchorXml(c: Chart, to: { col: number; colOff: number; row: number; rowOff: number }, n: number, rid: string): string {
   const PX = 9525;
   const ex = isChartEx(c.kind);
-  const descr = c.alt?.trim() ? ` descr="${xml(c.alt.trim())}"` : '';
+  const descr = c.alt?.trim() ? ` descr="${xmlAttr(c.alt.trim())}"` : '';
   const frame = `<xdr:graphicFrame macro=""><xdr:nvGraphicFramePr><xdr:cNvPr id="${n}" name="Chart ${c.id}"${descr}/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr>` +
     `<xdr:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></xdr:xfrm>` +
     (ex ? `<a:graphic><a:graphicData uri="${CX_NS}"><cx:chart xmlns:cx="${CX_NS}" r:id="${rid}"/></a:graphicData></a:graphic></xdr:graphicFrame>`

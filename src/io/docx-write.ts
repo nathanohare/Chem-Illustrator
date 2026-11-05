@@ -79,6 +79,10 @@ export interface DocxDeps {
   pages?(t: DocText): string[] | undefined;
 }
 
+/** The namespaces of a part of the text (body, header, footer, notes). Word 2010's text effects (w14)
+ * and Word 2013's content control settings (w15) are marked ignorable, as Word marks them, so a
+ * program that doesn't know them (Word 2007, others) skips them rather than refusing the file. */
+const PART_NS = `xmlns:w="${W_NS}" xmlns:r="${NS.r}" xmlns:wp="${WP_NS}" xmlns:a="${NS.a}" xmlns:pic="${PIC_NS}" xmlns:wps="${WPS_NS}" xmlns:wpg="${WPG_NS}" xmlns:mc="${MC_NS}" xmlns:m="${M_NS}" xmlns:w14="${W14_NS}" xmlns:w15="${W15_NS}" mc:Ignorable="w14 w15"`;
 const HEAD = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?>';
 const SVG_EXT = '{96DAC541-7B7A-43D3-8B79-37D633B846F1}';
 const NS_SVG = 'http://schemas.microsoft.com/office/drawing/2016/SVG/main';
@@ -214,7 +218,7 @@ class DocxWriter {
     const sect = await this.section(main, secs[secs.length - 1]);
     // Design > Page Color: Word's background (shown once settings say so)
     const bg = this.t.pageColor ? `<w:background w:color="${hex6(this.t.pageColor)}"/>` : '';
-    pkg.add(main, `${HEAD}<w:document xmlns:w="${W_NS}" xmlns:r="${NS.r}" xmlns:wp="${WP_NS}" xmlns:a="${NS.a}" xmlns:pic="${PIC_NS}" xmlns:wps="${WPS_NS}" xmlns:wpg="${WPG_NS}" xmlns:mc="${MC_NS}" xmlns:m="${M_NS}">${bg}<w:body>${body}${sect}</w:body></w:document>`, DOCX_CT.document);
+    pkg.add(main, `${HEAD}<w:document ${PART_NS}>${bg}<w:body>${body}${sect}</w:body></w:document>`, DOCX_CT.document);
     pkg.relate(main, DOCX_REL.styles, 'styles.xml');
     pkg.add('word/styles.xml', this.styles(), DOCX_CT.styles);
     // Design's theme as Word's own, so Word's Design tab shows it and new text and shapes take its fonts and colours
@@ -740,7 +744,7 @@ class DocxWriter {
       }
       const name = `${tag}s.xml`;
       this.pkg.relate(main, end ? DOCX_REL.endnotes : DOCX_REL.footnotes, name);
-      this.pkg.add(`word/${name}`, `${HEAD}<w:${tag}s xmlns:w="${W_NS}" xmlns:r="${NS.r}">${out.join('')}</w:${tag}s>`, end ? DOCX_CT.endnotes : DOCX_CT.footnotes);
+      this.pkg.add(`word/${name}`, `${HEAD}<w:${tag}s ${PART_NS}>${out.join('')}</w:${tag}s>`, end ? DOCX_CT.endnotes : DOCX_CT.footnotes);
       settings += `<w:${tag}Pr><w:${tag} w:id="-1"/><w:${tag} w:id="0"/></w:${tag}Pr>`;
     }
     return settings;
@@ -879,7 +883,7 @@ class DocxWriter {
     const uri = ex ? CX_NS : C_NS;
     const tag = ex ? 'cx' : 'c';
     const chart = '<w:drawing>' + this.placed(o, emu(size.w), emu(size.h),
-      `<wp:docPr id="${n}" name="${CHART_NAME} ${id}"${o.alt?.trim() ? ` descr="${xml(o.alt.trim())}"` : ''}/><wp:cNvGraphicFramePr/>` +
+      `<wp:docPr id="${n}" name="${CHART_NAME} ${id}"${o.alt?.trim() ? ` descr="${xmlAttr(o.alt.trim())}"` : ''}/><wp:cNvGraphicFramePr/>` +
       `<a:graphic><a:graphicData uri="${uri}"><${tag}:chart xmlns:${tag}="${uri}" r:id="${rid}"/></a:graphicData></a:graphic>`) + '</w:drawing>';
     const r = rPr ? `<w:rPr>${rPr}</w:rPr>` : '';
     if (!ex) return `<w:r>${r}${chart}</w:r>`;
@@ -1004,7 +1008,7 @@ class DocxWriter {
     const srcRect = crop && (crop.l || crop.t || crop.r || crop.b)
       ? `<a:srcRect l="${Math.round(crop.l * 100000)}" t="${Math.round(crop.t * 100000)}" r="${Math.round(crop.r * 100000)}" b="${Math.round(crop.b * 100000)}"/>` : '';
     const alt = o.kind === 'drawing' ? o.alt?.trim() || contentsAlt(o.contents) || structureAltText(smiles) : o.kind === 'picture' ? o.alt?.trim() : '';
-    const descr = alt ? ` descr="${xml(alt)}"` : '';
+    const descr = alt ? ` descr="${xmlAttr(alt)}"` : '';
     if (o.kind === 'drawing' && this.model.drawings[id]) this.model.drawings[id].alt = alt ?? '';
     const look = lookOf(o);
     const docPr = `<wp:docPr id="${n}" name="${xml(name)}"${descr}/>`;
@@ -1239,7 +1243,7 @@ class DocxWriter {
     const pPr = `<w:pPr><w:tabs><w:tab w:val="center" w:pos="${twips(fullW / 2)}"/><w:tab w:val="right" w:pos="${twips(fullW)}"/></w:tabs>` +
       `<w:spacing w:before="0" w:after="0" w:line="240" w:lineRule="auto"/><w:ind w:left="0" w:firstLine="0"/><w:jc w:val="left"/></w:pPr>`;
     const vml = wm ? ` xmlns:v="${V_NS}" xmlns:o="${O_NS}" xmlns:w10="${W10_NS}"` : '';
-    return `${HEAD}<w:${kind === 'header' ? 'hdr' : 'ftr'} xmlns:w="${W_NS}" xmlns:r="${NS.r}"${vml}><w:p>${pPr}${wm}${parts.join('')}</w:p></w:${kind === 'header' ? 'hdr' : 'ftr'}>`;
+    return `${HEAD}<w:${kind === 'header' ? 'hdr' : 'ftr'} ${PART_NS}${vml}><w:p>${pPr}${wm}${parts.join('')}</w:p></w:${kind === 'header' ? 'hdr' : 'ftr'}>`;
   }
 
   /** A header or footer with pictures, tables or formatted text: its paragraphs as Word's (its pictures related from its own part), with the watermark. */
@@ -1274,7 +1278,7 @@ class DocxWriter {
     }
     const tag = kind === 'header' ? 'hdr' : 'ftr';
     const vml = wm ? ` xmlns:v="${V_NS}" xmlns:o="${O_NS}" xmlns:w10="${W10_NS}"` : '';
-    return `${HEAD}<w:${tag} xmlns:w="${W_NS}" xmlns:r="${NS.r}" xmlns:wp="${WP_NS}" xmlns:a="${NS.a}" xmlns:pic="${PIC_NS}" xmlns:wps="${WPS_NS}" xmlns:wpg="${WPG_NS}" xmlns:mc="${MC_NS}" xmlns:m="${M_NS}"${vml}>${out.join('')}</w:${tag}>`;
+    return `${HEAD}<w:${tag} ${PART_NS}${vml}>${out.join('')}</w:${tag}>`;
   }
 
   // ---------------------------------------------------------------- styles and lists
