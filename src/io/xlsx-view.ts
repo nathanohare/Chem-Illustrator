@@ -10,6 +10,7 @@ import type { SheetViewOpts, CustomView, CustomSheetView } from '../sheet/views'
 import { SparklineGroup, SparkKind, SparkAxisLimit, SPARK_DEFAULTS, newSparkId } from '../sheet/sparklines';
 import { WorkbookTheme, SCHEME_ELEMENTS, readThemeParts, DEFAULT_THEME, sameTheme } from '../sheet/themes';
 import { cellName, quoteSheet } from '../sheet/refs';
+import type { RichValues } from './xlsx-rich';
 
 const DML = 'http://schemas.openxmlformats.org/drawingml/2006/main';
 export const X14_NS = 'http://schemas.microsoft.com/office/spreadsheetml/2009/9/main';
@@ -271,6 +272,8 @@ export interface ExcelSheetKept {
 export interface ExcelBookKept {
   protection?: string;
   fileSharing?: string;
+  /** Pictures placed in cells and other rich values: their parts and value metadata (see xlsx-rich.ts). */
+  richValues?: RichValues;
 }
 
 /**

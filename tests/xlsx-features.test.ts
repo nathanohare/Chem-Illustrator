@@ -20,7 +20,7 @@ const WS = `${R}/worksheet`;
 /** A workbook made the way Excel writes it: sheets (name and body), and any other parts with their relationships. */
 function excelBook(sheets: [string, string][], extra: {
   workbook?: (sheetsXml: string) => string;
-  parts?: { path: string; xml: string | Uint8Array; type?: string; from?: string; rel?: string }[];
+  parts?: { path: string; xml: string | Uint8Array; type?: string; from?: string; rel?: string; target?: string }[];
 } = {}): Uint8Array {
   const pkg = new Package();
   pkg.relate('', REL.officeDocument, 'xl/workbook.xml');
@@ -28,7 +28,7 @@ function excelBook(sheets: [string, string][], extra: {
   sheets.forEach(([, body], i) => pkg.add(`xl/worksheets/sheet${i + 1}.xml`, `<worksheet xmlns="${MAIN}" xmlns:r="${R}">${body}</worksheet>`));
   for (const p of extra.parts ?? []) {
     pkg.add(p.path, p.xml, p.type);
-    if (p.rel) pkg.relate(p.from ?? 'xl/workbook.xml', p.rel, p.path.replace(/^xl\//, p.from?.startsWith('xl/worksheets/') ? '../' : ''));
+    if (p.rel) pkg.relate(p.from ?? 'xl/workbook.xml', p.rel, p.target ?? p.path.replace(/^xl\//, p.from?.startsWith('xl/worksheets/') ? '../' : ''));
   }
   pkg.add('xl/workbook.xml', extra.workbook?.(list) ?? `<workbook xmlns="${MAIN}" xmlns:r="${R}"><sheets>${list}</sheets></workbook>`,
     'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml');
@@ -175,5 +175,65 @@ Bars</t></si><si><t>Shout</t></si><si><t>F</t></si></sst>`, rel: `${R}/sharedStr
     const strings = part(saved, 'xl/sharedStrings.xml');
     expect(strings).toContain('<t xml:space="preserve">Gender </t>');
     expect(strings).toContain('<t xml:space="preserve">Handle\nBars</t>');
+  });
+});
+
+describe('pictures placed in cells (X13)', () => {
+  const RD = 'http://schemas.microsoft.com/office/spreadsheetml/2017/richdata';
+  const PNG = Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8/5+hHgAHggJ/PchI7wAAAABJRU5ErkJggg=='), (ch) => ch.charCodeAt(0));
+  const PICTURE = new Uint8Array([...PNG, 1, 2, 3]);
+  // as Excel 365 writes a picture placed in a cell
+  const file = () => excelBook([['Structures', '<sheetData><row r="1"><c r="A1" t="e" vm="1"><v>#VALUE!</v></c><c r="C1"><v>5</v></c></row></sheetData>']], {
+    parts: [
+      { path: 'xl/metadata.xml', rel: `${R}/sheetMetadata`, type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheetMetadata+xml',
+        xml: `<metadata xmlns="${MAIN}" xmlns:xlrd="${RD}"><metadataTypes count="1"><metadataType name="XLRICHVALUE" minSupportedVersion="120000" copy="1" pasteAll="1" pasteValues="1" merge="1" splitFirst="1" rowColShift="1" clearFormats="1" clearComments="1" assign="1" coerce="1"/></metadataTypes>` +
+          '<futureMetadata name="XLRICHVALUE" count="1"><bk><extLst><ext uri="{3e2802c4-a4d2-4d8b-9148-e3be6c30e623}"><xlrd:rvb i="0"/></ext></extLst></bk></futureMetadata>' +
+          '<valueMetadata count="1"><bk><rc t="1" v="0"/></bk></valueMetadata></metadata>' },
+      { path: 'xl/richData/rdrichvaluestructure.xml', rel: 'http://schemas.microsoft.com/office/2017/06/relationships/rdRichValueStructure', type: 'application/vnd.ms-excel.rdrichvaluestructure+xml',
+        xml: `<rvStructures xmlns="${RD}" count="1"><s t="_localImage"><k n="_rvRel:LocalImageIdentifier" t="i"/><k n="CalcOrigin" t="i"/></s></rvStructures>` },
+      { path: 'xl/richData/rdrichvalue.xml', rel: 'http://schemas.microsoft.com/office/2017/06/relationships/rdRichValue', type: 'application/vnd.ms-excel.rdrichvalue+xml',
+        xml: `<rvData xmlns="${RD}" count="1"><rv s="0"><v>0</v><v>5</v></rv></rvData>` },
+      { path: 'xl/richData/richValueRel.xml', rel: 'http://schemas.microsoft.com/office/2022/10/relationships/richValueRel', type: 'application/vnd.ms-excel.richvaluerel+xml',
+        xml: `<richValueRels xmlns="http://schemas.microsoft.com/office/spreadsheetml/2022/richvaluerel" xmlns:r="${R}"><rel r:id="rId1"/></richValueRels>` },
+      { path: 'xl/media/image1.png', xml: PICTURE, type: 'image/png', from: 'xl/richData/richValueRel.xml', rel: `${R}/image`, target: '../media/image1.png' },
+    ],
+  });
+
+  it('says so on opening, and keeps the picture and its cell for Excel', async () => {
+    const { book, warnings } = await readXlsx(file());
+    expect(warnings).toContain('1 cell holds a picture or other value placed in it in Excel: shown as #VALUE! here, and kept for Excel unless the cell is changed.');
+    // a dynamic array formula and a floating picture of this program's own, beside it
+    book.edit('type', () => book.sheet.setInput(0, 1, '=SEQUENCE(2)'));
+    book.build(() => book.sheet.setObjects([{ id: 1, kind: 'picture', at: { row: 4, col: 4, dx: 0, dy: 0 }, w: 10, h: 10, src: `data:image/png;base64,${btoa(String.fromCharCode(...PNG))}` }]));
+    book.recalc();
+    const saved = await writeXlsx(book, pictures);
+    const files = unzipSync(saved);
+    expect(cellXml(part(saved, 'xl/worksheets/sheet1.xml'), 'A1')).toBe('<c r="A1" vm="1" t="e"><v>#VALUE!</v></c>');
+    // the value metadata after Excel's dynamic array kind, pointing at the second kind
+    const meta = part(saved, 'xl/metadata.xml');
+    expect(meta).toMatch(/<metadataTypes count="2"><metadataType name="XLDAPR"[^>]*\/><metadataType name="XLRICHVALUE"[^>]*\/><\/metadataTypes>/);
+    expect(meta).toContain(`<xlrd:rvb xmlns:xlrd="${RD}" i="0"/>`);
+    expect(meta).toContain('<valueMetadata count="1"><bk><rc t="2" v="0"/></bk></valueMetadata>');
+    expect(new DOMParser().parseFromString(meta, 'application/xml').getElementsByTagName('parsererror').length).toBe(0);
+    // the rich value's parts, and its picture under a name of its own
+    expect(part(saved, 'xl/richData/rdrichvalue.xml')).toContain('<rv s="0"><v>0</v><v>5</v></rv>');
+    const relTarget = /Target="([^"]+)"/.exec(part(saved, 'xl/richData/_rels/richValueRel.xml.rels'))![1];
+    expect(relTarget).not.toBe('../media/image1.png');
+    expect(files[`xl/${relTarget.replace('../', '')}`]).toEqual(PICTURE);
+    expect(files['xl/media/image1.png']).toEqual(PNG);
+    const wbRels = part(saved, 'xl/_rels/workbook.xml.rels');
+    expect(wbRels).toContain('relationships/rdRichValue" Target="richData/rdrichvalue.xml"');
+    expect(wbRels).toContain('relationships/richValueRel" Target="richData/richValueRel.xml"');
+    expect(part(saved, '[Content_Types].xml')).toContain('PartName="/xl/richData/rdrichvalue.xml" ContentType="application/vnd.ms-excel.rdrichvalue+xml"');
+    // and again from this program's own file
+    const again = await writeXlsx((await readXlsx(saved)).book, pictures);
+    expect(cellXml(part(again, 'xl/worksheets/sheet1.xml'), 'A1')).toContain('vm="1"');
+  });
+
+  it('lets the pointer go when the cell is changed', async () => {
+    const { book } = await readXlsx(file());
+    book.edit('type', () => book.sheet.setInput(0, 0, 'replaced'));
+    const xml = part(await writeXlsx(book, pictures), 'xl/worksheets/sheet1.xml');
+    expect(xml).not.toContain('vm=');
   });
 });

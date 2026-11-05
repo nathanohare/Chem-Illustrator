@@ -60,6 +60,7 @@ import { seenSparkId } from '../sheet/sparklines';
 import { type CompoundCard } from '../sheet/compound';
 import { type Query, seenQueryId } from '../sheet/query';
 import { keepFileValues, fileValues, type FileValue } from './xlsx-cached';
+import { readRichValues, writeRichParts, richMetadataXml, keepPointers, pointerOf } from './xlsx-rich';
 export { applyTint };
 
 /** Pictures of structures for Excel (the app draws them; tests use stand-ins). */
@@ -123,10 +124,11 @@ const RELS = {
  * The cell metadata that marks a formula as a dynamic array formula (cm="1" on its cell), as
  * Excel writes it: without it Excel works a formula out the old way, one value per cell.
  */
-const DYNAMIC_ARRAY_METADATA = `<metadata xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:xda="http://schemas.microsoft.com/office/spreadsheetml/2017/dynamicarray">` +
-  `<metadataTypes count="1"><metadataType name="XLDAPR" minSupportedVersion="120000" copy="1" pasteAll="1" pasteValues="1" merge="1" splitFirst="1" rowColShift="1" clearFormats="1" clearComments="1" assign="1" coerce="1" cellMeta="1"/></metadataTypes>` +
-  `<futureMetadata name="XLDAPR" count="1"><bk><extLst><ext uri="{bdbb8cdc-fa1e-496e-a857-3c3f30c029c3}"><xda:dynamicArrayProperties fDynamic="1" fCollapsed="0"/></ext></extLst></bk></futureMetadata>` +
-  `<cellMetadata count="1"><bk><rc t="1" v="0"/></bk></cellMetadata></metadata>`;
+const DYNAMIC_ARRAY_METADATA = {
+  type: `<metadataType name="XLDAPR" minSupportedVersion="120000" copy="1" pasteAll="1" pasteValues="1" merge="1" splitFirst="1" rowColShift="1" clearFormats="1" clearComments="1" assign="1" coerce="1" cellMeta="1"/>`,
+  future: `<futureMetadata name="XLDAPR" count="1"><bk><extLst><ext uri="{bdbb8cdc-fa1e-496e-a857-3c3f30c029c3}"><xda:dynamicArrayProperties fDynamic="1" fCollapsed="0"/></ext></extLst></bk></futureMetadata>`,
+  cells: `<cellMetadata count="1"><bk><rc t="1" v="0"/></bk></cellMetadata>`,
+};
 
 /** Pixels to Office's drawing units (EMU): 9525 to the pixel at 96 to the inch. */
 const PX = 9525;
@@ -647,7 +649,9 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
         const blockRef = arrayRef ?? legacyRef;
         const f = dt ? dataTableXml(dt) : formula === null ? '' : blockRef ? `<f t="array" ref="${blockRef}">${xml(formula)}</f>` : `<f>${xml(formula)}</f>`;
         // a dynamic array formula's cell points at the metadata that says so
-        const sAttr = arrayRef ? `${sAttr0} cm="1"` : sAttr0;
+        // a picture placed in the cell (a rich value), while the cell is as it was read
+        const vm = book.excel?.richValues ? pointerOf(cell) : undefined;
+        const sAttr = (arrayRef ? `${sAttr0} cm="1"` : sAttr0) + (vm !== undefined ? ` vm="${vm}"` : '');
         let body = '';
         if (v === null || v === '') {
           body = f ? `<c r="${ref}"${sAttr}>${f}</c>` : sAttr ? `<c r="${ref}"${sAttr}/>` : '';
@@ -669,6 +673,8 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
             : `<c r="${ref}"${sAttr} t="s"><v>${strings.index(wrote, chem, wrote === v ? runsOf(cell) : undefined, style)}</v></c>`;
         }
         if (entry) entry.wrote = wrote;
+        // (a rich value's cell holds the error Excel shows where it can't show the value)
+        if (vm !== undefined && !f && typeof v === 'string' && FILE_ERRORS.includes(v)) body = `<c r="${ref}"${sAttr} t="e"><v>${v}</v></c>`;
         if (body) cells.push(body);
 
         // the structure's picture, over the cell (or merged block)
@@ -912,9 +918,16 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
   // links to other workbooks, in the order their formulas number them ([1]Sheet1!A1)
   const linkIds = book.externalLinks.map((t) => writeTree(pkg, t, 'xl/workbook.xml')).filter((id): id is string => !!id);
 
-  if (anyDynamic) {
+  // cell metadata (dynamic arrays) and value metadata (rich values, with their parts)
+  const rich = book.excel?.richValues;
+  if (rich) writeRichParts(pkg, rich.trees, 'xl/workbook.xml');
+  if (anyDynamic || rich) {
+    const dyn = anyDynamic ? DYNAMIC_ARRAY_METADATA : null;
+    const values = rich ? richMetadataXml(rich.metadata, dyn ? [dyn.type] : []) : null;
+    const types = [...(dyn ? [dyn.type] : []), ...(values?.types ?? [])];
     pkg.relate('xl/workbook.xml', RELS.metadata, 'metadata.xml');
-    pkg.add('xl/metadata.xml', HEAD + DYNAMIC_ARRAY_METADATA, CT.metadata);
+    pkg.add('xl/metadata.xml', `${HEAD}<metadata xmlns="${MAIN}" xmlns:xda="http://schemas.microsoft.com/office/spreadsheetml/2017/dynamicarray">` +
+      `<metadataTypes count="${types.length}">${types.join('')}</metadataTypes>${dyn?.future ?? ''}${values?.future ?? ''}${dyn?.cells ?? ''}${values?.values ?? ''}</metadata>`, CT.metadata);
   }
 
   // defined names (Name Manager): a sheet's own carry its place in the list of sheets
@@ -1201,6 +1214,10 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
   // dates counted from 1904 (the old Mac default) are held here counting from 1900, and saved back as they were
   const date1904 = isOn(kid(root, 'workbookPr')?.getAttribute('date1904'));
   const bookKept = readBookKept(root);
+  // pictures placed in cells and other rich values: their parts and the metadata cells point into
+  const richValues = readRichValues(pkg, wbPath, [...rels.values()].find((r) => r.type === RELS.metadata)?.target ?? null);
+  const pointers = new Map<Sheet, Map<number, number>>();
+  let richCells = 0;
 
   const relTarget = (type: string) => [...rels.values()].find((r) => r.type === type)?.target ?? null;
   const themeDoc = relTarget(RELS.theme) ? pkg.xml(relTarget(RELS.theme)!) : null;
@@ -1376,6 +1393,14 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
           else if (t === 'd' && v) value = Date.parse(v) / 86400000 + 25569;
           else if (v !== null && v !== '') value = Number(v);
           raw.set(keyOf(r, col), value);
+          // a rich value's cell (a picture placed in it): its pointer, kept with the cell
+          const vm = c.getAttribute('vm');
+          if (vm !== null) {
+            richCells++;
+            let list = pointers.get(s);
+            if (!list) pointers.set(s, (list = new Map()));
+            if (richValues && Number(vm) >= 1 && Number(vm) <= richValues.metadata.blocks.length) list.set(keyOf(r, col), Number(vm));
+          }
           // a data table: its results are worked out again here (its formula is on the first of them)
           const dt = f ? readDataTable(f) : null;
           if (dt) {
@@ -1647,9 +1672,14 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
   // a filter goes back as it was: the rows it hid are hidden already
   if (filters.length) book.build(() => { for (const { s, f } of filters) s.restoreFilter(f); });
   book.active = Math.min(Math.max(0, activeTab), book.sheets.length - 1);
-  book.excel = bookKept;
+  book.excel = richValues ? { ...bookKept, richValues } : bookKept;
   keepFileValues(book, formulaValues);
+  if (richValues) keepPointers(book, pointers);
 
+  if (richCells && richValues) {
+    warnings.push(`${richCells} cell${richCells > 1 ? 's hold pictures or other values' : ' holds a picture or other value'} placed in ${richCells > 1 ? 'them' : 'it'} in Excel: ` +
+      `shown as #VALUE! here, and kept for Excel unless ${richCells > 1 ? 'the cells are' : 'the cell is'} changed.`);
+  } else if (richCells) notKept.add(`${richCells} picture${richCells > 1 ? 's' : ''} or other value${richCells > 1 ? 's' : ''} placed in cells`);
   if (foreignPictures) notKept.add(`${foreignPictures} picture${foreignPictures > 1 ? 's' : ''} or chart${foreignPictures > 1 ? 's' : ''}`);
   if (unknownFormulas) warnings.push(`${unknownFormulas} formula${unknownFormulas > 1 ? 's use' : ' uses'} Excel functions this program can't work out yet.`);
   if (linkedFormulas) {
