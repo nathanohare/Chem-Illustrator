@@ -3935,13 +3935,21 @@ function tickAutoSave(): void {
   b.setAttribute('aria-checked', String(keeper.autoSaveWanted(t) && ws.canAutoSave(t)));
 }
 
+/**
+ * The resolution of the PNG saved beside each structure's SVG in a deck. PowerPoint 2016 and later
+ * show the SVG; the PNG is for programs that can't, such as Google Slides and older PowerPoint, and
+ * at 150 dots to the inch it is as sharp as a 1080p projector shows a 13.33-inch slide, at a quarter
+ * of the size (and encoding time) of 300.
+ */
+const PPTX_FALLBACK_DPI = 150;
+
 /** How slides are saved for PowerPoint: structures as pictures (PNG and SVG), the bundled fonts inside. */
 function pptxOptions(): PptxOptions {
   return {
     picture: async (d) => {
       const pic = recordPicture(d, 1);
       if (!pic) return null;
-      const png = new Uint8Array(await (await canvasPng(pictureCanvas(d, pic).canvas)).arrayBuffer());
+      const png = new Uint8Array(await (await canvasPng(pictureCanvas(d, pic, PPTX_FALLBACK_DPI).canvas)).arrayBuffer());
       return { svg: pictureSvg(pic), png, box: pic.box };
     },
     svgToPng,
