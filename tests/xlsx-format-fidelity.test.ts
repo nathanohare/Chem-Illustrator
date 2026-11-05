@@ -246,3 +246,52 @@ describe('formatting shown here as the nearest thing', () => {
     expect(st).toContain('<alignment horizontal="left" vertical="distributed" shrinkToFit="1" readingOrder="2"/>');
   });
 });
+
+describe('named cell styles', () => {
+  const file = (normalName = 'Normal') => excelFile(
+    '<sheetData><row r="1"><c r="A1" s="1"><v>1</v></c><c r="B1" s="2"><v>2</v></c><c r="C1" s="3"><v>3</v></c></row></sheetData>',
+    { styles: styles([
+      '<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>',
+      '<xf numFmtId="0" fontId="1" fillId="0" borderId="0" xfId="1" applyFont="1"/>',
+      '<xf numFmtId="0" fontId="0" fillId="2" borderId="0" xfId="2" applyFill="1"/>',
+      '<xf numFmtId="0" fontId="0" fillId="3" borderId="0" xfId="3" applyFill="1"/>',
+    ], {
+      fonts: [FONT, '<font><u/><sz val="11"/><color theme="10"/><name val="Calibri"/><family val="2"/><scheme val="minor"/></font>'],
+      fills: '<fills count="4"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FFDDEEFF"/><bgColor indexed="64"/></patternFill></fill>' +
+        '<fill><patternFill patternType="solid"><fgColor rgb="FFC6EFCE"/><bgColor indexed="64"/></patternFill></fill></fills>',
+      cellStyleXfs: '<xf numFmtId="0" fontId="0" fillId="0" borderId="0"/><xf numFmtId="0" fontId="1" fillId="0" borderId="0" applyNumberFormat="0" applyFill="0" applyBorder="0" applyAlignment="0" applyProtection="0"/>' +
+        '<xf numFmtId="0" fontId="0" fillId="2" borderId="0" applyNumberFormat="0" applyBorder="0" applyAlignment="0"><alignment horizontal="center"/></xf><xf numFmtId="0" fontId="0" fillId="3" borderId="0" applyNumberFormat="0" applyBorder="0" applyAlignment="0" applyProtection="0"/>' +
+        '<xf numFmtId="0" fontId="0" fillId="0" borderId="0"/>',
+      cellStyles: `<cellStyles count="5"><cellStyle name="Good" xfId="3" builtinId="26"/><cellStyle name="Hyperlink" xfId="1" builtinId="8"/><cellStyle name="${normalName}" xfId="0" builtinId="0"/>` +
+        '<cellStyle name="Sample ID" xfId="2"/><cellStyle name="Unused" xfId="4" customBuiltin="1"/></cellStyles>',
+    }).replace('<cellStyleXfs count="1">', '<cellStyleXfs count="5">') },
+  );
+
+  it('keeps every one, built-in, the file\'s own and unused, with the cells that use them', async () => {
+    const { book } = await readXlsx(file());
+    expect(book.sheet.styleAt(0, 0)?.cellStyle).toBe('Hyperlink');
+    expect(book.sheet.styleAt(0, 1)?.cellStyle).toBe('Sample ID');
+    expect(book.sheet.styleAt(0, 2)?.cellStyle).toBe('Good');
+    const st = part(await writeXlsx(book, pictures), 'xl/styles.xml');
+    const xfIdOf = (name: string) => Number(new RegExp(`<cellStyle name="${name}" xfId="(\\d+)"`).exec(st)?.[1]);
+    expect(st).toMatch(/<cellStyle name="Hyperlink" xfId="\d+" builtinId="8"\/>/);
+    expect(st).toMatch(/<cellStyle name="Sample ID" xfId="\d+"\/>/);
+    expect(st).toMatch(/<cellStyle name="Unused" xfId="\d+" customBuiltin="1"\/>/);
+    expect(st).toMatch(/<cellStyle name="Good" xfId="\d+" builtinId="26"\/>/);
+    // the style's own look, with what it applies
+    const styleXfs = /<cellStyleXfs count="\d+">(.*?)<\/cellStyleXfs>/.exec(st)![1].match(/<xf [^>]*?(?:\/>|>.*?<\/xf>)/g)!;
+    expect(styleXfs[xfIdOf('Sample ID')]).toMatch(/applyNumberFormat="0" applyBorder="0" applyAlignment="0"><alignment horizontal="center"\/><\/xf>/);
+    // the cells point at their style
+    const cellXfs = /<cellXfs count="\d+">(.*?)<\/cellXfs>/.exec(st)![1].match(/<xf [^>]*?(?:\/>|>.*?<\/xf>)/g)!;
+    expect(cellXfs.some((x) => x.includes(`xfId="${xfIdOf('Hyperlink')}"`))).toBe(true);
+    expect(cellXfs.some((x) => x.includes(`xfId="${xfIdOf('Sample ID')}"`))).toBe(true);
+    expect(st).toContain('<cellStyle name="Normal" xfId="0" builtinId="0"/>');
+  });
+
+  it("keeps the Normal style's name in the language the file had it", async () => {
+    const { book } = await readXlsx(file('Standard'));
+    const st = part(await writeXlsx(book, pictures), 'xl/styles.xml');
+    expect(st).toContain('<cellStyle name="Standard" xfId="0" builtinId="0"/>');
+    expect(st).not.toContain('name="Normal"');
+  });
+});

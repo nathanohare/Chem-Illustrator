@@ -34,7 +34,7 @@ import { chemPieces, showsChem } from '../sheet/cell-text';
 import { type TextRun, looksOf, lookOver, runsFrom, runsOf } from '../sheet/rich-text';
 import { DEFAULT_COL_W, DEFAULT_ROW_H, MAX_AUTO_ROW, structureHeight } from '../sheet/layout';
 import type { Contents } from '../model';
-import type { ExcelStyles, ExcelLook } from '../sheet/workbook';
+import type { ExcelStyles, ExcelLook, NamedCellStyle } from '../sheet/workbook';
 import type { DocStyle } from '../style';
 import { applyTint } from '../colours';
 import { chartXml, chartAnchorXml, readChartXml, CT_CHART, REL_CHART, C_NS, CX_NS, CT_CHARTEX, REL_CHARTEX, addChartExStyle } from './xlsx-chart';
@@ -304,9 +304,12 @@ class Styles {
   private fonts: string[];
   /** Number formats the file read had as its own though they are a built-in one's code (m/d/yyyy from a German Excel). */
   private ownCodes: Set<string>;
+  /** Named cell styles kept from the file read, by the name cells know them by. */
+  private keptNamed = new Map<string, NamedCellStyle>();
   /** Named cell styles (Good, Heading 1…): the base formats cells point at, by name. */
   private named = new Map<string, number>();
   private namedXfs = ['<xf numFmtId="0" fontId="0" fillId="0" borderId="0"/>'];
+  private normalName: string;
 
   /**
    * `normal` is the look of style 0 (the workbook's Normal style, when it isn't the plain look
@@ -315,6 +318,7 @@ class Styles {
   constructor(private theme: WorkbookTheme | null = null, private normal: CellStyle = {}, kept: ExcelStyles = {}) {
     this.minor = themeOf(theme).minor;
     this.ownCodes = new Set(kept.numFmts);
+    this.normalName = kept.normalName ?? 'Normal';
     this.fonts = [Object.keys(normal).length && kept.normalFont ? kept.normalFont : `<font><sz val="11"/><color theme="1"/><name val="${xml(this.minor)}"/><family val="2"/><scheme val="minor"/></font>`];
     if (Object.keys(normal).length) {
       // style 0 (and the Normal style's base format) in that look: the plain look is a style of its own
@@ -322,6 +326,16 @@ class Styles {
       this.xfs.length = 0;
       this.xf(normal);
       this.namedXfs[0] = this.xfs[0].replace(/ xfId="\d+"/, '');
+    }
+    // the file's named cell styles, all of them (Excel's Cell Styles gallery keeps those no cell uses), as it had them
+    for (const k of kept.named ?? []) {
+      const key = namedStyleKey(k.name, k.builtinId);
+      if (this.named.has(key)) continue;
+      const { font, fill, border } = this.parts(k.look);
+      const align = this.alignment(k.look);
+      this.namedXfs.push(`<xf numFmtId="${this.numFmt(k.look.numFmt)}" fontId="${font}" fillId="${fill}" borderId="${border}"${k.apply}${align ? `>${align}</xf>` : '/>'}`);
+      this.named.set(key, this.namedXfs.length - 1);
+      this.keptNamed.set(key, k);
     }
   }
 
@@ -361,16 +375,7 @@ class Styles {
     if (got !== undefined) return got;
     const { font, fill, border } = this.parts(s);
     const fmt = this.numFmt(s.numFmt);
-    // an indent needs the text aligned to a side (left when it isn't set)
-    // Excel's own alignment where it still shows as this one (centered across the selection…)
-    const ex = s.excel;
-    const keptH = ex?.horizontal && (SHOWN_H[ex.horizontal] ?? undefined) === s.align ? ex.horizontal : undefined;
-    const horizontal = keptH ?? s.align ?? (s.indent ? 'left' : undefined);
-    const vertical = s.valign === 'middle' ? (ex?.vertical ?? 'center') : s.valign === 'top' ? 'top' : undefined;
-    const align = horizontal || vertical || s.wrap || s.rotate || ex?.shrinkToFit || ex?.readingOrder
-      ? `<alignment${horizontal ? ` horizontal="${horizontal}"` : ''}${vertical ? ` vertical="${vertical}"` : ''}${s.rotate ? ` textRotation="${textRotation(s.rotate)}"` : ''}${s.wrap ? ' wrapText="1"' : ''}${s.indent && horizontal !== 'center' ? ` indent="${s.indent}"` : ''}` +
-        `${ex?.shrinkToFit ? ' shrinkToFit="1"' : ''}${ex?.readingOrder ? ` readingOrder="${ex.readingOrder}"` : ''}/>`
-      : '';
+    const align = this.alignment(s);
     const xfId = s.cellStyle ? this.namedStyle(s.cellStyle) : 0;
     const protection = cellProtectionXml(s);
     const x = `<xf numFmtId="${fmt}" fontId="${font}" fillId="${fill}" borderId="${border}" xfId="${xfId}"` +
@@ -380,6 +385,20 @@ class Styles {
     const i = this.xfs.length - 1;
     this.byKey.set(key, i);
     return i;
+  }
+
+  /** A look's alignment element ('' when it has none). */
+  private alignment(s: CellStyle): string {
+    // Excel's own alignment where it still shows as this one (centered across the selection…)
+    const ex = s.excel;
+    const keptH = ex?.horizontal && (SHOWN_H[ex.horizontal] ?? undefined) === s.align ? ex.horizontal : undefined;
+    // an indent needs the text aligned to a side (left when it isn't set)
+    const horizontal = keptH ?? s.align ?? (s.indent ? 'left' : undefined);
+    const vertical = s.valign === 'middle' ? (ex?.vertical ?? 'center') : s.valign === 'top' ? 'top' : undefined;
+    return horizontal || vertical || s.wrap || s.rotate || ex?.shrinkToFit || ex?.readingOrder
+      ? `<alignment${horizontal ? ` horizontal="${horizontal}"` : ''}${vertical ? ` vertical="${vertical}"` : ''}${s.rotate ? ` textRotation="${textRotation(s.rotate)}"` : ''}${s.wrap ? ' wrapText="1"' : ''}${s.indent && horizontal !== 'center' ? ` indent="${s.indent}"` : ''}` +
+        `${ex?.shrinkToFit ? ' shrinkToFit="1"' : ''}${ex?.readingOrder ? ` readingOrder="${ex.readingOrder}"` : ''}/>`
+      : '';
   }
 
   /** The font, fill and border numbers for a look. */
@@ -409,6 +428,7 @@ class Styles {
 
   /** The base format of a named cell style (Excel's cellStyleXfs), added the first time it is used. */
   private namedStyle(name: string): number {
+    if (this.named.has(name)) return this.named.get(name)!;
     const def = cellStyleNamed(name);
     if (!def) return 0;
     let i = this.named.get(def.name);
@@ -431,9 +451,20 @@ class Styles {
       `<borders count="${this.borders.length}">${this.borders.join('')}</borders>` +
       `<cellStyleXfs count="${this.namedXfs.length}">${this.namedXfs.join('')}</cellStyleXfs>` +
       `<cellXfs count="${this.xfs.length}">${this.xfs.join('')}</cellXfs>` +
-      `<cellStyles count="${this.named.size + 1}"><cellStyle name="Normal" xfId="0" builtinId="0"/>${[...this.named].map(([n, i]) => `<cellStyle name="${xmlAttr(n)}" xfId="${i}" builtinId="${cellStyleNamed(n)!.builtinId}"/>`).join('')}</cellStyles>` +
+      `<cellStyles count="${this.named.size + 1}"><cellStyle name="${xmlAttr(this.normalName)}" xfId="0" builtinId="0"/>${[...this.named].map(([n, i]) => {
+        const k = this.keptNamed.get(n);
+        return k ? `<cellStyle name="${xmlAttr(k.name)}" xfId="${i}"${k.builtinId !== undefined ? ` builtinId="${k.builtinId}"` : ''}${k.attrs}/>` : `<cellStyle name="${xmlAttr(n)}" xfId="${i}" builtinId="${cellStyleNamed(n)!.builtinId}"/>`;
+      }).join('')}</cellStyles>` +
       `<dxfs count="${this.dxfs.length}">${this.dxfs.join('')}</dxfs><tableStyles count="0" defaultTableStyle="TableStyleMedium2" defaultPivotStyle="PivotStyleLight16"/></styleSheet>`;
   }
+}
+
+/**
+ * The name cells here know a named cell style by: a built-in one's own (Heading 1, whatever the
+ * file's language called it), else the file's.
+ */
+function namedStyleKey(name: string, builtinId: number | undefined): string {
+  return (cellStyleNamed(name) ?? (builtinId !== undefined ? CELL_STYLES.find((d) => d.builtinId === builtinId) : undefined))?.name ?? name;
 }
 
 /** What makes two cell looks the same style in the file (an empty look is style 0). */
@@ -1155,11 +1186,15 @@ function readStyles(doc: Document | null, theme: string[], faces: { minor: strin
     }
     return Object.keys(out).length ? out : undefined;
   });
-  // the named cell styles Excel built in (Good, Heading 1…), by their base format's number
+  // the named cell styles (Good, Heading 1, Hyperlink, the file's own…), by their base format's number
   const named = new Map<number, string>();
+  const namedEls = new Map<number, Element>();
+  const builtinOf = (cs: Element) => (cs.getAttribute('builtinId') !== null ? Number(cs.getAttribute('builtinId')) : undefined);
   for (const cs of kids(kid(root, 'cellStyles'), 'cellStyle')) {
-    const def = cellStyleNamed(cs.getAttribute('name') ?? '') ?? CELL_STYLES.find((d) => cs.getAttribute('builtinId') !== null && d.builtinId === Number(cs.getAttribute('builtinId')));
-    if (def && def.name !== 'Normal') named.set(Number(cs.getAttribute('xfId') ?? -1), def.name);
+    const key = namedStyleKey(cs.getAttribute('name') ?? '', builtinOf(cs));
+    const xfId = Number(cs.getAttribute('xfId') ?? -1);
+    if (cs.getAttribute('name') && key !== 'Normal' && builtinOf(cs) !== 0 && xfId > 0 && !named.has(xfId)) { named.set(xfId, key); namedEls.set(xfId, cs); }
+    else if (builtinOf(cs) === 0 && cs.getAttribute('name') && cs.getAttribute('name') !== 'Normal') kept.normalName = cs.getAttribute('name')!;
   }
   const xfLook = (x: Element): CellStyle | undefined => {
     const st: CellStyle = { ...fonts[Number(x.getAttribute('fontId') ?? 0)] };
@@ -1205,6 +1240,16 @@ function readStyles(doc: Document | null, theme: string[], faces: { minor: strin
     return Object.keys(st).some((k) => (st as Record<string, unknown>)[k] !== undefined) ? st : undefined;
   };
   const xfs = kids(kid(root, 'cellXfs'), 'xf').map(xfLook);
+  // each named cell style's look and settings, to save back
+  const styleXfs = kids(kid(root, 'cellStyleXfs'), 'xf');
+  for (const [xfId, cs] of namedEls) {
+    const x = styleXfs[xfId];
+    const attrs = (el: Element | undefined, keep: RegExp) => Array.from(el?.attributes ?? []).filter((a) => !a.prefix && keep.test(a.name)).map((a) => ` ${a.name}="${xmlAttr(a.value)}"`).join('');
+    (kept.named ??= []).push({
+      name: cs.getAttribute('name')!, ...(builtinOf(cs) !== undefined ? { builtinId: builtinOf(cs) } : {}),
+      attrs: attrs(cs, /^(customBuiltin|hidden|iLevel)$/), look: (x && xfLook(x)) || {}, apply: attrs(x, /^apply/),
+    });
+  }
   // the Normal style's font as written, when cells with no format of their own don't look as they do here
   const font0 = fontEls[Number(kids(kid(root, 'cellXfs'), 'xf')[0]?.getAttribute('fontId') ?? 0)];
   if (xfs[0] && font0) kept.normalFont = fontXml(font0);

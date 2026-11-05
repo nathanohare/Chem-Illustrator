@@ -101,8 +101,26 @@ export interface ExcelLook {
 export interface ExcelStyles {
   /** The Normal style's font (font 0) as the file had it. */
   normalFont?: string;
+  /** The Normal style's name when the file had another (Excel writes it in its own language: Standard, Normale…). */
+  normalName?: string;
   /** Number formats of the file's own whose code is also a built-in format's (kept as its own, not the built-in). */
   numFmts?: string[];
+  /** Named cell styles (Home > Cell Styles: built-in ones and the file's own), in the file's order. */
+  named?: NamedCellStyle[];
+}
+
+/** A named cell style as an Excel file had it (cellStyles and cellStyleXfs). */
+export interface NamedCellStyle {
+  /** Its name as the file had it. */
+  name: string;
+  /** Excel's number for a built-in style; none for a style of the file's own. */
+  builtinId?: number;
+  /** Other attributes of its cellStyle (customBuiltin, hidden, iLevel), as written. */
+  attrs: string;
+  /** Its look (its cellStyleXfs format). */
+  look: CellStyle;
+  /** Which parts of the look cells take from it (the apply attributes of its format), as written. */
+  apply: string;
 }
 
 /** The macros of an .xlsm workbook, as its file held them. */
@@ -1314,7 +1332,7 @@ export class Workbook {
    * Normal style (Arial 10…), when it isn't this program's plain look (the theme's body font at 11 pt).
    */
   normalStyle: CellStyle | undefined = undefined;
-  /** What an Excel file's styles held that cells here don't (its Normal font as written), saved back with it. */
+  /** What an Excel file's styles held that cells here don't (its Normal font as written, its named cell styles), saved back with it. */
   excelStyles: ExcelStyles | undefined = undefined;
   chem: ChemHost | null = null;
   /**
