@@ -322,6 +322,8 @@ The **Page Layout** tab sets how a sheet prints, as in Excel: **Margins**, **Ori
 - Excel has no dashboards, so it gets a plain version: each chart tile becomes a real Excel chart showing what the tile shows, and numbers, tables and text become cells.
 - Excel has no `ISOMZ`, `ISOABUND` or other chemistry functions, so the saved file keeps their values.
 - Open the .xlsx here again and the structures, chemistry formulas and full dashboard come back, even after Excel has saved the file.
+- They come back in the right cells after rows or columns were inserted, deleted or sorted in Excel. A structure whose SMILES was changed in Excel stays as Excel left it, with the SMILES showing.
+- Workbook settings and links made in Excel are kept on save: dates in workbooks that count from 1904 (an old Mac setting) show and save as they did in Excel, formulas that read other workbooks (`[1]Sheet1!A1`) keep their links for Excel to update, and array formulas entered with Ctrl+Shift+Enter keep filling their whole block.
 - **Save As** also writes a CSV file or an SD file (.sdf). These keep only the values of the sheet showing.
 - **File ▸ Open** reads .xlsx, .csv and SD files. An SD file gives one row per structure, with its data fields as columns.
 - Copy cells here and paste into Excel to get the values, with SMILES for structures. Cells copied in Excel paste here.
