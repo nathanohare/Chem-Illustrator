@@ -13,7 +13,7 @@ import type { Rect, Vec } from '../geom';
 import { add, angleOf, arcCenter, DEG, dist, distToSegment, dot, fromAngle, mul, norm, normAngle, perp, sub } from '../geom';
 import type { Measure } from '../editor/arrange';
 import { bezPathAt, bezPoints, chordLocal, chordPoint } from '../objects';
-import { makePin } from './pins';
+import { makePin, shapeAxis } from './pins';
 import { throughPoints } from '../arrow-path';
 
 /**
@@ -840,7 +840,7 @@ export function pushPins(doc: Doc, push: Pick<PushArrow, 'tail' | 'head' | 'star
 export function symbolPin(doc: Doc, s: Shape): Pin | undefined {
   if (!isAtomSymbol(s)) return undefined;
   const o = pairOwner(doc, s);
-  return o !== null ? makePin(doc, 'atom', [o], shapeCentre(s)) ?? undefined : undefined;
+  return o !== null ? makePin(doc, 'atom', [o], shapeCentre(s), shapeAxis(s)) ?? undefined : undefined;
 }
 
 /**

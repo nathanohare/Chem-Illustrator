@@ -88,5 +88,11 @@ export function orbitalShapes(spec: OrbitalSpec, at: Vec): Omit<Shape, 'id'>[] {
   }
 }
 
+/**
+ * An orbital's lobe (drawn here, or ChemDraw's orbital): it points a way from its atom, so it turns
+ * when the drawing is turned, in a drawing as on a slide.
+ */
+export const isOrbitalPart = (s: Pick<Shape, 'kind' | 'geo' | 'orbital'>): boolean => (s.kind === 'geo' && s.geo === ORBITAL_LOBE) || (s.kind === 'oval' && !!s.orbital);
+
 /** The middle of a shape's box (where a lobe is stuck to its atom from). */
 export const shapeCentre = (s: Pick<Shape, 'x1' | 'y1' | 'x2' | 'y2'>): Vec => ({ x: (s.x1 + s.x2) / 2, y: (s.y1 + s.y2) / 2 });

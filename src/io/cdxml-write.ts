@@ -11,8 +11,8 @@ import { CdxmlSource, Doc, Atom, Bond, Caption, Arrow, Shape, TextRun, Entity, K
 import { interpretArrow, isReactionArrow, linkRows, isStep, plainMeasure, schemeItems, type Item } from '../chem/reaction';
 import { SYMBOLS } from '../chem/elements';
 import { labelBonds, labelSpec, layoutLabel, labelDir, labelGraph, tokenize, isGenericLabel, Measure, MiniGraph, kekulize, labelLook } from '../chem/labels';
-import { Vec, DEG, arcCenter, norm, sub, Rect } from '../geom';
-import { arrowEllipse, bezPoints } from '../objects';
+import { Vec, DEG, arcCenter, norm, sub, Rect, turnedCorners } from '../geom';
+import { arrowEllipse, bezPoints, boxOf, shapeTurn } from '../objects';
 import { kids, descendants, wellFormed, withoutDoctype } from './xml';
 import { arialWidth } from '../text-metrics';
 import { toSymbolPieces, isSymbolFont, faceFromStyle } from '../richtext';
@@ -28,7 +28,7 @@ import { frameTag } from '../editor/frames';
 import { tableContents } from '../editor/table-figs';
 import { macPrintInfo, paperOf, SHEETS } from './cdxml-print';
 import { pageExtent, pageCount, pageTag } from '../page-grid';
-import { geoDef, isPathId, isPenId, moveSteps, outlineParts, textArea, type GeoStep } from '../design/geo';
+import { geoDef, isPathId, isPenId, moveSteps, outlineParts, textArea, turnSteps, type GeoStep } from '../design/geo';
 import { FADE, tint } from '../colours';
 import { fillInk, mix, ringShadowGroups, ringShadowSize, shadowLook } from '../render/fills';
 import { shapeShadow } from '../render/highlight-fx';
@@ -1904,8 +1904,11 @@ class CdxmlWriter {
       : def.draw(b.x2 - b.x1, b.y2 - b.y1);
     const lw = this.doc.style.lineWidth;
     const width = ringPts ? 0 : s.lineWidth ?? (s.bold ? lw * 2.5 : lw);
+    // a turned shape (an orbital's lobe, a shape turned on a slide) is turned in ChemDraw too
+    const turn = s.kind === 'geo' ? shapeTurn(s) : 0;
+    const mid = { x: (b.x1 + b.x2) / 2, y: (b.y1 + b.y2) / 2 };
     const curves = (steps: GeoStep[], type: string, color: string | undefined) => {
-      for (const c of chemDrawCurves(moveSteps(steps, b.x1, b.y1))) {
+      for (const c of chemDrawCurves(turnSteps(moveSteps(steps, b.x1, b.y1), mid, turn))) {
         const closed = c.closed && type !== 'open';
         // CurveType's bits (to be checked in ChemDraw): closed 1, dashed 2, bold 4, filled 128
         const kinds = (closed ? 1 : 0) | (type !== 'fill' && s.dashed ? 2 : 0) | (type !== 'fill' && width > 1.75 * lw ? 4 : 0) | (type === 'fill' ? 128 : 0);
@@ -1964,8 +1967,10 @@ class CdxmlWriter {
     // (with the first curve's points as written: ChemDraw keeps them as they are unless the shape is
     // moved or changed there, when the curves are read instead)
     const first = kids(g).find((k) => k.nodeName === 'curve')?.getAttribute('CurvePoints');
-    g.appendChild(this.el('objecttag', { TagType: 'String', Name: GEO_TAG, Value: JSON.stringify({ ...look, savedBox: box(b), ...(first ? { seen: { curve: first } } : {}) }), Visible: 'no' }));
-    this.set(g, 'BoundingBox', box(b));
+    // (a turned shape's group goes round its turned corners)
+    const gb = turn ? boxOf(turnedCorners(b, mid, turn)) : b;
+    g.appendChild(this.el('objecttag', { TagType: 'String', Name: GEO_TAG, Value: JSON.stringify({ ...look, savedBox: box(gb), ...(first ? { seen: { curve: first } } : {}) }), Visible: 'no' }));
+    this.set(g, 'BoundingBox', box(gb));
     g.removeAttribute(GEO_BOX_ATTR);
     this.changed = true;
   }

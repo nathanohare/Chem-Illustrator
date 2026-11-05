@@ -789,6 +789,11 @@ export interface Pin {
   hand: number;
   /** Where the point was when it was last put in place: when it is elsewhere, it was moved by hand. */
   was: Vec;
+  /**
+   * Which way the thing points in the same frame (a lone pair's two dots, an orbital's lobe), so
+   * it turns with its atoms as well as going with them. Not set for things that point no way.
+   */
+  dir?: Vec;
 }
 
 /**
@@ -1028,9 +1033,12 @@ export interface Shape {
   holder?: { runs?: TextRun[] };
 }
 
-/** Can this shape be turned to any angle (Slides and Design), keeping its box and turning it as a whole? */
-export function turnsFreely(s: Pick<Shape, 'kind' | 'chart' | 'table' | 'ring' | 'frame' | 'pin'>): boolean {
-  return (s.kind === 'rect' || s.kind === 'oval' || s.kind === 'geo' || s.kind === 'picture') && !s.chart && !s.frame && !s.pin;
+/**
+ * Can this shape be turned to any angle (Slides and Design, and an orbital's lobes anywhere),
+ * keeping its box and turning it as a whole? (An orbital's lobe stuck to its atom turns too.)
+ */
+export function turnsFreely(s: Pick<Shape, 'kind' | 'chart' | 'table' | 'ring' | 'frame'>): boolean {
+  return (s.kind === 'rect' || s.kind === 'oval' || s.kind === 'geo' || s.kind === 'picture') && !s.chart && !s.frame;
 }
 
 /**
