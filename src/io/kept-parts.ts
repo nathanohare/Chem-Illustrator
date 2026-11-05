@@ -15,8 +15,9 @@
 // properties, content controls; Part 2: packages) and Microsoft's published description of add-in
 // settings in documents ([MS-OWEXML]).
 //
-// The document's properties (File > Info: title, author, when it was made...) are kept the same
-// way: as the file had them, brought up to date where saving changes them, as Office does.
+// The document's properties (File > Info: title, author, when it was made...) and Word's and
+// Excel's theme are kept the same way: as the file had them, brought up to date where saving
+// changes them, as Office does.
 
 import { REL, kids, xml, type Package, type PackageReader } from './ooxml';
 import { dataUrl, fromDataUrl } from '../render/images';
@@ -81,6 +82,12 @@ export interface KeptParts {
   vars?: string;
   trees?: KeptTree[];
   docProps?: KeptProps;
+  /**
+   * The theme part as the file had it (Word and Excel), written back while the theme isn't changed
+   * here, so its fonts for each script, effects and the rest are kept. `look` is the theme as read
+   * here (to tell whether it was changed).
+   */
+  theme?: { xml: string; look?: string };
 }
 
 const serializer = () => new XMLSerializer();
@@ -97,6 +104,8 @@ export interface KeptReadOptions {
   ours?: (root: Element) => boolean;
   /** Custom properties this app writes itself (Zotero's preferences): not kept. */
   ownProp?: (name: string) => boolean;
+  /** Keep the main part's theme (Word and Excel). */
+  theme?: boolean;
 }
 
 /** Everything another program left in the file that this app doesn't read; undefined when there is none. */
@@ -136,6 +145,14 @@ export function readKeptParts(pkg: PackageReader, opts: KeptReadOptions): KeptPa
   if (trees.length) out.trees = trees;
   const docProps = readDocProps(pkg);
   if (docProps) out.docProps = docProps;
+  if (opts.theme) {
+    // (a theme with pictures of its own, which would need their parts too, is made afresh)
+    const path = pkg.relOfType(opts.main, REL.theme);
+    let ok = false;
+    try { ok = !!path && !!pkg.xml(path) && !pkg.rels(path).size; } catch { ok = false; }
+    const text = ok && path ? pkg.text(path) : null;
+    if (text) out.theme = { xml: text };
+  }
   return Object.keys(out).length ? out : undefined;
 }
 

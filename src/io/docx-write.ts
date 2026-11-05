@@ -222,11 +222,13 @@ class DocxWriter {
     pkg.add(main, `${HEAD}<w:document ${PART_NS}>${bg}<w:body>${body}${sect}</w:body></w:document>`, DOCX_CT.document);
     pkg.relate(main, DOCX_REL.styles, 'styles.xml');
     pkg.add('word/styles.xml', this.styles(), DOCX_CT.styles);
-    // Design's theme as Word's own, so Word's Design tab shows it and new text and shapes take its fonts and colours
+    // Design's theme as Word's own, so Word's Design tab shows it and new text and shapes take its
+    // fonts and colours; else the document's own theme as it came
     const theme = wordTheme(this.t.design);
-    if (theme) {
+    const keptTheme = theme ? null : this.t.kept?.theme?.xml;
+    if (theme || keptTheme) {
       pkg.relate(main, DOCX_REL.theme, 'theme/theme1.xml');
-      pkg.add('word/theme/theme1.xml', themeXml(theme), THEME_CT);
+      pkg.add('word/theme/theme1.xml', theme ? themeXml(theme) : keptTheme!, THEME_CT);
     }
     if (this.cmts.size) this.commentParts(main);
     const notes = this.noteParts(main);

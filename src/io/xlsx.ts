@@ -900,10 +900,12 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
 
   pkg.relate('xl/workbook.xml', RELS.styles, 'styles.xml');
   pkg.add('xl/styles.xml', styles.toXml(), CT.styles);
-  // the theme, when it isn't Excel's own default
-  if (book.theme) {
+  // the theme: the file's own while it isn't changed here (its fonts for each script, effects and
+  // the rest kept), else made from the workbook's when it isn't Excel's own default
+  const keptTheme = book.kept?.theme && book.kept.theme.look === JSON.stringify(book.theme) ? book.kept.theme.xml : null;
+  if (keptTheme || book.theme) {
     pkg.relate('xl/workbook.xml', RELS.theme, 'theme/theme1.xml');
-    pkg.add('xl/theme/theme1.xml', themeXml(book.theme), CT.theme);
+    pkg.add('xl/theme/theme1.xml', keptTheme ?? themeXml(book.theme!), CT.theme);
   }
   pkg.relate('xl/workbook.xml', RELS.sharedStrings, 'sharedStrings.xml');
   pkg.add('xl/sharedStrings.xml', strings.toXml(), CT.strings);
@@ -1269,7 +1271,8 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
 
   if (model?.drawingStyle) book.drawingStyle = { ...book.drawingStyle, ...model.drawingStyle };
   // other programs' data (custom XML, custom properties, add-ins' settings), to save back
-  book.kept = readKeptParts(pkg, { main: wbPath, ours: (r) => r.namespaceURI === MODEL_NS });
+  book.kept = readKeptParts(pkg, { main: wbPath, ours: (r) => r.namespaceURI === MODEL_NS, theme: true });
+  if (book.kept?.theme) book.kept.theme.look = JSON.stringify(workbookTheme);
   // links to other workbooks (formulas reading [1]Sheet1!A1), kept as they are to save back in the same order
   for (const ref of kids(kid(root, 'externalReferences'), 'externalReference')) {
     const r = rels.get(rAttr(ref, 'id') ?? '');

@@ -699,7 +699,7 @@ class DocxReader {
 
   /** Other programs' data, kept as it is; Chem4Word's structures by their id. */
   private readKept(): void {
-    this.kept = readKeptParts(this.pkg, { main: this.main, ours: (root) => root.namespaceURI === MODEL_NS, ownProp: (name) => /^ZOTERO_PREF_\d+$/.test(name) });
+    this.kept = readKeptParts(this.pkg, { main: this.main, ours: (root) => root.namespaceURI === MODEL_NS, ownProp: (name) => /^ZOTERO_PREF_\d+$/.test(name), theme: true });
     for (const x of this.kept?.xml ?? []) {
       const guid = cmlGuid(x.xml);
       if (guid) this.cml.set(guid, x.xml);
@@ -2807,7 +2807,8 @@ class DocxReader {
       ...(typeof m?.citeStyle === 'string' && m.citeStyle in CITE_PRESETS ? { citeStyle: m.citeStyle } : zoteroStyle ? { citeStyle: zoteroStyle } : {}),
       ...(manager ? { citeManager: manager } : {}),
       ...(zoteroPrefs ? { zoteroPrefs } : {}),
-      ...(this.kept ? { kept: this.kept } : {}),
+      // (a theme made here from a Design choice is written from that choice, not kept)
+      ...(this.kept ? { kept: parseDesign(m?.design) && this.kept.theme ? { ...this.kept, theme: undefined } : this.kept } : {}),
       ...(usedControls(runs, out.map((p) => p.ps), this.controls) ?? {}),
       ...(m?.citeOptions && Object.keys(cleanOptions(m.citeOptions)).length ? { citeOptions: cleanOptions(m.citeOptions) } : {}),
     };
