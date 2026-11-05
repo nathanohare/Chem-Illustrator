@@ -45,9 +45,11 @@ const GEM_SP3 = -12.5;
  * The structure's predicted 1H spectrum at sf MHz. h1: predicted shift per heavy atom (NaN when
  * none). pj: vicinal couplings from 3-D conformers (karplus.ts), which replace the 2-D values for
  * their atom pairs; where the protons of one CH2 couple differently (axial and equatorial, or the
- * two sides of a stereocentre), they are simulated as separate spins.
+ * two sides of a stereocentre), they are simulated as separate spins. gap: per CH2 atom, the
+ * predicted shift difference (ppm) between its two diastereotopic protons (proton3d.ts); they are
+ * simulated at h1 ± gap/2 with their couplings shared, since which proton is which is not known.
  */
-export function predictSpectrum(g: JGraph, h1: number[], codes: string[], sf = 400, quality: NmrQuality = 'balanced', width = 0.9, pj: ProtonJ[] = []): PredictedSpectrum {
+export function predictSpectrum(g: JGraph, h1: number[], codes: string[], sf = 400, quality: NmrQuality = 'balanced', width = 0.9, pj: ProtonJ[] = [], gap: Record<number, number> = {}): PredictedSpectrum {
   const groups = protonGroups(g, h1, codes);
   let cs = predictCouplings(g).filter((c) => g.atoms[c.a].el !== 'F' && g.atoms[c.b].el !== 'F');
   // 3-D couplings: per proton, and their mean per atom pair in place of the 2-D value
@@ -62,8 +64,16 @@ export function predictSpectrum(g: JGraph, h1: number[], codes: string[], sf = 4
     cs = cs.filter((c) => c.a === c.b || !mean.has(`${c.a},${c.b}`));
     for (const [k, m] of mean) { const [a, b] = k.split(',').map(Number); cs.push({ a, b, j: m.t / m.n, kind: 'vic-3d' }); }
   }
-  // atoms whose protons couple differently to some neighbour
-  const split = new Set<number>();
+  // a CH2 with a predicted gap: its protons' couplings are shared (mean over its two protons)
+  for (const [k, v] of [...perH]) {
+    const [p, q] = k.split(',');
+    const [a, ka] = p.split('.').map(Number), [b, kb] = q.split('.').map(Number);
+    if (gap[a] !== undefined && g.atoms[a].h === 2) perH.set(k, (v + (perH.get(`${a}.${1 - ka},${b}.${kb}`) ?? v)) / 2);
+    else if (gap[b] !== undefined && g.atoms[b].h === 2) perH.set(k, (v + (perH.get(`${a}.${ka},${b}.${1 - kb}`) ?? v)) / 2);
+  }
+  // atoms whose protons couple differently to some neighbour, or have different predicted shifts
+  const split = new Set<number>(Object.keys(gap).map(Number).filter((a) => g.atoms[a]?.h === 2 && gap[a] > 0 && !Number.isNaN(h1[a])));
+  const shiftOf = (p: { atom: number; k: number }) => h1[p.atom] + (split.has(p.atom) && gap[p.atom] ? (p.k === 0 ? 1 : -1) * gap[p.atom] / 2 : 0);
   for (const k of mean.keys()) {
     const [a, b] = k.split(',').map(Number);
     for (const [x, y] of [[a, b], [b, a]]) {
@@ -147,7 +157,7 @@ export function predictSpectrum(g: JGraph, h1: number[], codes: string[], sf = 4
       continue;
     }
     const jm = spinAtoms.map((p) => spinAtoms.map((q) => pairJ(p, q)));
-    push(transitions({ shifts: spinAtoms.map((p) => h1[p.atom]), j: jm, nuclei: spinAtoms.map((p) => (p.obs ? '1H' : 'X')), widths: width }, sf));
+    push(transitions({ shifts: spinAtoms.map(shiftOf), j: jm, nuclei: spinAtoms.map((p) => (p.obs ? '1H' : 'X')), widths: width }, sf));
   }
   return { sf, lines: sorted(HZ, INT, W, sf), groups };
 }

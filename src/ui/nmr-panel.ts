@@ -12,6 +12,7 @@ import { predictSpectrum, type NmrQuality, type PredictedSpectrum } from '../che
 import { exchangeRange, type ExchangeRange } from '../chem/nmr/exchange';
 import { spectrumInBackground } from '../chem/nmr/spectrum-client';
 import { graphCouplings3d, type ProtonJ } from '../chem/nmr/karplus';
+import { ch2Splits, type Ch2SplitTrees } from '../chem/nmr/proton3d';
 import { withPopulations } from '../chem/conformer-rank';
 import type { Model3d } from '../chem/model3d-build';
 import { checkData, measuredLines, parsePeakLists, type CheckNucleus, type CheckResult, type MeasuredList, type PredictedRow } from '../chem/nmr/check';
@@ -41,6 +42,32 @@ export interface NmrRow {
   /** OH, NH, SH: not predicted (their shifts move with concentration, water and temperature);
    *  Check Data still matches them within the usual range for their kind of group. */
   exch?: ExchangeRange | null;
+  /** One of the two diastereotopic protons of a CH2 (Accurate): 'hi' the downfield row, 'lo' the
+   *  upfield one; which proton is which is not predicted. lo: the upfield shift, on the 'hi' row. */
+  pair?: 'hi' | 'lo';
+  lo?: number;
+}
+
+/** Smallest predicted gap (ppm) shown as two rows. */
+const MIN_GAP = 0.02;
+
+/** The CH2 rows split in two where its protons are predicted apart (gap by atom, ppm); the 13C value stays on the first. */
+export function splitRows(rows: NmrRow[], gap: Record<number, number>, g: NamerGraph): NmrRow[] {
+  const out: NmrRow[] = [];
+  for (const r of rows) {
+    const a0 = g.atoms[r.atoms[0]];
+    const ds = r.atoms.map((a) => gap[a]);
+    const d = ds.every((x) => x !== undefined) ? ds.reduce((t, x) => t + x, 0) / ds.length : 0;
+    if (!r.h1 || r.exch || a0.el !== 'C' || a0.h !== 2 || !(d >= MIN_GAP)) { out.push(r); continue; }
+    // each proton now also couples to its partner (geminal, about 12.5 Hz for an sp3 CH2)
+    const mult = !r.mult || r.mult === 'm' || r.mult.startsWith('br') ? r.mult : (r.mult === 's' ? 'd' : `d${r.mult}`);
+    const j = r.mult && r.mult !== 'm' && !r.mult.startsWith('br') ? [12.5, ...(r.j ?? [])].sort((x, y) => y - x) : r.j;
+    const m = mult && mult.length > 4 ? 'm' : mult;
+    const hi = r.h1.value + d / 2, lo = r.h1.value - d / 2;
+    out.push({ ...r, h1: { ...r.h1, value: hi }, hCount: r.hCount / 2, mult: m, j: m === 'm' ? [] : j, pair: 'hi', lo });
+    out.push({ ...r, c13: null, h1: { ...r.h1, value: lo }, hCount: r.hCount / 2, mult: m, j: m === 'm' ? [] : j, pair: 'lo' });
+  }
+  return out;
 }
 
 /** "dd, J = 15.5, 6.8 Hz" as an SI writes it (empty without a multiplicity). */
@@ -181,6 +208,12 @@ interface Shown {
   molblock: string; heavy: number[];
   /** Vicinal couplings from 3-D conformers (Accurate), once asked for; empty when no model could be built. */
   pj?: Promise<ProtonJ[]>;
+  /** The conformers (Accurate), once asked for; null when no model could be built. */
+  model?: Promise<Model3d | null>;
+  /** Diastereotopic CH2 gaps (ppm) by graph atom (Accurate), once asked for. */
+  gap?: Promise<Record<number, number>>;
+  /** The rows with each such CH2 as two rows, and the list row of each atom for them; set when the gaps are in. */
+  baseRows: NmrRow[]; baseRowOf: number[]; splitRows?: NmrRow[]; splitRowOf?: number[];
 }
 
 export interface NmrHost {
@@ -189,6 +222,8 @@ export interface NmrHost {
   measuredUrl?: string;
   /** The shift networks; optional, the lookup stands alone without them. */
   netUrl?: string;
+  /** Trees for the gap between diastereotopic CH2 protons (Accurate); optional. */
+  splitUrl?: string;
   graph(molblock: string): Promise<{ graph: NamerGraph | null }>;
   /** Low-energy conformers of a structure (molfile) for Accurate spectra; optional. */
   conformers?(molblock: string): Promise<Model3d>;
@@ -208,6 +243,7 @@ export class NmrPanel {
   private table: Promise<ShiftTable> | null = null;
   private store: Promise<MeasuredStore | null> | null = null;
   private net: Promise<ShiftNet | null> | null = null;
+  private splitTrees: Promise<Ch2SplitTrees | null> | null = null;
   private shown = new Map<number, Shown>();
   private items: (Item | null)[] = [];
   private marks = false;
@@ -386,7 +422,7 @@ export class NmrPanel {
         if (graph.atoms[gr.atoms[0]].el === 'C') { r.mult = gr.mult; r.j = gr.j; } else { r.mult = 'br s'; r.j = []; }
       }
       for (const r of rows) if (r.exch) for (const a of r.atoms) h1[a] = NaN;
-      this.shown.set(i, { rows, ids, ring, graph, h1, codes, rowOf, specs: new Map(), pending: new Set(), molblock: item.molblock, heavy });
+      this.shown.set(i, { rows, ids, ring, graph, h1, codes, rowOf, specs: new Map(), pending: new Set(), molblock: item.molblock, heavy, baseRows: rows, baseRowOf: rowOf });
       this.render(i, d);
       if (this.win?.visible && this.winItem === i) this.win.refresh();
       if (this.marks) this.host.redraw();
@@ -399,6 +435,7 @@ export class NmrPanel {
   private render(i: number, d: HTMLElement): void {
     const s = this.shown.get(i);
     if (!s) return;
+    this.useRows(i, s);
     const body = d.querySelector<HTMLElement>('.nmr-body')!;
     if (!s.rows.length) { body.innerHTML = '<p class="muted small">No carbons or hydrogens to predict.</p>'; return; }
     body.innerHTML = `<div class="nmr-strip" data-item="${i}"><button type="button" class="nmr-popout" title="Open the spectrum in a window (zoom, labels, field, Copy as Picture)" aria-label="Open the spectrum in a window">⤢</button></div>`
@@ -554,12 +591,13 @@ export class NmrPanel {
   private dataFor(i: number, sf: number, quality: NmrQuality, nuc: Nucleus): SpectrumData | null {
     const s = this.shown.get(i);
     if (!s) return null;
+    this.useRows(i, s);
     if (nuc === '13C') return { nuc, sticks: s.rows.flatMap((r, k) => (r.c13 ? [{ shift: r.c13.value, n: r.atoms.length, row: k }] : [])), measured: this.overlayFor(i, nuc, sf) };
     const key = `${sf}|${quality}`;
     let spec = s.specs.get(key);
     if (!spec) {
       const job = quality === 'fast' || s.pending.has(key) ? null : quality === 'accurate' && this.host.conformers
-        ? this.couplings3d(s).then((pj) => spectrumInBackground(s.graph, s.h1, s.codes, sf, quality, pj) ?? predictSpectrum(s.graph, s.h1, s.codes, sf, quality, undefined, pj))
+        ? Promise.all([this.couplings3d(s), this.gaps(s)]).then(([pj, gap]) => spectrumInBackground(s.graph, s.h1, s.codes, sf, quality, pj, gap) ?? predictSpectrum(s.graph, s.h1, s.codes, sf, quality, undefined, pj, gap))
         : spectrumInBackground(s.graph, s.h1, s.codes, sf, quality);
       if (job) {
         // first-order lines straight away; the exact spectrum replaces them when it is ready
@@ -575,10 +613,57 @@ export class NmrPanel {
 
   /** Vicinal couplings from the structure's conformers (built once); none when no model can be built. */
   private couplings3d(s: Shown): Promise<ProtonJ[]> {
-    s.pj ??= this.host.conformers!(s.molblock)
-      .then((m) => graphCouplings3d({ ...m, conformers: withPopulations(m.conformers) }, s.heavy, s.graph.atoms.map((a) => a.h)))
-      .catch(() => []);
+    s.pj ??= this.model3d(s).then((m) => (m ? graphCouplings3d(m, s.heavy, s.graph.atoms.map((a) => a.h)) : [])).catch(() => []);
     return s.pj;
+  }
+
+  /** The structure's conformers with their populations (built once); null when no model can be built. */
+  private model3d(s: Shown): Promise<Model3d | null> {
+    s.model ??= this.host.conformers!(s.molblock).then((m) => ({ ...m, conformers: withPopulations(m.conformers) }), () => null);
+    return s.model;
+  }
+
+  private loadSplit(): Promise<Ch2SplitTrees | null> {
+    const url = this.host.splitUrl;
+    if (!url) return Promise.resolve(null);
+    this.splitTrees ??= fetch(url).then((r) => (r.ok ? r.json() as Promise<Ch2SplitTrees> : null)).catch(() => null);
+    return this.splitTrees;
+  }
+
+  /** Predicted gaps between the two protons of each diastereotopic CH2, by graph atom (once). */
+  private gaps(s: Shown): Promise<Record<number, number>> {
+    s.gap ??= Promise.all([this.model3d(s), this.loadSplit()]).then(([m, trees]) => {
+      const out: Record<number, number> = {};
+      if (!m || !trees) return out;
+      const byModel = ch2Splits(m, trees);
+      s.heavy.forEach((ma, ga) => { const d = byModel.get(ma); if (d !== undefined && d >= MIN_GAP && s.graph.atoms[ga].h === 2) out[ga] = d; });
+      return out;
+    }).catch(() => ({}));
+    return s.gap;
+  }
+
+  /** The rows for the quality setting: on Accurate, each diastereotopic CH2 as two rows once its gap is predicted. */
+  private useRows(i: number, s: Shown): void {
+    const accurate = this.quality === 'accurate' && !!this.host.conformers && !!this.host.splitUrl;
+    if (accurate && !s.gap) {
+      void this.gaps(s).then((gap) => {
+        if (this.shown.get(i) !== s || !Object.keys(gap).length) return;
+        s.splitRows = splitRows(s.baseRows, gap, s.graph);
+        s.splitRowOf = s.graph.atoms.map(() => -1);
+        s.splitRows.forEach((r, k) => { for (const a of r.atoms) if (s.splitRowOf![a] < 0) s.splitRowOf![a] = k; });
+        const d = document.querySelector<HTMLElement>(`details.nmr[data-item="${i}"]`);
+        if (d && this.quality === 'accurate') {
+          this.render(i, d);
+          // Check Data matched the old rows: match again
+          if (this.checkState(i, false)?.results.size && d instanceof HTMLDetailsElement) void this.runCheck(i, d);
+        }
+        if (this.win?.visible && this.winItem === i) this.win.refresh();
+        if (this.marks) this.host.redraw();
+      });
+    }
+    const split = accurate && s.splitRows;
+    s.rows = split ? s.splitRows! : s.baseRows;
+    s.rowOf = split ? s.splitRowOf! : s.baseRowOf;
   }
 
   /** A background simulation finished: redraw the strip and the window if they still show it. */
@@ -667,6 +752,7 @@ export class NmrPanel {
       const pts = s.ids.map((id) => (id !== null ? atom(id) : undefined)).filter((q): q is { x: number; y: number } => !!q);
       const cx = pts.reduce((t, q) => t + q.x, 0) / (pts.length || 1), cy = pts.reduce((t, q) => t + q.y, 0) / (pts.length || 1);
       for (const row of s.rows) {
+        if (row.pair === 'lo') continue; // drawn with its partner: "2.62/2.53"
         row.atoms.forEach((a, k) => {
           const n = row.numbers[k];
           const id = s.ids[a];
@@ -698,7 +784,7 @@ export class NmrPanel {
           // shifts: δC by the atom, δH beyond it (stacked under δC when the label points sideways)
           const labels: { text: string; colour: string; bold: boolean }[] = [];
           if (row.c13) labels.push({ text: row.c13.value.toFixed(1), colour: '#555555', bold: false });
-          if (row.h1 && row.hCount && !row.exch) labels.push({ text: row.h1.value.toFixed(2), colour: accent, bold: true });
+          if (row.h1 && row.hCount && !row.exch) labels.push({ text: row.h1.value.toFixed(2) + (row.pair === 'hi' && row.lo !== undefined ? `/${row.lo.toFixed(2)}` : ''), colour: accent, bold: true });
           if (!labels.length) return;
           const side = Math.abs(ux) > 0.6;
           const at = labels.map((_, j) => side
