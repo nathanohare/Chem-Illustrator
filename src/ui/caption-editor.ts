@@ -65,7 +65,14 @@ const MISSPELLED = '#e0302f';
 const FORMATTING = '#2f6fdf';
 /** Words ignored with "Ignore" or "Leave as written" while the program is open (lower case). */
 const ignored = new Set<string>();
-const FRAME = 'rgba(47, 111, 223, 0.6)';
+/** The dashed box round the text being typed: the usual blue, or Canvas mode's teal (setCaptionTint). */
+let FRAME = 'rgba(47, 111, 223, 0.6)';
+
+/** Draw the box round the text being typed in `hex` (Canvas mode's teal, as the selection is), or in the usual blue (null). */
+export function setCaptionTint(hex: string | null): void {
+  const c = hex && /^#[0-9a-f]{6}$/i.test(hex) ? [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16)) : [47, 111, 223];
+  FRAME = `rgba(${c.join(', ')}, 0.6)`;
+}
 const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 
 /** The keys shown at the end of the bar, with Enter finishing the text when `enterDone`. */

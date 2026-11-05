@@ -51,6 +51,15 @@ describe('mode colours', () => {
     expect(parseModeColours({ document: '#0000AA' }).document).toBe('#0000aa');
     expect(parseModeColours({ style: 'rainbow' }).style).toBe('accent');
   });
+  it('reads the old Canvas blue, saved before the teal, as the teal', () => {
+    // every settings file saved before 2026-10-30 holds the blue, so the desktop app stayed blue
+    const old = { style: 'accent', drawing: '#2f6fdf', slides: '#c8572a', sheet: '#1e8a50', document: '#2647a8', design: '#7b3fbf' };
+    expect(parseModeColours(old)).toEqual(DEFAULT_MODE_COLOURS);
+    expect(parseModeColours({ ...old, drawing: '#2F6FDF' }).drawing).toBe('#0e7c93');
+    expect(parseSettings(JSON.stringify({ modeColours: old })).modeColours.drawing).toBe('#0e7c93');
+    // (only the canvases' colour changed: the others, and a colour of the user's own, stay as saved)
+    expect(parseModeColours({ ...old, drawing: '#3366cc', document: '#2f6fdf' })).toMatchObject({ drawing: '#3366cc', document: '#2f6fdf' });
+  });
   it('keeps them in the settings file', () => {
     expect(parseSettings(null).modeColours).toEqual(DEFAULT_MODE_COLOURS);
     const s = { ...DEFAULT_SETTINGS, modeColours: { style: 'window' as const, drawing: '#123456', slides: '#abcdef', sheet: '#0a7a3a', document: '#203080', design: '#552288' } };

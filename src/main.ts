@@ -83,7 +83,7 @@ import { DesignLibrary, GEO_DRAG_TYPE, pickDesignSize, sizeLabel, setShapeInk } 
 import { ShapeMenu } from './ui/shape-menu';
 import { whenIconsLoaded } from './design/icons';
 import { SlideTextRibbon } from './ui/slide-text-ribbon';
-import { CaptionEditor } from './ui/caption-editor';
+import { CaptionEditor, setCaptionTint } from './ui/caption-editor';
 import { LayersPanel } from './ui/layers-panel';
 import { Scrollbars } from './ui/scrollbars';
 import type { Presenter, ShowOptions } from './ui/present';
@@ -349,14 +349,15 @@ const renderer = new Renderer(scene, overlay);
 const editor = new Editor(doc, renderer, host);
 
 /**
- * Colour the window for a mode; in Canvas mode the selection, hover and drawing marks take the
- * mode's teal too, so the accent is the same everywhere (UI rule 5).
+ * Colour the window for a mode; in Canvas mode the selection, hover and drawing marks and the box
+ * round text being typed take the mode's teal too, so the accent is the same everywhere (UI rule 5).
  */
 function applyModeColours(mode: Parameters<typeof applyModeColoursOnly>[0], c: ModeColours): void {
   applyModeColoursOnly(mode, c);
   const tint = mode === 'drawing' ? modeColour('drawing', c) : null;
   setMarkTint(tint);
   setAidTint(tint);
+  setCaptionTint(tint);
   editor.requestScene();
 }
 editor.lengthUnits = () => rulerPrefs.units;
