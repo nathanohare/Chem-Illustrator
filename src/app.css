@@ -2758,7 +2758,7 @@ dialog.settings-window { max-width: none; }
 .sw-foot.sw-actions .sw-default, .sw-foot.sw-actions .sw-apply { display: none; }
 .sw-pane .sw-hidden { display: none !important; }
 /* labels on one line where the window has room; the pane scrolls as a whole (no inner scroll box with empty room under it) */
-.sw-pane .ask-row:not(.ask-check):not(.ask-wide) { grid-template-columns: minmax(9em, 18em) 1fr auto; }
+.sw-pane .ask-form > .ask-row:not(.ask-check, .ask-wide) > .ask-name { max-width: 26em; }
 .sw-pane .ds-list { max-height: none; overflow: visible; padding-right: 0; }
 .sw-pane > dialog.embedded { position: static; display: block; inset: auto; margin: 0; padding: 0; border: 0; box-shadow: none; background: none; color: inherit;
   width: auto; height: auto; max-width: none; max-height: none; min-width: 0; overflow: visible; }
