@@ -131,3 +131,16 @@ test set: 909 compounds, 2,593 diastereotopic CH2): mean absolute error for the 
 0.126 ppm and for all C-H 0.1073 -> 0.1054 ppm (bootstrap 95% CI of the gain 0.0015 to 0.0024).
 Direction (which proton is downfield) was tested on the Dickson 2025 assigned pairs and reached only
 about 70% with simple 3-D terms, so the rows are ordered by shift with no Ha/Hb labels.
+
+## 19F and 31P
+
+| Step | Script | What it does |
+|---|---|---|
+| Lookup | `train_fp.py WORKDIR --out public/nmr/nmr-fp.dat` (inputs: `nmrshiftdb2.py` output, NMRexp 19F/31P lists, `env_codes.ts` codes) | the same environment-code lookup as 13C/1H (`lookup.ts`), with `19F` and `31P` sections; NMRexp lists matched to atoms when they have one shift per symmetry-distinct F or P atom |
+
+Results (2026-11-05; held out: 10% of NMRShiftDB2 records, 5% of NMRexp papers; SI test set v1 gold and
+silver, its structures left out of training): 19F median error 0.73 ppm on held-out NMRexp papers and
+1.3 ppm on the SI set (63% within 2 ppm, 79% within 5 ppm); 31P 1.07 ppm held out and 3.3 ppm on the
+SI set (44% within 2 ppm, 59% within 5 ppm, 142 shifts). Means are 5-10 ppm because of a tail of
+unusual environments (metal complexes, hypervalent P and F) with few or no close matches.
+

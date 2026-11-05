@@ -29,4 +29,8 @@ are a produced work of those sources and carry the same credits.
 protons of a diastereotopic CH2, trained by `scripts/nmr/proton3d_fit.py` on NMRShiftDB2 shifts. It is a
 produced work of NMRShiftDB2 and carries the same nmrshiftdb2 Database License and credit.
 
+`nmr-fp.dat` holds median 19F and 31P shifts for atom environments, built by `scripts/nmr/train_fp.py`
+from NMRShiftDB2 and NMRexp (CC BY 4.0, doi 10.5281/zenodo.17296666; contains data from NMRexp). It
+carries the nmrshiftdb2 Database License and both credits.
+
 No text from any article is included. Papers in the project's NMR test set were left out.

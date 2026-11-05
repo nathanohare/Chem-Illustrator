@@ -59,8 +59,9 @@ export function predictCouplings(g: JGraph): Coupling[] {
       const r = ring.bond[bi];
       const het = (x: number) => nbs[x].some((y) => at[y.n].arom && at[y.n].el !== 'C');
       if (r === 6) {
-        // pyridine-like: H2-H3 ~4.8 when one end is next to the ring N
-        add(u, v, het(u) || het(v) ? 5.0 : 7.9, 'ortho');
+        // pyridine-like: H2-H3 ~4.8 when one end is next to the ring N; ~6.3 next to N+ (pyridinium, N-oxide)
+        const plus = (x: number) => nbs[x].some((y) => at[y.n].arom && at[y.n].el === 'N' && (at[y.n].q ?? 0) > 0);
+        add(u, v, plus(u) || plus(v) ? 6.3 : het(u) || het(v) ? 5.0 : 7.9, 'ortho');
       } else if (r === 5) {
         const ringHet = (x: number) => nbs[x].find((y) => at[y.n].arom && at[y.n].el !== 'C');
         const hu = ringHet(u), hv = ringHet(v);
@@ -118,7 +119,10 @@ export function predictCouplings(g: JGraph): Coupling[] {
       if (at[a].arom && at[b].arom && at[x].arom) {
         const r = ring.atom[x];
         const nextToN = (y: number) => nbs[y].some((z) => at[z.n].arom && at[z.n].el === 'N');
-        add(a, b, r === 5 ? (at[x].el === 'C' ? 1.5 : 1.0) : nextToN(a) || nextToN(b) ? 1.8 : 1.6, 'meta');
+        // pyridine: H2-H6 across the N ~0; H3-H5 (N para to the middle carbon) 1.4; H2-H4 1.8
+        if (r === 6 && at[x].el !== 'C') continue;
+        const nTwoAway = (y: number) => nbs[y].some((z) => z.n !== x && at[z.n].arom && nextToN(z.n));
+        add(a, b, r === 5 ? (at[x].el === 'C' ? 1.5 : 1.0) : nextToN(a) || nextToN(b) ? 1.8 : nTwoAway(a) && nTwoAway(b) ? 1.4 : 1.6, 'meta');
       } else if (!at[a].arom && hyb(a) === 3 && p.o === 1 && q.o === 2 && hyb(b) === 2 && !at[b].arom) {
         add(a, b, -1.5, 'allylic');
       } else if (!at[b].arom && hyb(b) === 3 && q.o === 1 && p.o === 2 && hyb(a) === 2 && !at[a].arom) {

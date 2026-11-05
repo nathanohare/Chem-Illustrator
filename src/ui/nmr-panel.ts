@@ -18,10 +18,11 @@ import type { Model3d } from '../chem/model3d-build';
 import { checkData, measuredLines, parsePeakLists, type CheckNucleus, type CheckResult, type MeasuredList, type PredictedRow } from '../chem/nmr/check';
 import { knownPeaks, residualPeaks } from '../chem/nmr/known-peaks';
 import { nucleusOfSpectrum, readSpectrumFile, referenceToSolvent, spectrumToList, SpectrumFileError, type MeasuredSpectrum } from '../chem/nmr/spectrum-file';
-import { autoRange, rowAt, spectrumSvg, SpectrumWindow, type MeasuredOverlay, type SpectrumData } from './nmr-spectrum';
+import { autoRange, rowAt, spectrumSvg, SpectrumWindow, nmrQuality, type MeasuredOverlay, type SpectrumData } from './nmr-spectrum';
 
 export const NMR_SOLVENTS = ['CDCl3', 'DMSO-d6', 'CD3OD', 'C6D6', 'acetone-d6', 'CD2Cl2', 'CD3CN', 'D2O'] as const;
 
+const isCheckNuc = (n: Nucleus): n is CheckNucleus => n === '1H' || n === '13C';
 const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!));
 
 /** One row of the table: a set of equivalent atoms (same surroundings). */
@@ -46,7 +47,16 @@ export interface NmrRow {
    *  upfield one; which proton is which is not predicted. lo: the upfield shift, on the 'hi' row. */
   pair?: 'hi' | 'lo';
   lo?: number;
+  /** F and P atoms: the 19F or 31P shift. */
+  x?: ShiftHit | null;
+  xNuc?: XNucleus;
 }
+
+/** Nuclei shown besides 1H and 13C, for the structures that have them. */
+export type XNucleus = '19F' | '31P';
+const X_EL: Record<XNucleus, string> = { '19F': 'F', '31P': 'P' };
+/** Spectrometer frequency of each nucleus at a 1H frequency (MHz). */
+export const NUC_MHZ = (nuc: Nucleus, mhz: number) => Math.round(mhz * { '1H': 1, '13C': 0.2515, '19F': 0.9408, '31P': 0.4048 }[nuc]);
 
 /** Smallest predicted gap (ppm) shown as two rows. */
 const MIN_GAP = 0.02;
@@ -101,12 +111,14 @@ export function nmrRows(g: NamerGraph, shifts: AtomShifts[]): NmrRow[] {
   const codes = envCodes(g);
   const sets = new Map<string, number[]>();
   g.atoms.forEach((a, i) => {
-    if (a.el !== 'C' && !(a.h > 0)) return;
+    if (a.el !== 'C' && a.el !== 'F' && a.el !== 'P' && !(a.h > 0)) return;
     const k = `${a.el}|${codes[i][codes[i].length - 1]}`;
     sets.set(k, [...(sets.get(k) ?? []), i]);
   });
   const cnum = new Map<number, number>();
   g.atoms.forEach((a, i) => { if (a.el === 'C') cnum.set(i, cnum.size + 1); });
+  const xnum = new Map<number, number>();
+  for (const el of ['F', 'P']) { let k = 0; g.atoms.forEach((a, i) => { if (a.el === el) xnum.set(i, ++k); }); }
   const rows: NmrRow[] = [];
   for (const atoms of sets.values()) {
     const s = shifts[atoms[0]];
@@ -114,12 +126,13 @@ export function nmrRows(g: NamerGraph, shifts: AtomShifts[]): NmrRow[] {
     const numbers = atoms.map((i) => cnum.get(i) ?? null);
     rows.push({
       atoms, numbers,
-      label: a.el === 'C' ? numbers.join(', ') : `${a.el}H${a.h > 1 ? a.h : ''}`,
+      label: a.el === 'C' ? numbers.join(', ') : a.el === 'F' || a.el === 'P' ? atoms.map((i) => `${a.el}${xnum.get(i)}`).join(', ') : `${a.el}H${a.h > 1 ? a.h : ''}`,
       c13: s.c13, h1: s.h1, hCount: a.h * atoms.length,
+      ...(a.el === 'F' || a.el === 'P' ? { xNuc: a.el === 'F' ? '19F' as const : '31P' as const, x: null } : {}),
     });
   }
   // carbons in number order, heteroatom hydrogens last
-  const first = (r: NmrRow) => r.numbers[0] ?? 1e9;
+  const first = (r: NmrRow) => r.numbers[0] ?? (r.xNuc ? 2e9 : 1e9);
   return rows.sort((p, q) => first(p) - first(q));
 }
 
@@ -139,12 +152,13 @@ function chip(h: ShiftHit | null, wide: number): string {
   return `<span class="nmr-src${loose ? ' loose' : ''}" title="${esc(tip)}">${loose ? '~' : h.n > 99 ? '99+' : h.n}</span>`;
 }
 
-export type Nucleus = '1H' | '13C';
+export type Nucleus = '1H' | '13C' | XNucleus;
 
 const pm = (h: ShiftHit, wide: number) => (h.measured ? '' : `<span class="muted">±${h.spread.toFixed(wide > 1 ? 1 : 2)}</span>`);
 
 /** The list for one nucleus, highest shift first: shift, how many atoms, which atoms, source chip. */
 export function nmrListHtml(rows: NmrRow[], nuc: Nucleus): string {
+  if (nuc === '19F' || nuc === '31P') return xListHtml(rows, nuc);
   const c = nuc === '13C';
   const all = rows.map((r, k) => ({ r, k, h: c ? r.c13 : r.h1 })).filter((x) => x.h && (c || x.r.hCount));
   const left = c ? [] : [...new Set(all.filter((x) => x.r.exch).map((x) => `${rows[x.k].label.replace(/\d+$/, '')}`))];
@@ -155,6 +169,19 @@ export function nmrListHtml(rows: NmrRow[], nuc: Nucleus): string {
   const multCell = (r: NmrRow) => (m ? `<td class="nmr-mult">${esc(r.mult ?? '')}${r.j?.length && r.mult !== 'm' ? ` ${r.j.map((x) => x.toFixed(1)).join(', ')}` : ''}</td>` : '');
   const body = list.map(({ r, k, h }) => `<tr data-row="${k}"><td>${h!.value.toFixed(c ? 1 : 2)} ${pm(h!, c ? 3 : 0.3)}</td><td>${c ? (r.atoms.length > 1 ? `${r.atoms.length}C` : '') : `${r.hCount}H`}</td>${multCell(r)}<td>${esc(r.label)}</td><td>${chip(h, c ? 3 : 0.3)}</td></tr>`).join('');
   return `<table class="nmr-table${m ? ' with-mult' : ''}"><thead><tr><th>δ (ppm)${tip}</th><th></th>${m ? '<th class="nmr-mult">Mult., J (Hz)</th>' : ''}<th>Atoms</th><th></th></tr></thead><tbody>${body}</tbody></table>`;
+}
+
+/** The 19F or 31P list: shift, how many atoms, which atoms, source chip. */
+function xListHtml(rows: NmrRow[], nuc: XNucleus): string {
+  const list = rows.map((r, k) => ({ r, k })).filter(({ r }) => r.xNuc === nuc && r.x).sort((a, b) => b.r.x!.value - a.r.x!.value);
+  if (!list.length) return `<p class="muted small">No ${nuc === '19F' ? 'fluorine' : 'phosphorus'} shift could be predicted.</p>`;
+  const body = list.map(({ r, k }) => `<tr data-row="${k}"><td>${r.x!.value.toFixed(1)} ${pm(r.x!, 5)}</td><td>${r.atoms.length}${X_EL[nuc]}</td><td>${esc(r.label)}</td><td>${chip(r.x!, 5)}</td></tr>`).join('');
+  return `<table class="nmr-table"><thead><tr><th>δ (ppm)</th><th></th><th>Atoms</th><th></th></tr></thead><tbody>${body}</tbody></table>`;
+}
+
+/** 19F and 31P shifts of a structure, highest first, by nucleus (only nuclei it has). */
+function xShifts(rows: NmrRow[]): [XNucleus, { v: number; k: number }[]][] {
+  return (['19F', '31P'] as const).map((n) => [n, [...rows.entries()].filter(([, r]) => r.xNuc === n && r.x).map(([k, r]) => ({ v: r.x!.value, k })).sort((a, b) => b.v - a.v)] as [XNucleus, { v: number; k: number }[]]).filter(([, l]) => l.length);
 }
 
 /** 1H signals highest first; equal shifts print once with their hydrogens added (and as m when their patterns differ). */
@@ -176,7 +203,8 @@ export function nmrReportHtml(rows: NmrRow[], solvent: string, mhz = 400): strin
   const cs = [...rows.entries()].filter(([, r]) => r.c13).sort((a, b) => b[1].c13!.value - a[1].c13!.value);
   const h = merged.map((x) => `<span data-row="${x.k.join(',')}">${x.v.toFixed(2)} (${x.m ? `${esc(x.m).replace(/J = /, '<i>J</i> = ')}, ` : ''}${x.n}H)</span>`).join(', ');
   const c = cs.map(([k, r]) => `<span data-row="${k}">${r.c13!.value.toFixed(1)}</span>`).join(', ');
-  return `<p class="nmr-report"><sup>1</sup>H NMR (${mhz} MHz, ${sol}) δ ${h || '—'}.</p><p class="nmr-report"><sup>13</sup>C NMR (${Math.round(mhz / 3.97)} MHz, ${sol}) δ ${c || '—'}.</p>`;
+  const x = xShifts(rows).map(([n, l]) => `<p class="nmr-report"><sup>${n.slice(0, 2)}</sup>${n.slice(2)} NMR (${NUC_MHZ(n, mhz)} MHz, ${sol}) δ ${l.map((e) => `<span data-row="${e.k}">${e.v.toFixed(1)}</span>`).join(', ')}.</p>`).join('');
+  return `<p class="nmr-report"><sup>1</sup>H NMR (${mhz} MHz, ${sol}) δ ${h || '—'}.</p><p class="nmr-report"><sup>13</sup>C NMR (${Math.round(mhz / 3.97)} MHz, ${sol}) δ ${c || '—'}.</p>${x}`;
 }
 
 /** The predicted spectra as an SI writes them (ACS style), highest shift first. */
@@ -184,7 +212,8 @@ export function siText(rows: NmrRow[], solvent: string, mhz = 400): string {
   const merged = mergedH(rows);
   const cs = rows.filter((r) => r.c13).map((r) => r.c13!.value).sort((a, b) => b - a);
   const c = Math.round(mhz / 3.97);
-  return `1H NMR (${mhz} MHz, ${solvent}) δ ${merged.map((h) => `${h.v.toFixed(2)} (${h.m ? `${h.m}, ` : ''}${h.n}H)`).join(', ')}; 13C NMR (${c} MHz, ${solvent}) δ ${cs.map((v) => v.toFixed(1)).join(', ')}.`;
+  const x = xShifts(rows).map(([n, l]) => `; ${n} NMR (${NUC_MHZ(n, mhz)} MHz, ${solvent}) δ ${l.map((e) => e.v.toFixed(1)).join(', ')}`).join('');
+  return `1H NMR (${mhz} MHz, ${solvent}) δ ${merged.map((h) => `${h.v.toFixed(2)} (${h.m ? `${h.m}, ` : ''}${h.n}H)`).join(', ')}; 13C NMR (${c} MHz, ${solvent}) δ ${cs.map((v) => v.toFixed(1)).join(', ')}${x}.`;
 }
 
 interface Item { molblock: string; map: number[] }
@@ -224,6 +253,8 @@ export interface NmrHost {
   netUrl?: string;
   /** Trees for the gap between diastereotopic CH2 protons (Accurate); optional. */
   splitUrl?: string;
+  /** The 19F and 31P shift lookup; optional. */
+  fpUrl?: string;
   graph(molblock: string): Promise<{ graph: NamerGraph | null }>;
   /** Low-energy conformers of a structure (molfile) for Accurate spectra; optional. */
   conformers?(molblock: string): Promise<Model3d>;
@@ -241,6 +272,7 @@ export interface NmrHost {
 /** The NMR section of the Analysis panel and its markers on the drawing. */
 export class NmrPanel {
   private table: Promise<ShiftTable> | null = null;
+  private fp: Promise<ShiftTable | null> | null = null;
   private store: Promise<MeasuredStore | null> | null = null;
   private net: Promise<ShiftNet | null> | null = null;
   private splitTrees: Promise<Ch2SplitTrees | null> | null = null;
@@ -261,7 +293,7 @@ export class NmrPanel {
   get solvent(): string { try { return localStorage.getItem('ci-nmr-solvent') || 'CDCl3'; } catch { return 'CDCl3'; } }
   set solvent(v: string) { try { localStorage.setItem('ci-nmr-solvent', v); } catch { /* not remembered */ } }
   /** Which nucleus the list shows. */
-  get nuc(): Nucleus { try { return localStorage.getItem('ci-nmr-nuc') === '13C' ? '13C' : '1H'; } catch { return '1H'; } }
+  get nuc(): Nucleus { try { const n = localStorage.getItem('ci-nmr-nuc'); return n === '13C' || n === '19F' || n === '31P' ? n : '1H'; } catch { return '1H'; } }
   set nuc(v: Nucleus) { try { localStorage.setItem('ci-nmr-nuc', v); } catch { /* not remembered */ } }
   /** The peak report (journal lines) instead of the list. */
   get report(): boolean { try { return localStorage.getItem('ci-nmr-view') === 'report'; } catch { return false; } }
@@ -273,6 +305,13 @@ export class NmrPanel {
       return r.arrayBuffer();
     }).then((b) => new ShiftTable(b)).catch((e) => { this.table = null; throw e; });
     return this.table;
+  }
+
+  private loadFp(): Promise<ShiftTable | null> {
+    const url = this.host.fpUrl;
+    if (!url) return Promise.resolve(null);
+    this.fp ??= fetch(url).then((r) => (r.ok ? r.arrayBuffer() : null)).then((b) => (b ? new ShiftTable(b) : null)).catch(() => null);
+    return this.fp;
   }
 
   private loadStore(): Promise<MeasuredStore | null> {
@@ -304,7 +343,7 @@ export class NmrPanel {
       d.dataset.item = String(i);
       d.open = this.open;
       d.innerHTML = `<summary>NMR (predicted) <span class="info-icon" tabindex="0" role="img" title="Predicted by networks trained on measured shifts, blended with shifts of atoms with the same surroundings (NMRShiftDB2 and CC BY journal data). ± is the expected error. The chip is how many measured atoms share the atom's surroundings; ~ means a less certain prediction; M means this structure's own measured shift. Marker numbers on the drawing match the Atoms column." aria-label="About predicted NMR">i</span>
-        <span class="nmr-nuc" role="group" aria-label="Nucleus"${this.report ? ' hidden' : ''}>${(['1H', '13C'] as const).map((n) => `<button type="button" data-nuc="${n}" aria-pressed="${n === this.nuc}"><sup>${n.slice(0, -1)}</sup>${n.slice(-1)}</button>`).join('')}</span>
+        <span class="nmr-nuc" role="group" aria-label="Nucleus"${this.report ? ' hidden' : ''}>${(['1H', '13C', '19F', '31P'] as const).map((n) => `<button type="button" data-nuc="${n}" aria-pressed="${n === this.nuc}"${n === '19F' || n === '31P' ? ' hidden' : ''}><sup>${n.slice(0, -1)}</sup>${n.slice(-1)}</button>`).join('')}</span>
         <select class="nmr-solvent" title="Solvent">${NMR_SOLVENTS.map((s) => `<option value="${s}"${s === this.solvent ? ' selected' : ''}>${s}</option>`).join('')}</select></summary>
         <div class="nmr-body"><p class="muted small">Loading…</p></div>
         <div class="an-buttons"><button type="button" class="nmr-check" aria-pressed="false" title="Compare a measured peak list (pasted as an SI writes it) with the prediction">Check Data</button><button type="button" class="nmr-copy" title="Copy the predicted 1H and 13C lines as an SI writes them">Copy as SI Text</button><button type="button" class="nmr-view" aria-pressed="${this.report}" title="Show the predicted 1H and 13C lines as a journal prints them">Peak Report</button><button type="button" class="nmr-marks" aria-pressed="${this.marks}" title="Show the predictions on the drawing">Show on Drawing</button><select class="nmr-mode" title="What Show on Drawing shows: shifts by each atom, atom numbers matching the list, or confidence dots (green: small expected error; amber: larger; red: large, or no similar measured atoms)">${(['shifts', 'numbers', 'confidence'] as const).map((m) => `<option value="${m}"${m === this.mode ? ' selected' : ''}>${{ shifts: 'Shifts', numbers: 'Atom Numbers', confidence: 'Confidence' }[m]}</option>`).join('')}</select></div>`;
@@ -361,7 +400,7 @@ export class NmrPanel {
       nb.addEventListener('pointermove', (e) => {
         const strip = (e.target as HTMLElement).closest<HTMLElement>('.nmr-strip');
         if (!strip || (e.target as HTMLElement).closest('.nmr-popout')) return;
-        const data = this.dataFor(i, 400, this.quality, this.specNuc);
+        const data = this.dataFor(i, 400, this.quality, this.specNuc(i));
         if (!data) return;
         const r = autoRange(data), b = strip.getBoundingClientRect();
         const ppm = r.hi - ((e.clientX - b.left) / b.width) * (r.hi - r.lo);
@@ -405,6 +444,12 @@ export class NmrPanel {
       store?.apply(graph, shifts, this.solvent);
       const rows = nmrRows(graph, shifts);
       for (const r of rows) r.exch = exchangeRange(graph, r.atoms[0], this.solvent);
+      if (rows.some((r) => r.xNuc)) {
+        const fp = await this.loadFp();
+        if (seq !== this.seq) return;
+        const all = envCodes(graph);
+        for (const r of rows) if (r.xNuc) r.x = fp?.predict(r.xNuc, all[r.atoms[0]], this.solvent) ?? null;
+      }
       const ids = heavy.map((k) => { const id = item.map[k]; return id !== undefined && id >= 0 ? id : null; });
       const ring = new Set<string>();
       for (const b of graph.bonds) {
@@ -440,7 +485,14 @@ export class NmrPanel {
     if (!s.rows.length) { body.innerHTML = '<p class="muted small">No carbons or hydrogens to predict.</p>'; return; }
     body.innerHTML = `<div class="nmr-strip" data-item="${i}"><button type="button" class="nmr-popout" title="Open the spectrum in a window (zoom, labels, field, Copy as Picture)" aria-label="Open the spectrum in a window">⤢</button></div>`
       + this.checkHtml(i)
-      + (this.report ? nmrReportHtml(s.rows, this.solvent) : nmrListHtml(s.rows, this.nuc));
+      + (this.report ? nmrReportHtml(s.rows, this.solvent) : nmrListHtml(s.rows, this.nucOf(i)));
+    // 19F and 31P buttons only for structures with F or P; the button shown pressed is the list shown
+    const shownNuc = this.nucOf(i);
+    for (const b of d.querySelectorAll<HTMLButtonElement>('.nmr-nuc button')) {
+      const n = b.dataset.nuc as Nucleus;
+      if (n === '19F' || n === '31P') b.hidden = !s.rows.some((r) => r.xNuc === n);
+      b.setAttribute('aria-pressed', String(n === shownNuc));
+    }
     this.drawStrip(i, d, null);
   }
 
@@ -463,7 +515,7 @@ export class NmrPanel {
       return `<div class="ck-box"><textarea spellcheck="false" aria-label="Measured peak list" placeholder="Paste a peak list as an SI writes it: 1H NMR (400 MHz, CDCl3) δ 7.30 (d, J = 8.7 Hz, 2H), …">${esc(st.text)}</textarea>`
         + `<div class="ck-row"><span class="ck-read">${esc(this.readNote(st))}</span><span class="sp"><button type="button" class="ck-open" title="Open a measured spectrum: JCAMP-DX (.jdx, .dx) or a Bruker experiment folder as a .zip (with its processed pdata)">Open Spectrum…</button><button type="button" class="ck-run primary">Check</button><button type="button" class="ck-cancel">Cancel</button></span></div></div>`;
     }
-    const nucs: CheckNucleus[] = this.report ? ['1H', '13C'] : [this.nuc];
+    const nucs: CheckNucleus[] = this.report ? ['1H', '13C'] : isCheckNuc(this.nuc) ? [this.nuc] : [];
     const sev = { ok: 'ck-ok', warn: 'ck-warn', bad: 'ck-bad', info: 'ck-info' } as const;
     let html = '', first = true;
     for (const n of nucs) {
@@ -557,13 +609,14 @@ export class NmrPanel {
       st.results.set(list.nuc, { list, res, rowIdx, note, trace });
     }
     st.editing = false;
-    if (!this.report && !st.results.has(this.nuc)) { this.nuc = st.results.keys().next().value!; this.restyle(d.closest<HTMLElement>('.frag')?.parentElement ?? document.body); }
+    if (!this.report && !st.results.has(this.nuc as CheckNucleus)) { this.nuc = st.results.keys().next().value!; this.restyle(d.closest<HTMLElement>('.frag')?.parentElement ?? document.body); }
     else this.render(i, d);
     if (this.win?.visible && this.winItem === i) this.win.refresh();
   }
 
   /** The measured list drawn against the prediction in the Spectrum window. */
   private overlayFor(i: number, nuc: Nucleus, sf: number): MeasuredOverlay | undefined {
+    if (!isCheckNuc(nuc)) return undefined;
     const r = this.checkState(i, false)?.results.get(nuc);
     if (!r) return undefined;
     const { list, res } = r;
@@ -585,7 +638,9 @@ export class NmrPanel {
   }
 
   /** Which nucleus the spectrum shows: the list's, or 1H beside the peak report. */
-  private get specNuc(): Nucleus { return this.report ? '1H' : this.nuc; }
+  private specNuc(i: number): Nucleus { return this.report ? '1H' : this.nucOf(i); }
+  /** The nucleus the list of structure i shows: 19F or 31P only for a structure that has them. */
+  private nucOf(i: number): Nucleus { const n = this.nuc; return n === '1H' || n === '13C' || this.shown.get(i)?.rows.some((r) => r.xNuc === n) ? n : '1H'; }
 
   /** The spectrum data for one structure (simulated once per field and quality). */
   private dataFor(i: number, sf: number, quality: NmrQuality, nuc: Nucleus): SpectrumData | null {
@@ -593,6 +648,7 @@ export class NmrPanel {
     if (!s) return null;
     this.useRows(i, s);
     if (nuc === '13C') return { nuc, sticks: s.rows.flatMap((r, k) => (r.c13 ? [{ shift: r.c13.value, n: r.atoms.length, row: k }] : [])), measured: this.overlayFor(i, nuc, sf) };
+    if (nuc === '19F' || nuc === '31P') return { nuc, sticks: s.rows.flatMap((r, k) => (r.xNuc === nuc && r.x ? [{ shift: r.x.value, n: r.atoms.length, row: k }] : [])) };
     const key = `${sf}|${quality}`;
     let spec = s.specs.get(key);
     if (!spec) {
@@ -677,7 +733,7 @@ export class NmrPanel {
   /** Draws the panel's small spectrum (panel width, 400 MHz). */
   private drawStrip(i: number, d: HTMLElement, hotRow: number | null): void {
     const box = d.querySelector<HTMLElement>('.nmr-strip');
-    const data = this.dataFor(i, 400, this.quality, this.specNuc);
+    const data = this.dataFor(i, 400, this.quality, this.specNuc(i));
     if (!box || !data) return;
     const w = Math.max(160, Math.round(box.clientWidth || d.clientWidth || 260)), r = autoRange(data);
     box.querySelector('svg')?.remove();
@@ -685,7 +741,12 @@ export class NmrPanel {
   }
 
   /** Quality of the 1H simulation (shared with the Spectrum window). */
-  private get quality(): NmrQuality { try { const q = localStorage.getItem('ci-nmr-quality'); return q === 'fast' || q === 'accurate' ? q : 'balanced'; } catch { return 'balanced'; } }
+  private get quality(): NmrQuality { return nmrQuality(); }
+
+  /** Shows a quality setting changed elsewhere (Settings ▸ Preferences). */
+  qualityChanged(panel: HTMLElement | null): void {
+    if (panel) this.restyle(panel); else this.win?.refresh();
+  }
 
   /** Hovering a row or a peak: its atoms on the drawing, its row in the list, its peaks in both spectra. */
   private hoverRow(i: number, row: number | null, from: 'list' | 'strip' | 'window'): void {
@@ -704,7 +765,7 @@ export class NmrPanel {
   private popOut(i: number, near: DOMRect | null): void {
     this.winItem = i;
     this.win ??= new SpectrumWindow({
-      data: (sf, q) => this.dataFor(this.winItem, sf, q, this.specNuc),
+      data: (sf, q) => this.dataFor(this.winItem, sf, q, this.specNuc(this.winItem)),
       hover: (row) => this.hoverRow(this.winItem, row, 'window'),
       copyPicture: (png) => (this.host.copyPicture ? this.host.copyPicture(png) : navigator.clipboard.write([new ClipboardItem({ 'image/png': new Blob([png as Uint8Array<ArrayBuffer>], { type: 'image/png' }) })])),
       putOnCanvas: (png) => { if (this.host.placePicture) this.host.placePicture(png); else this.host.flash('Pictures cannot be put on this page.'); },
@@ -717,7 +778,6 @@ export class NmrPanel {
   /** Brings every NMR section in line with the nucleus and view settings. */
   private restyle(panel: HTMLElement): void {
     for (const d of panel.querySelectorAll<HTMLElement>('details.nmr')) {
-      for (const b of d.querySelectorAll<HTMLElement>('.nmr-nuc button')) b.setAttribute('aria-pressed', String(b.dataset.nuc === this.nuc));
       d.querySelector<HTMLElement>('.nmr-nuc')!.hidden = this.report;
       d.querySelector('.nmr-view')!.setAttribute('aria-pressed', String(this.report));
       this.render(Number(d.dataset.item), d);
@@ -760,9 +820,9 @@ export class NmrPanel {
           if (id === null || !p) return;
           const hot = this.hot.includes(id);
           if (mode === 'confidence') {
-            const h = row.c13 ?? row.h1;
+            const h = row.c13 ?? row.h1 ?? row.x ?? null;
             if (!h) return;
-            ctx.fillStyle = confidenceColour(h, row.c13 ? 3 : 0.3);
+            ctx.fillStyle = confidenceColour(h, row.c13 ? 3 : row.x ? 5 : 0.3);
             if (hot) { ctx.strokeStyle = accent; ctx.lineWidth = 1.5 * px; ctx.beginPath(); ctx.arc(p.x, p.y, 7.5 * px, 0, Math.PI * 2); ctx.stroke(); }
             ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1 * px;
             ctx.beginPath(); ctx.arc(p.x, p.y, 4.5 * px, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
@@ -784,6 +844,7 @@ export class NmrPanel {
           // shifts: δC by the atom, δH beyond it (stacked under δC when the label points sideways)
           const labels: { text: string; colour: string; bold: boolean }[] = [];
           if (row.c13) labels.push({ text: row.c13.value.toFixed(1), colour: '#555555', bold: false });
+          if (row.x) labels.push({ text: row.x.value.toFixed(1), colour: '#555555', bold: false });
           if (row.h1 && row.hCount && !row.exch) labels.push({ text: row.h1.value.toFixed(2) + (row.pair === 'hi' && row.lo !== undefined ? `/${row.lo.toFixed(2)}` : ''), colour: accent, bold: true });
           if (!labels.length) return;
           const side = Math.abs(ux) > 0.6;

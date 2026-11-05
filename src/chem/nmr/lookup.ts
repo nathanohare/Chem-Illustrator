@@ -6,10 +6,12 @@
 import { envCodes, type EnvGraph } from './env';
 
 export type Nucleus = '13C' | '1H';
+/** Nuclei a lookup file can hold: nmr-hose.dat has 13C and 1H, nmr-fp.dat 19F and 31P. */
+export type TableNucleus = Nucleus | '19F' | '31P';
 
 export interface LookupParams { maxr: number; min_n?: number; depth?: number; decay?: number; c?: number; solvent?: boolean }
 
-interface Section { nuc: Nucleus; r: number; solvent: string | null; count: number; codes: Float64Array; med: Int16Array; mad: Uint16Array; n: Uint16Array }
+interface Section { nuc: TableNucleus; r: number; solvent: string | null; count: number; codes: Float64Array; med: Int16Array; mad: Uint16Array; n: Uint16Array }
 
 export interface ShiftHit {
   /** Predicted shift, ppm. */
@@ -32,11 +34,11 @@ export interface AtomShifts {
   hCount: number;
 }
 
-interface Header { version: number; scale: Record<Nucleus, number>; params: Record<Nucleus, LookupParams>; sections: Omit<Section, 'codes' | 'med' | 'mad' | 'n'>[]; sources?: Record<string, number> }
+interface Header { version: number; scale: Record<TableNucleus, number>; params: Record<TableNucleus, LookupParams>; sections: Omit<Section, 'codes' | 'med' | 'mad' | 'n'>[]; sources?: Record<string, number> }
 
 export class ShiftTable {
-  readonly params: Record<Nucleus, LookupParams>;
-  readonly scale: Record<Nucleus, number>;
+  readonly params: Record<TableNucleus, LookupParams>;
+  readonly scale: Record<TableNucleus, number>;
   readonly sources: Record<string, number>;
   private readonly sec = new Map<string, Section>();
 
@@ -67,7 +69,7 @@ export class ShiftTable {
     }
   }
 
-  private find(nuc: Nucleus, r: number, solvent: string | null, code: number): [number, number, number] | null {
+  private find(nuc: TableNucleus, r: number, solvent: string | null, code: number): [number, number, number] | null {
     const s = this.sec.get(key(nuc, r, solvent));
     if (!s) return null;
     let lo = 0, hi = s.count - 1;
@@ -81,8 +83,9 @@ export class ShiftTable {
   }
 
   /** One atom's shift from its environment codes (radius 0 first), blending the deepest radii. */
-  predict(nuc: Nucleus, codes: string[], solvent: string | null): ShiftHit | null {
+  predict(nuc: TableNucleus, codes: string[], solvent: string | null): ShiftHit | null {
     const p = this.params[nuc];
+    if (!p) return null;
     const mins = p.min_n ?? 1, depth = p.depth ?? 1, decay = p.decay ?? 0.35, c = p.c ?? 1;
     const hits: [number, [number, number, number]][] = [];
     for (let r = Math.min(p.maxr, codes.length - 1); r >= 0; r--) {

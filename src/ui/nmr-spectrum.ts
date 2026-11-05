@@ -9,10 +9,10 @@ const esc = (s: string) => s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&l
 
 /** What one drawing shows. */
 export interface SpectrumData {
-  nuc: '1H' | '13C';
+  nuc: '1H' | '13C' | '19F' | '31P';
   /** 1H: the simulated spectrum. */
   spec?: PredictedSpectrum;
-  /** 13C: one line per carbon set (shift, carbons). */
+  /** 13C, 19F, 31P: one line per set of equivalent atoms (shift, atoms). */
   sticks?: { shift: number; n: number; row: number }[];
   /** 1H: list row index for each proton group (same order as spec.groups), -1 when none. */
   groupRows?: number[];
@@ -26,9 +26,9 @@ export interface DrawOpts { w: number; h: number; hi: number; lo: number; labels
 export function autoRange(d: SpectrumData): { hi: number; lo: number } {
   const xs = d.nuc === '1H' ? (d.spec?.groups ?? []).map((g) => g.shift) : (d.sticks ?? []).map((s) => s.shift);
   if (d.measured) xs.push(...d.measured.links.map((l) => l.m), ...d.measured.marks.map((m) => m.ppm));
-  if (!xs.length) return d.nuc === '1H' ? { hi: 10, lo: 0 } : { hi: 220, lo: 0 };
+  if (!xs.length) return d.nuc === '1H' ? { hi: 10, lo: 0 } : d.nuc === '13C' ? { hi: 220, lo: 0 } : { hi: 50, lo: -250 };
   const m = d.nuc === '1H' ? 0.5 : 10;
-  const hi = Math.ceil((Math.max(...xs) + m) / m) * m, lo = Math.max(d.nuc === '1H' ? -0.5 : -10, Math.floor((Math.min(...xs) - m) / m) * m);
+  const hi = Math.ceil((Math.max(...xs) + m) / m) * m, lo = Math.max(d.nuc === '1H' ? -0.5 : d.nuc === '13C' ? -10 : -1000, Math.floor((Math.min(...xs) - m) / m) * m);
   return { hi, lo };
 }
 
@@ -212,6 +212,11 @@ export interface SpectrumWindowHost {
   closed(): void;
 }
 
+/** The NMR quality setting (Fast, Balanced, Accurate), kept on this computer: the Spectrum window's
+ *  dropdown and Settings ▸ Preferences change the same value. */
+export function nmrQuality(): NmrQuality { try { const q = localStorage.getItem('ci-nmr-quality'); return q === 'fast' || q === 'accurate' ? q : 'balanced'; } catch { return 'balanced'; } }
+export function setNmrQuality(v: NmrQuality): void { try { localStorage.setItem('ci-nmr-quality', v); } catch { /* not remembered */ } }
+
 /** The popped-out Spectrum window: drag by its title, resize from the corner, wheel to zoom, double-click to fit. */
 export class SpectrumWindow {
   readonly el: HTMLDivElement;
@@ -222,8 +227,8 @@ export class SpectrumWindow {
 
   get sf(): number { try { return Number(localStorage.getItem('ci-nmr-mhz')) || 400; } catch { return 400; } }
   set sf(v: number) { try { localStorage.setItem('ci-nmr-mhz', String(v)); } catch { /* not remembered */ } }
-  get quality(): NmrQuality { try { const q = localStorage.getItem('ci-nmr-quality'); return q === 'fast' || q === 'accurate' ? q : 'balanced'; } catch { return 'balanced'; } }
-  set quality(v: NmrQuality) { try { localStorage.setItem('ci-nmr-quality', v); } catch { /* not remembered */ } }
+  get quality(): NmrQuality { return nmrQuality(); }
+  set quality(v: NmrQuality) { setNmrQuality(v); }
 
   constructor(private host: SpectrumWindowHost) {
     const el = document.createElement('div');
@@ -298,13 +303,16 @@ export class SpectrumWindow {
   /** Re-reads the data (structure, nucleus, field or quality changed). */
   refresh(): void {
     if (this.el.hidden) return;
+    const qs = this.el.querySelector<HTMLSelectElement>('.nmr-spec-quality');
+    if (qs) qs.value = this.quality;
     const prev = this.d?.nuc;
     this.d = this.host.data(this.sf, this.quality);
     if (this.d?.nuc !== prev) this.range = null;
-    const nucHtml = this.d?.nuc === '13C' ? '<sup>13</sup>C' : '<sup>1</sup>H';
+    const n = this.d?.nuc ?? '1H';
+    const nucHtml = `<sup>${n.slice(0, -1)}</sup>${n.slice(-1)}`;
     this.el.querySelector('.nmr-spec-title')!.innerHTML = this.d?.measured ? `Measured vs Predicted ${nucHtml} Spectrum` : `Predicted ${nucHtml} Spectrum`;
-    this.el.querySelector<HTMLElement>('.nmr-spec-mhz')!.hidden = this.d?.nuc === '13C';
-    this.el.querySelector<HTMLElement>('.nmr-spec-quality')!.hidden = this.d?.nuc === '13C';
+    this.el.querySelector<HTMLElement>('.nmr-spec-mhz')!.hidden = n !== '1H';
+    this.el.querySelector<HTMLElement>('.nmr-spec-quality')!.hidden = n !== '1H';
     this.draw();
   }
 

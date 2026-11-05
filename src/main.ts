@@ -42,6 +42,7 @@ import { pubchemHtml, pubchemRuns, type PubChemState } from './ui/pubchem-panel'
 import { paragraphPages } from './document/doc-file';
 import { reviewAuthor, setReviewAuthor } from './document/revisions';
 import { NmrPanel } from './ui/nmr-panel';
+import { nmrQuality, setNmrQuality } from './ui/nmr-spectrum';
 import { analysisHtml, formulaHtml, electronsHtml, analysisRuns, withRepeats, polymerHtml, descriptorRuns, DEFAULT_DESCRIPTORS, nameHtml, type RepeatUnit, type NameState } from './ui/analysis-panel';
 import { attachedAtoms, attachWhereItIs, defaultGap, nearestStructure, placeAttached, structureSig } from './editor/attached';
 import { repeatGroups, lipDirection } from './chem/polymer';
@@ -2345,7 +2346,7 @@ async function editTorsion(id: number): Promise<void> {
 
 const names = new NameReader(new URL('opsin/opsin-data.dat', document.baseURI).href);
 const nmrPanel = new NmrPanel({
-  url: new URL('nmr/nmr-hose.dat', document.baseURI).href, measuredUrl: new URL('nmr/nmr-measured.dat', document.baseURI).href, netUrl: new URL('nmr/nmr-net.dat', document.baseURI).href, splitUrl: new URL('nmr/nmr-ch2split.json', document.baseURI).href,
+  url: new URL('nmr/nmr-hose.dat', document.baseURI).href, measuredUrl: new URL('nmr/nmr-measured.dat', document.baseURI).href, netUrl: new URL('nmr/nmr-net.dat', document.baseURI).href, splitUrl: new URL('nmr/nmr-ch2split.json', document.baseURI).href, fpUrl: new URL('nmr/nmr-fp.dat', document.baseURI).href,
   graph: (molblock) => chem.namerGraph(molblock),
   conformers: (molblock) => model3d.build(molblock, 30),
   redraw: () => editor.requestOverlay(),
@@ -10143,6 +10144,10 @@ async function personalPreferences(): Promise<void> {
       { value: 'box', label: 'A thin red box' }, { value: 'soft', label: 'A soft red disc' }, { value: 'circle', label: 'A red circle' },
       { value: 'dashed', label: 'A dashed red circle' }, { value: 'corners', label: 'Red corner marks' }],
       help: 'Atoms with too many bonds, labels that can\'t be read and other problems the Warnings box lists. Clear Show on drawing (Warnings) to hide the marks.' },
+    { name: 'nmrQuality', label: 'Predict NMR spectra with', value: nmrQuality(), options: [
+      { value: 'fast', label: 'Fast: first-order multiplets' }, { value: 'balanced', label: 'Balanced: exact simulation of up to 8 coupled protons' },
+      { value: 'accurate', label: 'Accurate: 3-D conformers, up to 12 coupled protons' }],
+      help: 'Analysis ▸ NMR and the Spectrum window start with this. Accurate also predicts both shifts of diastereotopic CH2 protons and couplings from the 3-D shape; it takes a few seconds per structure. The Spectrum window\'s dropdown changes the same setting.' },
     { name: 'offerFigures', label: 'Offer to make structures figures when opening a document', type: 'checkbox', value: String(offerFigures),
       help: 'A bar over the pages offers Make Figures when a document\'s structures aren\'t figures yet (a Word file from ChemDraw, for one). Don\'t Ask for This File on the bar turns it off for one document. Make All Structures Figures… stays on a structure\'s right-click menu either way.' },
   ], { ok: 'Save', preview: { title: 'Alkyl groups', draw: (v) => alkylPreview(parseAlkylLook(v.alkylLook)) } });
@@ -10150,6 +10155,9 @@ async function personalPreferences(): Promise<void> {
   enterFinishesText = r.enterFinishes === 'enter';
   offerFigures = r.offerFigures === 'true';
   setWarnLook(r.warnLook as Settings['warnLook']);
+  if (r.nmrQuality === 'fast' || r.nmrQuality === 'balanced' || r.nmrQuality === 'accurate') {
+    if (r.nmrQuality !== nmrQuality()) { setNmrQuality(r.nmrQuality); nmrPanel.qualityChanged(document.getElementById('analysis-body')); }
+  }
   const look = parseAlkylLook(r.alkylLook);
   const changed = look !== alkylPrefs.look;
   alkylPrefs.look = look;
