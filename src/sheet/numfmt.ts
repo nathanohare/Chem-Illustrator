@@ -146,6 +146,37 @@ function sectionIsDate(sec: Section): boolean {
   return sec.parts.some((p) => p.k === 'code' && isDateCode(p.s) && !/[0#?]/.test(p.s));
 }
 
+/**
+ * What a format shows a number as: a date (perhaps with a time), a time of day, an elapsed time
+ * ([h]:mm), or none of these (null). Judged by its first section, the one for positive numbers.
+ */
+export function dateKind(code: string | undefined): 'date' | 'time' | 'elapsed' | null {
+  if (!code || /^general$/i.test(code)) return null;
+  const sec = parseSections(code)[0];
+  if (!sec || !sectionIsDate(sec)) return null;
+  const codes = sec.parts.filter((p) => p.k === 'code').map((p) => p.s).join('');
+  const plain = codes.replace(/\[[^\]]*\]/g, '').replace(/AM\/PM|A\/P/gi, '');
+  // m is a month unless hours or seconds are about (h:mm, mm:ss)
+  if (/[yd]/i.test(plain) || (/m/i.test(plain) && !/[hs]/i.test(codes))) return 'date';
+  return /\[[hms]+\]/i.test(codes) ? 'elapsed' : 'time';
+}
+
+/**
+ * Days from Excel's count starting in 1900 to its count starting in 1904: a workbook counting from
+ * 1904 (workbookPr date1904, the old Mac default; ECMA-376 Part 1, 18.17.4.1) holds each date this
+ * much lower.
+ */
+export const DAYS_1900_TO_1904 = 1462;
+
+/**
+ * Is a number (by the 1900 count) in a cell of this format a date, which a workbook counting from
+ * 1904 holds 1462 lower? A time of day (under one day) and an elapsed time ([h]:mm) are not.
+ */
+export function holdsDate(code: string | undefined, v: number): boolean {
+  const k = dateKind(code);
+  return k === 'date' || (k === 'time' && v >= DAYS_1900_TO_1904 + 1);
+}
+
 /** Show a value in a format. Undefined or "General" shows it as Excel's General does. */
 export function formatValue(v: Value, code?: string): Shown {
   if (v === null) return { text: '', align: 'left' };

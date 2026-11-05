@@ -5,7 +5,7 @@
 
 import type { ParaStyle, TextRun } from '../model';
 
-const KEYS = ['list', 'level', 'cont', 'align', 'spaceBefore', 'spaceAfter', 'indent', 'style', 'pageBreak', 'colBreak', 'firstLine', 'line', 'keepNext', 'indentRight', 'linePt', 'lineRule', 'section', 'noLineNumbers', 'noHyphen', 'marks', 'tabs', 'scheme', 'bullet', 'border', 'shade', 'xe', 'ta', 'cc'] as const;
+const KEYS = ['list', 'level', 'cont', 'align', 'spaceBefore', 'spaceAfter', 'indent', 'style', 'pageBreak', 'colBreak', 'firstLine', 'line', 'keepNext', 'keepLines', 'noWidow', 'indentRight', 'linePt', 'lineRule', 'section', 'noLineNumbers', 'noHyphen', 'marks', 'tabs', 'scheme', 'bullet', 'numType', 'startAt', 'border', 'shade', 'xe', 'ta', 'cc'] as const;
 
 /** A paragraph style with nothing unset or zero, so two styles compare simply. */
 export function cleanPara(p: ParaStyle | undefined): ParaStyle {
@@ -18,8 +18,8 @@ export function cleanPara(p: ParaStyle | undefined): ParaStyle {
     o[k] = v;
   }
   // a level or a continuation means nothing outside a list
-  if (!o.list) { delete o.level; delete o.cont; delete o.scheme; delete o.bullet; }
-  else if (o.list === 'bullet') delete o.scheme;
+  if (!o.list) { delete o.level; delete o.cont; delete o.scheme; delete o.bullet; delete o.numType; delete o.startAt; }
+  else if (o.list === 'bullet') { delete o.scheme; delete o.numType; delete o.startAt; }
   else delete o.bullet;
   return o as ParaStyle;
 }
@@ -188,30 +188,49 @@ export function numberLabel(n: number, level: number): string {
   return schemeLabel(LIST_SCHEMES[0], level % 9, counts);
 }
 
-/** Each paragraph's bullet or number (null for none), and whether a numbered list starts again there (at its top level). */
-export interface ListInfo { marker: string | null; start: boolean }
+/** Each paragraph's bullet or number (null for none), and whether a numbered list starts again there (at its top level); a numbered one's number at its level (n). */
+export interface ListInfo { marker: string | null; start: boolean; n?: number }
+
+/**
+ * A number as one of PowerPoint's numbering types (a:buAutoNum's type: arabicPeriod, alphaUcParenR,
+ * romanLcParenBoth and the like); null for a type this program doesn't write numbers in.
+ */
+export function autoNumLabel(type: string, n: number): string | null {
+  const m = /^(arabic|alphaLc|alphaUc|romanLc|romanUc)(Period|ParenR|ParenBoth|Plain)$/.exec(type);
+  if (!m) return null;
+  const fmt: Record<string, NumFormat> = { arabic: 'decimal', alphaLc: 'lowerLetter', alphaUc: 'upperLetter', romanLc: 'lowerRoman', romanUc: 'upperRoman' };
+  const v = formatNumber(Math.max(1, n), fmt[m[1]]);
+  return m[2] === 'Period' ? `${v}.` : m[2] === 'ParenR' ? `${v})` : m[2] === 'ParenBoth' ? `(${v})` : v;
+}
 
 /**
  * The bullet or number shown in front of each paragraph, and where numbered lists start.
  * Numbers count up through a list and start again after a paragraph that is not in it; a
  * deeper level starts again under each item of the level above, and a level of another kind
- * (or another scheme) starts again too.
+ * (or another scheme) starts again too. A list starts at its startAt; further on, an item whose
+ * startAt the item before it at its level doesn't share starts the list again from it (Word's
+ * Restart Numbering), and the items after count on.
  */
 export function listInfo(paras: ParaStyle[]): ListInfo[] {
   const counts: number[] = [];
   const kinds: (string | undefined)[] = [];
+  const ats: (number | undefined)[] = [];
   return paras.map((p) => {
-    if (!p.list) { counts.length = 0; kinds.length = 0; return { marker: null, start: false }; }
+    if (!p.list) { counts.length = 0; kinds.length = 0; ats.length = 0; return { marker: null, start: false }; }
     const level = Math.max(0, Math.min(8, p.level ?? 0));
     if (p.cont) return { marker: null, start: false };
-    const kind = p.list === 'number' ? `n${p.scheme ?? ''}` : 'b';
-    if (kinds[level] !== kind) counts[level] = 0;
+    const kind = p.list === 'number' ? `n${p.scheme ?? ''}${p.numType ?? ''}` : 'b';
+    if (kinds[level] !== kind) counts[level] = p.list === 'number' && p.startAt && p.startAt > 1 ? p.startAt - 1 : 0;
+    else if (p.list === 'number' && p.startAt && p.startAt >= 1 && p.startAt !== ats[level]) counts[level] = p.startAt - 1;
     kinds[level] = kind;
+    ats[level] = p.startAt;
     counts[level] = (counts[level] ?? 0) + 1;
     counts.length = level + 1;
     kinds.length = level + 1;
+    ats.length = level + 1;
     if (p.list === 'bullet') return { marker: p.bullet || BULLETS[level % BULLETS.length], start: false };
-    return { marker: schemeLabel(schemeOf(p.scheme), level, counts), start: level === 0 && counts[0] === 1 };
+    const own = p.numType ? autoNumLabel(p.numType, counts[level]) : null;
+    return { marker: own ?? schemeLabel(schemeOf(p.scheme), level, counts), start: level === 0 && counts[0] === (p.startAt && p.startAt > 1 ? p.startAt : 1), n: counts[level] };
   });
 }
 

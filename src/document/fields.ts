@@ -7,8 +7,12 @@
 
 import type { ParaStyle, TextRun } from '../model';
 
-/** The fields offered, by Word's names. */
-export type FieldCode = 'date' | 'time' | 'createdate' | 'savedate' | 'printdate' | 'author' | 'title' | 'subject' | 'keywords' | 'company' | 'filename' | 'page' | 'numpages' | 'ref' | 'pageref' | 'abovebelow';
+/**
+ * The fields offered, by Word's names; and two kept from Word files that aren't offered: 'word',
+ * any other Word field (a note's number, a style's text, a calculation), kept with its instruction
+ * and showing the result Word last gave it, and 'hidden', Word's hidden text, not shown here.
+ */
+export type FieldCode = 'date' | 'time' | 'createdate' | 'savedate' | 'printdate' | 'author' | 'title' | 'subject' | 'keywords' | 'company' | 'filename' | 'page' | 'numpages' | 'ref' | 'pageref' | 'abovebelow' | 'word' | 'hidden';
 
 /** A document's properties (File > Info, Insert > Quick Parts > Document Property), saved in Word's docProps. */
 export interface DocProps {
@@ -22,8 +26,12 @@ export interface DocProps {
   saved?: string;
 }
 
-/** A field as it sits in the text. `format` is a date picture; `target` a bookmark's name. */
-export interface FieldObj { kind: 'field'; code: FieldCode; format?: string; target?: string }
+/**
+ * A field as it sits in the text. `format` is a date picture; `target` a bookmark's name. A field
+ * kept from Word ('word') has its instruction in `instr` and its last result in `text`; hidden
+ * text ('hidden') has its text in `text`.
+ */
+export interface FieldObj { kind: 'field'; code: FieldCode; format?: string; target?: string; instr?: string; text?: string }
 
 /** What fields need from outside the document: the file's name and the time now. */
 export const fieldEnv: { fileName: string; now: () => Date } = { fileName: '', now: () => new Date() };
@@ -140,6 +148,8 @@ export function fieldText(o: FieldObj, t: FieldDoc, para: number, pages?: (p: nu
     case 'filename': return fieldEnv.fileName;
     case 'page': return pages?.(para) || '1';
     case 'numpages': return String(Math.max(1, pageCount ?? 1));
+    case 'word': return o.text ?? '';
+    case 'hidden': return '';
   }
   const marks = cache ? (cache.marks ??= marksOf(t)) : marksOf(t);
   const at = o.target ? marks.get(o.target.toLowerCase()) : undefined;
@@ -173,6 +183,8 @@ export function fieldInstr(o: FieldObj): string {
     case 'ref': return ` REF ${o.target ?? ''} \\h `;
     case 'pageref': return ` PAGEREF ${o.target ?? ''} \\h `;
     case 'abovebelow': return ` REF ${o.target ?? ''} \\p \\h `;
+    case 'word': return o.instr ?? '';
+    case 'hidden': return '';
   }
 }
 

@@ -72,6 +72,8 @@ export function applyTemplate(m: Master, t: SlideTemplate): Master {
     // a template's background is a colour: it takes the place of a picture or gradient on every slide
     fill: undefined,
     template: t.name,
+    // and its look takes the place of a PowerPoint template's artwork and theme
+    art: undefined,
   };
 }
 

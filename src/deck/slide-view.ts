@@ -8,7 +8,7 @@ import { Renderer, withMeasure } from '../render/renderer';
 import { imageFor } from '../render/images';
 import { VectorContext, VecPath, Item } from '../render/vector';
 import { arialWidth } from '../text-metrics';
-import { Master, SlideSize, LayoutId, decorFrames, showsNumber, showsFooter, showsDate, dateText, type SlideHF, slideColours, slideBackground, decorShapes, layoutFrames, placeRefs, type DecorShape } from './deck';
+import { Master, SlideSize, LayoutId, type ArtLayer, decorFrames, showsNumber, showsFooter, showsDate, dateText, type SlideHF, slideColours, slideBackground, decorShapes, layoutFrames, placeRefs, type DecorShape } from './deck';
 import { lineGap, type RefBlock } from './slide-refs';
 import { backgroundColour, paintBackground, type Background } from './background';
 import type { Rect } from '../geom';
@@ -54,6 +54,7 @@ export function drawSlidePage(ctx: CanvasRenderingContext2D, p: SlidePage, surro
 export function drawScreen(ctx: CanvasRenderingContext2D, p: SlidePage): void {
   const { size, master: m } = p;
   const colours = slideColours(m, p.layout);
+  if (!p.hideGraphics) drawArt(ctx, p);
   if (!p.hideGraphics) for (const sh of decorShapes(size, m, p.layout)) drawDecor(ctx, sh);
   const d = decorFrames(size, m);
   if (m.logo && d.logo && !p.hideGraphics) {
@@ -169,6 +170,36 @@ export function drawKeyTitle(ctx: CanvasRenderingContext2D, p: Pick<SlidePage, '
   // the first line's baseline one ascent below the top, as a title placeholder's
   ctx.fillText(title, x, f.y + ASCENT * size, f.w);
   ctx.restore();
+}
+
+/** Each artwork layer as a drawing, made once. */
+const artDocs = new WeakMap<ArtLayer, Doc>();
+
+/**
+ * A PowerPoint template's artwork behind the slide: its master's (unless the layout hides it),
+ * then its layout's, scaled when the deck's slide size has changed since.
+ */
+function drawArt(ctx: CanvasRenderingContext2D, p: SlidePage): void {
+  const art = p.master.art;
+  if (!art) return;
+  const layer = art.layouts?.[p.layout];
+  const kx = p.size.w / (art.size?.w || p.size.w), ky = p.size.h / (art.size?.h || p.size.h);
+  for (const l of [layer?.hideMaster ? undefined : art.master, layer]) {
+    if (!l?.xml.length) continue;
+    let doc = artDocs.get(l);
+    if (!doc) {
+      doc = new Doc();
+      doc.restoreContents(l.contents);
+      artDocs.set(l, doc);
+    }
+    const r = new Renderer(noCanvas, noCanvas);
+    r.showWarnings = false;
+    if ('picture' in ctx) r.makePath = () => new VecPath() as unknown as Path2D;
+    ctx.save();
+    if (Math.abs(kx - 1) > 1e-6 || Math.abs(ky - 1) > 1e-6) ctx.scale(kx, ky);
+    r.drawDocument(ctx, doc);
+    ctx.restore();
+  }
 }
 
 /** One of a design template's shapes behind the slide. */

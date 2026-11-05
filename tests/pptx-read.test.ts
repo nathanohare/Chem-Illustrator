@@ -180,7 +180,8 @@ describe('opening files made in PowerPoint', () => {
     expect(title.y).toBeGreaterThan(29 + 30);
     const body = caps.find((c) => c.ph === 'body')!;
     expect(body.runs).toEqual([{ text: 'Yield ' }, { text: '92%\n', bold: true }, { text: 'after workup', size: 24 }]);
-    expect(body.paras).toEqual([{ list: 'bullet' }, { list: 'bullet', level: 1 }]);
+    // (the master's bullet on the second level is PowerPoint's •, not our usual –)
+    expect(body.paras).toEqual([{ list: 'bullet' }, { list: 'bullet', level: 1, bullet: '•' }]);
   });
 
   it('keeps text box formatting: sizes, subscripts and colours', () => {
@@ -197,9 +198,10 @@ describe('opening files made in PowerPoint', () => {
     const shapes = back.slides[0].contents.shapes;
     const rect = shapes.find((s) => s.kind === 'rect')!;
     expect(rect.filled).toBe(true);
-    // PowerPoint's default look: an accent fill with a darker outline, both kept
+    // PowerPoint's default look: an accent fill with a darker outline (accent 1 shaded 50% in
+    // linear RGB: PowerPoint's 2F528F), both kept
     expect(rect.fillColor).toBe('#4472c4');
-    expect(rect.color).toBe('#223962');
+    expect(rect.color).toBe('#2f528f');
     const arrow = back.slides[0].contents.arrows[0];
     // flipped: drawn from right to left, the head at its end
     expect(arrow.tail).toEqual({ x: 400, y: 300 });

@@ -110,7 +110,8 @@ export function notesParts(s: Sheet, sheetNo: number, persons: Persons): { comme
         'Comment:', `    ${n.text}`, ...(n.replies ?? []).flatMap((rep) => ['Reply:', `    ${rep.author ? rep.author + ': ' : ''}${rep.text}`])].join('\n');
       comments.push(`<comment ref="${ref}" authorId="${authorNo(`tc=${id}`)}"><text><r>${plain}${tText(body)}</r></text></comment>`);
     } else {
-      const head = n.author ? `<r>${bold}${tText(n.author + ':')}</r><r>${plain}${tText('\n' + noteText(n))}</r>` : `<r>${plain}${tText(noteText(n))}</r>`;
+      // the author's name in bold first, as Excel starts a note, unless the note didn't have it
+      const head = n.author && !n.noAuthorLine ? `<r>${bold}${tText(n.author + ':')}</r><r>${plain}${tText('\n' + noteText(n))}</r>` : `<r>${plain}${tText(noteText(n))}</r>`;
       comments.push(`<comment ref="${ref}" authorId="${authorNo(n.author)}"><text>${head}</text></comment>`);
     }
     // the box, beside the cell, a little up (as Excel places a new note)
@@ -196,8 +197,9 @@ export function readNotes(comments: Document | null, shown: Set<number>, threade
       if (out.has(key) || author.startsWith('tc=')) continue;
       let text = richText(kid(c, 'text')).replace(/\r\n?/g, '\n');
       // Excel starts a note with its author's name in bold: that is the note's author, not its text
-      if (author && text.startsWith(author + ':')) text = text.slice(author.length + 1).replace(/^\n/, '');
-      out.set(key, { kind: 'note', author, date: '', text, ...(shown.has(key) ? { shown: true } : {}) });
+      const authorLine = !!author && text.startsWith(author + ':');
+      if (authorLine) text = text.slice(author.length + 1).replace(/^\n/, '');
+      out.set(key, { kind: 'note', author, date: '', text, ...(shown.has(key) ? { shown: true } : {}), ...(author && !authorLine ? { noAuthorLine: true as const } : {}) });
     }
   }
   return out;
@@ -209,15 +211,18 @@ const KIND_TO_XL: Record<ValidationKind, string> = { any: 'none', whole: 'whole'
 const XL_TO_KIND: Record<string, ValidationKind> = { none: 'any', whole: 'whole', decimal: 'decimal', list: 'list', date: 'date', time: 'time', textLength: 'length', custom: 'custom' };
 const OPS: ValidationOp[] = ['between', 'notBetween', 'equal', 'notEqual', 'greaterThan', 'lessThan', 'greaterThanOrEqual', 'lessThanOrEqual'];
 
-/** A limit or list as Excel writes it in formula1/formula2 (null when it can't be written). */
-function formulaFor(kind: ValidationKind, text: string | undefined, fn: (f: string) => string): string | null {
+/**
+ * A limit or list as Excel writes it in formula1/formula2 (null when it can't be written). A date
+ * is written `dateShift` lower in a workbook counting from 1904 (1462; see DAYS_1900_TO_1904).
+ */
+function formulaFor(kind: ValidationKind, text: string | undefined, fn: (f: string) => string, dateShift = 0): string | null {
   const t = (text ?? '').trim();
   if (!t) return null;
   if (t.startsWith('=')) return t.length > 1 ? fn(t.slice(1)) : null;
   if (kind === 'list') return `"${t.replace(/"/g, '""')}"`;
   if (kind === 'custom') return fn(t);
   const n = limitNumber(kind, t);
-  return n === null ? null : String(n);
+  return n === null ? null : String(kind === 'date' ? n - dateShift : n);
 }
 
 /** The most characters Excel takes in a drop-down list typed as its items. */
@@ -228,17 +233,17 @@ const MAX_TYPED_LIST = 255;
  * newer functions; `longList` gives a list typed as items that is too long for Excel as a range of
  * cells holding them.
  */
-export function validationsXml(list: Validation[], fn: (f: string) => string, longList?: (text: string) => string): string {
+export function validationsXml(list: Validation[], fn: (f: string) => string, longList?: (text: string) => string, dateShift = 0): string {
   const rules: string[] = [];
   for (const v of list) {
     if (!v.ranges.length) continue;
     const typed = (v.value1 ?? '').trim();
     const long = v.kind === 'list' && !!longList && !typed.startsWith('=') && typed.length > MAX_TYPED_LIST;
-    const f1 = v.kind === 'any' ? null : long ? longList!(typed) : formulaFor(v.kind, v.value1, fn);
+    const f1 = v.kind === 'any' ? null : long ? longList!(typed) : formulaFor(v.kind, v.value1, fn, dateShift);
     if (v.kind !== 'any' && f1 === null) continue;
     const comparing = v.kind !== 'any' && v.kind !== 'list' && v.kind !== 'custom';
     const op = v.op ?? 'between';
-    const f2 = comparing && (op === 'between' || op === 'notBetween') ? formulaFor(v.kind, v.value2, fn) : null;
+    const f2 = comparing && (op === 'between' || op === 'notBetween') ? formulaFor(v.kind, v.value2, fn, dateShift) : null;
     if (comparing && (op === 'between' || op === 'notBetween') && f2 === null) continue;
     const attrs = [
       v.kind !== 'any' ? `type="${KIND_TO_XL[v.kind]}"` : '',
@@ -260,8 +265,8 @@ export function validationsXml(list: Validation[], fn: (f: string) => string, lo
   return rules.length ? `<dataValidations count="${rules.length}">${rules.join('')}</dataValidations>` : '';
 }
 
-/** A formula1/formula2 back as the dialog has it typed. */
-function readLimit(kind: ValidationKind, f: string | null | undefined): string | undefined {
+/** A formula1/formula2 back as the dialog has it typed (a date `dateShift` higher, from a workbook counting from 1904). */
+function readLimit(kind: ValidationKind, f: string | null | undefined, dateShift = 0): string | undefined {
   if (f === null || f === undefined) return undefined;
   const t = f.trim().replace(/_xlfn\.|_xlws\./g, '');
   if (kind === 'list') {
@@ -270,13 +275,13 @@ function readLimit(kind: ValidationKind, f: string | null | undefined): string |
   }
   if (kind === 'custom') return '=' + t;
   const n = Number(t);
-  return t !== '' && Number.isFinite(n) ? limitText(kind, n) : '=' + t;
+  return t !== '' && Number.isFinite(n) ? limitText(kind, kind === 'date' ? n + dateShift : n) : '=' + t;
 }
 
 const ranges = (sqref: string): Range[] => sqref.split(/\s+/).map((p) => parseRange(p)).filter((r): r is Range => !!r);
 const on = (v: string | null) => v === '1' || v === 'true';
 
-function readRule(el: Element, sqref: string, f1: string | null | undefined, f2: string | null | undefined): Validation | null {
+function readRule(el: Element, sqref: string, f1: string | null | undefined, f2: string | null | undefined, dateShift = 0): Validation | null {
   const R = ranges(sqref);
   if (!R.length) return null;
   const kind = XL_TO_KIND[el.getAttribute('type') ?? 'none'] ?? 'any';
@@ -286,8 +291,8 @@ function readRule(el: Element, sqref: string, f1: string | null | undefined, f2:
   const rule: Omit<Validation, 'id' | 'ranges'> = {
     kind,
     ...(kind !== 'any' && kind !== 'list' && kind !== 'custom' && op !== 'between' ? { op } : {}),
-    ...(kind !== 'any' && f1 !== undefined && f1 !== null ? { value1: readLimit(kind, f1) } : {}),
-    ...(f2 !== undefined && f2 !== null && (op === 'between' || op === 'notBetween') ? { value2: readLimit(kind, f2) } : {}),
+    ...(kind !== 'any' && f1 !== undefined && f1 !== null ? { value1: readLimit(kind, f1, dateShift) } : {}),
+    ...(f2 !== undefined && f2 !== null && (op === 'between' || op === 'notBetween') ? { value2: readLimit(kind, f2, dateShift) } : {}),
     ...(on(el.getAttribute('allowBlank')) ? {} : { noBlank: true }),
     ...(kind === 'list' && on(el.getAttribute('showDropDown')) ? { noDropDown: true } : {}),
     ...(on(el.getAttribute('showInputMessage')) ? {} : { hidePrompt: true }),
@@ -302,16 +307,17 @@ function readRule(el: Element, sqref: string, f1: string | null | undefined, f2:
 }
 
 /** A sheet's data validation rules: the standard ones, and Excel 2010's in the sheet's extensions. */
-export function readValidations(ws: Element): Validation[] {
+/** A sheet's data validation rules; `dateShift` is 1462 in a workbook counting its dates from 1904. */
+export function readValidations(ws: Element, dateShift = 0): Validation[] {
   const out: Validation[] = [];
   for (const el of kids(kid(ws, 'dataValidations'), 'dataValidation')) {
-    const v = readRule(el, el.getAttribute('sqref') ?? '', kid(el, 'formula1')?.textContent, kid(el, 'formula2')?.textContent);
+    const v = readRule(el, el.getAttribute('sqref') ?? '', kid(el, 'formula1')?.textContent, kid(el, 'formula2')?.textContent, dateShift);
     if (v) out.push(v);
   }
   for (const el of Array.from(ws.getElementsByTagNameNS(X14_NS, 'dataValidation'))) {
     const sq = el.getElementsByTagNameNS(XM_NS, 'sqref')[0]?.textContent ?? '';
     const f = (name: string) => kid(el, name)?.getElementsByTagNameNS(XM_NS, 'f')[0]?.textContent;
-    const v = readRule(el, sq, f('formula1'), f('formula2'));
+    const v = readRule(el, sq, f('formula1'), f('formula2'), dateShift);
     if (v) out.push(v);
   }
   return out;

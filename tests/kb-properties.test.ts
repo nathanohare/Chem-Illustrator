@@ -55,14 +55,15 @@ describe('pKa in water', () => {
 
 describe('Hammett constants', () => {
   it('lists common groups with valid SMILES on benzene and finds them by group or name', async () => {
-    const { HAMMETT, HAMMETT_TABLE, onBenzene } = await import('../src/kb/hammett');
-    expect(HAMMETT.length).toBeGreaterThan(100);
-    expect(new Set(HAMMETT.map((x) => x.row)).size).toBe(HAMMETT.length);
+    const { HAMMETT, onBenzene, hammettId } = await import('../src/kb/hammett');
+    const { HAMMETT_TABLE } = await import('../src/kb/hammett-table');
+    expect(HAMMETT.length).toBeGreaterThan(500);
+    expect(new Set(HAMMETT.map(hammettId)).size).toBe(HAMMETT.length);
     const nitro = findRows(HAMMETT_TABLE, 'nitro').find((m) => m.row.group === 'NO2')!.row;
     expect([nitro.sm, nitro.sp, nitro.F, nitro.R]).toEqual(['0.71', '0.78', '0.65', '0.13']);
     expect(findRows(HAMMETT_TABLE, 'OCH3').find((m) => m.row.group === 'OCH3')!.row.sp).toBe('-0.27');
     expect(onBenzene(HAMMETT.find((x) => x.name.startsWith('methylenedioxy'))!)).toBe('c1ccc2c(c1)OCO2');
     // σp = F + R within rounding, as the Swain–Lupton split requires (bracketed values aside)
-    for (const x of HAMMETT) if (!x.approx && x.group !== 'H') expect(Math.abs(x.F + x.R - x.sp), x.group).toBeLessThan(0.1);
+    for (const x of HAMMETT) if (!x.uncertain && x.sp !== null && x.group !== 'H') expect(Math.abs(x.F! + x.R! - x.sp), x.group).toBeLessThan(0.025);
   });
 });

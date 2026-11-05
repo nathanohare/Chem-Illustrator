@@ -79,6 +79,46 @@ export function substructureMatches(RDKit: any, query: string, mols: string[]): 
 }
 
 
+/**
+ * A set of structures kept ready for substructure searches (the Knowledge Base's thousands): each
+ * read once and screened by fingerprint, so a search takes milliseconds, not seconds. `at` gives the
+ * caller's index of each structure kept (one that can't be read is left out).
+ */
+export interface StructureLibrary {
+  lib: any;
+  at: number[];
+  size: number;
+}
+
+export function structureLibrary(RDKit: any, mols: string[]): StructureLibrary {
+  const lib = new RDKit.SubstructLibrary();
+  const at: number[] = [];
+  mols.forEach((s, i) => {
+    // a SMILES that can't be read is left out (-1, or an exception for some), so never found
+    try { const k = lib.add_smiles(s); if (k >= 0) at[k] = i; } catch { /* left out */ }
+  });
+  return { lib, at, size: mols.length };
+}
+
+/** The indexes (in the caller's list) of the library's structures containing the query, as substructureMatches reads it. */
+export function libraryMatches(RDKit: any, L: StructureLibrary, query: string): { results: number[]; error?: string } {
+  const qm = RDKit.get_mol(query);
+  if (!qm || !qm.is_valid()) { qm?.delete?.(); return { results: [], error: 'Could not read the structure searched for.' }; }
+  const smarts = qm.get_smiles();
+  qm.delete();
+  const q = RDKit.get_qmol(smarts);
+  if (!q || !q.is_valid()) { q?.delete?.(); return { results: [], error: 'Could not search for this structure.' }; }
+  try {
+    const hits = JSON.parse(L.lib.get_matches(q, false, 1, L.at.length + 1)) as number[];
+    // (get_matches stops after the number of results asked for: more than the set holds)
+    return { results: hits.map((k) => L.at[k]).sort((a, b) => a - b) };
+  } catch {
+    return { results: [], error: 'Could not search for this structure.' };
+  } finally {
+    q.delete();
+  }
+}
+
 /** What the Analysis panel shows for one structure, besides formula and masses. */
 export interface PanelProps {
   /** Element counts (H includes drawn and implied hydrogens). */

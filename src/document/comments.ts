@@ -15,6 +15,11 @@ export interface CommentNote {
   author: string;
   date: string;
   text: string;
+  /**
+   * From a Word file: the note's paragraphs as Word wrote them (with their formatting), written
+   * back while `text` is still what they said (`text` here), and its lasting id (w16cid:durableId).
+   */
+  word?: { paras?: string[]; text?: string; id?: string };
 }
 
 /** A comment: its first note, the replies under it, and whether it has been resolved. */

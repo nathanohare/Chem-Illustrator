@@ -5,7 +5,7 @@
 import type { ParaStyle, TableCell, TableData, TextRun } from '../model';
 import * as rt from '../richtext';
 import { cleanPara, fitParas, paraCount, paraRange, splitParagraphs } from '../text/paragraphs';
-import { coveringCell, isCovered, rowSpanOf, spanOf } from '../table';
+import { coveringCell, isCovered, rowHeights, rowSpanOf, spanOf } from '../table';
 import { nextObjectId, objectOffsets, objectRun, paraFromStyle, styleOf, type DocObject, type DocText } from './document';
 import type { CellBlock } from './table-styles';
 
@@ -209,8 +209,9 @@ export function splitTable(t: DocText, id: number, r: number): { t: DocText; id:
     bottom[0][c] = under;
   }
   const head = Math.min(tab.head, r);
-  const a: TableData = { ...tab, rows: top, head };
-  const b: TableData = { ...tab, rows: bottom, head: 0, title: undefined, notes: undefined };
+  const a: TableData = { ...tab, rows: top, head, ...rowHeights(tab, (h) => h.splice(r)) };
+  // (the new table sits in its line under the first, even when the first floats)
+  const b: TableData = { ...tab, rows: bottom, head: 0, title: undefined, notes: undefined, float: undefined, ...rowHeights(tab, (h) => h.splice(0, r)) };
   const nid = nextObjectId(t);
   const style = rt.styleOf(rt.sliceRuns(t.runs, at, at + 1)[0] ?? { text: '' });
   const text = rt.plainText(t.runs);

@@ -6,8 +6,8 @@ import { cfbStreams, isCfb } from './cfb';
 const MIME = 'application/vnd.oasis.opendocument.text';
 const extOf = (name: string) => /\.([^.\\/]+)$/.exec(name)?.[1]?.toLowerCase() ?? '';
 
-/** Extensions of documents that open but save as .docx. */
-export const DOC_OPEN_ONLY = ['doc'];
+/** Extensions of documents that open but save as .docx (old Word documents, Word templates and macro-enabled files). */
+export const DOC_OPEN_ONLY = ['doc', 'docm', 'dotx', 'dotm'];
 
 /** Is this an RTF file? */
 export const isRtf = (b: Uint8Array): boolean => b.length > 5 && String.fromCharCode(...b.slice(0, 5)) === '{\\rtf';

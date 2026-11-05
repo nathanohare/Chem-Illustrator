@@ -348,6 +348,13 @@ export interface TextRun {
   link?: string;
   /** Character spacing: points added after each character (less than 0 is condensed), as PowerPoint's Character Spacing. */
   spacing?: number;
+  /** Slides: a PowerPoint field (slidenum, datetime1…) that PowerPoint fills in; this is the text it last showed. */
+  field?: string;
+  /**
+   * The text's language (a tag such as de-DE), for spelling, when not US English: kept from
+   * PowerPoint, and from Word (w:lang) where not the document's own language (DocText.lang).
+   */
+  lang?: string;
   /** Small capitals: lower-case letters shown as smaller capitals (documents). */
   smallCaps?: boolean;
   /** All capitals: letters shown as capitals, the text itself unchanged (documents). */
@@ -367,6 +374,8 @@ export interface TextRun {
   outlineW?: number;
   /** Text effects: a soft drop shadow, down and to the right. */
   shadow?: boolean;
+  /** Documents: not spell- or grammar-checked (Word's Do not check spelling or grammar: chemical names, citations). */
+  noProof?: boolean;
   /**
    * Which font a ChemDraw file had the run's signs in: true for its Symbol font (•, ° stay in it,
    * though Arial has them), false for an ordinary font (a − stays in Arial, though Symbol has it).
@@ -455,6 +464,10 @@ export interface ParaStyle {
   line?: number;
   /** Documents: kept on the same page as the paragraph after it (headings). */
   keepNext?: boolean;
+  /** Documents: its lines kept together on one page (Word's Keep lines together). */
+  keepLines?: boolean;
+  /** Documents: a single first or last line may be left on a page by itself (Word's Widow/Orphan control off). */
+  noWidow?: boolean;
   /** Documents: indent from the right margin, in points. */
   indentRight?: number;
   /** Documents: line spacing in points instead of a multiple: exactly this, or at least this. */
@@ -475,8 +488,16 @@ export interface ParaStyle {
   tabs?: TabStop[];
   /** Documents: a numbered list's multilevel scheme (1. a. i. when left out; see paragraphs.ts LIST_SCHEMES). */
   scheme?: string;
-  /** Documents: a bulleted list item's own bullet (from the bullet library), in place of its level's. */
+  /** A bulleted list item's own bullet (from the bullet library, or a slide's from PowerPoint), in place of its level's. */
   bullet?: string;
+  /** Slides: a numbered item's numbering as PowerPoint's (its buAutoNum type, such as alphaUcParenR), in place of its level's. */
+  numType?: string;
+  /**
+   * The number a numbered list starts at (PowerPoint's Start at, Word's Set Numbering Value), when
+   * not 1. In a document it may also stand further on in a list, where Word's numbers start again
+   * (Restart Numbering): an item whose startAt the item before it at its level doesn't share.
+   */
+  startAt?: number;
   /**
    * Documents: lines round the paragraph (Home > Borders), as Word's paragraph borders. Paragraphs
    * one after another with the same borders share one box, with `between` drawn between them.
@@ -700,6 +721,11 @@ export interface Arrow {
   piece?: number;
   /** Part of a ChemDraw object from PowerPoint: saved back to PowerPoint as that object, which opens in ChemDraw (OleMark). */
   ole?: OleMark;
+  /**
+   * A line with an arrowhead drawn in PowerPoint (read from a slide): saved back as a PowerPoint
+   * line of its own, not into a structure's picture, while it is an arrow PowerPoint can draw.
+   */
+  ppt?: boolean;
   id: number;
   /** The group it belongs to (Format > Group); things with the same number move and select together. */
   grp?: number;
@@ -852,6 +878,11 @@ export interface Shape {
   piece?: number;
   /** Part of a ChemDraw object from PowerPoint: saved back to PowerPoint as that object, which opens in ChemDraw (OleMark). */
   ole?: OleMark;
+  /**
+   * A box, oval or line drawn in PowerPoint (read from a slide, where it was a shape of its own):
+   * saved back to PowerPoint as its own shape, never into a structure's picture beside it.
+   */
+  ppt?: boolean;
   id: number;
   /** The group it belongs to (Format > Group); things with the same number move and select together. */
   grp?: number;
@@ -1277,6 +1308,45 @@ export interface TableData {
   look?: TableLook;
   /** Documents: the margins of every cell (Word's default cell margins), when not the standard ones. */
   pad?: CellMargins;
+  /** Documents: each row's height, row by row (Word's row height); a row without one is as tall as its text. */
+  rowH?: (RowHeight | null)[];
+  /** Documents: the heading rows only look like headings; they aren't repeated at the top of each page (Word's Repeat Header Rows off). */
+  noRepeat?: boolean;
+  /** Documents: the width Word gives the table, when not its columns' total: a share of the text's width (in percent) or as its contents need ('auto'). */
+  width?: 'auto' | { pct: number };
+  /** Documents: how far the table is moved in from the left margin, in points (Word's Indent from left). */
+  indent?: number;
+  /** Documents: Word fits the columns to their contents (AutoFit), rather than keeping their widths. */
+  autofit?: boolean;
+  /** Documents: a table Word places on the page with the text going round it (a floating table); kept for Word, shown in its line here. */
+  float?: TableFloat;
+}
+
+/** A row's height in a document's table, in points: at least that tall (the text may make it taller), or exactly that tall. */
+export interface RowHeight {
+  h: number;
+  exact?: boolean;
+}
+
+/**
+ * Where Word places a floating table (w:tblpPr), in points. Across, it is measured from the text's
+ * column, the margin or the page (`hFrom`), at `x` or lined up as `xAlign` says; down, from the
+ * paragraph after it, the margin or the page (`vFrom`), at `y` or as `yAlign` says. `left` to
+ * `bottom` is the room kept between it and the text round it. Only what the file gave is set.
+ */
+export interface TableFloat {
+  hFrom?: 'text' | 'margin' | 'page';
+  vFrom?: 'text' | 'margin' | 'page';
+  x?: number;
+  y?: number;
+  xAlign?: 'left' | 'center' | 'right' | 'inside' | 'outside';
+  yAlign?: 'top' | 'center' | 'bottom' | 'inside' | 'outside' | 'inline';
+  left?: number;
+  right?: number;
+  top?: number;
+  bottom?: number;
+  /** Other floating tables may not overlap it (Word's Allow overlap off). */
+  noOverlap?: boolean;
 }
 
 /** A drawing's page: the drawing area of one sheet of paper (inside its margins), in points. */
