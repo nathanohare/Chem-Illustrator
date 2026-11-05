@@ -601,6 +601,15 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
     const rowH = (r: number) => (s.hiddenRows.has(r) ? 0 : s.rowHeights.get(r) ?? auto.get(r) ?? DEFAULT_ROW_H);
     ms.autoRows = [...auto].filter(([r]) => !s.rowHeights.has(r));
     const cols = new Axis(colW), rows = new Axis(rowH);
+    // a column's style number (the many columns a range to the end of the sheet formats share one look, looked up once)
+    const colXfs = new Map<CellStyle, number>();
+    const colXf = (c: number) => {
+      const st = s.colStyles.get(c);
+      if (!st) return 0;
+      let xf = colXfs.get(st);
+      if (xf === undefined) colXfs.set(st, (xf = styles.xf(st)));
+      return xf;
+    };
 
     // every cell in use: typed, formatted, or worked out by a property column
     const keys = new Set<number>([...s.cells.keys(), ...s.values.keys(), ...headerName.keys()]);
@@ -659,7 +668,7 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
         // a structure's SMILES is in its cell, hidden under the picture (the format ;;; shows nothing)
         const xf = styles.xf(cell?.structure ? { ...style, numFmt: HIDDEN } : style);
         // a cell in style 0 in a formatted column says so (some programs give a cell with no style its column's)
-        const sAttr0 = xf ? ` s="${xf}"` : s.colStyles.has(c) && styles.xf(s.colStyles.get(c)) ? ' s="0"' : '';
+        const sAttr0 = xf ? ` s="${xf}"` : colXf(c) ? ' s="0"' : '';
         const dt = dataTableAt.get(k);
         const blockRef = arrayRef ?? legacyRef;
         const f = dt ? dataTableXml(dt) : formula === null ? '' : blockRef ? `<f t="array" ref="${blockRef}">${xml(formula)}</f>` : `<f>${xml(formula)}</f>`;
@@ -737,13 +746,21 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
     }
 
     // columns: widths, hidden, and whole-column formatting
-    const colKeys = [...new Set([...s.colWidths.keys(), ...s.hiddenCols.keys(), ...s.colStyles.keys(), ...s.colLevels.keys()])].sort((a, b) => a - b);
-    const colXml = colKeys.map((c) => {
+    // (columns pushed past the sheet's last by inserting ones are gone, as in Excel)
+    const colKeys = [...new Set([...s.colWidths.keys(), ...s.hiddenCols.keys(), ...s.colStyles.keys(), ...s.colLevels.keys()])].filter((c) => c < MAX_COLS).sort((a, b) => a - b);
+    const colAttrs = colKeys.map((c): [number, string] => {
       const w = s.colWidths.get(c);
-      const st = s.colStyles.get(c);
-      const xf = st ? styles.xf(st) : 0;
-      return `<col min="${c + 1}" max="${c + 1}" width="${widthFromPx(w ?? DEFAULT_COL_W)}"${w !== undefined ? ' customWidth="1"' : ''}${s.hiddenCols.has(c) ? ' hidden="1"' : ''}${xf ? ` style="${xf}"` : ''}${outlineAttrs(s.colLevels, s.hiddenCols, c, !!s.outline?.summaryLeft)}/>`;
+      const xf = colXf(c);
+      return [c, ` width="${widthFromPx(w ?? DEFAULT_COL_W)}"${w !== undefined ? ' customWidth="1"' : ''}${s.hiddenCols.has(c) ? ' hidden="1"' : ''}${xf ? ` style="${xf}"` : ''}${outlineAttrs(s.colLevels, s.hiddenCols, c, !!s.outline?.summaryLeft)}`];
     });
+    // neighboring columns set the same way as one range, as Excel writes them (to the end of the sheet: min="8" max="16384")
+    const colXml: string[] = [];
+    for (let i = 0; i < colAttrs.length;) {
+      let j = i;
+      while (j + 1 < colAttrs.length && colAttrs[j + 1][0] === colAttrs[j][0] + 1 && colAttrs[j + 1][1] === colAttrs[i][1]) j++;
+      colXml.push(`<col min="${colAttrs[i][0] + 1}" max="${colAttrs[j][0] + 1}"${colAttrs[i][1]}/>`);
+      i = j + 1;
+    }
 
     const used = s.lastRow >= 0 ? `A1:${cellName(Math.max(s.lastRow, 0), Math.max(s.lastCol, 0))}` : 'A1';
     const fr = s.frozen.rows, fc = s.frozen.cols;
@@ -1374,13 +1391,16 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
       // other programs' standard widths, a few pixels either way, are the standard width here
       if (Math.abs(defW - DEFAULT_COL_W) <= 3) defW = DEFAULT_COL_W;
       const widthSet = new Set<number>();
+      // (Excel's ranges don't overlap: a damaged file's are read only so far)
+      let colBudget = 4 * MAX_COLS;
       for (const col of kids(kid(ws, 'cols'), 'col')) {
         const min = Number(col.getAttribute('min')) - 1, max = Math.min(Number(col.getAttribute('max')) - 1, MAX_COLS - 1);
         const w = col.getAttribute('width');
         const hidden = isOn(col.getAttribute('hidden'));
         const st = col.getAttribute('style') ? xfs[Number(col.getAttribute('style'))] : undefined;
-        // a format for every column to the end of the sheet only matters where there are cells
-        const last = max - min > 1000 ? min : max;
+        // every column of the range, to the end of the sheet too (hidden columns right of a table stay hidden)
+        const last = Math.min(max, min + colBudget - 1);
+        if (last >= min) colBudget -= last - min + 1;
         for (let c = min; c <= last; c++) {
           if (w !== null) {
             const px = pxFromWidth(Number(w));

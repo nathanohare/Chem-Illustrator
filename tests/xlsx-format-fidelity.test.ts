@@ -136,3 +136,35 @@ describe("the workbook's Normal style", () => {
     expect(st).toMatch(/<fonts count="\d+"><font><sz val="11"\/><color rgb="FF000000"\/><name val="Calibri"\/><\/font>/);
   });
 });
+
+describe('columns to the end of the sheet', () => {
+  const file = () => excelFile(
+    '<cols><col min="1" max="2" width="12.7109375" customWidth="1"/><col min="4" max="16384" width="9.140625" hidden="1"/></cols>' +
+    '<sheetData><row r="1"><c r="A1"><v>1</v></c><c r="B1"><v>2</v></c></row></sheetData>',
+    { styles: styles(['<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>']) },
+  );
+
+  it('hides every column of a range that runs to the end, not only its first', async () => {
+    const { book } = await readXlsx(file());
+    const s = book.sheet;
+    expect(s.hiddenCols.has(3)).toBe(true);
+    expect(s.hiddenCols.has(300)).toBe(true);
+    expect(s.hiddenCols.has(16383)).toBe(true);
+    expect(s.hiddenCols.has(2)).toBe(false);
+  });
+
+  it('writes neighboring columns set the same way as one range, to the end of the sheet', async () => {
+    const { book } = await readXlsx(file());
+    const xml = part(await writeXlsx(book, pictures), 'xl/worksheets/sheet1.xml');
+    expect(xml).toMatch(/<cols><col min="1" max="2" width="[\d.]+" customWidth="1"\/><col min="4" max="16384" width="[\d.]+" hidden="1"\/><\/cols>/);
+  });
+});
+
+describe('columns to the end of the sheet, after inserting one', () => {
+  it('stops at the last column of the sheet', async () => {
+    const { book } = await readXlsx(excelFile('<cols><col min="4" max="16384" width="9.140625" hidden="1"/></cols><sheetData><row r="1"><c r="A1"><v>1</v></c></row></sheetData>'));
+    book.edit('insert', () => book.sheet.insertCols(1, 2));
+    const xml = part(await writeXlsx(book, pictures), 'xl/worksheets/sheet1.xml');
+    expect(xml).toMatch(/<col min="6" max="16384" width="[\d.]+" hidden="1"\/>/);
+  });
+});
