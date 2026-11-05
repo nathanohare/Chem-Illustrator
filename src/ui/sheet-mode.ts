@@ -624,6 +624,9 @@ export class SheetMode {
     // File > Print > Paper Size
     const paper = name.startsWith('sheet-paper-') ? name.slice('sheet-paper-'.length) : '';
     if (paper && paper in SHEET_PAPERS) { this.page.set('Paper size', { paper: paper as PaperName }); return true; }
+    // while typing in a cell, Bold, Italic and Underline are for the selected text (issue #503)
+    const typing = name === 'cell-bold' ? 'bold' : name === 'cell-italic' ? 'italic' : name === 'cell-underline' ? 'underline' : null;
+    if (typing && v.styleTyping(typing)) { this.showRibbonState(); return true; }
     switch (name) {
       case 'cell-bold': this.style('Bold', { bold: !a.bold || undefined }); break;
       case 'cell-italic': this.style('Italic', { italic: !a.italic || undefined }); break;
@@ -1787,8 +1790,7 @@ export class SheetMode {
       },
       look: (col, ref, w, h) => {
         const sts = structures(col);
-        const SAYS = 'Every group on the ring it sits on is placed o, m or p from it; two or more add up (Σσ).';
-        if (!sts.length) return { picture: null, note: `SMILES are read as the values are worked out: write the reference position as * on a ring carbon, e.g. *c1ccc(OC)cc1. ${SAYS}` };
+        if (!sts.length) return { picture: null, note: 'In SMILES, write the reference position as * on a ring carbon, e.g. *c1ccc(OC)cc1.' };
         let once = 0, several = 0;
         let onRing = null as Structure | null;
         for (const st of sts) {
@@ -1802,7 +1804,6 @@ export class SheetMode {
           : once || several ? `Found once in ${once} of the ${n} structures${none ? `; ${none} ${none === 1 ? 'has' : 'have'} none and will show #N/A` : ''}${several ? `; ${several} ${several === 1 ? 'has' : 'have'} more than one and will show #N/A` : ''}.`
           : `None of the structures has a ${name} attachment point yet: right-click a ring carbon and pick Attachment Point.`;
         if (once + several && !onRing) note += ' It must sit on a benzene ring carbon, with nothing between it and the ring.';
-        else if (once + several) note += ` ${SAYS}`;
         const fit = onRing && this.pictures.fitted(onRing, w, h);
         const m = fit && refMarks(fit.doc, ref);
         if (!fit || !m) return { picture: null, note };
@@ -2405,9 +2406,10 @@ export class SheetMode {
     const st = s.styleAt(r, c) ?? {};
     // (some buttons are on two tabs, as in Excel: Filter on Home and on Data)
     const press = (name: string, on: boolean) => { for (const b of this.ribbon.querySelectorAll(`[data-sh="${name}"]`)) b.setAttribute('aria-pressed', String(on)); };
-    press('cell-bold', !!st.bold);
-    press('cell-italic', !!st.italic);
-    press('cell-underline', !!st.underline);
+    // while typing: the look where the caret is
+    press('cell-bold', this.view.typingHas('bold') ?? !!st.bold);
+    press('cell-italic', this.view.typingHas('italic') ?? !!st.italic);
+    press('cell-underline', this.view.typingHas('underline') ?? !!st.underline);
     press('align-left', st.align === 'left');
     press('align-center', st.align === 'center');
     press('align-right', st.align === 'right');

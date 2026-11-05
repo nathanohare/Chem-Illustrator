@@ -191,7 +191,9 @@ const heavy = (mol: NewmanMol, a: number, nb: { atom: number; order: number }[][
 function shapeKey(mol: NewmanMol, a: number, from: number, nb: { atom: number; order: number }[][], depth = 0): string {
   const el = elementSymbol(mol.atoms[a].z);
   const h = hCount(mol, a, nb);
-  const kids = heavy(mol, a, nb, from).map((n) => (n.order === 2 ? '=' : n.order === 3 ? '#' : n.order === 1.5 ? ':' : '') + (depth > 5 ? '…' : shapeKey(mol, n.atom, a, nb, depth + 1))).sort();
+  // a benzene ring on the group is written c, as in the keys for OBz and Bn
+  const kids = heavy(mol, a, nb, from).map((n) => (n.order === 2 ? '=' : n.order === 3 ? '#' : n.order === 1.5 ? ':' : '')
+    + (isPhenyl(mol, n.atom, a, nb) ? 'c' : depth > 5 ? '…' : shapeKey(mol, n.atom, a, nb, depth + 1))).sort();
   const q = mol.atoms[a].charge ? (mol.atoms[a].charge > 0 ? '+' : '-') : '';
   return el + (h ? 'H' + (h > 1 ? h : '') : '') + q + (kids.length ? '(' + kids.join(',') + ')' : '');
 }

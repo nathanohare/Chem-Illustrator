@@ -2,6 +2,7 @@
 // opens the same small menu: the standard colours, your palette rows, and "More colours…", so
 // the rows you make in a drawing are there in slides, sheets, documents and designs as well.
 
+import { addInfo } from './info-tip';
 import { showDialog } from './dialog-host';
 import { PRESET_PALETTES, cleanColour, freshName, withColour, type Palette, PALETTES_MAX } from '../palettes';
 import { STANDARD_COLOURS } from '../colours';
@@ -89,9 +90,11 @@ let pop: HTMLElement | null = null;
 let popFor: HTMLInputElement | null = null;
 
 function closePop(): void {
-  pop?.remove();
+  // forgotten first, as taking it out can blur its colour box and close it again (#326)
+  const p = pop;
   pop = null;
   popFor = null;
+  p?.remove();
 }
 
 /** Open the colour menu for a plain colour box: picking sets the box and tells its owner, as the system picker would. */
@@ -179,10 +182,8 @@ function fillDialog(d: HTMLDialogElement): void {
   d.replaceChildren();
   const h = document.createElement('h2');
   h.textContent = 'Your palettes';
-  const intro = document.createElement('p');
-  intro.className = 'muted';
-  intro.textContent = 'Rows of colors shown in every color menu, in every mode. Click a color to change it; × takes it out.';
-  d.append(h, intro);
+  addInfo(h, 'Rows of colors shown in every color menu, in every mode. Click a color to change it; × takes it out.');
+  d.append(h);
 
   const list = document.createElement('div');
   list.className = 'palette-list';

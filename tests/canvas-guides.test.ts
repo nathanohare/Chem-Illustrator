@@ -101,9 +101,8 @@ describe('saving', () => {
 describe('the toolbox', () => {
   it('adds guides on a tick in the middle of the window, and switches the grid and snapping', () => {
     let now: CanvasGuides | null = null;
-    let smart = false;
     const body = document.createElement('div');
-    buildGuidesToolbox(body, false, { get: () => now, set: (x) => { now = x; }, centre: () => ({ x: 203, y: 95 }), units: () => 'in', smart: () => smart, setSmart: (on) => { smart = on; } });
+    buildGuidesToolbox(body, false, { get: () => now, set: (x) => { now = x; }, centre: () => ({ x: 203, y: 95 }), units: () => 'in' });
     body.querySelector<HTMLButtonElement>('.gt-btn[title^="Add a crosshair"]')!.click();
     expect(now!.list).toEqual([{ kind: 'cross', x: 198, y: 90 }]);
     body.querySelector<HTMLButtonElement>('.gt-btn[title^="Grid"]')!.click();
@@ -127,7 +126,7 @@ describe('the toolbox', () => {
     // no separate unit, no "None", and the help is behind an "i"
     expect([...body.querySelectorAll('.gt-seg')].map((b) => b.textContent)).toEqual(['Major', 'Minor', 'Both']);
     expect(body.textContent).not.toContain('Drag a guide');
-    expect(body.querySelector('.gt-info')!.getAttribute('title')).toContain('Drag a guide');
+    expect(body.querySelector('.gt-info')!.getAttribute('data-tip')).toContain('Drag a guide');
     // one checkbox, above the snap choices, turns snapping on and off
     const check = body.querySelector<HTMLElement>('.gt-check')!;
     expect(check.textContent).toBe('Toggle object snapping');
@@ -137,10 +136,10 @@ describe('the toolbox', () => {
     expect(box.checked).toBe(true);
     box.checked = true;
     box.dispatchEvent(new Event('change'));
-    expect([smart, now!.snapOff]).toEqual([true, undefined]);
+    expect(now!.snapOff).toBeUndefined();
     box.checked = false;
     box.dispatchEvent(new Event('change'));
-    expect([smart, now!.snapOff, now!.snap]).toEqual([false, true, 'major']);
+    expect([now!.snapOff, now!.snap]).toEqual([true, 'major']);
     expect(body.querySelector<HTMLButtonElement>('.gt-seg')!.disabled).toBe(true);
   });
   it('reads lengths with their units', () => {

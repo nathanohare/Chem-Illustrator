@@ -5,17 +5,28 @@
 // sheet or document. Every abbreviation shows what it means when the mouse rests on it.
 //
 // Tables you import (a CSV or tab-separated file, or text pasted from a spreadsheet) are kept on
-// this computer only, for data you have a copy of but the program can't carry. So are your PDFs
-// (a book, papers, SI files): each one's text is read once and searched as a table of pages, with
-// an excerpt around the words found, and the file opens from its row.
+// this computer only, for data you have a copy of but the program can't carry.
 
 import { BUILT_IN_TABLES, LATER_ROWS, LATER_TABLES } from '../kb/data';
 import type { SafetyRecord } from '../kb/safety';
 import { safetyRow, sortSafety } from '../kb/safety-tables';
 import { explainPieces, glossaryEntry } from '../kb/glossary';
-import { CANONICAL_ROWS, PRESENT, cellShown, filterValues, findRows, isCas, parseUserTable, searchedShift, sortRows, tableTsv, type KbColumn, type KbTable, type RowMatch } from '../kb/tables';
-import { pdfTable, type PdfIndex } from '../kb/pdf-library';
+import { CANONICAL_ROWS, PRESENT, filterValues, findRows, isCas, looksLikeSmiles, parseUserTable, sortRows, tableTsv, type KbColumn, type KbTable, type RowMatch } from '../kb/tables';
 import { ask } from './ask';
+import { infoIcon, setInfo } from './info-tip';
+import { templateIcon } from './template-icons';
+import { svgNode } from './svg-node';
+import { prettyChem } from '../kb/pretty';
+import type { Template } from '../chem/templates';
+
+/** A structure picture in a table cell, in pixels. */
+const PIC = 48;
+/** The structure shown beside a solvent's name, in pixels. */
+const STRUCTURE_PIC = 120;
+
+/** Rows built when a table is shown, and how many more each time it is scrolled near its end. */
+const FIRST_ROWS = 60;
+const MORE_ROWS = 300;
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, props: Partial<HTMLElementTagNameMap[K]> = {}, ...kids: (Node | string)[]): HTMLElementTagNameMap[K] => {
   const e = Object.assign(document.createElement(tag), props);
@@ -31,9 +42,10 @@ const button = (label: string, title: string, on: () => void, primary = false): 
 };
 
 /** Text with its abbreviations explained on hover (each one an <abbr> with its meaning as the tooltip). */
-export function explained(text: string): DocumentFragment {
+export function explained(text: string, nuclei = false): DocumentFragment {
   const f = document.createDocumentFragment();
-  for (const p of explainPieces(text)) f.append(p.tip ? el('abbr', { textContent: p.text, title: p.tip }) : withSigma(p.text));
+  // formulas with real subscripts (CDCl₃), nuclei with superscripts (¹H): shown so, searched as typed
+  for (const p of explainPieces(text)) { const t = prettyChem(p.text, nuclei); f.append(p.tip ? el('abbr', { textContent: t, title: p.tip }) : withSigma(t)); }
   return f;
 }
 
@@ -52,11 +64,36 @@ function withSigma(text: string): DocumentFragment | string {
  * A cell's text with its abbreviations explained. A short list cell (multiplicities "sept, s")
  * is explained piece by piece, so a lone "s" or "t" gets its tooltip there and nowhere else.
  */
-function cellExplained(text: string, list: boolean): DocumentFragment {
-  if (!list) return explained(text);
+function cellExplained(text: string, list: boolean, nuclei = false): DocumentFragment {
+  if (!list) return explained(text, nuclei);
   const f = document.createDocumentFragment();
-  for (const part of text.split(/(,\s*)/)) f.append(/^,/.test(part) ? part : explained(part));
+  for (const part of text.split(/(,\s*)/)) f.append(/^,/.test(part) ? part : explained(part, nuclei));
   return f;
+}
+
+/** A table's Solvent filter column (an impurity table's NMR solvent), if it has one. */
+function solventColumn(t: KbTable): KbColumn | undefined {
+  return t.columns.find((c) => c.filter === true && /^(nmr )?solvent$/i.test(c.label));
+}
+
+/** The same NMR solvent under another name: "CDCl3", "Chloroform-d", "cdcl3". */
+const SOLVENT_NAMES = [
+  ['cdcl3', 'chloroform-d', 'chloroform'], ['acetone-d6', '(cd3)2co', 'acetone'], ['dmso-d6', '(cd3)2so', 'dmso', 'dimethyl sulfoxide-d6'],
+  ['cd3cn', 'acetonitrile-d3', 'acetonitrile'], ['cd3od', 'methanol-d4', 'methanol'], ['d2o', 'deuterium oxide'], ['c6d6', 'benzene-d6', 'benzene'],
+  ['thf-d8', 'tetrahydrofuran-d8', 'c4d8o'], ['toluene-d8', 'c6d5cd3', 'c7d8'], ['cd2cl2', 'dichloromethane-d2'], ['c5d5n', 'pyridine-d5'],
+];
+export function matchSolvent(values: string[], wanted: string): string | null {
+  const key = (v: string) => { const l = v.trim().toLowerCase(); return SOLVENT_NAMES.find((n) => n.includes(l))?.[0] ?? l; };
+  const w = key(wanted);
+  return values.find((v) => key(v) === w) ?? null;
+}
+
+const NMR_SOLVENT_KEY = 'chem-illustrator.kb.nmrSolvent';
+function readNmrSolvent(): string {
+  try { return localStorage.getItem(NMR_SOLVENT_KEY) ?? ''; } catch { return ''; }
+}
+function writeNmrSolvent(v: string): void {
+  try { if (v) localStorage.setItem(NMR_SOLVENT_KEY, v); else localStorage.removeItem(NMR_SOLVENT_KEY); } catch { /* not kept */ }
 }
 
 export interface KnowledgeBaseHost {
@@ -70,38 +107,13 @@ export interface KnowledgeBaseHost {
   pickTable(): Promise<{ name: string; text: string } | null>;
   copyText(text: string): Promise<void>;
   openUrl(url: string): void;
-  /** PDFs the user picks, with where each is on this computer when the app can tell. */
-  pickPdfs?(): Promise<{ name: string; bytes: Uint8Array; path?: string }[]>;
-  /** The text of each page of a PDF. */
-  readPdfPages?(bytes: Uint8Array, progress: (done: number, of: number) => void): Promise<string[]>;
-  /** The PDFs read before (each a PdfIndex as JSON). */
-  readPdfs?(): Promise<string[]>;
-  writePdf?(id: string, json: string): Promise<void>;
-  removePdf?(id: string): Promise<void>;
-  /** Open a file on this computer in the program that opens it. */
-  openFile?(path: string): Promise<void>;
   /** PubChem's compound number for a CAS number (the big tables carry no CAS numbers). */
   cidForCas?(cas: string): Promise<number | null>;
   /** A compound's hazard record read live from PubChem (a name, CAS number or SMILES), or null. */
   lookUpSafety?(query: string): Promise<SafetyRecord | null>;
 }
 
-/** An excerpt with the words searched for marked. */
-export function marked(text: string, query: string): DocumentFragment {
-  const f = document.createDocumentFragment();
-  const words = query.trim().toLowerCase().split(/\s+/).filter((w) => w.length > 1).map((w) => w.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
-  if (!words.length) { f.append(text); return f; }
-  const re = new RegExp(`(${words.join('|')})`, 'gi');
-  text.split(re).forEach((part, i) => f.append(i % 2 ? el('mark', { textContent: part }) : part));
-  return f;
-}
-
-/** Does this look like SMILES rather than a word or number (has ring digits, bonds or brackets)? */
-export function looksLikeSmiles(q: string): boolean {
-  const s = q.trim();
-  if (!s || /\s/.test(s) || isCas(s) || searchedShift(s) !== null) return false;
-  return /[=#()[\]@]|[a-z]\d|\d[A-Za-z]/.test(s) && /^[A-Za-z0-9@+\-[\]()=#$/\\%.:*]+$/.test(s);
-}
+export { looksLikeSmiles };
 
 export class KnowledgeBaseWindow {
   private d: HTMLDialogElement | null = null;
@@ -110,18 +122,26 @@ export class KnowledgeBaseWindow {
   private search!: HTMLInputElement;
   private list!: HTMLDivElement;
   private filters!: HTMLDivElement;
-  private about!: HTMLParagraphElement;
+  private about!: HTMLElement;
+  private title!: HTMLHeadingElement;
+  private titleText!: HTMLSpanElement;
   private wrap!: HTMLDivElement;
   private sources!: HTMLParagraphElement;
   private count!: HTMLSpanElement;
   private removeBtn!: HTMLButtonElement;
   private picked: Record<string, string> = {};
+  /** The NMR solvent last picked in a Solvent filter: impurity tables open showing that solvent. */
+  private nmrSolvent = readNmrSolvent();
   private sort: { key: string; down: boolean } | null = null;
+  /** The table showing last (a different one starts scrolled to its top). */
+  private shownId = '';
   /** Canonical SMILES of each row's structure (worked out once, when a SMILES is first searched). */
   private canon = new Map<string, string | null>();
   /** The canonical form of the SMILES typed, when the search is one. */
   private queryCanon: string | null = null;
   private searchToken = 0;
+  /** Builds more rows of the table showing (as it is scrolled down). */
+  private moreRows: ((n?: number) => void) | null = null;
   private loaded = false;
   /** The PubChem compound a CAS number typed belongs to, for rows that carry no CAS number. */
   private casCid: number | null = null;
@@ -138,24 +158,35 @@ export class KnowledgeBaseWindow {
     d.addEventListener('keydown', (e) => { e.stopPropagation(); });
     this.search = el('input', { type: 'search', placeholder: 'Name, CAS, SMILES or a shift (2.17)', title: 'Search every table by name, CAS number, SMILES, any word, or a chemical shift (2.17 finds peaks within 0.05 ppm in 1H, 0.5 in 13C)', value: query });
     this.search.setAttribute('aria-label', 'Search the Knowledge Base');
-    this.search.addEventListener('input', () => this.searchChanged());
+    // a single letter matches most of every table (~110 ms): wait a moment for the next key first
+    let wait = 0;
+    this.search.addEventListener('input', () => {
+      clearTimeout(wait);
+      if (this.search.value.trim().length === 1) wait = window.setTimeout(() => this.searchChanged(), 200);
+      else this.searchChanged();
+    });
     this.list = el('div', { className: 'kb-list', role: 'tablist' });
     this.list.setAttribute('aria-label', 'Tables');
     this.filters = el('div', { className: 'refs-filter kb-filters' });
-    this.about = el('p', { className: 'muted kb-about' });
+    // the table's name with its description behind an "i" (UI rule 2), and its filters, in the
+    // title row above the table: no line of their own
+    this.title = el('h3', { className: 'kb-title has-info' });
+    this.titleText = el('span');
+    this.about = infoIcon('');
+    this.title.append(this.titleText, this.about);
     this.wrap = el('div', { className: 'refs-table-wrap kb-table-wrap' });
+    this.wrap.addEventListener('scroll', () => { const w = this.wrap; if (w.scrollTop + w.clientHeight > w.scrollHeight - 600) this.moreRows?.(); }, { passive: true });
     this.sources = el('p', { className: 'muted kb-sources' });
     this.count = el('span', { className: 'muted' });
-    this.removeBtn = button('Remove Table…', 'Remove the imported table or PDF showing (only from this computer; the file is not changed)', () => void this.removeImported());
+    this.removeBtn = button('Remove Table…', 'Remove the imported table showing (only from this computer)', () => void this.removeImported());
     d.append(
-      el('div', { className: 'refs-head' }, el('h2', { textContent: 'Knowledge Base' }), this.search),
+      el('div', { className: 'refs-head kb-head' }, el('h2', { textContent: 'Knowledge Base' }), el('div', { className: 'kb-top' }, this.title, this.filters), this.search),
       el('div', { className: 'kb-body' },
         this.list,
-        el('div', { className: 'kb-main' }, this.about, this.filters, this.wrap, this.sources)),
+        el('div', { className: 'kb-main' }, this.wrap, this.sources)),
       el('div', { className: 'refs-buttons' },
         el('span', { className: 'refs-add' },
           button('Import Table…', 'Add a table of your own from a CSV or tab-separated file (or paste one from a spreadsheet). It is kept on this computer only', () => void this.importTable()),
-          ...(this.host.pickPdfs ? [button('Add PDFs…', 'Search your own PDFs (a book, papers, SI files) here too. Their text is read once and kept on this computer only', () => void this.addPdfs())] : []),
           this.removeBtn),
         el('span', { className: 'refs-edit' },
           this.count,
@@ -207,55 +238,10 @@ export class KnowledgeBaseWindow {
       if (!Array.isArray(got)) return;
       for (const t of got) if (t && typeof t.id === 'string' && Array.isArray(t.rows) && Array.isArray(t.columns)) this.tables.push({ ...t, personal: true });
     } catch { /* a damaged file: start without imported tables */ }
-    finally { await this.loadPdfs(); }
-  }
-
-  private async loadPdfs(): Promise<void> {
-    const all = await this.host.readPdfs?.().catch(() => [] as string[]) ?? [];
-    for (const json of all) {
-      try {
-        const p = JSON.parse(json) as PdfIndex;
-        if (p && typeof p.id === 'string' && Array.isArray(p.pages)) this.tables.push(pdfTable(p));
-      } catch { /* a damaged index: leave it out */ }
-    }
   }
 
   private async saveImported(): Promise<void> {
-    await this.host.writeImported(JSON.stringify(this.tables.filter((t) => t.personal && !t.pdf), null, 1));
-  }
-
-  /** Add PDFs: read each one's text, page by page, and keep it on this computer. */
-  private async addPdfs(): Promise<void> {
-    const h = this.host;
-    if (!h.pickPdfs || !h.readPdfPages || !h.writePdf) return;
-    const files = await h.pickPdfs().catch((e) => { h.flash(`Couldn't open the PDFs: ${e}`); return []; });
-    let last: KbTable | null = null, added = 0;
-    for (const f of files) {
-      h.flash(`Reading ${f.name}…`, 60000);
-      let pages: string[];
-      try {
-        pages = await h.readPdfPages(f.bytes, (done, of) => h.flash(`Reading ${f.name}: page ${done} of ${of}…`, 60000));
-      } catch (e) {
-        h.flash(`${f.name} couldn't be read: ${e}`);
-        continue;
-      }
-      if (!pages.some((p) => p)) { h.flash(`${f.name} has no text to search (a scan without OCR?).`, 6000); continue; }
-      const index: PdfIndex = { id: `pdf-${Date.now().toString(36)}${added}`, name: f.name, ...(f.path ? { path: f.path } : {}), added: new Date().toISOString(), pages };
-      await h.writePdf(index.id, JSON.stringify(index));
-      // the same file added again replaces the copy read before
-      const old = this.tables.find((t) => t.pdf && t.title === pdfTable(index).title && t.pdf.path === index.path);
-      if (old) { this.tables = this.tables.filter((t) => t !== old); await h.removePdf?.(old.id); }
-      last = pdfTable(index);
-      this.tables.push(last);
-      added++;
-    }
-    if (!last) return;
-    this.current = last;
-    this.picked = {};
-    this.sort = null;
-    this.showList();
-    this.showTable();
-    h.flash(added === 1 ? `Added ${last.title} (${last.rows.length} pages with text).` : `Added ${added} PDFs.`);
+    await this.host.writeImported(JSON.stringify(this.tables.filter((t) => t.personal), null, 1));
   }
 
   /** The table list on the left, each with how many rows match the search. */
@@ -274,9 +260,22 @@ export class KnowledgeBaseWindow {
     }));
   }
 
+  /** The rows matched for each table and search, so one key typed matches each table once (the counts on the left and the table showing ask for the same). */
+  private matchMemo = new Map<string, readonly RowMatch[]>();
+
   private matches(t: KbTable, withFilters = true): RowMatch[] {
+    const filters = withFilters ? this.filtersFor(t) : {};
+    const key = JSON.stringify([t.id, t.personal === true, t.rows.length, this.search.value, this.queryCanon, this.casCid, this.canon.size, filters]);
+    const got = this.matchMemo.get(key);
+    if (got) return [...got];
+    if (this.matchMemo.size > 200) this.matchMemo.clear();
+    const found = this.findMatches(t, filters);
+    this.matchMemo.set(key, found);
+    return [...found];
+  }
+
+  private findMatches(t: KbTable, filters: Record<string, string>): RowMatch[] {
     const same = this.queryCanon ? new Set(t.rows.filter((r) => typeof r.smiles === 'string' && this.canon.get(r.smiles) === this.queryCanon).map((r) => r.smiles as string)) : undefined;
-    const filters = withFilters ? this.picked : {};
     let found = findRows(t, this.queryCanon ? '' : this.search.value, filters, same).filter((m) => !this.queryCanon || same?.has(m.row.smiles as string));
     // a CAS number typed also finds rows without CAS numbers, by the compound PubChem gives it
     if (this.casCid !== null) {
@@ -364,10 +363,21 @@ export class KnowledgeBaseWindow {
     this.showTable();
   }
 
+  /** The filters picked, with the remembered NMR solvent in a Solvent column nobody has set yet. */
+  private filtersFor(t: KbTable): Record<string, string> {
+    const col = solventColumn(t);
+    if (!col || this.picked[col.key] !== undefined || !this.nmrSolvent) return this.picked;
+    const v = matchSolvent(filterValues(t, col.key), this.nmrSolvent);
+    return v ? { ...this.picked, [col.key]: v } : this.picked;
+  }
+
   private header(c: KbColumn): HTMLTableCellElement {
-    const th = el('th', {}, explained(c.label));
+    const th = el('th', {}, explained(c.label, true));
     if (c.numeric || c.shift) th.classList.add('num');
     if (c.narrow) th.classList.add('narrow');
+    // what the scale means: hover for the tip, a click pins it (and doesn't sort)
+    if (c.info) th.append(' ', infoIcon(c.info));
+    if (c.picture) { th.classList.add('kb-pic'); return th; }
     th.title = `Sort by ${c.label}`;
     if (this.sort?.key === c.key) th.append(this.sort.down ? ' ▾' : ' ▴');
     th.addEventListener('click', () => {
@@ -380,53 +390,43 @@ export class KnowledgeBaseWindow {
   private showTable(): void {
     if (!this.d) return;
     const t = this.current;
-    this.about.textContent = t.about;
+    // another table starts at its top
+    if (this.shownId !== t.id) { this.shownId = t.id; this.wrap.scrollTop = 0; this.wrap.scrollLeft = 0; }
+    // a chart gets the room to show whole
+    this.wrap.classList.toggle('kb-mx-host', !!t.matrix);
+    this.titleText.textContent = prettyChem(t.title);
+    setInfo(this.about, prettyChem(t.about));
     this.removeBtn.hidden = !t.personal;
-    this.removeBtn.textContent = t.pdf ? 'Remove PDF…' : 'Remove Table…';
     // filter lists
     this.filters.replaceChildren(...t.columns.filter((c) => c.filter).map((c) => {
       const s = el('select', { title: `Show only one ${c.label.toLowerCase()}` });
-      s.append(el('option', { value: '', textContent: `All (${c.label})` }));
+      s.append(el('option', { value: '', textContent: 'All' }));
       if (c.filter === 'present') s.append(el('option', { value: PRESENT, textContent: `With ${c.label.toLowerCase()}` }));
-      else s.append(...filterValues(t, c.key).map((v) => el('option', { value: v, textContent: v })));
-      s.value = this.picked[c.key] ?? '';
-      s.addEventListener('change', () => { this.picked = { ...this.picked, [c.key]: s.value }; this.showTable(); });
-      return el('label', {}, el('span', { textContent: c.label }), s);
+      else s.append(...filterValues(t, c.key).map((v) => el('option', { value: v, textContent: prettyChem(v, c.key === 'nucleus') })));
+      const solvent = c === solventColumn(t);
+      s.value = (solvent ? this.filtersFor(t)[c.key] : this.picked[c.key]) ?? '';
+      s.addEventListener('change', () => {
+        this.picked = { ...this.picked, [c.key]: s.value };
+        if (solvent) { this.nmrSolvent = s.value; writeNmrSolvent(s.value); }
+        this.showTable();
+      });
+      if (solvent) s.title = 'The solvent your NMR was taken in: impurity shifts change with it. Remembered for the other impurity tables';
+      return el('label', {}, el('span', { textContent: solvent ? 'NMR taken in' : c.label }), s);
     }));
     this.filters.hidden = !this.filters.childElementCount;
     let rows = this.matches(t);
     const sortCol = this.sort && t.columns.find((c) => c.key === this.sort!.key);
     if (sortCol) rows = sortRows(rows, sortCol, this.sort!.down);
-    const shown = rows.slice(0, 2000);
+    // the first rows straight away and the rest as the table is scrolled down: building every
+    // row of a big table (Reagent Safety, Solubility) on each key typed took most of a second
     const body = el('tbody');
-    for (const m of shown) {
-      const tr = el('tr');
-      for (const c of t.columns) {
-        if (c.hidden) continue;
-        const v = cellShown(m.row, c, this.search.value);
-        const td = el('td');
-        if (c.numeric || c.shift) td.className = 'num';
-        if (c.narrow) td.classList.add('narrow');
-        if (c.prose) td.classList.add('prose');
-        if (c.key === 'cas') td.classList.add('cas');
-        if (c.excerptOf) { td.classList.add('kb-excerpt'); if (v) td.append(marked(String(v), this.search.value)); }
-        else if (v !== null && v !== undefined && v !== '') td.append(typeof v === 'number' ? String(v) : cellExplained(v, !!c.narrow));
-        tr.append(td);
-      }
-      if (t.links) {
-        const td = el('td', { className: 'kb-links' });
-        t.links(m.row).forEach((l, i) => {
-          if (i) td.append(' · ');
-          const a = el('a', { href: l.url ?? '#', textContent: l.label });
-          if (l.path) a.title = l.page ? `Open the PDF (this is page ${l.page})` : 'Open the file';
-          a.addEventListener('click', (e) => { e.preventDefault(); void this.follow(l); });
-          td.append(a);
-        });
-        tr.append(td);
-      }
-      body.append(tr);
-    }
-    const table = el('table', { className: 'refs-table kb-table' }, el('thead', {}, el('tr', {}, ...t.columns.filter((c) => !c.hidden).map((c) => this.header(c)), ...(t.links ? [el('th', { textContent: 'Look up' })] : []))), body);
+    let next = 0;
+    this.moreRows = (n = MORE_ROWS) => {
+      const end = Math.min(rows.length, next + n);
+      for (; next < end; next++) body.append(this.rowEl(t, rows[next]));
+    };
+    this.moreRows(FIRST_ROWS);
+    const table = el('table', { className: 'refs-table kb-table' + (t.picture ? ' kb-pictures' : '') }, el('thead', {}, el('tr', {}, ...t.columns.filter((c) => !c.hidden).map((c) => this.header(c)), ...(t.links ? [el('th', { textContent: 'Look up' })] : []))), body);
     if (!rows.length) {
       const q = this.search.value.trim();
       const empty = el('p', { className: 'muted kb-empty', textContent: q ? `Nothing in ${t.title} matches “${q}”.` : 'This table is empty.' });
@@ -435,7 +435,9 @@ export class KnowledgeBaseWindow {
         ? [button(`Rate “${q.length > 40 ? q.slice(0, 39) + '…' : q}” from PubChem`, 'Look the compound up on PubChem and rate it with the same rules, from the same open sources (needs the internet)', () => void this.rateLive(q))]
         : [];
       this.wrap.replaceChildren(empty, ...live);
-    } else this.wrap.replaceChildren(table);
+    } else if (t.matrix) this.wrap.replaceChildren(this.matrixEl(t, rows));
+    else if (t.parts) this.wrap.replaceChildren(...this.partsEl(t, rows));
+    else this.wrap.replaceChildren(table);
     this.count.textContent = rows.length === t.rows.length ? `${t.rows.length} rows` : `${rows.length} of ${t.rows.length} rows`;
     // sources, each a link when it has one
     this.sources.replaceChildren(t.sources.length > 1 ? 'Sources: ' : 'Source: ');
@@ -449,21 +451,134 @@ export class KnowledgeBaseWindow {
     });
   }
 
-  /** A row's link: a web page, or one of your files (a PDF opens in its own program, at its first page). */
-  private async follow(l: { url?: string; path?: string; page?: number }): Promise<void> {
-    if (l.url) { this.host.openUrl(l.url); return; }
-    if (!l.path || !this.host.openFile) return;
-    try {
-      await this.host.openFile(l.path);
-      if (l.page) this.host.flash(`Opened the PDF: what you searched for is on page ${l.page}.`, 5000);
-    } catch (e) {
-      this.host.flash(`Couldn't open ${l.path}: it may have moved. Add it again to search it from its new place. (${e})`, 7000);
+  /** One row of the table. */
+  private rowEl(t: KbTable, m: RowMatch): HTMLTableRowElement {
+    const tr = el('tr');
+    for (const c of t.columns) {
+      if (c.hidden) continue;
+      const v = m.row[c.key];
+      const td = el('td');
+      if (c.numeric || c.shift) td.className = 'num';
+      if (c.narrow) td.classList.add('narrow');
+      if (c.prose) td.classList.add('prose');
+      if (c.key === 'cas') td.classList.add('cas');
+      if (c.picture) {
+        const tpl = t.picture?.(m.row);
+        td.className = 'kb-pic';
+        { const icon = tpl ? svgNode(templateIcon(tpl, PIC, 14)) : null; if (icon) td.append(icon); }
+        tr.append(td);
+        continue;
+      }
+      if (v !== null && v !== undefined && v !== '') td.append(typeof v === 'number' ? String(v) : c.key === 'atom' ? v : cellExplained(v, !!c.narrow, c.key === 'nucleus')); // atom labels (H2, C3) are not formulas
+      if (c.key === 'name' && t.structure) this.structureOnHover(td, () => t.structure!(m.row));
+      tr.append(td);
     }
+    if (t.links) {
+      const td = el('td', { className: 'kb-links' });
+      t.links(m.row).forEach((l, i) => {
+        if (i) td.append(' · ');
+        const a = el('a', { href: l.url ?? '#', textContent: l.label });
+        a.addEventListener('click', (e) => { e.preventDefault(); if (l.url) this.host.openUrl(l.url); });
+        td.append(a);
+      });
+      tr.append(td);
+    }
+    return tr;
+  }
+
+  /** The structure in a little card beside a name while the pointer rests on it (Solvents). */
+  private structureOnHover(td: HTMLElement, tpl: () => Template | null): void {
+    td.classList.add('kb-structure-name');
+    let pop: HTMLElement | null = null;
+    const hide = () => { pop?.remove(); pop = null; };
+    td.addEventListener('pointerenter', () => {
+      const t = tpl();
+      const icon = t ? svgNode(templateIcon(t, STRUCTURE_PIC, 30)) : null;
+      if (!icon) return;
+      hide();
+      pop = el('div', { className: 'info-pop kb-structure-pop' });
+      pop.setAttribute('role', 'tooltip');
+      pop.append(icon);
+      (td.closest('dialog') ?? document.body).append(pop);
+      // just after the name, level with the row, kept on the screen
+      const range = document.createRange();
+      range.selectNodeContents(td);
+      const r = td.getBoundingClientRect(), words = range.getBoundingClientRect(), size = STRUCTURE_PIC + 10;
+      pop.style.left = `${Math.max(8, Math.min((words.width ? words.right : r.right) + 10, window.innerWidth - size - 8))}px`;
+      pop.style.top = `${Math.max(8, Math.min(r.top + r.height / 2 - size / 2, window.innerHeight - size - 8))}px`;
+    });
+    td.addEventListener('pointerleave', hide);
+  }
+
+  /**
+   * A miscibility chart: the solvents down the side and across the top, a shaded square where a
+   * pair forms two layers. Solvents matching the search are picked out; resting the pointer on a
+   * square names the pair and lights up its row and column.
+   */
+  private matrixEl(t: KbTable, rows: RowMatch[]): HTMLElement {
+    const m = t.matrix!;
+    const q = this.search.value.trim();
+    const hit = new Set(q ? rows.map((r) => String(r.row.name)) : []);
+    const marked = new Set(m.pairs.flatMap(([a, b]) => [`${a}|${b}`, `${b}|${a}`]));
+    const head = el('tr', {}, el('th', { className: 'kb-mx-corner' }));
+    m.names.forEach((name, j) => {
+      const th = el('th', { className: 'kb-mx-col' }, el('span', {}, prettyChem(name)));
+      th.dataset.c = String(j);
+      if (hit.has(name)) th.classList.add('hit');
+      head.append(th);
+    });
+    const body = el('tbody');
+    m.names.forEach((a, i) => {
+      const th = el('th', { className: 'kb-mx-row', textContent: prettyChem(a) });
+      th.dataset.r = String(i);
+      if (hit.has(a)) th.classList.add('hit');
+      const tr = el('tr', {}, th);
+      m.names.forEach((b, j) => {
+        const td = el('td');
+        // the full square (Nate's pick): every pair twice, a solvent with itself shaded on the diagonal
+        if (j === i) { td.className = 'kb-mx-self'; tr.append(td); return; }
+        const two = marked.has(`${a}|${b}`);
+        td.className = two ? 'kb-mx-two' : 'kb-mx-one';
+        td.dataset.r = String(i);
+        td.dataset.c = String(j);
+        if (hit.has(a) || hit.has(b)) td.classList.add('hit');
+        td.title = `${a} + ${b}: ${two ? `${m.mark.toLowerCase()} (two layers form in some proportions)` : `${m.other.toLowerCase()} in all proportions`}`;
+        tr.append(td);
+      });
+      body.append(tr);
+    });
+    const table = el('table', { className: 'kb-matrix' }, el('thead', {}, head), body);
+    // the row and column of the square under the pointer
+    let lit: Element[] = [];
+    table.addEventListener('pointerover', (e) => {
+      const cell = (e.target as Element).closest('td[data-r]') as HTMLElement | null;
+      lit.forEach((x) => x.classList.remove('lit'));
+      lit = cell ? [...table.querySelectorAll(`[data-r="${cell.dataset.r}"], [data-c="${cell.dataset.c}"]`)] : [];
+      lit.forEach((x) => x.classList.add('lit'));
+    });
+    table.addEventListener('pointerleave', () => { lit.forEach((x) => x.classList.remove('lit')); lit = []; });
+    const key = el('div', { className: 'kb-mx-key' },
+      el('span', { className: 'kb-mx-swatch two' }), el('span', { textContent: m.mark }), infoIcon(m.markInfo),
+      el('span', { className: 'kb-mx-swatch one' }), el('span', { textContent: m.other }));
+    return el('div', { className: 'kb-mx-wrap' }, table, key);
+  }
+
+  /** A table in parts (Acids and Bases): each part under its own heading, with its own columns. */
+  private partsEl(t: KbTable, rows: RowMatch[]): HTMLElement[] {
+    return t.parts!.flatMap((p) => {
+      const mine = rows.filter((m) => m.row.part === p.key);
+      if (!mine.length) return [];
+      const shown: KbTable = { ...t, columns: p.columns, parts: undefined };
+      const table = el('table', { className: 'refs-table kb-table kb-part' },
+        el('thead', {}, el('tr', {}, ...p.columns.filter((c) => !c.hidden).map((c) => this.header(c)))),
+        el('tbody', {}, ...mine.map((m) => this.rowEl(shown, m))));
+      return [el('h4', { className: 'kb-part-title', textContent: p.title }), table];
+    });
   }
 
   private async copy(): Promise<void> {
     const rows = this.matches(this.current);
-    await this.host.copyText(tableTsv(this.current, rows, this.search.value));
+    await this.host.copyText(tableTsv(this.current, rows));
     this.host.flash(`Copied ${rows.length} row${rows.length === 1 ? '' : 's'} of ${this.current.title}: paste into a sheet or a table.`);
   }
 
@@ -496,12 +611,10 @@ export class KnowledgeBaseWindow {
   private async removeImported(): Promise<void> {
     const t = this.current;
     if (!t.personal) return;
-    const what = t.pdf ? `the searchable text of ${t.title} (${t.rows.length} pages)` : `${t.title} (${t.rows.length} rows)`;
-    const ok = await ask(t.pdf ? 'Remove PDF' : 'Remove Table', [], { ok: 'Remove', note: `Remove ${what} from this computer? The file it came from is not changed.` });
+    const ok = await ask('Remove Table', [], { ok: 'Remove', note: `Remove ${t.title} (${t.rows.length} rows) from this computer? The file it came from is not changed.` });
     if (!ok) return;
     this.tables = this.tables.filter((x) => x !== t);
-    if (t.pdf) await this.host.removePdf?.(t.id);
-    else await this.saveImported();
+    await this.saveImported();
     this.current = this.tables[0];
     this.showList();
     this.showTable();

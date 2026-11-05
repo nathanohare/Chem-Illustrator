@@ -139,7 +139,8 @@ export function ribbonFavorites(host: HTMLElement, o: RibbonFavoritesOptions): {
       const hint = document.createElement('button');
       hint.type = 'button';
       hint.className = 'rbf-empty';
-      hint.textContent = 'Select something formatted, then + (or right-click it ▸ Save Format as Favorite)';
+      hint.textContent = 'No favorites yet';
+      hint.title = 'Select something formatted, then click + (or right-click it ▸ Save Format as Favorite)';
       hint.addEventListener('click', () => o.save());
       strip.append(hint);
     }

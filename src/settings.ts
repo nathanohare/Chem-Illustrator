@@ -22,7 +22,7 @@ import { parseRibbons, type RibbonsPrefs } from './ui/ribbon-custom';
 import { DEFAULT_DEPTH_SHADE, readDepthShade, type DepthShade } from './render/depth-shade';
 import { parseQuick } from './ui/quick-bar';
 import { parseOwnStyles, parseModeStyles, type StyleMode } from './drawing-styles';
-import { DEFAULT_BOND_ENDS, MAP_LOOKS, type DocStyle, type MapLook } from './style';
+import { DEFAULT_BOND_ENDS, DEFAULT_MAP_BOX, MAP_LOOKS, mapBoxStyle, type DocStyle, type MapBoxStyle, type MapLook } from './style';
 import { ALKYL_LOOKS, type AlkylLook } from './chem/labels';
 import { parseDarkPalettes, type DarkPalette } from './dark-page';
 import { DEFAULT_SCHEME_PREFS, parseSchemePrefs, type SchemePrefs } from './chem/scheme-layout';
@@ -122,12 +122,12 @@ export interface Settings {
   toolCells: 'off' | 'grid' | 'raised' | 'both';
   /** Settings ▸ Toolboxes: the Canvas ribbon in two rows of buttons (Classic) or one (Simplified). */
   canvasRibbon: 'classic' | 'simple';
-  /** Settings ▸ Toolboxes and Ribbon: where every ribbon's group names go: along the dividers, across each group, or nowhere. */
-  ribbonNames: 'top' | 'side' | 'none';
   /** The start view (new tabs, recent files) on the empty drawing the program opens with. */
   startView: boolean;
   /** Settings ▸ Preferences: Enter finishes text typed with the Text tool (in every mode) and Alt+Enter (Option+Enter on a Mac) starts a new line. Off: Enter starts a new line and Esc finishes (ChemDraw). */
   enterFinishesText: boolean;
+  /** Settings ▸ Preferences: opening a document whose structures aren't figures offers to make them figures (Make All Structures Figures stays on the right-click menu either way). */
+  offerFigures: boolean;
   /** Resting the mouse on an abbreviation shows the group written out (View > Group Tooltips). */
   groupTips: boolean;
   /** Tooltips that show what a tool does and its keys (off: the plain one-line tip). */
@@ -171,12 +171,14 @@ export interface Settings {
   superscriptR: boolean;
   /** How the n-, i-, s- and t- of alkyl groups (tBu, iPr) are written as labels and text are typed. */
   alkylLook: AlkylLook;
-  /** Settings ▸ Preferences: how a warning is marked on the drawing (soft red disc, thin red box, circle, dashed circle or corner marks). */
-  warnLook: 'disc' | 'box' | 'circle' | 'dashed' | 'corners';
+  /** Settings ▸ Preferences: how a warning is marked on the drawing (thin red box, soft red disc, circle, dashed circle or corner marks). */
+  warnLook: 'box' | 'soft' | 'circle' | 'dashed' | 'corners';
   /** How round bond lines' free ends are, 1 (round) to 0 (square); see bondEndPrefs. */
   bondEnds: number;
-  /** How atom-map numbers look (Chemistry ▸ Map Atoms); see mapLookPrefs. */
+  /** The default look of atom-map numbers for drawings with none of their own (each drawing saves its own); see mapLookPrefs. */
   mapLook: MapLook;
+  /** The user's own map-number box format (mapLook 'custom'). */
+  mapBox: MapBoxStyle;
   /** Depth shading of structures drawn in 3-D (see render/depth-shade.ts). */
   depthShade: DepthShade;
   /** Where Format > Link Text to Structure puts the text: where it is, or a side of the structure. */
@@ -201,8 +203,8 @@ export interface Settings {
   darkPalette: string;
   /** Your own dark palettes (View > Window and Colours > Reading Mode Colours). */
   darkPalettes: DarkPalette[];
-  /** Alignment guides on or off in each kind of tab (View > Alignment Guides). */
-  guides: { drawing: boolean; slides: boolean; design: boolean };
+  /** Smart guides on or off in presentations (View > Grid Settings) and designs (the ribbon's Guides box). */
+  guides: { slides: boolean; design: boolean };
   /** Finding your way around drawings: the Document Map, edge arrows, dot grid, outside tint, Fit and Go to Selection buttons (Settings ▸ Navigation). */
   orient: OrientPrefs;
   /** How the drawing's page grid looks, and what a paste past a fixed edge does (Settings ▸ Page Grid). */
@@ -274,10 +276,10 @@ export const SLIDE_PANE_MIN = 120, SLIDE_PANE_MAX = 480, NOTES_MIN = 36, NOTES_M
 export const DEFAULT_SETTINGS: Settings = {
   hotkeys: {}, keepHotspotOnBond: true, stickyHotspot: false, fixedLength: true, fixedAngles: true, devTools: false, showRoles: true,
   chemTyping: true, stereoItalic: true, boldNumbers: false, autoLinks: true, linkCtrlClick: true, spellCheck: true, replacements: DEFAULT_TYPING.replacements, dictionary: [],
-  modeColours: DEFAULT_MODE_COLOURS, nicknames: {}, templates: [], splitWidth: 0.38, slidePaneWidth: 212, notesHeight: 84, slideNotes: true, scrollBars: true, ribbonCollapsed: false, ribbonAutoFold: false, tabsInMenu: true, uiScale: 1, titleBar: typeof navigator !== 'undefined' && /Mac/.test(navigator.platform || navigator.userAgent) ? 'system' : 'app', page: { name: 'letter', w: 540, h: 720, grow: true }, welcomed: false, textBar: 'docked', appTheme: 'system', density: 'cozy', shadows: 'light', iconLook: 'mode', shapeInk: 'neutral', oneColumnTools: false, toolCells: 'off', canvasRibbon: 'classic', ribbonNames: 'side', startView: true, enterFinishesText: false, groupTips: true, toolTips: true, touchMode: 'auto', penSketch: false,
-  citeStyle: DEFAULT_STYLE, citeOptions: {}, methylStyle: 'Me', axialStyle: 'RaSa', circledCharges: false, textToAtom: true, ionCharges: false, saltGroups: false, groupClick: 'group', groupOutline: true, rerouteArrows: true, arrowProducts: true, arrowStartGap: null, arrowEndGap: null, superscriptR: true, alkylLook: 'typed', warnLook: 'disc', bondEnds: DEFAULT_BOND_ENDS, mapLook: 'peach', depthShade: { ...DEFAULT_DEPTH_SHADE }, linkSide: 'keep', slideTemplate: null, slideThemes: [], askWholeDrawing: true, palettes: [], toolboxes: defaultToolboxes(), ribbons: {}, quickBar: null,
+  modeColours: DEFAULT_MODE_COLOURS, nicknames: {}, templates: [], splitWidth: 0.38, slidePaneWidth: 212, notesHeight: 84, slideNotes: true, scrollBars: true, ribbonCollapsed: false, ribbonAutoFold: false, tabsInMenu: true, uiScale: 1, titleBar: typeof navigator !== 'undefined' && /Mac/.test(navigator.platform || navigator.userAgent) ? 'system' : 'app', page: { name: 'letter', w: 540, h: 720, grow: true }, welcomed: false, textBar: 'docked', appTheme: 'darkgray', density: 'cozy', shadows: 'light', iconLook: 'mode', shapeInk: 'neutral', oneColumnTools: false, toolCells: 'off', canvasRibbon: 'classic', startView: true, enterFinishesText: false, offerFigures: true, groupTips: true, toolTips: true, touchMode: 'auto', penSketch: false,
+  citeStyle: DEFAULT_STYLE, citeOptions: {}, methylStyle: 'Me', axialStyle: 'RaSa', circledCharges: false, textToAtom: true, ionCharges: false, saltGroups: false, groupClick: 'group', groupOutline: true, rerouteArrows: true, arrowProducts: true, arrowStartGap: null, arrowEndGap: null, superscriptR: true, alkylLook: 'typed', warnLook: 'box', bondEnds: DEFAULT_BOND_ENDS, mapLook: 'grey', mapBox: { ...DEFAULT_MAP_BOX }, depthShade: { ...DEFAULT_DEPTH_SHADE }, linkSide: 'keep', slideTemplate: null, slideThemes: [], askWholeDrawing: true, palettes: [], toolboxes: defaultToolboxes(), ribbons: {}, quickBar: null,
   myStyles: [], modeStyles: {}, darkPage: false, darkPalette: 'Graphite', darkPalettes: [],
-  guides: { drawing: false, slides: true, design: true },
+  guides: { slides: true, design: true },
   orient: { ...DEFAULT_ORIENT },
   pageLook: { ...DEFAULT_PAGE_LOOK },
   docPins: [],
@@ -313,6 +315,9 @@ export function parseSettings(text: string | null | undefined): Settings {
   for (const k of ['arrowStartGap', 'arrowEndGap'] as const) if (typeof r[k] === 'number' && isFinite(r[k] as number) && (r[k] as number) >= 0) s[k] = Math.min(50, r[k] as number);
   if (typeof r.bondEnds === 'number' && isFinite(r.bondEnds)) s.bondEnds = Math.max(0, Math.min(1, r.bondEnds));
   if (MAP_LOOKS.some((l) => l.value === r.mapLook)) s.mapLook = r.mapLook as MapLook;
+  // 'peach' (the first default) is the light peach box, now the starting custom format
+  else if (r.mapLook === 'peach') s.mapLook = 'custom';
+  if (r.mapBox !== undefined) s.mapBox = mapBoxStyle(r.mapBox);
   if (r.depthShade) s.depthShade = readDepthShade(r.depthShade);
   if (r.touchMode === 'auto' || r.touchMode === 'on' || r.touchMode === 'off') s.touchMode = r.touchMode;
   s.orient = parseOrient(r.orient);
@@ -332,7 +337,6 @@ export function parseSettings(text: string | null | undefined): Settings {
   if (r.updateChannel === 'stable' || r.updateChannel === 'latest') s.updateChannel = r.updateChannel;
   if (typeof r.textBar === 'string' && ['docked', 'floating', 'hidden'].includes(r.textBar)) s.textBar = r.textBar as Settings['textBar'];
   if (r.canvasRibbon === 'classic' || r.canvasRibbon === 'simple') s.canvasRibbon = r.canvasRibbon;
-  if (r.ribbonNames === 'top' || r.ribbonNames === 'side' || r.ribbonNames === 'none') s.ribbonNames = r.ribbonNames;
   if (r.appTheme === 'system' || r.appTheme === 'light' || r.appTheme === 'dark' || r.appTheme === 'darkgray') s.appTheme = r.appTheme;
   if (r.density === 'snug' || r.density === 'cozy' || r.density === 'normal' || r.density === 'standard' || r.density === 'large') s.density = r.density;
   // ('compact' was the old name for the default, now Cozy)
@@ -344,6 +348,7 @@ export function parseSettings(text: string | null | undefined): Settings {
   if (typeof r.oneColumnTools === 'boolean') s.oneColumnTools = r.oneColumnTools;
   if (typeof r.startView === 'boolean') s.startView = r.startView;
   if (typeof r.enterFinishesText === 'boolean') s.enterFinishesText = r.enterFinishesText;
+  if (typeof r.offerFigures === 'boolean') s.offerFigures = r.offerFigures;
   if (typeof r.linkSide === 'string' && ['keep', 'below', 'above', 'left', 'right'].includes(r.linkSide)) s.linkSide = r.linkSide as Settings['linkSide'];
   if (Array.isArray(r.replacements)) {
     s.replacements = r.replacements.filter((x): x is [string, string] => Array.isArray(x) && typeof x[0] === 'string' && typeof x[1] === 'string' && x[0] !== '').map(([a, b]) => [a, b]);
@@ -372,7 +377,7 @@ export function parseSettings(text: string | null | undefined): Settings {
   s.darkPalettes = parseDarkPalettes(r.darkPalettes);
   if (r.guides && typeof r.guides === 'object') {
     const g = r.guides as Record<string, unknown>;
-    for (const k of ['drawing', 'slides', 'design'] as const) if (typeof g[k] === 'boolean') s.guides[k] = g[k] as boolean;
+    for (const k of ['slides', 'design'] as const) if (typeof g[k] === 'boolean') s.guides[k] = g[k] as boolean;
   }
   if (typeof r.docRuler === 'boolean') s.docRuler = r.docRuler;
   if (typeof r.sheetFormulaBar === 'boolean') s.sheetFormulaBar = r.sheetFormulaBar;
@@ -384,7 +389,8 @@ export function parseSettings(text: string | null | undefined): Settings {
   if (Array.isArray(r.docPins)) s.docPins = ['para', 'style', 'page', 'hf'].filter((k) => (r.docPins as unknown[]).includes(k));
   if (r.methylStyle === 'Me' || r.methylStyle === 'CH3') s.methylStyle = r.methylStyle;
   if (ALKYL_LOOKS.includes(r.alkylLook as AlkylLook)) s.alkylLook = r.alkylLook as AlkylLook;
-  if (['disc', 'box', 'circle', 'dashed', 'corners'].includes(r.warnLook as string)) s.warnLook = r.warnLook as Settings['warnLook'];
+  // (not 'disc': that was the default for a while and every saved settings file holds it, so it goes back to the box)
+  if (['box', 'soft', 'circle', 'dashed', 'corners'].includes(r.warnLook as string)) s.warnLook = r.warnLook as Settings['warnLook'];
   if (r.groupClick === 'group' || r.groupClick === 'item') s.groupClick = r.groupClick;
   if (r.axialStyle === 'RaSa' || r.axialStyle === 'PM') s.axialStyle = r.axialStyle;
   if (typeof r.slideTemplate === 'string' || r.slideTemplate === null) s.slideTemplate = r.slideTemplate as string | null;

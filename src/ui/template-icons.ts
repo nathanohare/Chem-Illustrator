@@ -61,8 +61,9 @@ export function templateIcon(t: Template, size = 44, maxBond = 12): string {
   });
 
   // Labels in bond-length units, relative to their atom.
+  const stub = new Set(t.stubs ?? []);
   const layouts: (LabelLayout | null)[] = t.atoms.map(([x, y, el, charge, text], i) => {
-    if (ringOnly && nbrs[i].length < 2) return null;
+    if ((ringOnly && nbrs[i].length < 2) || stub.has(i)) return null;
     const z = elementNumber(el) ?? 6;
     const spec = labelSpec(z, text ?? null, charge ?? 0, 0, order[i], nbrs[i].length);
     if (!spec) return null;
@@ -181,6 +182,19 @@ export function templateIcon(t: Template, size = 44, maxBond = 12): string {
       const sa = clear[a].length ? 0 : 0.16, sb = clear[b].length ? 0 : 0.16;
       line({ x: p.x + dx * sa + nx * off * sgn, y: p.y + dy * sa + ny * off * sgn }, { x: q.x - dx * sb + nx * off * sgn, y: q.y - dy * sb + ny * off * sgn });
     }
+  }
+  // attachment points: a wavy line across the bond, where the group joins the molecule
+  for (const i of stub) {
+    const j = nbrs[i][0];
+    if (j === undefined) continue;
+    const p = P(i), q = P(j), d = Math.hypot(q.x - p.x, q.y - p.y) || 1;
+    const ux = (q.x - p.x) / d, uy = (q.y - p.y) / d, half = 0.42 * k, amp = 0.09 * k;
+    let path = '';
+    for (let s = 0; s <= 16; s++) {
+      const u = -half + (2 * half * s) / 16, w = amp * Math.sin((s / 16) * 4 * Math.PI);
+      path += `${s ? 'L' : 'M'}${f(p.x - uy * u + ux * w)} ${f(p.y + ux * u + uy * w)}`;
+    }
+    parts.push(`<path d="${path}" stroke-width="1"/>`);
   }
   // hapto bonds: from the metal (clear of its label) to the middle of the ring or π-bond
   for (const [m, members, disp] of t.hapto ?? []) {

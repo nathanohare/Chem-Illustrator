@@ -366,8 +366,8 @@ function drawStereo(ctx: Ctx, r: Stroke & { trimmed: [Vec, Vec] }, segs: Piece[]
       return;
     }
     case 'wavy': {
-      const waves = Math.max(2, Math.round(L / (style.bondLength * k * 0.17)));
-      const step = L / waves, amp = style.bondLength * k * 0.09;
+      const waves = Math.max(2, Math.round(L / (style.bondLength * k * 0.11)));
+      const step = L / waves, amp = style.bondLength * k * 0.07;
       ctx.beginPath();
       ctx.moveTo(s.x, s.y);
       for (let i = 0; i < waves; i++) {

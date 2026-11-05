@@ -491,9 +491,13 @@ export class Toolboxes {
       if (lock) { lock.innerHTML = lockIcon(locked, 14); lock.title = locked ? `Lock this toolbox's place (locked). Click to unlock it, then drag it by its title. The drawing itself is never locked.` : `Lock this toolbox's place (unlocked: drag it by its title). Click to lock it where it is.`; lock.setAttribute('aria-pressed', String(locked)); }
       f.dataset.dock = place.dock;
       if (def.id === 'details') f.style.setProperty('--strip-h', `${stripHeight(st, innerHeight)}px`);
+      // the drawing tools keep their docked columns when they float, so their title goes above the
+      // buttons as when docked, rather than making the box as wide as a one-line title bar
+      const upright = vertical || (place.dock === 'float' && def.id === 'main');
+      f.classList.toggle('upright', upright);
       const body = f.querySelector<HTMLElement>('.tb-body')!;
       body.replaceChildren();
-      def.build(body, vertical || place.dock === 'float' && def.id === 'main');
+      def.build(body, upright);
       if (place.dock === 'float') {
         document.body.append(f);
         f.style.left = `${place.x}px`;
@@ -880,14 +884,5 @@ export function withOverflow(st: ToolboxState, id: string, o: Overflow): Toolbox
   return { ...st, overflow: { ...st.overflow, [id]: o } };
 }
 
-/** An "i" whose tip says how to use something (hover, or focus it with the keyboard). */
-export function infoIcon(text: string, className: string): HTMLElement {
-  const i = document.createElement('span');
-  i.className = `info-icon ${className}`;
-  i.textContent = 'i';
-  i.title = text;
-  i.tabIndex = 0;
-  i.setAttribute('role', 'img');
-  i.setAttribute('aria-label', text);
-  return i;
-}
+import { infoIcon } from './info-tip';
+export { infoIcon };

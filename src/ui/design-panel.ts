@@ -2,6 +2,7 @@
 // (shapes and icons, searchable, in groups, each drawn as a small picture). Clicking a shape picks it as the
 // tool (click or drag on the page to place it); a shape can also be dragged straight onto the page.
 
+import { infoIcon } from './info-tip';
 import { DESIGN_SIZES, SlideSize } from '../deck/deck';
 import { GEOS, GEO_GROUPS, GeoDef, traceSteps } from '../design/geo';
 import { ICON_CREDIT, findIcons, iconGroups, iconSvg, iconsLoaded, loadIcons, whenIconsLoaded } from '../design/icons';
@@ -264,6 +265,8 @@ export class DesignLibrary {
   private iconGroup = '';
   private groupChosen = false;
   private iconCount = ICON_PAGE;
+  /** The pictures were left until the library shows (it starts hidden: Design mode, Insert > Shapes). */
+  private stale = false;
 
   constructor(private el: HTMLElement, private pick: (id: string) => void) {
     el.classList.add('design-lib');
@@ -294,10 +297,8 @@ export class DesignLibrary {
       this.iconCount = ICON_PAGE;
       this.build();
     });
-    const tip = document.createElement('p');
-    tip.className = 'muted small';
-    tip.textContent = 'Click a shape, then click or drag on the page. Or drag it onto the page.';
-    head.append(bar, this.search, this.groupPick, tip);
+    bar.append(infoIcon('Click a shape, then click or drag on the page. Or drag it onto the page.', 'dl-info'));
+    head.append(bar, this.search, this.groupPick);
     this.body = document.createElement('div');
     this.body.className = 'dl-body';
     el.replaceChildren(head, this.body);
@@ -306,7 +307,14 @@ export class DesignLibrary {
     const redraw = () => { if (this.tab === 'shapes' && this.el.isConnected) this.build(); };
     addEventListener('shape-ink-changed', redraw);
     addEventListener('surround-changed', redraw);
+    // drawn when it first comes into view, not while the app starts
+    if (typeof IntersectionObserver === 'function') new IntersectionObserver((seen) => { if (seen.some((e) => e.isIntersecting)) this.refresh(); }).observe(el);
     this.showTab('shapes');
+  }
+
+  /** Draw the pictures now if they were left while the library was hidden. */
+  refresh(): void {
+    if (this.stale) this.build();
   }
 
   /** Show the shapes or the icons. */
@@ -348,6 +356,9 @@ export class DesignLibrary {
   }
 
   private build(): void {
+    // ~200 shapes, each drawn on its own canvas: not worth doing until someone can see them
+    if (this.el.closest('[hidden]')) { this.stale = true; return; }
+    this.stale = false;
     this.body.replaceChildren(...(this.tab === 'icons' ? this.iconParts() : this.shapeParts()));
   }
 

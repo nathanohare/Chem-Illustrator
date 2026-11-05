@@ -4,6 +4,8 @@
 // how a stray NMR peak is looked up. Columns of a few repeated values (Solvent, Nucleus) can be
 // filtered to one value.
 
+import type { Template } from '../chem/templates';
+
 export type Cell = string | number | null;
 
 export interface KbColumn {
@@ -19,18 +21,17 @@ export interface KbColumn {
   narrow?: boolean;
   /** A column of sentences: given more room. */
   prose?: boolean;
-  /** Searched but not shown or copied (a PDF page's whole text). */
+  /** Searched but not shown or copied (SMILES, a CAS number kept for searching). */
   hidden?: boolean;
-  /** Shows a short excerpt of another column around the words searched for. */
-  excerptOf?: string;
+  /** What the column's scale or class means and where it comes from, behind an "i" by its heading. */
+  info?: string;
+  /** A picture of the row's structure (the table's `picture`), not text. */
+  picture?: boolean;
 }
 
 export interface KbSource {
   label: string;
   url?: string;
-  /** A file on this computer (one of your PDFs), and the page to open it at. */
-  path?: string;
-  page?: number;
 }
 
 export interface KbTable {
@@ -47,8 +48,21 @@ export interface KbTable {
   links?: (row: Record<string, Cell>) => KbSource[];
   /** Its rows' SMILES are RDKit's canonical form already (no need to work them out to compare). */
   canonicalSmiles?: boolean;
-  /** One of your PDFs, a row a page: where the file is, when known. */
-  pdf?: { path?: string };
+  /** The drawing shown in a `picture` column (a Hammett group with its attachment point). */
+  picture?: (row: Record<string, Cell>) => Template | null;
+  /** The structure shown when the pointer rests on a row's name (a solvent's), when it has one. */
+  structure?: (row: Record<string, Cell>) => Template | null;
+  /**
+   * Shown as a chart of which pairs mix instead of a list: `names` along both sides (in this
+   * order), `pairs` the ones marked (two phases form). The rows stay one a name, for searching and
+   * copying.
+   */
+  matrix?: { names: string[]; pairs: [string, string][]; mark: string; markInfo: string; other: string };
+  /**
+   * Shown as several tables one under another, each with its own columns: a row belongs to the
+   * part named in its `part` cell. The table's own `columns` are all of them, for searching.
+   */
+  parts?: { key: string; title: string; columns: KbColumn[] }[];
 }
 
 /** The filter value meaning "has something in this column". */
@@ -85,7 +99,7 @@ export function cellShiftRanges(c: Cell): [number, number][] {
 
 const ROW_TEXT = new WeakMap<Record<string, Cell>, string>();
 
-/** A row's text for searching: every cell, lower case (kept, since a PDF's pages are long). */
+/** A row's text for searching: every cell, lower case (kept, so a long table searches quickly). */
 /** Rows whose SMILES is already RDKit's canonical form (the big tables, made so when built). */
 export const CANONICAL_ROWS = new WeakSet<Record<string, Cell>>();
 
@@ -105,6 +119,13 @@ export function isCas(text: string): boolean {
   const digits = (m[1] + m[2]).split('').reverse();
   const sum = digits.reduce((s, d, i) => s + Number(d) * (i + 1), 0);
   return sum % 10 === Number(m[3]);
+}
+
+/** Does this look like SMILES rather than a word or number (has ring digits, bonds or brackets)? */
+export function looksLikeSmiles(q: string): boolean {
+  const s = q.trim();
+  if (!s || /\s/.test(s) || isCas(s) || searchedShift(s) !== null) return false;
+  return /[=#()[\]@]|[a-z]\d|\d[A-Za-z]/.test(s) && /^[A-Za-z0-9@+\-[\]()=#$/\\%.:*]+$/.test(s);
 }
 
 export interface RowMatch {
@@ -166,7 +187,8 @@ export function sortRows(rows: RowMatch[], col: KbColumn, down: boolean): RowMat
   const key = (m: RowMatch): number | string | null => {
     const v = m.row[col.key];
     if (v === null || v === undefined || v === '') return null;
-    if (col.numeric || col.shift) { const n = cellNumbers(v)[0]; return n ?? null; }
+    // "Miscible" in a solubility column sorts above every number
+    if (col.numeric || col.shift) { if (/^miscible/i.test(String(v))) return Infinity; const n = cellNumbers(v)[0]; return n ?? null; }
     return String(v).toLowerCase();
   };
   return [...rows].sort((a, b) => {
@@ -179,34 +201,15 @@ export function sortRows(rows: RowMatch[], col: KbColumn, down: boolean): RowMat
 }
 
 /** The rows as tab-separated text with a header line: to paste into a sheet, a Word table or Excel. */
-export function tableTsv(t: KbTable, rows: RowMatch[], query = ''): string {
-  const cols = t.columns.filter((c) => !c.hidden);
+export function tableTsv(t: KbTable, rows: RowMatch[]): string {
   const clean = (v: Cell) => (v === null || v === undefined ? '' : String(v).replace(/[\t\n]+/g, ' '));
-  return [cols.map((c) => c.label).join('\t'), ...rows.map((m) => cols.map((c) => clean(cellShown(m.row, c, query))).join('\t'))].join('\n');
-}
-
-/** What a column shows for a row: its value, or an excerpt of another column around the search. */
-export function cellShown(row: Record<string, Cell>, c: KbColumn, query = ''): Cell {
-  if (!c.excerptOf) return row[c.key] ?? null;
-  const v = row[c.excerptOf];
-  return v === null || v === undefined ? null : excerpt(String(v), query);
-}
-
-/** About `size` characters around the first place a word of the search is found. */
-export function excerpt(text: string, query: string, size = 240): string {
-  const low = text.toLowerCase();
-  let at = -1;
-  for (const w of query.toLowerCase().split(/\s+/).filter(Boolean)) {
-    const i = low.indexOf(w);
-    if (i >= 0 && (at < 0 || i < at)) at = i;
-  }
-  if (at < 0) return text.length > size ? text.slice(0, size).trimEnd() + '…' : text;
-  let start = Math.max(0, at - Math.floor(size / 3));
-  // start and end on whole words
-  if (start > 0 && text[start - 1] !== ' ') { const sp = text.indexOf(' ', start); if (sp >= 0 && sp < at) start = sp + 1; }
-  let end = Math.min(text.length, start + size);
-  if (end < text.length) { const sp = text.lastIndexOf(' ', end); if (sp > at) end = sp; }
-  return (start > 0 ? '…' : '') + text.slice(start, end).trim() + (end < text.length ? '…' : '');
+  const block = (columns: KbColumn[], rs: RowMatch[]) => {
+    const cols = columns.filter((c) => !c.hidden && !c.picture);
+    return [cols.map((c) => c.label).join('\t'), ...rs.map((m) => cols.map((c) => clean(m.row[c.key])).join('\t'))].join('\n');
+  };
+  // a table in parts: each part under its title, a blank line between
+  if (t.parts) return t.parts.map((p) => ({ p, rs: rows.filter((m) => m.row.part === p.key) })).filter((x) => x.rs.length).map(({ p, rs }) => `${p.title}\n${block(p.columns, rs)}`).join('\n\n');
+  return block(t.columns, rows);
 }
 
 /**

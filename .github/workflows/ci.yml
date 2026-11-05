@@ -1,63 +1,108 @@
 name: Checks
 
+# Runs on every pull request. Not on pushes to main: everything reaches main through a pull
+# request (feature -> staging -> main), and that pull request's checks already ran on the merged
+# code. The Desktop app and Web version workflows still build each merge into main.
 on:
-  push:
-    branches: [main]
   pull_request:
+  workflow_dispatch:
 
-# the token only reads the code (none of these steps writes to the repository)
+# the token only reads the code and the pull request's file list (nothing here writes)
 permissions:
   contents: read
+  pull-requests: read
 
 # A new push to a pull request stops the run still going for its previous commit
 concurrency:
   group: checks-${{ github.event.pull_request.number || github.ref }}
-  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+  cancel-in-progress: true
 
 jobs:
-  test-and-build:
+  # the unit tests, split in two halves that run side by side (each about 1.5 min instead of 3)
+  tests:
+    name: tests (${{ matrix.shard }}/2)
     runs-on: ubuntu-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+      # also makes the icon data and copies RDKit (package.json's postinstall)
+      - run: npm ci
+      - run: npx vitest run --shard=${{ matrix.shard }}/2
+
+  # type checks, the web build, then the built app in a real browser: start, draw, paste, save and
+  # reopen, every kind of tab, menus that fit a laptop's window (scripts/smoke.mjs)
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
       - run: npm ci
-      - run: npm test
-      # the stricter type checks (unused parameters, a path that forgets to return)
+      # tsconfig.strict.json is tsconfig.json plus extra checks, so this covers the type check
+      # `npm run build` does as well; the build step below is then only Vite's
       - run: npm run typecheck:strict
-      - run: npm run build
-      # the built app in a real browser: start, draw, paste, save and reopen, every kind of tab,
-      # menus that fit a laptop's window (scripts/smoke.mjs)
-      - run: npx playwright install --with-deps chromium
+      - run: npx vite build
+      # Playwright's headless Chromium is all the smoke test needs (not the full browser)
+      - run: npx playwright install --with-deps --only-shell chromium
       - run: npm run smoke
 
   # the work behind each mode (bench/core.bench.ts), timed for this pull request and for the branch
-  # it merges into on the same machine: fails when a measure gets more than 40% slower
+  # it merges into on the same machine: fails when a measure gets more than 40% slower. Skipped
+  # when the pull request changes only the guide, tests or other text that can't change the timings.
   speed:
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
+      - name: See whether the pull request changes code
+        id: changed
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+        run: |
+          gh api --paginate "repos/$GITHUB_REPOSITORY/pulls/$PR/files" --jq '.[].filename' > files.txt
+          if grep -qvE '^(docs/|tests/|[^/]+\.md$|\.github/ISSUE_TEMPLATE/)' files.txt; then
+            echo "code=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Only the guide, tests or text changed: nothing to time."
+          fi
+      - if: steps.changed.outputs.code == 'true'
+        uses: actions/checkout@v7
         with:
           path: head
-      - uses: actions/checkout@v4
+      - if: steps.changed.outputs.code == 'true'
+        uses: actions/checkout@v7
         with:
           path: base
           ref: ${{ github.event.pull_request.base.ref }}
-      - uses: actions/setup-node@v4
+      - if: steps.changed.outputs.code == 'true'
+        uses: actions/setup-node@v7
         with:
           node-version: 24
           cache: npm
           cache-dependency-path: head/package-lock.json
-      - run: (cd head && npm ci) && (cd base && npm ci)
+      - if: steps.changed.outputs.code == 'true'
+        run: (cd head && npm ci) && (cd base && npm ci)
       # both are timed with this pull request's benchmarks
-      - run: cp head/bench/core.bench.ts base/bench/core.bench.ts
+      - if: steps.changed.outputs.code == 'true'
+        run: cp head/bench/core.bench.ts base/bench/core.bench.ts
       # twice each, taking turns, so a slow moment on the machine doesn't count against one side
-      - run: |
+      - if: steps.changed.outputs.code == 'true'
+        run: |
           for n in 1 2; do
             (cd base && npx vitest bench --run bench/core.bench.ts --outputJson ../base$n.json > /dev/null)
             (cd head && npx vitest bench --run bench/core.bench.ts --outputJson ../head$n.json > /dev/null)
           done
-      - run: node head/scripts/bench-gate.mjs base1.json,base2.json head1.json,head2.json
+      - if: steps.changed.outputs.code == 'true'
+        run: node head/scripts/bench-gate.mjs base1.json,base2.json head1.json,head2.json

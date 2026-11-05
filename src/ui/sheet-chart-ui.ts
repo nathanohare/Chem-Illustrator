@@ -2,6 +2,7 @@
 // and the panel on the right where every setting can be changed by hand, down to each series'
 // cell references, axis limits and fitted-line options.
 
+import { withInfo } from './info-tip';
 import { askAltText } from './accessibility-pane';
 import { popupMenu } from './sheet-view';
 import type { SheetView } from './sheet-view';
@@ -401,9 +402,7 @@ export class SheetCharts {
     const out: HTMLElement[] = [];
     const head = (t: string) => Object.assign(document.createElement('h4'), { textContent: t, className: 'cp-head' });
     const note = (t: string, cls = 'muted small') => Object.assign(document.createElement('p'), { textContent: t, className: cls });
-    out.push(note(this.ownData ? 'Everything here can be changed; a blank box means automatic. Series take ranges of the data, such as B2:B5.' : 'Drag the chart to move it and its corners to resize it. Everything here can be changed; a blank box means automatic.'));
-
-    out.push(head('Chart'));
+    out.push(withInfo(head('Chart'), this.ownData ? 'Everything here can be changed; a blank box means automatic. Series take ranges of the data, such as B2:B5.' : 'Drag the chart to move it and its corners to resize it. Everything here can be changed; a blank box means automatic.'));
     out.push(row('Type', select(KINDS.map((k) => [k, CHART_NAMES[k]]), c.kind, (v) => this.setKind(v as ChartKind))));
     out.push(row('Title', text(c.title ?? '', (v) => this.patch((x) => clean({ ...x, title: v || undefined }), 'Chart title'), 'none')));
     out.push(row('Legend', select([['right', 'Right'], ['bottom', 'Bottom'], ['top', 'Top'], ['none', 'None']], c.legend, (v) => this.patch((x) => ({ ...x, legend: v as Chart['legend'] }), 'Legend'))));

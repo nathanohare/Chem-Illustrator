@@ -4,6 +4,8 @@
 
 import { Doc, Atom, Caption, Bond, Arrow, Shape, turnsFreely } from '../model';
 import { Vec, Rect, add, sub, normDegrees } from '../geom';
+import { isOrbitalPart } from '../chem/orbitals';
+import { pointShape, shapeAxis } from '../chem/pins';
 import { arrowPoints, boxOf, shapeBox, unionRect } from '../objects';
 import { frameMembers } from './frames';
 
@@ -70,6 +72,42 @@ export function units(doc: Doc, sel: Selection, m: Measure): Unit[] {
   for (const id of sel.captions) { const c = doc.captions.get(id); if (c && !carried.captions.has(id)) out.push({ atoms: [], captions: [id], arrows: [], shapes: [], box: m.captionBox(c) }); }
   for (const id of sel.arrows) { const r = doc.arrows.get(id); if (r && !carried.arrows.has(id)) out.push({ atoms: [], captions: [], arrows: [id], shapes: [], box: boxOf(arrowPoints(r)) }); }
   for (const id of sel.shapes) { const s = doc.shapes.get(id); if (s && !carried.shapes.has(id)) out.push({ atoms: [], captions: [], arrows: [], shapes: [id], box: shapeBox(s) }); }
+  return out;
+}
+
+/**
+ * The units with grouped things (Format > Group) joined into one, so a group lines up and spaces
+ * out as a single object, as in PowerPoint (issue #405).
+ */
+export function joinGroups(doc: Doc, us: Unit[]): Unit[] {
+  const grpOf = (u: Unit): number[] => {
+    const g = new Set<number>();
+    for (const id of u.atoms) { const x = doc.atoms.get(id)?.grp; if (x !== undefined) g.add(x); }
+    for (const id of u.captions) { const x = doc.captions.get(id)?.grp; if (x !== undefined) g.add(x); }
+    for (const id of u.arrows) { const x = doc.arrows.get(id)?.grp; if (x !== undefined) g.add(x); }
+    for (const id of u.shapes) { const x = doc.shapes.get(id)?.grp; if (x !== undefined) g.add(x); }
+    return [...g];
+  };
+  const out: Unit[] = [];
+  const byGrp = new Map<number, Unit>();
+  for (const u of us) {
+    const gs = grpOf(u);
+    // the joined units this one shares a group with (it can bridge two)
+    const hits = [...new Set(gs.map((g) => byGrp.get(g)).filter((x): x is Unit => !!x))];
+    if (!hits.length) {
+      const copy = { atoms: [...u.atoms], captions: [...u.captions], arrows: [...u.arrows], shapes: [...u.shapes], box: { ...u.box } };
+      out.push(copy);
+      for (const g of gs) byGrp.set(g, copy);
+      continue;
+    }
+    const into = hits[0];
+    for (const other of [u, ...hits.slice(1)]) {
+      into.atoms.push(...other.atoms); into.captions.push(...other.captions); into.arrows.push(...other.arrows); into.shapes.push(...other.shapes);
+      into.box = unionRect(into.box, other.box)!;
+      if (other !== u) { out.splice(out.indexOf(other), 1); for (const [g, v] of byGrp) if (v === other) byGrp.set(g, into); }
+    }
+    for (const g of gs) byGrp.set(g, into);
+  }
   return out;
 }
 
@@ -182,7 +220,8 @@ export function snapshot(doc: Doc, sel: Selection, m: Measure): Snapshot {
 
 /**
  * Put everything in a snapshot through a rotation or a mirror. Text stays upright: captions
- * and boxes move with their centres. A mirror turns the drawing over, so double bonds keep
+ * and boxes move with their centres. Things that point a way turn with it: a lone pair's two
+ * dots, and an orbital's lobes. A mirror turns the drawing over, so double bonds keep
  * their second line on the same side, curved arrows bend the other way and brackets keep
  * facing in. Call inside an edit.
  */
@@ -215,7 +254,23 @@ export function transform(doc: Doc, snap: Snapshot, f: (p: Vec) => Vec, mirror: 
     }
     doc.updateArrow(r.id, patch);
   }
+  // an orbital's lobes (and the ring round a dz²'s middle, grouped with them) point a way
+  const orbitals = new Set(snap.shapes.filter((s) => s.grp !== undefined && isOrbitalPart(s)).map((s) => s.grp));
+  const orbital = (s: Shape) => isOrbitalPart(s) || (s.kind === 'oval' && s.grp !== undefined && orbitals.has(s.grp));
   for (const s of snap.shapes) {
+    // a lone pair's two dots (a bar, a radical ion's dot and sign) go where they are taken, each
+    if (s.kind === 'symbol' && shapeAxis(s)) {
+      const p = f({ x: s.x1, y: s.y1 }), q = f({ x: s.x2, y: s.y2 });
+      doc.updateShape(s.id, { x1: p.x, y1: p.y, x2: q.x, y2: q.y });
+      continue;
+    }
+    if (orbital(s)) {
+      // turned or turned over about its middle, so it still points from its atom
+      const mid = { x: (s.x1 + s.x2) / 2, y: (s.y1 + s.y2) / 2 }, axis = shapeAxis(s)!;
+      const m = f(mid), d = sub(f(add(mid, axis)), m);
+      doc.updateShape(s.id, { x1: s.x1 + m.x - mid.x, y1: s.y1 + m.y - mid.y, x2: s.x2 + m.x - mid.x, y2: s.y2 + m.y - mid.y, ...pointShape(s, d) });
+      continue;
+    }
     if (s.kind === 'line' || s.kind === 'bracket') {
       let p = f({ x: s.x1, y: s.y1 }), q = f({ x: s.x2, y: s.y2 });
       // a bracket's lips are on the right of its direction, so a mirror image runs the other way

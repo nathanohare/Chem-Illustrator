@@ -43,7 +43,9 @@ describe('where a tied caption sits', () => {
   it('saves the tie without the atom numbers and reads it back, ignoring nonsense', () => {
     const a: Attachment = { atoms: [1, 2], side: 'left', gap: 3, shift: 1, role: 'descriptors', show: ['formula', 'mw'], adduct: '[M+Na]+', sig: 'x', keepText: true };
     const back = attachFromTag(attachTag(a))!;
-    expect(back).toEqual({ atoms: [], side: 'left', gap: 3, shift: 1, role: 'descriptors', show: ['formula', 'mw'], adduct: '[M+Na]+', keepText: true });
+    expect(back).toEqual({ atoms: [], side: 'left', gap: 3, shift: 1, role: 'descriptors', show: ['formula', 'mw'], adduct: '[M+Na]+', sig: 'x', keepText: true });
+    // only descriptors keep a signature
+    expect(attachFromTag('{"side":"below","role":"label","sig":"x"}')!.sig).toBeUndefined();
     expect(attachFromTag('{"side":"sideways","gap":"far","role":"x","show":["formula","bogus"]}')).toEqual({ atoms: [], side: 'below', gap: 4, shift: 0, role: 'caption', show: ['formula'] });
     expect(attachFromTag('not json')).toBeUndefined();
   });
@@ -127,6 +129,30 @@ describe('a tied caption follows its structure', () => {
     expect(structureSig(doc, atoms)).not.toBe(sig);
   });
 
+  it('gives the same signature whatever the atoms are numbered', () => {
+    const { doc, ids } = setup();
+    const other = new Doc();
+    other.edit('Draw', () => {
+      // the same chain drawn from the other end, somewhere else
+      const c = other.addAtom(100, 10), b = other.addAtom(100, 0), a = other.addAtom(80, 0);
+      other.addBond(c.id, b.id);
+      other.addBond(b.id, a.id);
+    });
+    expect(structureSig(other, new Set(other.atoms.keys()))).toBe(structureSig(doc, new Set(ids)));
+    other.edit('Double', () => other.updateBond([...other.bonds.keys()][0], { order: 2 }));
+    expect(structureSig(other, new Set(other.atoms.keys()))).not.toBe(structureSig(doc, new Set(ids)));
+  });
+
+  it('changes when a bond is made dative (it changes the hydrogens), not when it is wedged', () => {
+    const { doc, ids } = setup();
+    const atoms = new Set(ids), sig = structureSig(doc, atoms);
+    const b = [...doc.bonds.keys()][0];
+    doc.edit('Wedge', () => doc.updateBond(b, { display: 'wedge' }));
+    expect(structureSig(doc, atoms)).toBe(sig);
+    doc.edit('Dative', () => doc.updateBond(b, { display: 'dative' }));
+    expect(structureSig(doc, atoms)).not.toBe(sig);
+  });
+
   it('ties a loose caption where it sits to the nearest structure', () => {
     const { doc, ids } = setup();
     let id = 0;
@@ -186,5 +212,68 @@ describe('saving tied captions', () => {
     expect(c.attach?.role).toBe('label');
     expect(c.attach?.gap).toBe(5);
     expect(c.attach?.atoms.length).toBe(ids.length);
+  });
+});
+
+describe('saving descriptors', () => {
+  function withDescriptors() {
+    const doc = new Doc();
+    doc.beforeCommit = (before) => refitAttached(doc, before, POINTS);
+    let ids: number[] = [];
+    doc.edit('Draw', () => {
+      const a = doc.addAtom(0, 0), b = doc.addAtom(20, 0), c = doc.addAtom(30, 17), d = doc.addAtom(40, 0);
+      doc.addBond(a.id, b.id);
+      doc.addBond(b.id, c.id, 2);
+      doc.addBond(b.id, d.id);
+      doc.updateAtom(c.id, { z: 8 });
+      doc.updateAtom(d.id, { label: 'OMe' });
+      ids = [a.id, b.id, c.id, d.id];
+    });
+    doc.edit('Descriptors', () => {
+      const c = doc.addCaption({ x: 0, y: 0, runs: [{ text: 'C3H6O2' }], justify: 'center', attach: { atoms: [...ids], side: 'below', gap: 5, shift: 0, role: 'descriptors', show: ['formula'], sig: structureSig(doc, new Set(ids)) } });
+      placeAttached(doc, c, POINTS);
+    });
+    return doc;
+  }
+  const read = (xml: string) => {
+    const back = readCdxml(xml).doc;
+    const c = [...back.captions.values()].find((x) => x.attach?.role === 'descriptors')!;
+    return { c, now: structureSig(back, new Set(c.attach!.atoms)) };
+  };
+
+  it('keeps them current when the structure comes back unchanged', () => {
+    const xml = writeCdxml(withDescriptors());
+    expect(xml).toMatch(/&quot;sig&quot;:&quot;\w+&quot;|"sig":"\w+"/);
+    const { c, now } = read(xml);
+    expect(c.attach!.atoms.length).toBe(4);
+    expect(c.attach!.sig).toBe(now);
+  });
+
+  it('keeps them current for a typed label that starts with another element (NHBoc)', () => {
+    const doc = withDescriptors();
+    const d = [...doc.atoms.values()].find((a) => a.label === 'OMe')!;
+    // as typing it sets it: the element number taken from the label's first letter
+    doc.edit('Label', () => doc.updateAtom(d.id, { label: 'NHBoc', z: 7 }));
+    const c = [...doc.captions.values()][0];
+    doc.edit('Sig', () => doc.updateCaption(c.id, { attach: { ...c.attach!, sig: structureSig(doc, new Set(c.attach!.atoms)) } }));
+    const { c: back, now } = read(writeCdxml(doc));
+    expect(back.attach!.sig).toBe(now);
+  });
+
+  it('marks them stale when the structure was changed in another program', () => {
+    const xml = writeCdxml(withDescriptors());
+    // the double bond made single elsewhere: the formula under it no longer holds
+    const edited = xml.replace(/(<b\b[^>]*?) Order="2"/, '$1');
+    expect(edited).not.toBe(xml);
+    const { c, now } = read(edited);
+    expect(c.attach!.sig).toBeDefined();
+    expect(c.attach!.sig).not.toBe(now);
+  });
+
+  it('takes descriptors from older files (no signature) to match the structure', () => {
+    const xml = writeCdxml(withDescriptors()).replace(/,(&quot;|")sig\1:\1\w+\1/, '');
+    expect(xml).not.toMatch(/sig/);
+    const { c, now } = read(xml);
+    expect(c.attach!.sig).toBe(now);
   });
 });

@@ -3,6 +3,7 @@
 // bond (label, charge, atom number; order and style).
 // Anything the drawing tools set automatically can be changed here by hand.
 
+import { addInfo, setInfo } from './info-tip';
 import { Doc, Arrow, Shape, Caption, Atom, Bond, PICTURE_STYLES, turnsFreely, type PictureLook, type StepRoles, type Pattern, type AttachSide, type Attachment, type DescriptorKey, type HighlightEnds, type HighlightFill, type HighlightLine, type HighlightShape, type HighlightSoftSide, type HighlightStyle } from '../model';
 import { fullStyle, tidyStyle } from '../render/highlight';
 import type { HighlightLookPreset } from './highlight-looks';
@@ -16,8 +17,11 @@ import type { Role } from '../chem/reaction';
 import { setStereoShown, setStereoText } from '../chem/stereo';
 import { arialWidth } from '../text-metrics';
 import { Selection } from '../editor/editor';
-import { DEG, normDegrees } from '../geom';
-import { isCircle, cropTo, isCurved, headBend, swapHalf } from '../objects';
+import { freeformPoints } from '../design/geo';
+import { ORBITAL_KIND_NAMES, ORBITAL_LOOK_NAMES, orbitalsAmong, readOrbital, type OrbitalKind, type OrbitalLook, type OrbitalSpec } from '../chem/orbitals';
+import { isSmoothPath, reshapeFreeform } from '../design/freeform';
+import { DEG, normDegrees, mul, type Vec } from '../geom';
+import { isCircle, cropTo, isCurved, headBend, swapHalf, arrowEllipseFrame, ellipseArrow } from '../objects';
 import { firstBend, shapeBez, shapeOf } from '../arrow-path';
 import { GEOS, geoDef } from '../design/geo';
 import { drawGeoIcon } from './design-panel';
@@ -26,6 +30,8 @@ import { ringFillsOn } from '../chem/ring-fill';
 import { frameMembers } from '../editor/frames';
 import { methylState, writeTerminalMethyls, type MethylStyle } from '../chem/hydrogens';
 import type { TableData } from '../model';
+import { labelAlignment, labelAlignPatch, type LabelAlign } from '../chem/label-align';
+import { ringsThroughBond } from '../chem/aromatic';
 import { canMerge, deleteColumn, deleteRow, fitColumns, insertColumn, insertRow, mergeDown, mergeRight, rowSpanOf, setColumnAlign, setColumnWidth, setRowSpan, setSpan, spanOf, splitCell, type TablePart } from '../table';
 import { SLIDE_TABLE_STYLES, lookOf, slideCellLook, slideTableStyle } from '../deck/table-styles';
 import type { Measure } from '../text/layout';
@@ -68,6 +74,7 @@ type Opt<T> = [T, string];
 
 const HEADS: Opt<Arrow['headStyle']>[] = [['none', 'None'], ['full', 'Full'], ['halfLeft', 'Half, left side'], ['halfRight', 'Half, right side']];
 const HEAD_TYPES: Opt<Arrow['headType']>[] = [['solid', 'Solid'], ['hollow', 'Hollow'], ['angle', 'Open']];
+const NO_GOS: Opt<'none' | 'cross' | 'hash'>[] = [['none', 'None'], ['cross', 'Cross'], ['hash', 'Hash']];
 const LINES: Opt<Arrow['line']>[] = [['solid', 'Solid'], ['dashed', 'Dashed'], ['bold', 'Bold'], ['wavy', 'Wavy']];
 const SHAFTS: Opt<string>[] = [['one', 'One line'], ['equilibrium', 'Equilibrium (two half arrows)'], ['retro', 'Retrosynthetic (double line)']];
 const BRACKETS: Opt<NonNullable<Shape['bracket']>>[] = [['square', 'Square [ ]'], ['round', 'Round ( )'], ['curly', 'Curly { }']];
@@ -85,7 +92,8 @@ const READ_AS: Opt<'auto' | 'on' | 'off'>[] = [['auto', 'Automatically'], ['on',
 const JUSTIFY: Opt<Caption['justify']>[] = [['left', 'Left'], ['center', 'Center'], ['right', 'Right']];
 const TABLE_LINES: Opt<TableData['lines']>[] = [['acs', 'ACS style (rules above and below the headings, and at the end)'], ['grid', 'Every cell boxed'], ['none', 'None']];
 
-const LABEL_DIRS: Opt<Atom['just']>[] = [['auto', 'Automatically (away from the bonds)'], ['right', 'To the right (OMe)'], ['left', 'To the left (MeO)']];
+/** How an atom's label lines up on the atom (ChemDraw's label alignment; Above and Below are one Center choice). */
+const LABEL_ALIGNS: Opt<LabelAlign>[] = [['auto', 'Auto (away from the bonds)'], ['left', 'Left (OMe)'], ['center', 'Center (stacked on the atom)'], ['right', 'Right (MeO)']];
 
 type Fill = 'none' | 'solid' | 'faded' | 'shaded' | 'gradient';
 const FILLS: Opt<Fill>[] = [['none', 'None'], ['solid', 'Solid color'], ['faded', 'Faded (light tint)'], ['shaded', 'Shaded (light to dark)'], ['gradient', 'Gradient (two colors)']];
@@ -95,7 +103,10 @@ const PATTERN_OPTS: Opt<string>[] = [['none', 'None'], ...PATTERNS];
 const PATTERN_PICKS: Opt<string>[] = [['none', 'None'], ...PATTERN_CHOICES];
 
 const BOND_ORDERS: Opt<string>[] = [['1', 'Single'], ['2', 'Double'], ['3', 'Triple'], ['1.5', 'Aromatic'], ['4', 'Quadruple'], ['0.5', 'Partial (transition state)']];
-const BOND_STYLES: Opt<Bond['display']>[] = [['solid', 'Plain'], ['wedge', 'Wedge'], ['hashWedge', 'Hashed wedge'], ['hash', 'Hashed'], ['bold', 'Bold'], ['dash', 'Dashed'], ['wavy', 'Wavy'], ['dative', 'Dative (arrow to the acceptor)']];
+const BOND_STYLES: Opt<Bond['display']>[] = [['solid', 'Plain'], ['wedge', 'Wedge'], ['hashWedge', 'Hashed wedge'], ['hollowWedge', 'Hollow wedge'], ['wavyWedge', 'Wavy wedge'], ['hash', 'Hashed'], ['bold', 'Bold'], ['dash', 'Dashed'], ['wavy', 'Wavy'], ['dative', 'Dative (arrow to the acceptor)'], ['hydrogen', 'Hydrogen bond (dotted, from the H)'], ['ionic', 'Ionic (dashed, from the + end)']];
+/** A double bond's styles: wavy is the crossed (either E or Z) double bond. */
+const DOUBLE_STYLES: Opt<Bond['display']>[] = [['solid', 'Plain'], ['bold', 'Bold'], ['dash', 'Dashed'], ['wavy', 'Crossed (E or Z)'], ['wedge', 'Wedge'], ['hashWedge', 'Hashed wedge']];
+const SECOND_LINES: Opt<string>[] = [['', 'Plain'], ['dash', 'Dashed'], ['bold', 'Bold'], ['hash', 'Hashed']];
 const DOUBLE_POS: Opt<Bond['dpos']>[] = [['auto', 'Automatic'], ['left', 'Left'], ['center', 'Centered'], ['right', 'Right']];
 
 const round = (x: number, k = 100) => Math.round(x * k) / k;
@@ -132,6 +143,8 @@ export class StylePanel {
   plate: { edit(shapeId: number): void; restyle(shapeId: number, patch: Partial<PlateData>): void } | null = null;
   /** SmartArt-style diagrams: the window with their text, a change of layout or look, and Convert to Shapes. */
   diagram: { edit(shapeId: number): void; restyle(shapeId: number, patch: Partial<DiagramData>): void; ungroup(shapeId: number): void } | null = null;
+  /** Orbitals drawn here (set up by the app): the Edit Orbital window, or the selected ones drawn again with some settings changed. */
+  orbital: { edit(): void; restyle(shapeIds: number[], patch: Partial<OrbitalSpec>): void } | null = null;
   /** Tie captions to the structure nearest each (Tie to Structure). */
   tie: ((captionIds: number[]) => void) | null = null;
 
@@ -161,6 +174,7 @@ export class StylePanel {
     const focused = this.body.contains(document.activeElement) ? document.activeElement!.closest('.style-row')?.textContent : null;
     this.body.textContent = '';
     this.titled = false;
+    for (const i of this.section.querySelectorAll(':scope > h2 > .style-help')) i.remove();
     this.subtitle('');
     const arrows = [...s.arrows].map((id) => this.doc.arrows.get(id)).filter((x): x is Arrow => !!x);
     const all = [...s.shapes].map((id) => this.doc.shapes.get(id)).filter((x): x is Shape => !!x && !x.picture);
@@ -206,6 +220,7 @@ export class StylePanel {
       // how its list works is behind the "i" by the list's title
       this.heading('Smart Scheme');
     }
+    else if (shapes.length && this.orbital && shapes.every((x) => x.orb)) this.orbitalControls(shapes);
     else if (shapes.length) this.shapeControls(shapes);
     if (rings.length) this.shapeControls(rings, rings.length > 1 ? `${rings.length} ring fills` : 'Ring fill');
     if (pictures.length) this.pictureControls(pictures);
@@ -249,7 +264,13 @@ export class StylePanel {
     }
     this.select('Head shape', HEAD_TYPES, r.headType, (v) => set('Arrowhead shape', () => ({ headType: v })));
     this.select('Line', LINES, r.line, (v) => set('Arrow line', () => ({ line: v })));
-    this.check('Crossed out (no reaction)', r.noGo, (v) => set('Crossed-out arrow', () => ({ noGo: v })));
+    this.select('No-go', NO_GOS, r.noGo ? r.noGoKind ?? 'cross' : 'none', (v) => set('No-go arrow', () => ({ noGo: v !== 'none', noGoKind: v === 'hash' ? 'hash' : undefined })));
+    this.check('Dipole', !!r.dipole, (v) => set('Dipole arrow', () => ({ dipole: v || undefined })));
+    if (r.headType === 'solid' && (r.headStyle !== 'none' || r.tailStyle !== 'none')) {
+      this.number('Head center (pt)', round(r.headLength * (r.headCenter ?? 0.75), 2), 0.25, 0, 100,
+        (v) => set('Arrowhead center', (a) => ({ headCenter: a.headLength > 0 ? Math.max(0, Math.min(1, v / a.headLength)) : undefined })),
+        'How far back from its point the head’s notch is. The head’s full length makes a plain triangle; less sweeps its back in.');
+    }
     if (!r.equilibrium && !r.shaftSpacing) {
       this.check('Square bends (elbow)', !!r.elbow, (v) => set('Elbow connector', () => ({ elbow: v || undefined, sweep: 0, bez: undefined })));
     }
@@ -272,7 +293,7 @@ export class StylePanel {
       b.addEventListener('click', () => set('Detach', () => ({ pin: undefined })));
       this.body.append(b);
     }
-    if (!r.equilibrium && !r.shaftSpacing && !r.elbow && isCurved(r)) {
+    if (!r.equilibrium && !r.shaftSpacing && !r.elbow && isCurved(r) && !(r.ellipse && arrowEllipseFrame(r))) {
       // a ready-made shape between the same two ends (or the arrow's own path, drawn or built up bend by bend)
       const now = shapeOf(r);
       const opts: Opt<string>[] = [['single', 'Single curve'], ['s', 'S (two bends)'], ['u', 'U-turn'], ['loop', 'Loop']];
@@ -286,6 +307,15 @@ export class StylePanel {
           return patch;
         });
       });
+    }
+    const ef = arrowEllipseFrame(r);
+    if (ef) {
+      const ratio = (f: { u: Vec; v: Vec }) => Math.hypot(f.u.x, f.u.y) / Math.max(Math.hypot(f.v.x, f.v.y), 1e-6);
+      this.number('Width/Height (%)', Math.round(ratio(ef) * 100), 5, 10, 1000, (v) => set('Reshape arc', (a) => {
+        const f = arrowEllipseFrame(a);
+        if (!f || !(v > 0)) return {};
+        return ellipseArrow(f.c, mul(f.u, v / 100 / ratio(f)), f.v, f.t0, f.sweep);
+      }), 'How wide the curve’s ellipse is for its height: 100 is a circle. Drag the diamonds on the selected arrow to reshape it.');
     }
     if (!r.equilibrium && !r.shaftSpacing && !r.elbow && !r.bez?.length) {
       this.number('Curve (°)', round(r.sweep / DEG, 1), 5, -330, 330, (v) => set('Bend arrow', () => ({ sweep: v * DEG })),
@@ -345,7 +375,7 @@ export class StylePanel {
     if (hooks.others()) {
       const opts: Opt<string>[] = [['', 'Choose…'], ['reactants', 'Starting materials'], ['products', 'Products'], ['above', 'Above the arrow'], ['below', 'Below the arrow'], ['none', 'Not part of this step']];
       this.select('Set Selection As', opts, '', (v) => { if (v) hooks.setRole(r.id, v as Role | 'none'); },);
-    } else this.note('To change a role by hand, select the arrow and the things with Shift, then choose what they are here.');
+    } else this.help('To change a role by hand, select the arrow and the things with Shift, then choose what they are here.');
     const buttons = document.createElement('div');
     buttons.className = 'style-buttons';
     const button = (text: string, title: string, on: () => void) => {
@@ -364,14 +394,32 @@ export class StylePanel {
 
   // ------------------------------------------------------------------ shapes
 
-  private shapeControls(shapes: Shape[], title?: string): void {
+  /** Orbitals drawn here: their type, phases, angle and size, drawn again as they change; then their outline and fill. */
+  private orbitalControls(shapes: Shape[]): void {
+    const list = orbitalsAmong(this.doc, shapes.map((x) => x.id));
+    const first = list.length ? readOrbital(list[0]) : null;
+    if (!first) { this.shapeControls(shapes); return; }
+    const spec = first.spec;
+    const L = this.doc.style.bondLength;
+    this.heading(list.length > 1 ? `${list.length} orbitals` : 'Orbital');
+    const set = (patch: Partial<OrbitalSpec>) => { this.key = ''; this.orbital?.restyle(shapes.map((x) => x.id), patch); };
+    this.select('Orbital', ORBITAL_KIND_NAMES.map((k): Opt<OrbitalKind> => [k.value, k.label]), spec.kind, (v) => set({ kind: v }));
+    this.select('Phases', ORBITAL_LOOK_NAMES.map((k): Opt<OrbitalLook> => [k.value, k.label]), spec.look, (v) => set({ look: v }));
+    if (spec.kind !== 's') this.number('Angle (°)', round(spec.angle, 10), 1, -360, 360, (v) => set({ angle: ((v % 360) + 360) % 360 }), 'Which way it points: degrees clockwise from straight up');
+    this.number('Lobe length', round(spec.size / L, 100), 0.1, 0.2, 5, (v) => set({ size: v * L }), 'In bond lengths');
+    if (spec.look !== 'outline') this.check('Swap phases', !!spec.flip, (v) => set({ flip: v }));
+    this.subheading('Outline and fill');
+    this.shapeControls(shapes, null);
+  }
+
+  private shapeControls(shapes: Shape[], title?: string | null): void {
     const s = shapes[0];
     const lw = this.doc.style.lineWidth;
     const set = (label: string, ok: (x: Shape) => boolean, patch: (x: Shape) => Partial<Shape>) =>
       this.edit(label, () => { for (const x of shapes) if (ok(x)) this.doc.updateShape(x.id, patch(x)); });
     const any = (f: (x: Shape) => boolean) => shapes.find(f);
     const names: Record<Shape['kind'], string> = { line: 'Line', rect: 'Rectangle', oval: 'Oval', symbol: 'Symbol', bracket: 'Bracket', picture: 'Picture', table: 'Table', geo: 'Shape', ring: 'Ring fill' };
-    this.heading(title ?? (shapes.length > 1 ? `${shapes.length} shapes` : isCircle(s) ? 'Circle' : s.kind === 'geo' ? geoDef(s.geo).name : names[s.kind]));
+    if (title !== null) this.heading(title ?? (shapes.length > 1 ? `${shapes.length} shapes` : isCircle(s) ? 'Circle' : s.kind === 'geo' ? geoDef(s.geo).name : names[s.kind]));
     this.rotation(shapes);
     const geo = any((x) => x.kind === 'geo');
     const isGeo = (x: Shape) => x.kind === 'geo';
@@ -379,7 +427,13 @@ export class StylePanel {
       // another shape from the library, keeping the size, colours and text
       // (an icon is listed too, so it can be swapped for a shape and back)
       const own = geoDef(geo.geo);
-      if (this.pickShape) this.shapePicker(own.id, (v) => set('Change shape', isGeo, () => ({ geo: v })));
+      const ff = freeformPoints(geo);
+      if (ff) {
+        // a freeform (or ChemDraw curve): closed or open, smooth or with straight sides, through the same points
+        const isFree = (x: Shape) => !!freeformPoints(x);
+        this.check('Closed', ff.closed, (v) => set(v ? 'Close shape' : 'Open shape', isFree, (x) => reshapeFreeform(x, { closed: v }) ?? {}));
+        this.check('Smooth', isSmoothPath(ff.pts), (v) => set(v ? 'Smooth shape' : 'Straighten shape', isFree, (x) => reshapeFreeform(x, { smooth: v }) ?? {}));
+      } else if (this.pickShape) this.shapePicker(own.id, (v) => set('Change shape', isGeo, () => ({ geo: v })));
       else {
         const opts = [...(own.icon ? [own] : []), ...GEOS].map((g): Opt<string> => [g.id, `${g.name} (${g.group.toLowerCase()})`]);
         this.select('Shape', opts, own.id, (v) => set('Change shape', isGeo, () => ({ geo: v })));
@@ -451,6 +505,16 @@ export class StylePanel {
     // the border together: its colour, weight, dashes, corners and shadow
     // (ring fills have no line, so no line colour: it only stood in for a fill colour that wasn't set)
     const box = any((x) => x.kind === 'rect');
+    const oval = any((x) => x.kind === 'oval');
+    // a lone pair: two dots, or ChemDraw's bar
+    const pair = any((x) => x.kind === 'symbol' && (x.symbol === 'LonePair' || x.symbol === 'LonePairBar'));
+    if (pair) {
+      const isPair = (x: Shape) => x.kind === 'symbol' && (x.symbol === 'LonePair' || x.symbol === 'LonePairBar');
+      this.select('Drawn as', [['LonePair', 'Two dots'], ['LonePairBar', 'Bar']], pair.symbol as string, (v) => set('Lone pair look', isPair, (x) => {
+        // (the same two ends: a bar runs a little past them, as ChemDraw draws it)
+        return x.symbol === v ? {} : { symbol: v };
+      }));
+    }
     if (l || box) this.subheading('Border');
     if (shapes.some((x) => x.kind !== 'ring')) this.color(f?.filled && f.fillColor ? 'Line color' : 'Color', s.color, (v) => set('Color', (x) => x.kind !== 'ring', () => ({ color: v })));
     if (geo) this.number('Outline (pt)', round(geo.lineWidth ?? (geo.bold ? lw * 2.5 : lw)), 0.25, 0, 50, (v) => set('Outline width', isGeo, () => ({ lineWidth: v, bold: undefined })), '0 for no outline');
@@ -465,6 +529,11 @@ export class StylePanel {
       if (box.rounded) this.number('Corner radius (pt)', round(box.radius ?? 6 * lw), 0.5, 0, 200, (v) => set('Corner radius', isBox, () => ({ radius: v })));
       this.check('Shadow', !!box.shadow, (v) => set('Shadow', isBox, () => ({ shadow: v })));
       if (box.shadow) this.number('Shadow size (pt)', round(box.shadowSize ?? 4 * lw), 0.5, 0, 100, (v) => set('Shadow size', isBox, () => ({ shadowSize: v })));
+    }
+    if (oval && !box) {
+      const isOval = (x: Shape) => x.kind === 'oval';
+      this.check('Shadow', !!oval.shadow, (v) => set('Shadow', isOval, () => ({ shadow: v || undefined })));
+      if (oval.shadow) this.number('Shadow size (pt)', round(oval.shadowSize ?? 4 * lw), 0.5, 0, 100, (v) => set('Shadow size', isOval, () => ({ shadowSize: v })));
     }
   }
 
@@ -482,7 +551,8 @@ export class StylePanel {
     this.check('Mark the overall change', !!d.overall, (v) => set({ overall: v }), 'A double arrow from the first species to the last, on each pathway');
     this.number('Decimal places', d.digits, 1, 0, 3, (v) => set({ digits: v }));
     const n = Math.max(...d.paths.map((p) => p.points.length));
-    this.note(`${d.paths.length === 1 ? 'One pathway' : `${d.paths.length} pathways`} through ${n} species. Change the names and energies in the window; drag a corner to resize it. Anything you draw inside stays when it is redrawn.`);
+    this.note(`${d.paths.length === 1 ? 'One pathway' : `${d.paths.length} pathways`} through ${n} species.`);
+    this.help('Change the names and energies in the window; drag a corner to resize it. Anything you draw inside stays when it is redrawn.');
     const row = document.createElement('div');
     row.className = 'style-buttons';
     const b = document.createElement('button');
@@ -500,7 +570,7 @@ export class StylePanel {
     if (d.kind === 'mo') {
       this.heading('MO diagram');
       if (d.mo) this.check('Energy arrow', d.mo.axis, (v) => this.plate?.restyle(sh.id, { mo: { ...d.mo!, axis: v } }));
-      this.note('Change the orbitals, energies and electrons in the window; drag a corner to resize it.');
+      this.help('Change the orbitals, energies and electrons in the window; drag a corner to resize it.');
       const row = document.createElement('div');
       row.className = 'style-buttons';
       const b = document.createElement('button');
@@ -522,7 +592,7 @@ export class StylePanel {
         this.check('Color', c.view.colour, (v) => view({ colour: v }));
         this.check('Atom labels', c.view.labels, (v) => view({ labels: v }));
       }
-      this.note('Turn it, change the ellipsoids or see the crystal data in the window; drag a corner to resize it.');
+      this.help('Turn it, change the ellipsoids or see the crystal data in the window; drag a corner to resize it.');
       const row = document.createElement('div');
       row.className = 'style-buttons';
       const b = document.createElement('button');
@@ -543,7 +613,8 @@ export class StylePanel {
     if (tlc) this.check('Start and solvent-front lines', d.lines, (v) => set({ lines: v }));
     if (!tlc) this.check('Write the marker sizes', d.sizes, (v) => set({ sizes: v }));
     this.check('Lane names', d.labels, (v) => set({ labels: v }));
-    this.note(`${d.lanes.length} lane${d.lanes.length === 1 ? '' : 's'}. Change the ${tlc ? 'spots' : 'bands'} in the window; drag a corner to resize it.`);
+    this.note(`${d.lanes.length} lane${d.lanes.length === 1 ? '' : 's'}.`);
+    this.help(`Change the ${tlc ? 'spots' : 'bands'} in the window; drag a corner to resize it.`);
     const row = document.createElement('div');
     row.className = 'style-buttons';
     const b = document.createElement('button');
@@ -569,7 +640,7 @@ export class StylePanel {
     this.check('Shadow', d.shadow, (v) => set({ shadow: v }));
     this.check('AutoFit Text', d.size === undefined, (v) => set({ size: v ? undefined : 14 }), 'The text as big as fits, the same size in every shape; off, a size of your own');
     if (d.size !== undefined) this.number('Text size', d.size, 1, 4, 96, (v) => set({ size: v }));
-    this.note('Double-click a shape to type in it, or change all the text in the window. Drag a corner to resize it: it is drawn again to fill the box.');
+    this.help('Double-click a shape to type in it, or change all the text in the window. Drag a corner to resize it: it is drawn again to fill the box.');
     const row = document.createElement('div');
     row.className = 'style-buttons';
     const b = document.createElement('button');
@@ -645,9 +716,9 @@ export class StylePanel {
     if (pics.every((x) => x.math)) { this.equationControls(pics); return; }
     this.heading(charts ? (pics.length > 1 ? `${pics.length} charts` : 'Chart') : pics.length > 1 ? `${pics.length} pictures` : 'Picture');
     // vector pictures (SVG, Windows metafiles) have no pixels to count
-    if (charts) this.note('A chart with its own data. Double-click it to change the data, the kind of chart and its look; resizing it lays it out again.');
+    if (charts) this.help('A chart with its own data. Double-click it to change the data, the kind of chart and its look; resizing it lays it out again.');
     else if (pics.every((x) => x.zoom)) {
-      this.note('A Slide Zoom: in the slide show a click zooms into its slide. Its picture follows the slide.');
+      this.help('A Slide Zoom: in the slide show a click zooms into its slide. Its picture follows the slide.');
       this.check('Return to Zoom', !!p.zoom?.back, (v) => set('Return to Zoom', (x) => ({ zoom: { ...x.zoom, back: v || undefined } })), 'After its slide (or its part of a Summary Zoom), the show comes back to this slide');
     } else if (pics.length === 1 && p.video) {
       const v = p.video;
@@ -723,7 +794,7 @@ export class StylePanel {
   private equationControls(maths: Shape[]): void {
     const p = maths[0];
     this.heading(maths.length > 1 ? `${maths.length} equations` : 'Equation');
-    this.note('Double-click it to change it in the equation window. Drag a corner to make it larger or smaller. PowerPoint opens it as its own equation.');
+    this.help('Double-click it to change it in the equation window. Drag a corner to make it larger or smaller. PowerPoint opens it as its own equation.');
     this.color('Color', p.math!.color ?? '#000000', (v) => this.onEquationColour(maths.map((x) => x.id), v ?? '#000000'));
     if (maths.length === 1) {
       const buttons = document.createElement('div');
@@ -886,9 +957,9 @@ export class StylePanel {
     if (caps.length !== 1) return;
     const r = captionReading(this.doc, caps[0]);
     if (r.species) this.note(`Chemistry: ${speciesSummary(r.species)}. It counts in the formula, mass and SMILES of what it is selected with.`);
-    else if (r.why === 'arrow') this.note('Text above or below a reaction arrow stays text. Choose Chemical to count it.');
+    else if (r.why === 'arrow') this.help('Text above or below a reaction arrow stays text. Choose Chemical to count it.');
     else if (r.why === 'unread' && r.forced) this.note('Set to Chemical, but this text can\'t be read as chemistry.');
-    else if (r.why === 'tied') this.note('Text tied to a structure stays text.');
+    else if (r.why === 'tied') this.help('Text tied to a structure stays text.');
   }
 
   /** Where a caption tied to a structure sits, what descriptors it shows; tie or untie it. */
@@ -957,7 +1028,7 @@ export class StylePanel {
       const note = document.createElement('p');
       note.className = 'muted';
       note.textContent = 'Where a metal\'s hapto bond ends. It stays in the middle of its atoms; delete it to remove the bond.';
-      this.body.appendChild(note);
+      this.help(note.textContent);
       return;
     }
     if (a.attach) {
@@ -980,7 +1051,11 @@ export class StylePanel {
     this.color('Highlight', a.highlight, (v) => { set(v ? 'Highlight' : 'Remove highlight', { highlight: v }); if (v) this.highlightUsed(v); }, 'None');
     this.highlightControls([a], []);
     if (a.label || a.z !== 6 || a.showCarbon) {
-      this.select('Label runs', LABEL_DIRS, a.just, (v) => set('Label direction', { just: v }));
+      this.select('Label alignment', LABEL_ALIGNS, labelAlignment(a), (v) => this.edit('Label alignment', () => this.doc.updateAtom(a.id, labelAlignPatch(this.doc, a, v))));
+    } else if (a.z === 6 && this.doc.degree(a.id) === 3 && (this.doc.adj.get(a.id) ?? []).every((bid) => ringsThroughBond(this.doc, bid).length > 0)) {
+      // a ring-fusion carbon: its H shown as a dot (toward the viewer) or a hashed dot (away)
+      this.select<'' | 'dot' | 'dash'>('Ring-fusion H', [['', 'None'], ['dot', 'H-Dot (toward viewer)'], ['dash', 'H-Dash (away from viewer)']], a.hDot ?? '',
+        (v) => set(v ? 'Ring-fusion H' : 'No ring-fusion H', { hDot: v || undefined }));
     }
     if (methylState(this.doc, [a.id]) !== 'none') this.methylControls([a.id]);
     else if (a.z === 6 && !a.label && this.doc.degree(a.id) > 0) {
@@ -997,6 +1072,14 @@ export class StylePanel {
   private bondControls(b: Bond): void {
     const set = (label: string, patch: Partial<Bond>) => this.edit(label, () => this.doc.updateBond(b.id, patch));
     const centre = centreEnd(this.doc, b);
+    if (centre?.variable) {
+      // a group on one of several ring atoms
+      this.heading('Variable attachment');
+      this.help(`The group is on one of ${centre.multi!.length} ring atoms. With the Variable Attachment tool (on the Hapto bond button), click a ring atom to add it or take it out.`);
+      this.select('Style', BOND_STYLES.filter(([v]) => !['wedge', 'hashWedge', 'hollowWedge', 'wavyWedge', 'hydrogen', 'ionic', 'dative'].includes(v)), b.display, (v) => set('Bond style', { display: v }));
+      this.color('Color', b.color, (v) => set('Bond color', { color: v }));
+      return;
+    }
     if (centre) {
       // a metal bonded to the middle of a ring or π-bond
       this.heading(`Hapto bond (${haptoText(centre.multi!.length)})`);
@@ -1021,8 +1104,12 @@ export class StylePanel {
       this.doc.updateBond(b.id, { order: Number(v), ...(Number(v) === 0.5 && b.display === 'solid' ? { display: 'dash' as const } : {}) });
       straightenAt(this.doc, b.id);
     }));
-    this.select('Style', BOND_STYLES, b.display, (v) => set('Bond style', { display: v }));
-    if (b.order === 2) this.select('Second line', DOUBLE_POS, b.dpos, (v) => set('Double bond position', { dpos: v }));
+    const styles = b.order === 2 ? DOUBLE_STYLES : b.order === 1 || b.order === 0.5 ? BOND_STYLES : BOND_STYLES.filter(([v]) => !['hollowWedge', 'wavyWedge', 'hydrogen', 'ionic', 'dative'].includes(v));
+    this.select('Style', styles.some(([v]) => v === b.display) ? styles : [...styles, ...BOND_STYLES.filter(([v]) => v === b.display)], b.display, (v) => set('Bond style', { display: v }));
+    if (b.order === 2 && b.display !== 'wavy') {
+      this.select('Second line', DOUBLE_POS, b.dpos, (v) => set('Double bond position', { dpos: v }));
+      this.select('Second line style', SECOND_LINES, b.line2 ?? '', (v) => set('Second line style', { line2: (v || undefined) as Bond['line2'] }));
+    }
     this.color('Color', b.color, (v) => set('Bond color', { color: v }));
     this.color('Highlight', b.highlight, (v) => { set(v ? 'Highlight' : 'Remove highlight', { highlight: v }); if (v) this.highlightUsed(v); }, 'None');
     this.highlightControls([], [b]);
@@ -1091,7 +1178,7 @@ export class StylePanel {
         this.color('Line color', st.lineColour || undefined, (v) => set('Highlight outline color', { lineColour: v ?? '' }), 'A darker shade', '#808080');
         this.number('Line width (pt)', st.lineWidth, 0.25, 0.25, 10, (v) => set('Highlight outline width', { lineWidth: v }));
       }
-      if (st.fill !== 'none') this.note('For an outline on its own, set Fill to None (Chemistry > Highlight and Fill > Outline-Only Highlight).');
+      if (st.fill !== 'none') this.help('For an outline on its own, set Fill to None (Chemistry > Highlight and Fill > Outline-Only Highlight).');
     });
 
     this.group('Soft edges', st.soft ? `${pct(st.softAmount)}%, ${HL_SOFT_SIDES.find(([v]) => v === st.softSide)![1].split(' (')[0].toLowerCase()}` : 'off', () => {
@@ -1229,6 +1316,21 @@ export class StylePanel {
       this.text('Label text', l?.manual ? l.text : '', auto ? `(${auto}), worked out` : 'worked out', (v) => this.edit('Stereo label text', () => setStereoText(this.doc, a ? 'a' : 'b', a ? a.id : b.id, v, arialWidth)),
         'Type your own label (for example (R*) or rel-(S)); leave empty to show the worked-out one.');
     }
+  }
+
+  /**
+   * How to use what is selected, in an "i" beside the last heading (the section title for the
+   * first thing styled): help never gets a line of its own.
+   */
+  private help(text: string): void {
+    const hs = this.body.querySelectorAll<HTMLElement>(':scope > h3');
+    const at = hs.length ? hs[hs.length - 1] : this.section.querySelector<HTMLElement>(':scope > h2');
+    if (at?.querySelector(':scope > .info-icon')) {
+      const i = at.querySelector<HTMLElement>(':scope > .info-icon')!;
+      setInfo(i, `${i.dataset.tip ?? ''} ${text}`.trim());
+      return;
+    }
+    if (!addInfo(at, text, 'style-help')) this.note(text);
   }
 
   private note(text: string): void {

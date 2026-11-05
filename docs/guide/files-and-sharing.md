@@ -27,7 +27,7 @@ Open files with **File ▸ Open…** (Ctrl+O), or drop them onto the window. Pic
 ### Structures in Office files
 
 - **Word (.docx):** structures show as pictures in Word. Open the file here again and they are editable drawings, even after Word has saved it. ChemDraw drawings embedded in a Word file made elsewhere keep the look they had in Word; double-click one to make it an editable structure.
-- **PowerPoint (.pptx):** the same: pictures in PowerPoint, editable drawings when opened here again. A ChemDraw object embedded in a PowerPoint slide comes in as a picture.
+- **PowerPoint (.pptx):** the same: pictures in PowerPoint, editable drawings when opened here again. A ChemDraw object embedded in a PowerPoint slide comes in as editable structures, where and at the size PowerPoint showed it, and is saved back as a ChemDraw object, so double-clicking it in PowerPoint still opens it in ChemDraw. Anything drawn onto its structures (a bond added to one) goes back in the object with them.
 - **Excel (.xlsx):** structures are pictures with their SMILES in the cell, and become editable drawings again when opened here.
 
 ### Older Excel files, macro-enabled workbooks and OpenDocument
@@ -66,7 +66,7 @@ A figure wider than the column is shrunk by the journal, which makes its text an
 - **Many files at once:** **File ▸ Export ▸ Batch Convert…** turns a set of CDXML, CDX, molfile, SD, SMILES, RXN, Marvin, Ketcher, CML and ChemDoodle files into CDXML, CDX, molfiles, SVG or PNG pictures, or one SMILES list. Each record of an SD file and each line of a SMILES file becomes a file of its own, named after its title. The desktop app saves them in a folder you pick or in one zip; the web version saves a zip.
 - **SD files (.sdf):** open in a spreadsheet with one row per structure and its data fields as columns.
 - **PDF:** **File ▸ Export ▸ Export PDF…** for canvases, presentations, designs and documents. Structures and text stay sharp at any zoom. The fonts go inside the file, so it looks the same everywhere and passes journals' "all fonts embedded" checks. Arial, Helvetica and similar fonts are drawn with Arimo, Times with Tinos and Courier with Cousine: free fonts with exactly the same letter widths. A character none of those has (an arrow such as →) uses the reader's Symbol font.
-- **Pictures:** **File ▸ Export ▸ Export Picture…** for a canvas, the current slide or a design page. Pick a white or page-coloured background or a see-through one.
+- **Pictures:** **File ▸ Export ▸ Export Picture…** for a canvas, the current slide or a design page. Pick a white or page-colored background or a see-through one.
   - **PNG** and **TIFF** are pictures made of dots. Type the dpi (300 for color, 600 to 1200 for line art). TIFF files are LZW-compressed, the kind many journals ask for.
   - **SVG**, **EMF** and **EPS** keep shapes and text sharp at any size. SVG suits Illustrator, Inkscape and web pages; EMF suits Word and PowerPoint on Windows; EPS suits older journal systems. EPS uses the standard PostScript fonts (Helvetica, Times, Courier and Symbol), and has no see-through colors, so those are mixed with white.
 
@@ -89,7 +89,7 @@ Double-click a file, or right-click it and choose **Open with ▸ Chem Illustrat
 | Word, PowerPoint or Excel (Windows app) | A Chem Illustrator drawing object: a sharp picture you can double-click to edit here (see below) |
 | Other programs, or from the browser version or on macOS and Linux | A high-resolution picture |
 
-In the Windows app, **Paste** (Ctrl+V) takes drawings copied in ChemDraw as editable structures, and spectra copied in MestReNova as sharp lines and text. **Edit ▸ Paste Special ▸ Show Clipboard Formats** lists what is on the clipboard, which helps when a paste doesn't come out as expected.
+In the Windows app, **Paste** (Ctrl+V) takes drawings copied in ChemDraw, and ChemDraw objects copied in PowerPoint or Word, as editable structures, and spectra copied in MestReNova as sharp lines and text. **Edit ▸ Paste Special ▸ Show Clipboard Formats** lists what is on the clipboard, which helps when a paste doesn't come out as expected.
 
 ### Editing drawings inside Word, PowerPoint and Excel (Windows)
 

@@ -37,13 +37,13 @@ function ringAvoiding(doc: Doc, bondId: number, avoid: Set<number>, maxSize = 8)
   return null;
 }
 
-/** The smallest rings through a bond: one on each side of it (when it is shared by two). */
-export function ringsThroughBond(doc: Doc, bondId: number): number[][] {
-  const first = ringAvoiding(doc, bondId, new Set());
+/** The smallest rings through a bond: one on each side of it (when it is shared by two). Rings bigger than `maxSize` atoms aren't looked for. */
+export function ringsThroughBond(doc: Doc, bondId: number, maxSize = 8): number[][] {
+  const first = ringAvoiding(doc, bondId, new Set(), maxSize);
   if (!first) return [];
   const b = doc.bonds.get(bondId)!;
   const inner = new Set(first.filter((a) => a !== b.a1 && a !== b.a2));
-  const second = ringAvoiding(doc, bondId, inner);
+  const second = ringAvoiding(doc, bondId, inner, maxSize);
   return second && key(second) !== key(first) ? [first, second] : [first];
 }
 

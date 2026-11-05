@@ -1,6 +1,7 @@
 // The periodic table window: pick an element, then click atoms to make them that element (or
 // empty space for a new atom). It stays open beside the drawing so several can be picked in turn.
 
+import { foldIntoInfo } from './info-tip';
 import { SYMBOLS, tablePosition } from '../chem/elements';
 
 export class PeriodicTable {
@@ -68,6 +69,7 @@ export class PeriodicTable {
     close.addEventListener('click', () => d.close());
     d.addEventListener('keydown', (e) => { if (e.key === 'Escape') { e.preventDefault(); d.close(); } });
     d.addEventListener('close', () => { d.remove(); this.d = null; this.cells.clear(); });
+    foldIntoInfo(note, h);
     d.append(head, grid, note);
     document.body.append(d);
     this.d = d;

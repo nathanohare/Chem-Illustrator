@@ -6,10 +6,31 @@
 import { describe, expect, it } from 'vitest';
 import { cellNumbers, findRows, isCas, parseUserTable, searchedShift, sortRows, tableTsv, filterValues } from '../src/kb/tables';
 import { explainPieces, glossaryEntry, glossaryTip, GLOSSARY } from '../src/kb/glossary';
-import { BUILT_IN_TABLES, GLOSSARY_TABLE, NMR_SOLVENTS } from '../src/kb/data';
+import { BUILT_IN_TABLES, GLOSSARY_TABLE } from '../src/kb/data';
+import { SOLVENTS_TABLE } from '../src/kb/solvents';
+import type { KbTable } from '../src/kb/tables';
 import { explained, looksLikeSmiles } from '../src/ui/knowledge-base';
 
 const names = (rows: { row: Record<string, unknown> }[]) => rows.map((m) => m.row.name);
+
+// A small table of NMR solvent peaks, like one a user imports, for the shift search.
+const NMR: KbTable = {
+  id: 'nmr-test', title: 'NMR peaks', about: '',
+  columns: [
+    { key: 'name', label: 'Solvent' }, { key: 'aka', label: 'Also', hidden: true }, { key: 'cas', label: 'CAS' },
+    { key: 'h', label: '1H (ppm)', shift: '1H' }, { key: 'c', label: '13C (ppm)', shift: '13C' },
+    { key: 'smiles', label: 'SMILES', hidden: true },
+  ],
+  rows: [
+    { name: 'Chloroform-d', aka: 'CDCl3', cas: '865-49-6', h: '7.26, 1.56 (H2O)', c: '77.16', smiles: '[2H]C(Cl)(Cl)Cl' },
+    { name: 'Dichloromethane-d2', aka: 'CD2Cl2', cas: '1665-00-5', h: '5.32, 1.52 (H2O)', c: '53.84', smiles: '[2H]C([2H])(Cl)Cl' },
+    { name: 'Acetonitrile-d3', aka: 'CD3CN', cas: '2206-26-0', h: '1.94, 2.13 (H2O)', c: '1.32, 118.26', smiles: '[2H]C([2H])([2H])C#N' },
+    { name: 'Dimethyl sulfoxide-d6', aka: 'DMSO-d6', cas: '2206-27-1', h: '2.50, 3.33 (H2O)', c: '39.52', smiles: '[2H]C([2H])([2H])S(=O)C([2H])([2H])[2H]' },
+    { name: 'Methanol-d4', aka: 'CD3OD', cas: '811-98-3', h: '3.31, 4.87 (OH)', c: '49.00', smiles: '[2H]OC([2H])([2H])[2H]' },
+    { name: 'Pyridine-d5', aka: 'C5D5N', cas: '7291-22-7', h: '8.74, 7.58, 7.22', c: '150.35, 135.91, 123.87', smiles: '[2H]c1nc([2H])c([2H])c([2H])c1[2H]' },
+  ],
+  sources: [],
+};
 
 describe('CAS numbers', () => {
   it('accepts numbers whose check digit is right', () => {
@@ -38,22 +59,22 @@ describe('searching', () => {
 
   it('finds the solvent a peak belongs to, nearest first', () => {
     // pyridine-d5's 7.22 is within 0.05 too, and further away
-    expect(names(findRows(NMR_SOLVENTS, '7.26'))).toEqual(['Chloroform-d', 'Pyridine-d5']);
-    expect(names(findRows(NMR_SOLVENTS, '77.2'))).toEqual(['Chloroform-d']);
+    expect(names(findRows(NMR, '7.26'))).toEqual(['Chloroform-d', 'Pyridine-d5']);
+    expect(names(findRows(NMR, '77.2'))).toEqual(['Chloroform-d']);
     // 1.56 is water in CDCl3; 1.52 water in CD2Cl2 is within 0.05 too, and further away
     // and CD3CN's 13C peak at 1.32 is within 0.5, ranked after the 1H matches
-    expect(names(findRows(NMR_SOLVENTS, '1.55'))).toEqual(['Chloroform-d', 'Dichloromethane-d2', 'Acetonitrile-d3']);
-    expect(findRows(NMR_SOLVENTS, '9.9')).toEqual([]);
+    expect(names(findRows(NMR, '1.55'))).toEqual(['Chloroform-d', 'Dichloromethane-d2', 'Acetonitrile-d3']);
+    expect(findRows(NMR, '9.9')).toEqual([]);
   });
 
   it('finds by CAS number exactly, and by words in any column', () => {
-    expect(names(findRows(NMR_SOLVENTS, '2206-27-1'))).toEqual(['Dimethyl sulfoxide-d6']);
-    expect(names(findRows(NMR_SOLVENTS, 'cd3 methanol'))).toEqual(['Methanol-d4']);
+    expect(names(findRows(NMR, '2206-27-1'))).toEqual(['Dimethyl sulfoxide-d6']);
+    expect(names(findRows(NMR, 'cd3 methanol'))).toEqual(['Methanol-d4']);
   });
 
   it('matches structures the caller found equal', () => {
     const same = new Set(['[2H]C(Cl)(Cl)Cl']);
-    expect(names(findRows(NMR_SOLVENTS, 'ClC([2H])(Cl)Cl', {}, same))).toEqual(['Chloroform-d']);
+    expect(names(findRows(NMR, 'ClC([2H])(Cl)Cl', {}, same))).toEqual(['Chloroform-d']);
   });
 
   it('filters, sorts and copies', () => {
@@ -61,12 +82,12 @@ describe('searching', () => {
     const safety = findRows(GLOSSARY_TABLE, '', { kind: 'Safety' });
     expect(safety.length).toBeGreaterThan(3);
     expect(safety.every((m) => m.row.kind === 'Safety')).toBe(true);
-    const bp = NMR_SOLVENTS.columns.find((c) => c.key === 'bp')!;
-    const sorted = sortRows(findRows(NMR_SOLVENTS, ''), bp, false);
-    expect(sorted[0].row.name).toBe('Dichloromethane-d2');
-    const tsv = tableTsv(NMR_SOLVENTS, findRows(NMR_SOLVENTS, '865-49-6')).split('\n');
+    const bp = SOLVENTS_TABLE.columns.find((c) => c.key === 'bp')!;
+    const sorted = sortRows(findRows(SOLVENTS_TABLE, ''), bp, false);
+    expect(sorted[0].row.name).toBe('Diethyl ether'); // bp 34.5 °C
+    const tsv = tableTsv(SOLVENTS_TABLE, findRows(SOLVENTS_TABLE, 'chloroform')).split('\n');
     expect(tsv[0].split('\t')[0]).toBe('Solvent');
-    expect(tsv[1].split('\t')[0]).toBe('Chloroform-d');
+    expect(tsv[1].split('\t')[0]).toBe('Chloroform');
   });
 
   it('tells SMILES from names and CAS numbers', () => {
@@ -128,7 +149,8 @@ describe('abbreviations', () => {
     const div = document.createElement('div');
     div.append(explained('LD50 (rat, po)'));
     const abbr = [...div.querySelectorAll('abbr')].map((a) => a.textContent);
-    expect(abbr).toContain('LD50');
-    expect(div.textContent).toBe('LD50 (rat, po)');
+    // written LD₅₀ on screen (the data and a copy keep LD50)
+    expect(abbr).toContain('LD₅₀');
+    expect(div.textContent).toBe('LD₅₀ (rat, po)');
   });
 });

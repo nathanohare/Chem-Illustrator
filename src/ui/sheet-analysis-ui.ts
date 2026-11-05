@@ -298,7 +298,7 @@ export class SheetAnalysis {
     const input = w.ref('Input Range:', this.selText(), g);
     const per = w.num('Rows per sample:', 2, g);
     const a = this.alpha(w, g);
-    w.note('Select the column labels too (first row) and the sample labels (first column), as Excel does.');
+    w.info('Select the column labels too (first row) and the sample labels (first column), as Excel does.');
     const out = this.outputGroup(w);
     w.actions('OK', () => {
       const al = this.numberOf(a, 'Alpha', (v) => v > 0 && v < 1);
@@ -749,7 +749,7 @@ export class SheetAnalysis {
     rel.addEventListener('change', () => { rhs.disabled = ['int', 'bin', 'dif'].includes(rel.value); });
     const nonNeg = w.check('Make Unconstrained Variables Non-Negative', m.nonNegative);
     const engine = w.select<SolverEngine>('Select a Solving Method:', [['grg', 'GRG Nonlinear'], ['simplex', 'Simplex LP'], ['evolutionary', 'Evolutionary']], m.engine);
-    w.note('GRG Nonlinear for smooth models (curve fitting, yields as smooth functions); Simplex LP for linear ones (amounts, costs, mixtures); Evolutionary for models that jump (IF, LOOKUP, rounding).');
+    w.info('GRG Nonlinear for smooth models (curve fitting, yields as smooth functions); Simplex LP for linear ones (amounts, costs, mixtures); Evolutionary for models that jump (IF, LOOKUP, rounding).');
     const og = w.group('Options');
     const precision = w.num('Constraint Precision:', m.precision ?? 0.000001, og);
     const intTol = w.num('Integer Optimality (%):', (m.intTolerance ?? 0.01) * 100, og);

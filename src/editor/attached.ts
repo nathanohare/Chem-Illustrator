@@ -77,19 +77,46 @@ export function sideOf(box: Rect, cap: Rect): AttachSide {
   return dx >= 0 ? 'right' : 'left';
 }
 
-/** A structure as written now (its atoms and bonds), to tell when its descriptors need working out again. */
+/**
+ * A structure as written now (its atoms and how they are bonded), to tell when its descriptors
+ * need working out again. It leaves out atom numbers and positions, so it is the same for the
+ * same structure read back from a file, and is saved with the descriptors.
+ */
 export function structureSig(doc: Doc, atoms: Set<number>): string {
-  const parts: string[] = [];
-  for (const id of [...atoms].sort((x, y) => x - y)) {
+  const tok = new Map<number, string>();
+  for (const id of atoms) {
     const a = doc.atoms.get(id);
-    if (!a) continue;
-    parts.push(`${id}:${a.z}:${a.charge}:${a.isotope ?? ''}:${a.label ?? ''}:${a.group ?? ''}`);
+    // a labelled atom is what its label says (its element number is only a guess from the first
+    // letter, and is not kept in the file), so its number is left out
+    if (a) tok.set(id, `${a.label ? '' : a.z}:${a.charge}:${a.isotope || ''}:${a.label ?? ''}:${a.group ?? ''}:${a.radical ?? ''}`);
+  }
+  const parts: string[] = [];
+  for (const [id, t] of tok) {
+    const orders: string[] = [];
     for (const b of doc.adj.get(id) ?? []) {
       const bd = doc.bonds.get(b);
-      if (bd && bd.a1 === id) parts.push(`${bd.a1}-${bd.a2}:${bd.order}:${bd.display}`);
+      if (!bd) continue;
+      // a dative bond leaves the valences as they were, so it changes the hydrogens (and formula)
+      const o = bd.display === 'dative' ? `${bd.order}d` : `${bd.order}`;
+      orders.push(o);
+      if (bd.a1 !== id) continue;
+      const u = t, v = tok.get(bd.a2) ?? '?';
+      parts.push(`${u < v ? u + '~' + v : v + '~' + u}~${o}`);
     }
+    parts.push(`${t}/${orders.sort().join(',')}`);
   }
-  return parts.join('|');
+  return hashText(parts.sort().join('|'));
+}
+
+/** A short hash of some text (two 32-bit FNV-1a runs), the same in every session. */
+function hashText(s: string): string {
+  let h1 = 0x811c9dc5, h2 = 0x01000193 ^ s.length;
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    h1 = Math.imul(h1 ^ c, 0x01000193);
+    h2 = Math.imul(h2 ^ c, 0x01000193) ^ (h2 >>> 13);
+  }
+  return (h1 >>> 0).toString(36) + (h2 >>> 0).toString(36);
 }
 
 const RANK: Record<Attachment['role'], number> = { label: 0, caption: 1, descriptors: 2 };
@@ -203,9 +230,13 @@ export function nearestStructure(doc: Doc, cap: Rect, m: Measure, maxDist = Infi
   return best;
 }
 
-/** An attachment as saved in a file (the structure is found again from where the caption sits). */
+/**
+ * An attachment as saved in a file (the structure is found again from where the caption sits).
+ * Descriptors keep the signature of the structure they were worked out for, so a structure
+ * changed in ChemDraw since gets them worked out again when the file is opened.
+ */
 export function attachTag(a: Attachment): string {
-  const { atoms: _atoms, sig: _sig, ...rest } = a;
+  const { atoms: _atoms, ...rest } = a;
   return JSON.stringify(rest);
 }
 
@@ -222,6 +253,7 @@ export function attachFromTag(text: string | null): Attachment | undefined {
     if (Array.isArray(v.show)) out.show = v.show.filter((k) => KEYS.includes(k));
     if (typeof v.adduct === 'string') out.adduct = v.adduct;
     if (v.keepText === true) out.keepText = true;
+    if (role === 'descriptors' && typeof v.sig === 'string' && v.sig) out.sig = v.sig;
     return out;
   } catch {
     return undefined;
@@ -233,8 +265,9 @@ export function fillAttachments(doc: Doc, m: Measure = POINTS): void {
   for (const c of [...doc.captions.values()]) {
     if (!c.attach || c.attach.atoms.length) continue;
     const f = nearestStructure(doc, m.captionBox(c), m, doc.style.bondLength * 6);
-    // saved descriptors are taken to match the structure as saved (they are redone when it changes)
-    if (f) doc.updateCaption(c.id, { attach: { ...c.attach, atoms: [...f], ...(c.attach.role === 'descriptors' ? { sig: structureSig(doc, f) } : {}) } });
+    // descriptors saved with a signature keep it, so they are redone if the structure no longer
+    // matches it (changed in ChemDraw); older files had none, so theirs are taken to match
+    if (f) doc.updateCaption(c.id, { attach: { ...c.attach, atoms: [...f], ...(c.attach.role === 'descriptors' ? { sig: c.attach.sig ?? structureSig(doc, f) } : {}) } });
     else doc.updateCaption(c.id, { attach: undefined });
   }
 }

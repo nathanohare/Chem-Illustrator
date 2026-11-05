@@ -7,6 +7,7 @@
 
 import { isMetalAtom, outsideValence, PARTIAL, radicalElectrons, type Atom, type AtomWatch, type Bond, type Doc } from '../model';
 import { metalCarbonyl } from './hapto';
+import { stereoDisagrees } from './stereo';
 import { SYMBOLS, elementNumber, maxValence, minValence, valenceOfBonds } from './elements';
 import { bracketsUnbalanced, labelDonates, labelGraph, labelOverValent, tokenize } from './labels';
 
@@ -67,6 +68,15 @@ function atomName(z: number, charge: number): string {
 /** Problems with one atom on its own: too many bonds, an unreadable label, an impossible isotope. */
 export function atomWarnings(doc: Doc, a: Atom): string[] {
   const out: string[] = [];
+  // a stereo label from ChemDraw's file that the rules don't agree with (the file's stays)
+  const say = (what: string, d: { file: string; rules: string }) => out.push(`${what} says ${d.file}, but the structure works out to ${d.rules}. A group label may be read differently.`);
+  const atomLabel = stereoDisagrees('a', a, doc.stereo);
+  if (atomLabel) say('The stereo label', atomLabel);
+  for (const bid of doc.adj.get(a.id) ?? []) {
+    const b = doc.bonds.get(bid)!;
+    const bondLabel = b.a1 === a.id ? stereoDisagrees('b', b, doc.stereo) : null;
+    if (bondLabel) say("The double bond's stereo label", bondLabel);
+  }
   const orders: number[] = [];
   // a dative bond leaves both atoms' valences as they were (H3N→BF3); a bond to a metal may be
   // a lone pair the atom gives it (PPh3, a bridging Cl, a pyridine N), so it may go past the valence
@@ -179,6 +189,11 @@ export class StructureChecks {
 
   constructor(private doc: Doc) {
     this.watch = doc.watchAtoms();
+  }
+
+  /** Look at these atoms again (something a warning depends on has changed, such as a stereo label). */
+  recheck(atoms: Iterable<number>): void {
+    for (const id of atoms) this.watch.ids.add(id);
   }
 
   /**

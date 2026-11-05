@@ -7,7 +7,7 @@
 // turned the Assistant on once, having been told what goes where.
 
 import { aiAsk, aiName, aiBase, isLocalAddress, localOnlyBlock, type AiPrefs, type AssistantLook } from '../ai/link';
-import { buildQuestion, clearRequestLog, logRequest, parseAnswer, requestLog, sendSummary, type AssistantAction, type AssistantMode, type SendItem } from '../ai/assistant';
+import { buildQuestion, clearRequestLog, logRequest, parseAnswer, requestLog, requestLogPlace, sendSummary, type AssistantAction, type AssistantMode, type SendItem } from '../ai/assistant';
 import { showDialog } from './dialog-host';
 
 export interface AssistantHost {
@@ -107,7 +107,7 @@ export class AssistantBar {
     const links = h('div', 'ai-links');
     this.looks = h('span', 'ai-looks');
     links.append(
-      button('Request Log', () => this.showLog(), 'ai-link', 'Every question sent, kept on this computer'),
+      button('Request Log', () => this.showLog(), 'ai-link', `Every question sent, kept ${requestLogPlace()}`),
       this.looks,
       button('Settings', () => void this.host.openSettings().then(() => { this.applyLook(); return this.refresh(); }), 'ai-link', 'Edit > Settings > AI Model'),
     );
@@ -274,7 +274,7 @@ export class AssistantBar {
       `Questions go to ${aiName(p)}${local ? ', on this computer: nothing leaves it.' : ', over the internet. It is billed to your account there, and its own terms say what it keeps.'}`,
       'Each question carries only what "Will send" lists under the box (such as the selected structure as SMILES, or the selected text). Click any of them to leave it out. Other files, other tabs, file names and your key are never sent.',
       'The Assistant only proposes. Nothing on the page changes until you click Accept, and Undo takes it back.',
-      'Every question sent is kept in a Request Log on this computer, which you can read or clear.',
+      `Every question sent is kept in a Request Log ${requestLogPlace()}, which you can read or clear.`,
       ...(local ? [] : ['For unpublished structures, tick Local only and use a model on this computer.']),
     ]) ul.append(h('li', '', t));
     d.append(ul);
@@ -308,6 +308,9 @@ export class AssistantBar {
     if (!question || p.provider === 'none' || !p.assistant) return;
     const blocked = localOnlyBlock(p);
     if (blocked) { this.note(blocked, 'warn'); return; }
+    // another tab chosen while the bar stayed open: a new conversation, about that tab's page
+    const tab = this.host.tab();
+    if (tab !== this.tab) { this.tab = tab; this.msgs.replaceChildren(); this.busy++; }
     // what is on the page now (the selection may have changed since the bar opened)
     this.items = (await this.host.items().catch(() => [])).map((i) => ({ ...i, on: i.on && !this.off.has(i.id) }));
     this.drawChips();
@@ -323,7 +326,7 @@ export class AssistantBar {
       const answer = await aiAsk(p, q);
       if (seq !== this.busy) return;
       wait.remove();
-      this.answer(answer);
+      this.answer(answer, tab);
     } catch (e) {
       if (seq !== this.busy) return;
       wait.remove();
@@ -332,17 +335,17 @@ export class AssistantBar {
   }
 
   /** The answer's words, then a card for each change it proposes. */
-  private answer(text: string): void {
+  private answer(text: string, tab: object): void {
     const { prose, actions } = parseAnswer(text);
     const d = h('div', 'ai-it');
     for (const para of prose.split(/\n{2,}/).filter((x) => x.trim())) d.append(h('p', '', para.trim()));
-    for (const a of actions) d.append(this.card(a));
+    for (const a of actions) d.append(this.card(a, tab));
     if (!d.childNodes.length) d.append(h('p', 'ai-muted', '(No answer.)'));
     this.msgs.append(d);
     this.msgs.scrollTop = this.msgs.scrollHeight;
   }
 
-  private card(a: AssistantAction): HTMLElement {
+  private card(a: AssistantAction, tab: object): HTMLElement {
     const c = h('div', 'ai-prop');
     if (a.type === 'check') {
       c.append(h('b', '', 'Check'));
@@ -371,7 +374,9 @@ export class AssistantBar {
     }
     const row = h('div', 'ai-actions');
     const status = h('span', 'ai-muted');
+    // a proposal is for the tab it was asked in: the bar can stay open while another tab is chosen
     const accept = button('Accept', () => void (async () => {
+      if (this.host.tab() !== tab) { status.textContent = 'This was asked about another tab. Go back to that tab to accept it.'; return; }
       accept.disabled = reject.disabled = true;
       const said = await this.host.apply(a).catch((e) => `Could not: ${String(e)}`);
       status.textContent = said;
@@ -402,7 +407,7 @@ export class AssistantBar {
       }
       d.replaceChildren(
         h('h2', '', 'Request Log'),
-        h('p', 'ai-muted', 'Every question the Assistant sent, and everything sent with it. Kept on this computer only (the last 200).'),
+        h('p', 'ai-muted', `Every question the Assistant sent, and everything sent with it. Kept ${requestLogPlace()} only (the last 200).`),
         body,
         (() => {
           const row = h('div', 'ai-actions');

@@ -5,6 +5,7 @@
 // file showing, or an SD file; find one by number, name, formula or tag, or by a drawn
 // substructure; insert it into the drawing, slide, document or cell showing, as it was drawn.
 
+import { withInfo } from './info-tip';
 import {
   compoundBySmiles, compoundText, compoundTitle, newId, parseTags, tagsOf,
   type LibCompound, type LibraryData,
@@ -180,8 +181,7 @@ export class CompoundLibraryWindow {
     });
     this.insertBtn = button('Insert', 'Put the compound picked into the file showing, as it was drawn (Enter)', () => this.insert(), true);
     d.append(
-      el('div', { className: 'refs-head' }, el('h2', { textContent: 'Compound Library' }), this.search),
-      el('p', { className: 'muted', textContent: 'Your own compounds, kept between sessions and shared by every file: each one\'s number, structure, names and notes, and the files it appears in (noted as files are saved and opened). Insert puts one into the drawing, slide, document or cell showing.' }),
+      el('div', { className: 'refs-head' }, withInfo(el('h2', { textContent: 'Compound Library' }), 'Your own compounds, kept between sessions and shared by every file: each one\'s number, structure, names and notes, and the files it appears in (noted as files are saved and opened). Insert puts one into the drawing, slide, document or cell showing.'), this.search),
       el('div', { className: 'refs-filter' }, el('span', { textContent: 'Show' }), this.tagSel,
         el('span', { className: 'compound-query' },
           button('Contains Drawn Structure', 'Show only the compounds that contain the structure selected in the drawing (a substructure search)', () => void this.findDrawn()),
@@ -431,8 +431,7 @@ export class CompoundLibraryWindow {
       const tags = text('Tags', c.tags.join(', '), 'separated by commas');
       const notes = el('textarea', { rows: 4, value: c.notes, placeholder: 'notebook page, where it is kept, how it was made…' });
       row('Notes', notes);
-      form.append(el('h3', { textContent: c.files.length ? 'Appears in' : 'Appears in no file yet' }));
-      if (!c.files.length) form.append(el('p', { className: 'muted small', textContent: 'Files are noted as they are saved or opened with this structure in them.' }));
+      form.append(withInfo(el('h3', { textContent: c.files.length ? 'Appears in' : 'Appears in no file yet' }), 'Files are noted as they are saved or opened with this structure in them.'));
       const files = el('ul', { className: 'compound-files' });
       for (const f of c.files) {
         const open = button('Open', `Open ${f.path}`, () => { done(null); void this.host.openFile(f.path, c); });

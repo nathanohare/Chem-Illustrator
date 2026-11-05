@@ -10,7 +10,7 @@
 
 import type { Atom, Bond, BondDisplay, DoublePos, Doc } from '../model';
 import { labelSpec, type GlyphRun } from '../chem/labels';
-import { doubleBondGap, wedgeWidth } from '../style';
+import { atomMargin, bondWidths, doubleBondGap, wedgeWidth } from '../style';
 import { bondLayer } from '../chem/crossing';
 import { isCircleRing } from '../chem/aromatic';
 import type { Rect, Vec } from '../geom';
@@ -248,7 +248,7 @@ function nodeOf(doc: Doc, a: Atom, r: Renderer, frag: string, num?: string): MNo
   let charge: MCharge | null = null;
   const lay = info.layout;
   if (lay) {
-    const m = doc.style.marginWidth * (a.s ?? 1);
+    const m = atomMargin(doc.style, a);
     const runs = lay.runs.filter((_, i) => i !== lay.charge);
     const boxes = lay.boxes.filter((_, i) => i !== lay.charge).map((b) => ({ x1: b.x1 - m, y1: b.y1 - m, x2: b.x2 + m, y2: b.y2 + m }));
     // the glyph the bonds meet sits on the atom: the run across x = 0 on the label's own line
@@ -285,7 +285,7 @@ function bondOf(doc: Doc, b: Bond, r: Renderer): MBond {
   if (b.display === 'hashWedge' || b.display === 'hash') {
     const p = doc.atoms.get(b.a1)!, q = doc.atoms.get(b.a2)!;
     const [s, e] = r.bondEnds(doc, p, q);
-    rungs = Math.min(MAX_HASHES, Math.max(2, Math.floor(Math.hypot(e.x - s.x, e.y - s.y) / (st.hashSpacing * k))));
+    rungs = Math.min(MAX_HASHES, Math.max(2, Math.floor(Math.hypot(e.x - s.x, e.y - s.y) / bondWidths(st, b).hashSpacing)));
   }
   const order = b.order === 1.5 ? 2 : b.order;
   return {
@@ -293,7 +293,7 @@ function bondOf(doc: Doc, b: Bond, r: Renderer): MBond {
     order: b.order === 1.5 && b.circle ? 1 : order,
     aromatic: b.order === 1.5 && !b.circle,
     display: b.display, dpos: b.dpos, z: bondLayer(b), color: hexRgb(b.color),
-    w: (b.display === 'bold' && order === 1 ? st.boldWidth : st.lineWidth) * k, s: k, rungs,
+    w: b.display === 'bold' && order === 1 ? bondWidths(st, b).boldWidth : st.lineWidth * k, s: k, rungs,
   };
 }
 

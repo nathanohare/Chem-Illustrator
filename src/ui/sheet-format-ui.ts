@@ -2,6 +2,7 @@
 // ready-made rules and looks, a window for any rule, a list to reorder and change the rules,
 // and the Table Design settings (header row, totals row, bands, first and last column).
 
+import { foldIntoInfo } from './info-tip';
 import { popupMenu } from './sheet-view';
 import type { SheetView } from './sheet-view';
 import { ask, Field } from './ask';
@@ -464,6 +465,7 @@ export class SheetFormatting {
       spacer,
       btn('Close', () => d.close()),
     );
+    foldIntoInfo(note, h);
     d.append(h, show, list, note, buttons);
     d.addEventListener('close', () => { d.remove(); this.host.view.focus(); });
     document.body.append(d);

@@ -3,6 +3,7 @@
 // and margins), the header and footer with the page numbers, and the figure picked. Every
 // value can be typed in; lengths take inches, cm, mm or pt ("2.5 cm").
 
+import { addInfo } from './info-tip';
 import type { Justify } from '../model';
 import { FloatBox, PINNED_ICON } from './float-box';
 import type { DocFile } from '../document/doc-file';
@@ -387,7 +388,7 @@ export class DocPanel {
     const note = document.createElement('p');
     note.className = 'muted small dp-note';
     note.textContent = 'Changes here change every paragraph in this style, except what was formatted by hand.';
-    s.append(note);
+    addInfo(s.querySelector(':scope > h3 > span'), note.textContent);
     const set = (patch: Partial<NamedStyle>) => {
       const f = this.host.file();
       if (!f) return;

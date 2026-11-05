@@ -18,6 +18,8 @@ export interface DocStyle {
   captionSize: number;
   /** How new captions look, as ChemDraw's face bits (1 bold, 2 italic, 4 underline, 96 formula). */
   captionFace: number;
+  /** How atom labels look, as the same face bits (absent: plain); bold is drawn, the rest is kept for saving. */
+  labelFace?: number;
   /** Text above and below reaction arrows (reagents, conditions): its size and font, where not the captions'. */
   arrowTextSize?: number;
   arrowTextFont?: string;
@@ -32,6 +34,13 @@ export interface DocStyle {
    * arrow beyond the text before it starts and before the head.
    */
   scheme?: StyleScheme;
+  /**
+   * How this drawing's atom-map number boxes look, and its own box format, saved with the file so
+   * a figure looks the same on any computer (Nate, 2026-11-03). Absent: the program's default
+   * (mapLookPrefs), as in files from before.
+   */
+  mapLook?: MapLook;
+  mapBox?: MapBoxStyle;
 }
 
 export interface StyleScheme {
@@ -64,6 +73,35 @@ export function doubleBondGap(s: DocStyle): number {
   return (s.bondSpacing / 100) * s.bondLength;
 }
 
+/** Whether an atom's label is drawn in bold: its own face where it has one, else the drawing's. */
+export function labelBold(s: DocStyle, a: { face?: number }): boolean {
+  return !!((a.face ?? s.labelFace ?? 0) & 1);
+}
+
+/** A bond's own widths, in points: its structure's settings where it has them, else the document's scaled by its `s`. */
+export function bondWidths(ds: DocStyle, b: { s?: number; boldWidth?: number; hashSpacing?: number; marginWidth?: number; bondLength?: number }): { lineWidth: number; boldWidth: number; hashSpacing: number; marginWidth: number; bondLength: number } {
+  const k = b.s ?? 1;
+  return {
+    lineWidth: ds.lineWidth * k,
+    boldWidth: b.boldWidth ?? ds.boldWidth * k,
+    hashSpacing: b.hashSpacing ?? ds.hashSpacing * k,
+    marginWidth: b.marginWidth ?? ds.marginWidth * k,
+    bondLength: b.bondLength ?? ds.bondLength * k,
+  };
+}
+
+/** A bond's own widths (bondWidths) made f times as big, as an update, when it has any (scaling a structure). */
+export function scaleOwnWidths(b: { boldWidth?: number; hashSpacing?: number; marginWidth?: number; bondLength?: number }, f: number): { boldWidth?: number; hashSpacing?: number; marginWidth?: number; bondLength?: number } {
+  const out: { boldWidth?: number; hashSpacing?: number; marginWidth?: number; bondLength?: number } = {};
+  for (const k of ['boldWidth', 'hashSpacing', 'marginWidth', 'bondLength'] as const) if (b[k] !== undefined) out[k] = b[k]! * f;
+  return out;
+}
+
+/** The gap bonds keep from an atom's label, in points. */
+export function atomMargin(ds: DocStyle, a: { s?: number; marginWidth?: number }): number {
+  return a.marginWidth ?? ds.marginWidth * (a.s ?? 1);
+}
+
 /** Width of a wedge's wide end: 1.5 × bold width (User Guide p. 41). */
 export function wedgeWidth(s: DocStyle): number {
   return 1.5 * s.boldWidth;
@@ -80,17 +118,63 @@ export const DEFAULT_BOND_ENDS = 0.25;
 export const bondEndPrefs: { round: number } = { round: DEFAULT_BOND_ENDS };
 
 /**
- * How atom-map numbers (Chemistry ▸ Map Atoms) look, an app setting: a small rounded box beside
- * the atom, filled light peach (Nate's pick), a light tint of the number's own colour (so an atom
- * and where it goes match at a glance), or ChemDraw's grey outline.
+ * How atom-map numbers look (Chemistry ▸ Map Atoms), saved with each drawing (DocStyle.mapLook),
+ * with the last one chosen as the default for drawings that have none of their own: a small rounded box beside
+ * the atom with ChemDraw's gray outline (Nate's pick, 2026-11-02), a light tint of the number's own
+ * color (so an atom and where it goes match at a glance), or a format of the user's own
+ * (Map Number Format…) used for every box.
  */
-export type MapLook = 'peach' | 'tint' | 'grey';
+export type MapLook = 'grey' | 'tint' | 'custom';
 export const MAP_LOOKS: { value: MapLook; label: string }[] = [
-  { value: 'peach', label: 'Light peach boxes' },
+  { value: 'grey', label: 'Gray outline (ChemDraw style)' },
   { value: 'tint', label: 'Each number in its own light color' },
-  { value: 'grey', label: 'Gray outlines (as ChemDraw)' },
+  { value: 'custom', label: 'Custom (Map Number Format…)' },
 ];
-export const mapLookPrefs: { look: MapLook } = { look: 'peach' };
+
+/** A format of the user's own for every map-number box. Colors are #rrggbb; '' is none. */
+export interface MapBoxStyle {
+  fill: string;
+  pattern: 'none' | 'lines' | 'cross' | 'dots';
+  patternColor: string;
+  border: string;
+  /** Outline width in points (0 for none). */
+  borderWidth: number;
+  text: string;
+  bold: boolean;
+  shadow: boolean;
+  /** Rounded corners (else square). */
+  rounded: boolean;
+}
+/** The custom format to start from: light peach with a dark outline, as in Nate's picture. */
+export const DEFAULT_MAP_BOX: MapBoxStyle = { fill: '#fbdcc2', pattern: 'none', patternColor: '#c96a2b', border: '#000000', borderWidth: 0.6, text: '#000000', bold: false, shadow: false, rounded: true };
+export const MAP_PATTERNS: { value: MapBoxStyle['pattern']; label: string }[] = [
+  { value: 'none', label: 'None' }, { value: 'lines', label: 'Diagonal lines' }, { value: 'cross', label: 'Cross-hatch' }, { value: 'dots', label: 'Dots' },
+];
+
+/** A stored map-box format, checked, with anything missing or wrong from the default. */
+export function mapBoxStyle(raw: unknown): MapBoxStyle {
+  const r = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const color = (v: unknown, d: string, empty = true) => typeof v === 'string' && (/^#[0-9a-f]{6}$/i.test(v) || (empty && v === '')) ? v : d;
+  const d = DEFAULT_MAP_BOX;
+  return {
+    fill: color(r.fill, d.fill),
+    pattern: MAP_PATTERNS.some((p) => p.value === r.pattern) ? r.pattern as MapBoxStyle['pattern'] : d.pattern,
+    patternColor: color(r.patternColor, d.patternColor, false),
+    border: color(r.border, d.border),
+    borderWidth: typeof r.borderWidth === 'number' && isFinite(r.borderWidth) ? Math.max(0, Math.min(5, r.borderWidth)) : d.borderWidth,
+    text: color(r.text, d.text, false),
+    bold: typeof r.bold === 'boolean' ? r.bold : d.bold,
+    shadow: typeof r.shadow === 'boolean' ? r.shadow : d.shadow,
+    rounded: typeof r.rounded === 'boolean' ? r.rounded : d.rounded,
+  };
+}
+/** The default for drawings with no map-number look of their own (a program setting). */
+export const mapLookPrefs: { look: MapLook; custom: MapBoxStyle } = { look: 'grey', custom: { ...DEFAULT_MAP_BOX } };
+
+/** The map-number look a drawing uses: its own, else the program's default. */
+export function docMapLook(st: DocStyle): { look: MapLook; custom: MapBoxStyle } {
+  return { look: st.mapLook ?? mapLookPrefs.look, custom: st.mapBox ?? mapLookPrefs.custom };
+}
 
 /** The choices offered for it (Settings > Drawing), from round to square. */
 export const BOND_END_CHOICES: { value: number; label: string }[] = [

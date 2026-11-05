@@ -9,7 +9,7 @@
 // rings such as norbornane) keep their drawn shape, resized.
 
 import { Vec, add, sub, mul, dist, cross, angleOf, fromAngle, normAngle, distToSegment, DEG } from '../geom';
-import type { BondDisplay, Doc } from '../model';
+import type { Bond, BondDisplay, Doc } from '../model';
 import { bondLength } from './chemgeom';
 import { atomsOnBonds, countCrossings, CROSSING, inPolygon, segmentsCross, untangleSystem } from './untangle';
 
@@ -98,12 +98,25 @@ export function cleanUpWays(doc: Doc, f: Set<number>, seeds: Map<number, Vec>[] 
   });
 }
 
+/**
+ * The bonds between atoms of a set, found from the atoms' own bonds (not by looking through every
+ * bond in the drawing, which made Clean Up of a big drawing take time in its size squared).
+ */
+export function bondsWithin(doc: Doc, atoms: Set<number>): Bond[] {
+  const out: Bond[] = [];
+  for (const id of atoms) for (const bid of doc.adj.get(id) ?? []) {
+    const b = doc.bonds.get(bid);
+    if (b && b.a1 === id && atoms.has(b.a2)) out.push(b);
+  }
+  return out;
+}
+
 /** Does a structure look tangled: bonds crossing, or atoms on top of one another? */
 export function looksTangled(doc: Doc, f: Set<number>): boolean {
   const ids = [...f];
   const L = bondLength(doc, doc.atoms.get(ids[0]));
   const pos = new Map(ids.map((id) => { const a = doc.atoms.get(id)!; return [id, { x: a.x / L, y: a.y / L }]; }));
-  const edges: [number, number][] = [...doc.bonds.values()].filter((b) => f.has(b.a1) && f.has(b.a2)).map((b) => [b.a1, b.a2]);
+  const edges: [number, number][] = bondsWithin(doc, f).map((b) => [b.a1, b.a2]);
   if (countCrossings(edges, pos)) return true;
   const pts = [...pos.values()];
   for (let i = 0; i < pts.length; i++) for (let j = i + 1; j < pts.length; j++) if (dist(pts[i], pts[j]) < 0.3) return true;
@@ -127,7 +140,7 @@ export function cleanUpOptions(doc: Doc, f: Set<number>, seeds: Map<number, Vec>
   const ways = cleanUpWays(doc, f, seeds);
   if (!ways.length) return [];
   const base = new Map([...f].map((id) => [id, { x: doc.atoms.get(id)!.x, y: doc.atoms.get(id)!.y }]));
-  const bonds = [...doc.bonds.values()].filter((b) => f.has(b.a1) && f.has(b.a2));
+  const bonds = bondsWithin(doc, f);
   const opts: CleanUpOption[] = ways.map((w, i) => {
     const pos = new Map(base);
     for (const [id, p] of w.moves) pos.set(id, p);

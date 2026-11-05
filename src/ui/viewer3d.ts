@@ -15,6 +15,7 @@ import { hornFit, rotation } from '../morph/rotate';
 import { ident, mul, axisTurn, skeleton, cleanerNearby, cleanestView, type M3, type P3 } from '../chem/view3d';
 import { depthShadePrefs } from '../render/depth-shade';
 import { ask } from './ask';
+import { infoIcon, setInfo } from './info-tip';
 import { DEFAULT_SEARCH, type SearchOptions } from '../chem/conformer-rank';
 import { KCAL_PER_HARTREE, refineWithXtb, XTB_SOLVENTS, type XtbOptions, type XtbRunner } from '../chem/xtb';
 import { chargeAndMultiplicity, qmInput, xyzFile, QM_METHODS, type QmOptions, type QmProgram } from '../chem/qm-input';
@@ -44,7 +45,7 @@ const TIER_NAMES: Record<Tier, string> = { quick: 'Quick', search: 'Full Search'
 const TIER_TIPS: Record<Tier, string> = {
   quick: 'About a dozen likely shapes, each relaxed with the MMFF94s+ force field. Takes seconds.',
   search: 'Hundreds of starting shapes, each relaxed with MMFF94s+, duplicates removed. Finds shapes Quick misses; under a minute for most molecules.',
-  xtb: 'The lowest few re-optimised with GFN2-xTB, a fast quantum-chemical method: more trustworthy energies than a force field. Minutes; desktop app, with xtb installed.',
+  xtb: 'The lowest few re-optimized with GFN2-xTB, a fast quantum-chemical method: more trustworthy energies than a force field. Minutes; desktop app, with xtb installed.',
 };
 
 /** The model's background: light grey, so white hydrogens stand out. */
@@ -91,6 +92,8 @@ export class Viewer3d {
   private tierBar: HTMLSpanElement;
   private exportBtn: HTMLButtonElement;
   private note: HTMLDivElement;
+  /** What the chosen method does, behind an "i" by the switch. */
+  private tierInfo: HTMLElement;
   private again: HTMLButtonElement;
   private list: HTMLDivElement;
   /** Each method's result, kept to switch back to; and the one shown. */
@@ -99,6 +102,8 @@ export class Viewer3d {
   private stopBtn: HTMLButtonElement;
   private busy = false;
   private stopped = false;
+  /** Counts the structures shown: a search or xTB run answers only if it is still the same one. */
+  private run = 0;
 
   constructor(private flash: (msg: string) => void) {
     this.box = new FloatBox('3-D Model', () => {});
@@ -163,7 +168,8 @@ export class Viewer3d {
     this.exportBtn.title = 'Input files for Gaussian or ORCA, or every conformer as an XYZ or SD file';
     this.exportBtn.setAttribute('aria-haspopup', 'menu');
     this.exportBtn.addEventListener('click', () => this.exportMenu());
-    methodBar.append(seg, spacer, this.exportBtn);
+    this.tierInfo = infoIcon('');
+    methodBar.append(seg, this.tierInfo, spacer, this.exportBtn);
     // what the chosen method is, and what it found
     this.note = document.createElement('div');
     this.note.className = 'v3d-note';
@@ -236,6 +242,7 @@ export class Viewer3d {
    * drawn atoms' page positions, in molfile order) turns it to start out looking like the drawing.
    */
   show(model: Model3d, title: string, onPlace: (v: PlaceView) => void, drawn?: ({ x: number; y: number } | null)[]): void {
+    this.abandon();
     this.model = model;
     this.onPlace = onPlace;
     this.box.title = title;
@@ -253,19 +260,30 @@ export class Viewer3d {
 
   /** Something to show while the model is being built. */
   showBusy(title: string): void {
+    this.abandon();
     this.model = null;
     this.box.title = title;
     this.info.textContent = 'Building the 3-D model…';
     this.list.replaceChildren();
     this.note.textContent = '';
+    this.note.hidden = true;
     this.box.show();
     this.draw();
   }
 
   close(): void {
     this.spinning = false;
-    if (this.busy) { this.stopped = true; this.tools?.stop(); }
+    this.abandon();
     this.box.close();
+  }
+
+  /**
+   * Another structure (or none): a search or xTB run still going is stopped, and what it finds is
+   * not shown, as it is of the structure that was showing before.
+   */
+  private abandon(): void {
+    this.run++;
+    if (this.busy) { this.stopped = true; this.tools?.stop(); this.setBusy(false); }
   }
 
   private drawn: ({ x: number; y: number } | null)[] | null = null;
@@ -321,12 +339,16 @@ export class Viewer3d {
     for (const x of this.tierBar.querySelectorAll<HTMLButtonElement>('[data-tier]')) x.setAttribute('aria-pressed', String(x.dataset.tier === this.tier));
     const m = this.results[this.tier];
     const n = m?.conformers.length ?? 0;
-    const text = this.tier === 'quick' ? `Quick: about a dozen likely shapes, each relaxed with the MMFF94s+ force field. Fast, but it can miss shapes: try Full Search.`
-      : this.tier === 'search' ? (m ? `Full Search: ${n} distinct conformer${n === 1 ? '' : 's'} from ${m.starts} starting shapes, each relaxed with MMFF94s+, duplicates removed.` : 'Full Search: hundreds of starting shapes, each relaxed with MMFF94s+, duplicates removed.')
-      : m ? `xTB Refine: the lowest ${n} re-optimised with ${m.method}, a fast quantum-chemical method, and ranked again.`
-      : `xTB Refine: re-optimises the lowest few with GFN2-xTB, a fast quantum-chemical method, using the xtb program on this computer.${this.tools?.xtb ? '' : ' Desktop app only.'}`;
-    this.note.textContent = text + ' ';
+    // what the method does is help, behind the "i"; the line under the switch only says what it found
+    setInfo(this.tierInfo, this.tier === 'quick' ? 'Quick: about a dozen likely shapes, each relaxed with the MMFF94s+ force field. Fast, but it can miss shapes: try Full Search.'
+      : this.tier === 'search' ? 'Full Search: hundreds of starting shapes, each relaxed with MMFF94s+, duplicates removed.'
+      : 'xTB Refine: re-optimizes the lowest few with GFN2-xTB, a fast quantum-chemical method, using the xtb program on this computer (desktop app only), and ranks them again.');
+    const text = this.tier === 'search' ? (m ? `${n} distinct conformer${n === 1 ? '' : 's'} from ${m.starts} starting shapes.` : '')
+      : this.tier === 'xtb' ? (m ? `The lowest ${n} re-optimized with ${m.method}.` : this.tools?.xtb ? '' : 'xTB Refine needs the desktop app.')
+      : '';
+    this.note.textContent = text ? text + ' ' : '';
     if (m && this.tier !== 'quick') this.note.append(this.again);
+    this.note.hidden = !this.note.childNodes.length;
   }
 
   /** The turn that makes the model look most like the drawing (or no turn, without one). */
@@ -706,14 +728,16 @@ export class Viewer3d {
     const num = (v: string, d: number, lo: number, hi: number) => { const x = parseFloat(v); return Number.isFinite(x) ? Math.min(hi, Math.max(lo, x)) : d; };
     const opts = { starts: Math.round(num(got.starts, DEFAULT_SEARCH.starts, 10, 2000)), window: num(got.window, DEFAULT_SEARCH.window, 0.5, 50), rmsd: num(got.rmsd, DEFAULT_SEARCH.rmsd, 0.05, 2) };
     this.setBusy(true, `Searching… 0 of ${opts.starts}`);
+    const run = this.run;
     try {
-      const m = await t.search(opts, (done, total) => { if (this.busy) this.info.textContent = `Searching… ${done} of ${total}`; });
+      const m = await t.search(opts, (done, total) => { if (this.busy && run === this.run) this.info.textContent = `Searching… ${done} of ${total}`; });
+      if (run !== this.run) return;
       this.replaceModel(m, 'search');
       this.flash(`Found ${m.conformers.length} conformer${m.conformers.length === 1 ? '' : 's'} within ${opts.window} kcal/mol from ${m.starts} starting points.`);
     } catch (e) {
-      this.flash(this.stopped ? 'Search stopped.' : (e as Error).message);
+      if (run === this.run) this.flash(this.stopped ? 'Search stopped.' : (e as Error).message);
     } finally {
-      this.setBusy(false);
+      if (run === this.run) this.setBusy(false);
     }
   }
 
@@ -738,18 +762,22 @@ export class Viewer3d {
     Object.assign(t.prefs.xtb, opts);
     t.prefs.save();
     this.setBusy(true, 'Starting xtb…');
+    const run = this.run;
     try {
       if (t.xtbVersion) await t.xtbVersion(opts.exe);
-      const refined = await refineWithXtb(m, opts, t.xtb, (done, total) => { this.info.textContent = `xTB: ${done} of ${total} done…`; }, () => this.stopped);
+      const refined = await refineWithXtb(m, opts, t.xtb, (done, total) => { if (run === this.run) this.info.textContent = `xTB: ${done} of ${total} done…`; }, () => this.stopped || run !== this.run);
+      if (run !== this.run) return;
       if (refined !== m) {
         this.replaceModel(refined, 'xtb');
         this.flash(`Refined ${refined.conformers.length} conformer${refined.conformers.length === 1 ? '' : 's'} with ${refined.method}; ranked again by their xTB energies.`);
       }
     } catch (e) {
+      if (run !== this.run) return;
       const msg = String((e as Error)?.message ?? e);
+      if (this.stopped) { this.flash('xTB stopped.'); return; }
       this.flash(/could not be started|No such file|not found|cannot find/i.test(msg) ? `xtb could not be started from "${opts.exe}". Install it, or give the full path to the program.` : msg);
     } finally {
-      this.setBusy(false);
+      if (run === this.run) this.setBusy(false);
     }
   }
 

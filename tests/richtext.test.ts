@@ -107,6 +107,10 @@ describe('Symbol font', () => {
     ]);
     expect(rt.toSymbolPieces('–—•')).toEqual([{ text: '–—•', symbol: false }]);
     // a minus sign goes in Symbol, as ChemDraw writes (−)-sparteine
+    // a space ending the text after a Symbol letter stays in the Symbol font (a run ChemDraw wrote as "¨ ")
+    expect(rt.toSymbolPieces('♦ ')).toEqual([{ text: '¨ ', symbol: true }]);
+    expect(rt.toSymbolPieces('x ♦ ')).toEqual([{ text: 'x ', symbol: false }, { text: '¨ ', symbol: true }]);
+    expect(rt.toSymbolPieces('→ rt')[1]).toEqual({ text: ' rt', symbol: false });
     expect(rt.toSymbolPieces('(−)-sparteine')).toEqual([{ text: '(', symbol: false }, { text: '-', symbol: true }, { text: ')-sparteine', symbol: false }]);
   });
   it('round-trips a Greek caption through a saved file', () => {

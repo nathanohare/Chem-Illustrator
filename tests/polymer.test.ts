@@ -60,7 +60,7 @@ describe('repeat groups', () => {
     expect(grp.getElementsByTagName('bracketattachment')).toHaveLength(2);
     expect(grp.getElementsByTagName('crossingbond')).toHaveLength(2);
     const labelled = [...dom.getElementsByTagName('graphic')].find((g) => g.getAttribute('BracketUsage') === 'SRU')!;
-    expect(labelled.textContent).toBe('n');
+    expect([...labelled.getElementsByTagName('objecttag')].find((t) => t.getAttribute('Name') === 'bracketusage')!.textContent).toBe('n');
     const back = readCdxml(xml).doc;
     expect([...back.shapes.values()].map((s) => s.repeat).filter(Boolean)).toEqual(['n']);
     expect(repeatGroups(back)[0].inner).toHaveLength(2);
@@ -74,5 +74,28 @@ describe('repeat groups', () => {
     expect(grp.getAttribute('BracketUsage')).toBe('MultipleGroup');
     expect(grp.getAttribute('RepeatCount')).toBe('3');
     expect([...readCdxml(xml).doc.shapes.values()].map((s) => s.repeat).filter(Boolean)).toEqual(['3']);
+  });
+
+  it("keeps a count's own colour, weight and size, and writes ChemDraw's hidden copy of it", () => {
+    const { doc } = butane('4');
+    const br = [...doc.shapes.values()].find((s) => s.repeat)!;
+    doc.edit('Look', () => doc.updateShape(br.id, { repeatLook: { color: '#2e4ec7', face: 1, size: 13.5 } }));
+    const xml = writeCdxml(doc);
+    const dom = new DOMParser().parseFromString(xml, 'text/xml');
+    const g = [...dom.getElementsByTagName('graphic')].find((e) => e.getAttribute('BracketUsage') === 'MultipleGroup')!;
+    const tags = [...g.getElementsByTagName('objecttag')];
+    expect(tags.map((t) => t.getAttribute('Name'))).toEqual(['bracketusage', 'parameterizedBracketLabel']);
+    const runs = tags.map((t) => t.getElementsByTagName('s')[0]);
+    for (const r of runs) {
+      expect(r.textContent).toBe('4');
+      expect(r.getAttribute('face')).toBe('1');
+      expect(r.getAttribute('size')).toBe('13.50');
+      expect(r.getAttribute('color')).not.toBe('0');
+    }
+    expect(tags[1].getAttribute('Visible')).toBe('no');
+    const back = [...readCdxml(xml).doc.shapes.values()].find((s) => s.repeat)!;
+    expect(back.repeatLook).toEqual({ color: '#2e4ec7', face: 1, size: 13.5 });
+    // a plain count reads back with no look of its own
+    expect([...readCdxml(writeCdxml(butane('4').doc)).doc.shapes.values()].find((s) => s.repeat)!.repeatLook).toBeUndefined();
   });
 });

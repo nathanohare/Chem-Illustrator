@@ -1,4 +1,5 @@
-// Format ▸ Align ▸ Arrange in a Grid…: a small window saying how many things are picked, with
+import { foldIntoInfo } from './info-tip';
+// Format ▸ Align ▸ Arrange in a Grid…: a small window (how many things are picked, in its title row), with
 // rows × columns and the spacing between rows and between columns, and a live preview beside it.
 
 export interface GridPick {
@@ -19,20 +20,21 @@ export function askGridLayout(n: number, start: GridPick, preview: (p: GridPick)
     d.setAttribute('aria-label', 'Arrange in a grid');
     const form = document.createElement('form');
     form.method = 'dialog';
-    form.innerHTML = `<h2>Arrange in a Grid</h2>
+    form.innerHTML = `<h2>Arrange in a Grid <span class="grid-pick-count muted"></span></h2>
       <div class="grid-pick-body">
         <div class="grid-pick-fields">
-          <p class="grid-pick-count"></p>
           <label class="ask-row"><span>Rows</span><input name="rows" type="number" min="1" step="1" /><span></span></label>
           <label class="ask-row"><span>Columns</span><input name="cols" type="number" min="1" step="1" /><span></span></label>
           <label class="ask-row"><span>Row spacing</span><input name="rowGap" type="number" min="0" step="1" /><span class="muted">pt</span></label>
           <label class="ask-row"><span>Column spacing</span><input name="colGap" type="number" min="0" step="1" /><span class="muted">pt</span></label>
-          <p class="muted small">Placed left to right, then down. Compound numbers move with their structures.</p>
+          <p class="muted small grid-pick-help">Placed left to right, then down. Compound numbers move with their structures.</p>
         </div>
         <div class="grid-pick-preview" aria-label="Preview"></div>
       </div>
       <p class="ask-buttons"><button type="button" data-act="cancel">Cancel</button> <button type="submit" class="primary">Arrange</button></p>`;
-    form.querySelector('.grid-pick-count')!.textContent = `${n} ${n === 1 ? 'item' : 'items'} selected`;
+    // the count sits in the title row, not on a line of its own
+    form.querySelector('.grid-pick-count')!.textContent = `${n} ${n === 1 ? 'item' : 'items'}`;
+    foldIntoInfo(form.querySelector('.grid-pick-help'), form.querySelector('h2'));
     const input = (name: string) => form.querySelector<HTMLInputElement>(`input[name=${name}]`)!;
     const rows = input('rows'), cols = input('cols'), rowGap = input('rowGap'), colGap = input('colGap');
     rows.max = cols.max = String(n);

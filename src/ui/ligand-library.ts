@@ -4,6 +4,7 @@
 // and its PubChem record; Use Template picks its drawing as the tool, to click on a metal (or
 // anywhere) in the drawing. The window stays open beside the drawing while you work.
 
+import { withInfo } from './info-tip';
 import { LIGAND_FAMILIES, bondingType, denticity, familyOf, searchLigands, type Ligand } from '../chem/ligands';
 import { templateById } from '../chem/templates';
 import { templateIcon } from './template-icons';
@@ -92,13 +93,13 @@ export class LigandLibraryWindow {
     this.count = el('span', { className: 'muted' });
     this.useBtn = button('Use Template', 'Pick the ligand\'s drawing as the tool, then click a metal in the drawing to put it on (or click anywhere). Double-click a ligand, or press Enter, to do the same and close this window', () => this.use(false), true);
     d.append(
-      el('div', { className: 'refs-head' }, el('h2', { textContent: 'Ligand Library' }), this.search),
+      el('div', { className: 'refs-head' }, withInfo(el('h2', { textContent: 'Ligand Library' }), 'Each abbreviation also works typed as a label: type dppf, XPhos or salen on a metal\'s bond.'), this.search),
       el('div', { className: 'kb-body lig-body' }, this.families, this.grid, this.details),
       el('div', { className: 'refs-buttons' },
-        el('span', { className: 'muted lig-hint', textContent: 'Each abbreviation also works typed as a label: type dppf, XPhos or salen on a metal\'s bond.' }),
+        el('span', { className: 'lig-hint' }),
         el('span', { className: 'refs-edit' }, this.count, this.useBtn, button('Close', '', () => d.close()))),
     );
-    d.addEventListener('close', () => { d.remove(); this.d = null; });
+    d.addEventListener('close', () => { d.remove(); this.d = null; this.cards.clear(); });
     document.body.append(d);
     this.showFamilies();
     this.fill();
@@ -122,18 +123,30 @@ export class LigandLibraryWindow {
     );
   }
 
+  /** Each ligand's card, made the first time it is shown and kept while the window is open (a search then only picks cards). */
+  private cards = new Map<string, HTMLElement>();
+
+  private card(l: Ligand): HTMLElement {
+    const had = this.cards.get(l.id);
+    if (had) return had;
+    const t = templateById(l.tpl);
+    const card = el('div', { className: 'lig-card', title: `${l.name}\n${bondingType(l)}${l.drawn ? `\nDrawn as ${shownAs(l)}` : ''}` });
+    card.dataset.id = l.id;
+    card.setAttribute('role', 'option');
+    card.setAttribute('aria-label', `${shownAs(l)}: ${l.name}`);
+    const pic = el('div', { className: 'lig-pic' });
+    { const icon = t ? svgNode(templateIcon(t, CARD)) : null; if (icon) pic.append(icon); }
+    card.append(pic, el('span', { className: 'lig-abbr', textContent: shownAs(l) }));
+    this.cards.set(l.id, card);
+    return card;
+  }
+
   private fill(): void {
     this.shown = searchLigands(this.search.value, this.family);
     const cards = this.shown.map((l) => {
-      const t = templateById(l.tpl);
-      const card = el('div', { className: 'lig-card' + (l === this.current ? ' on' : ''), title: `${l.name}\n${bondingType(l)}${l.drawn ? `\nDrawn as ${shownAs(l)}` : ''}` });
-      card.dataset.id = l.id;
-      card.setAttribute('role', 'option');
+      const card = this.card(l);
+      card.classList.toggle('on', l === this.current);
       card.setAttribute('aria-selected', String(l === this.current));
-      card.setAttribute('aria-label', `${shownAs(l)}: ${l.name}`);
-      const pic = el('div', { className: 'lig-pic' });
-      { const icon = t ? svgNode(templateIcon(t, CARD)) : null; if (icon) pic.append(icon); }
-      card.append(pic, el('span', { className: 'lig-abbr', textContent: shownAs(l) }));
       return card;
     });
     this.grid.replaceChildren(...(cards.length ? cards : [el('p', { className: 'muted kb-empty', textContent: this.search.value.trim() ? `No ligand matches “${this.search.value.trim()}”. Try part of its name, or another family.` : 'No ligands in this family.' })]));

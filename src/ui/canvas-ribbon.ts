@@ -1,9 +1,9 @@
 // The Canvas ribbon: a compact ribbon over the drawing with the chemistry commands that have no
 // toolbox of their own, or that are hard to find in the menus. It is a tabbed ribbon like the
 // other modes' (so collapsing, fitting a narrow window, command search and Customize work the
-// same), with two rows of buttons under the tabs. Only group names and the major commands carry
-// words; the rest are pictures, named in their tooltips. Settings ▸ Ribbon offers the one-row
-// Simplified look and where the group names go (on top, along the dividers, or none).
+// same), with two rows of buttons under the tabs. Only the major commands carry words (the groups
+// have no names shown); the rest are pictures, named in their tooltips. Settings ▸ Ribbon offers
+// the one-row Simplified look.
 //
 // Tabs for one kind of object (Arrow, Ring, Bond) come up beside the others while that kind is
 // being drawn or is selected, and the ribbon switches to them; it goes back to the tab you were
@@ -14,7 +14,12 @@
 export type RibbonItem =
   | { cmd: string; label: string; major?: boolean; tip?: string }
   | { tool: string; label: string; major?: boolean; tip?: string };
-export interface RibbonGroup { name: string; items: RibbonItem[]; gallery?: 'favorites' }
+/**
+ * A group: its buttons, or one built specially: the Format Favorites gallery, the Clipboard (Paste,
+ * Cut, Copy and Format Painter, as the Spreadsheet's Home tab has them), or the Font and Paragraph
+ * groups (every button and box of the text formatting bar, which hides while they show).
+ */
+export interface RibbonGroup { name: string; items: RibbonItem[]; gallery?: 'favorites'; special?: 'clipboard' | 'font' | 'paragraph' }
 export interface RibbonTab { id: string; title: string; groups: RibbonGroup[]; context?: ContextKind }
 export type ContextKind = 'arrow' | 'ring' | 'bond';
 
@@ -25,6 +30,10 @@ const t = (tool: string, label: string, major = false): RibbonItem => ({ tool, l
 export const CANVAS_TABS: RibbonTab[] = [
   {
     id: 'home', title: 'Home', groups: [
+      // first, as the Spreadsheet's Home tab starts
+      { name: 'Clipboard', items: [], special: 'clipboard' },
+      { name: 'Font', items: [], special: 'font' },
+      { name: 'Paragraph', items: [], special: 'paragraph' },
       // (filled by the shared Format Favorites gallery, as on every mode's Home tab)
       { name: 'Format Favorites', items: [], gallery: 'favorites' },
       { name: 'Schemes', items: [c('smart-scheme', 'Smart Scheme', true), c('catalytic-cycle', 'Catalytic Cycle', true), c('convert-smart-scheme', 'Convert to Smart Scheme'), c('stoichiometry-table', 'Stoichiometry Table…'), c('check-balance', 'Check Balance…'), c('map-atoms', 'Map Atoms…')] },
@@ -78,7 +87,8 @@ export const CANVAS_TABS: RibbonTab[] = [
   {
     id: 'bond', title: 'Bond', context: 'bond', groups: [
       { name: 'Order', items: [t('bond-single', 'Single'), t('bond-double', 'Double'), t('bond-triple', 'Triple'), t('bond-dative', 'Dative'), t('bond-wavy', 'Wavy'), t('bond-bold', 'Bold')] },
-      { name: 'Stereo', items: [t('bond-wedge', 'Wedge'), t('bond-hashWedge', 'Hashed Wedge'), t('bond-hash', 'Hashed')] },
+      { name: 'Stereo', items: [t('bond-wedge', 'Wedge'), t('bond-hashWedge', 'Hashed Wedge'), t('bond-hollowWedge', 'Hollow Wedge'), t('bond-wavyWedge', 'Wavy Wedge'), t('bond-hash', 'Hashed')] },
+      { name: 'Non-Covalent', items: [t('bond-hydrogen', 'Hydrogen Bond'), t('bond-ionic', 'Ionic Bond')] },
       { name: 'Highlight', items: [c('centre-highlight', 'Center Highlight on Double Bonds')] },
     ],
   },
@@ -96,6 +106,10 @@ export interface CanvasRibbonHost {
   hasTool(name: string): boolean;
   /** A command's or tool's picture (24×24 SVG), if it has one. */
   icon(item: RibbonItem): string | undefined;
+  /** Fill the Font and Paragraph groups' rows with the text formatting bar's buttons and boxes. */
+  textGroups(font: HTMLElement, paragraph: HTMLElement): void;
+  /** Paste's ▾: its menu, under the button. */
+  pasteMenu(at: DOMRect): void;
 }
 
 const esc = (s: string) => s.replace(/[&<>"]/g, (ch) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[ch]!);
@@ -160,13 +174,22 @@ export class CanvasRibbon {
     p.hidden = tab.id !== 'home';
     p.setAttribute('role', 'tabpanel');
     if (tab.context) p.classList.add('cr-ctx-panel');
+    const text: Partial<Record<'font' | 'paragraph', HTMLElement>> = {};
     for (const g of tab.groups) {
       const items = g.items.filter((it) => !('tool' in it) || this.host.hasTool(it.tool));
-      if (!items.length && !g.gallery) continue;
+      if (!items.length && !g.gallery && !g.special) continue;
       const group = document.createElement('div');
       group.className = 'rb-group';
       const row = document.createElement('div');
       row.className = 'rb-row cr-rows';
+      if (g.special === 'clipboard') this.clipboard(row);
+      if (g.special === 'font' || g.special === 'paragraph') {
+        row.className = 'rb-row cr-font';
+        // (a click in them keeps text being typed open, as the Text Formatting toolbox does, and so
+        // does a click on the button they fold into in a narrow window)
+        group.dataset.keepsTyping = '';
+        text[g.special] = row;
+      }
       if (g.gallery) {
         // the gallery fills its host itself (main.ts mounts every [data-favorites-gallery])
         row.className = 'rb-row cr-gallery';
@@ -179,10 +202,45 @@ export class CanvasRibbon {
       const label = document.createElement('div');
       label.className = 'rb-label';
       label.textContent = g.name;
-      group.append(label, row);
+      group.append(row, label);
       p.append(group);
     }
+    if (text.font && text.paragraph) this.host.textGroups(text.font, text.paragraph);
     return p;
+  }
+
+  /** Paste (with its ▾), then Cut, Copy and Format Painter in a column: as the Spreadsheet's Clipboard group. */
+  private clipboard(row: HTMLElement): void {
+    row.className = 'rb-row cr-clipboard';
+    const btn = (cmd: string, html: string, title: string, cls = '') => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      if (cls) b.className = cls;
+      b.dataset.cmd = cmd;
+      b.title = title;
+      b.innerHTML = html;
+      return b;
+    };
+    const paste = document.createElement('div');
+    paste.className = 'rb-col rb-paste';
+    const more = document.createElement('button');
+    more.type = 'button';
+    more.className = 'rb-paste-more';
+    more.textContent = '▾';
+    more.title = 'Paste options: Paste, or Paste SMILES (text on the clipboard read as structures)';
+    more.setAttribute('aria-label', 'Paste options');
+    more.setAttribute('aria-haspopup', 'menu');
+    more.addEventListener('click', () => this.host.pasteMenu(more.getBoundingClientRect()));
+    paste.append(btn('paste', '<span class="rb-icon">⎘</span>Paste', 'Paste (Ctrl+V): structures from ChemDraw, pictures or text', 'rb-big'), more);
+    const col = document.createElement('div');
+    col.className = 'rb-col';
+    col.append(
+      btn('cut', 'Cut', 'Cut (Ctrl+X)'),
+      btn('copy', 'Copy', 'Copy (Ctrl+C): structures go as a drawing for ChemDraw, Word and PowerPoint'),
+      btn('format-painter', '<span class="rb-lead" data-ic-lead="format-painter"></span>Format Painter', 'Format Painter: copy the look of the selection (or of the text where the caret is) to what you click next. Double-click to keep painting until Esc'),
+    );
+    col.lastElementChild!.setAttribute('aria-pressed', 'false');
+    row.append(paste, col);
   }
 
   private button(it: RibbonItem): HTMLButtonElement {
@@ -213,7 +271,7 @@ export class CanvasRibbon {
     this.el.hidden = !on;
   }
 
-  /** The look: two rows (Classic) or one (Simplified). (Where group names go is set on the body, for every ribbon.) */
+  /** The look: two rows (Classic) or one (Simplified). */
   setLook(look: RibbonLook): void {
     this.el.classList.toggle('cr-classic', look === 'classic');
     this.el.classList.toggle('cr-simple', look === 'simple');

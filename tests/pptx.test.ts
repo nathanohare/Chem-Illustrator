@@ -230,5 +230,18 @@ describe('sorting a slide for PowerPoint', () => {
     expect(parts.texts.length).toBe(1);
     expect(parts.drawings[0].captions.size).toBe(0);
   });
+
+  it('keeps a linked compound number under its structure as text, so its link works', () => {
+    const doc = new Doc();
+    doc.bulk(() => {
+      ring(doc, 100, 100);
+      doc.addCaption({ x: 95, y: 150, runs: [{ text: '7', link: '#slide=5' }], justify: 'left' });
+      doc.addCaption({ x: 95, y: 70, runs: [{ text: '8' }], justify: 'left' });
+    });
+    const parts = splitSlide(doc);
+    expect(parts.texts.map((c) => c.runs[0].text)).toEqual(['7']);
+    expect(parts.drawings).toHaveLength(1);
+    expect(parts.drawings[0].captions.size).toBe(1);
+  });
 });
 

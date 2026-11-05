@@ -2,6 +2,7 @@
 // steps and what comes in and goes out, in a table per loop; then how it looks. Species are
 // typed with _ for subscripts and ^ for superscripts (L_nPd^0); formula digits drop by themselves.
 
+import { foldIntoInfo } from './info-tip';
 import { CYCLE_PRESETS, STEP_NAMES, shortName, type CycleJoin, type CycleLook, type CycleLoop, type CycleSpec } from '../chem/cycles';
 
 export interface CycleChoice {
@@ -36,7 +37,7 @@ export function askCycle(given = 0, start?: CycleStart): Promise<CycleChoice | n
     const form = document.createElement('form');
     form.method = 'dialog';
     form.innerHTML = `<h2>Catalytic Cycle</h2>
-      <label class="ask-row"><span>Start from</span><select name="preset"></select></label>
+      <label class="ask-row"><span class="cycle-from">Start from</span><select name="preset"></select></label>
       <p class="muted cycle-blurb"></p>
       <div class="cycle-loops"></div>
       <p class="cycle-more"><button type="button" data-act="loop2"></button></p>
@@ -52,11 +53,13 @@ export function askCycle(given = 0, start?: CycleStart): Promise<CycleChoice | n
       <label class="ask-row"><span>Direction</span><select name="dir"><option value="cw">Clockwise</option><option value="acw">Counterclockwise</option></select></label>
       <label class="ask-row"><span>Step names</span><select name="names"><option value="short">Short (OA, TM, RE)</option><option value="full">In full (oxidative addition)</option><option value="none">None</option></select></label>
       <label class="ask-row ask-check"><input name="arrows" type="checkbox" /><span>What comes in and goes out on small curved arrows (otherwise written outside the loop)</span></label>
-      <p class="muted small">Type _ for a subscript and ^ for a superscript: L_nPd^0, Pd^{II}, X^−. Digits in formulas drop by themselves (ArB(OH)2). Afterwards, every species, name and arrow can be edited, or swapped for a drawn structure (then Chemistry ▸ Arrange ▸ Catalytic cycle tidies it again).</p>
+      <p class="muted small cycle-typing">Type _ for a subscript and ^ for a superscript: L_nPd^0, Pd^{II}, X^−. Digits in formulas drop by themselves (ArB(OH)2). Afterwards, every species, name and arrow can be edited, or swapped for a drawn structure (then Chemistry ▸ Arrange ▸ Catalytic cycle tidies it again).</p>
       <datalist id="cycle-steps">${STEP_NAMES.map((n) => `<option value="${n}"></option>`).join('')}</datalist>
       <p class="ask-buttons"><button type="button" data-act="cancel">Cancel</button> <button type="submit" class="primary">${start ? 'Apply' : 'Insert'}</button></p>`;
     const $ = <T extends Element>(q: string) => form.querySelector<T>(q)!;
     const presetSel = $<HTMLSelectElement>('select[name=preset]');
+    foldIntoInfo($('.cycle-blurb'), $('.cycle-from'));
+    foldIntoInfo($('.cycle-typing'), $('h2'));
     const groups: Record<string, string> = { classic: 'Classic cycles', two: 'Two loops or two pathways', blank: 'Blank' };
     for (const [g, label] of Object.entries(groups)) {
       const og = document.createElement('optgroup');

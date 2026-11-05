@@ -123,11 +123,20 @@ function evenHeights(ribbon: HTMLElement): void {
   if (panels.length < 2) return;
   ribbon.style.removeProperty('--rb-panel-h');
   let tallest = 0;
-  for (const p of panels) {
-    const was = p.hidden;
-    p.hidden = false;
-    tallest = Math.max(tallest, p.offsetHeight);
-    p.hidden = was;
+  if (ribbon.matches('.ribbon.tabbed, .doc-ribbon')) {
+    // the panels stack in a column, so they can all show at once and be measured in one layout
+    // (one at a time made a layout each, ~25 ms as the app starts)
+    const was = panels.map((p) => p.hidden);
+    for (const p of panels) p.hidden = false;
+    for (const p of panels) tallest = Math.max(tallest, p.offsetHeight);
+    panels.forEach((p, i) => { p.hidden = was[i]; });
+  } else {
+    for (const p of panels) {
+      const was = p.hidden;
+      p.hidden = false;
+      tallest = Math.max(tallest, p.offsetHeight);
+      p.hidden = was;
+    }
   }
   if (tallest) ribbon.style.setProperty('--rb-panel-h', `${tallest}px`);
 }
@@ -165,7 +174,7 @@ function paintArrow(b: HTMLElement): void {
   if (look && !collapsed) {
     const simple = look.simple();
     b.textContent = simple ? '˅' : '˄';
-    b.title = simple ? 'Classic ribbon: two rows of buttons, with group names' : 'Simplified ribbon: one row of buttons, for more room';
+    b.title = simple ? 'Classic ribbon: two rows of buttons' : 'Simplified ribbon: one row of buttons, for more room';
     b.title += '. Double-click a tab (or Ctrl+F1) to fold the ribbon to its tabs';
   } else {
     b.textContent = collapsed ? '˅' : '˄';
@@ -203,9 +212,27 @@ export function fitRibbons(): void {
   queued = true;
   requestAnimationFrame(() => {
     queued = false;
+    const showing = [...document.querySelectorAll<HTMLElement>('.ribbon')].filter((r) => r.offsetParent);
+    // each ribbon keeps its height while it is fitted and measured, so nothing else on the page
+    // moves in the layouts that takes: with every tab's buttons stacked up to be measured, the
+    // docks below were squeezed for a moment, took a scroll bar, and the toolbox at the left came
+    // back that much wider (the work jumped sideways each time a tab changed)
+    const pinned = showing.map(holdHeight);
     for (const row of rows()) if (row.offsetParent) fitRow(row);
-    for (const r of document.querySelectorAll<HTMLElement>('.ribbon')) if (r.offsetParent) evenHeights(r);
+    for (const r of showing) evenHeights(r);
+    pinned.forEach((release) => release());
   });
+}
+
+/** Keep a ribbon at the height it has now, its buttons free to be taller or shorter inside it, until the function returned is called. */
+function holdHeight(ribbon: HTMLElement): () => void {
+  const h = ribbon.offsetHeight;
+  ribbon.style.height = `${h}px`;
+  ribbon.classList.add('rb-measuring');
+  return () => {
+    ribbon.style.removeProperty('height');
+    ribbon.classList.remove('rb-measuring');
+  };
 }
 
 /** Keep the ribbons fitted: on resizing, on picking a ribbon tab, and when a ribbon or panel comes into view. */

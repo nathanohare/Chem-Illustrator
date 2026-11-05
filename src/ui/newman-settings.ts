@@ -33,8 +33,7 @@ export function newmanSettings(now: NewmanPrefs, preview: (look: NewmanLook, kin
     form.innerHTML = `<h2>Newman Projections</h2>
       <div class="ns-grid">
         <div>
-          <h3>Group colors</h3>
-          <p class="muted small">The groups on each atom are ranked by size (their A-value, the cyclohexane axial–equatorial free energy difference), largest to smallest. Groups the same size share a rank; ring bonds are not ranked.</p>
+          <h3 data-info="The groups on each atom are ranked by size (their A-value, the cyclohexane axial–equatorial free energy difference), largest to smallest. Groups the same size share a rank; ring bonds are not ranked.">Group colors</h3>
           <table class="ns-ranks"><thead><tr><th></th><th>Color</th><th>Bold</th><th>Italic</th><th>Color its bond</th></tr></thead>
             <tbody>${rankRow(0, 'Largest')}${rankRow(1, 'Middle')}${rankRow(2, 'Smallest')}</tbody></table>
           <p class="ns-presets"><button type="button" data-preset="red">Largest red</button> <button type="button" data-preset="rbb">Red, blue, black</button> <button type="button" data-preset="black">All black</button></p>

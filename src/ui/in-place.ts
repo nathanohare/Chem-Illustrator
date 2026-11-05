@@ -26,6 +26,8 @@ export interface InPlace {
   area(drawn: Rect | null): Rect;
   /** Before Done: false keeps drawing (the structure outgrew its figure and the user went back to it). */
   beforeDone?(c: Contents): Promise<boolean>;
+  /** Saving, switching tabs or closing while drawing: what beforeDone would ask, done without asking (a figure grows round its structures). */
+  fitNow?(c: Contents): void;
 }
 
 /** How far round a structure clicks still draw (when it isn't in a figure), in drawing points. */
@@ -34,4 +36,15 @@ export const PLACE_MARGIN = 36;
 /** Two views the same to within a pixel's rounding. */
 export function sameView(a: PlaceView, b: PlaceView): boolean {
   return Math.abs(a.scale - b.scale) <= 1e-4 * b.scale && Math.abs(a.ox - b.ox) < 0.75 && Math.abs(a.oy - b.oy) < 0.75;
+}
+
+/**
+ * What Esc does in the structure editor (a cell's, a document's in place, or the pop-out one):
+ * first it lets go of whatever the drawing tools hold (a selection, the highlight on the atom last
+ * drawn, text being typed, a drag); then it cancels, asking first when something was drawn, so a
+ * second Esc pressed out of habit never throws the drawing away.
+ */
+export function escapeAction(o: { toolsBusy: boolean; changed: boolean }): 'tools' | 'cancel' | 'ask' {
+  if (o.toolsBusy) return 'tools';
+  return o.changed ? 'ask' : 'cancel';
 }

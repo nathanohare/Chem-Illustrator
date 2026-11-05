@@ -17,6 +17,21 @@ const STEP = 1.25;
 
 export interface Recorded { doc: Doc; pic: Picture | null }
 
+type Box = { x1: number; y1: number; x2: number; y2: number };
+
+/**
+ * A figure's area grown round structures that reach past it, or null when they fit: `drawn` is
+ * what is drawn, `pic` its picture's box (with the margin round it). What is drawn up to the
+ * edges still fits; a grown area takes in the picture too, so nothing is cut off.
+ */
+export function outgrownFrame(fr: { x: number; y: number; w: number; h: number }, drawn: Box | null, pic: Box | null): { x: number; y: number; w: number; h: number } | null {
+  if (!drawn || !pic) return null;
+  if (drawn.x1 >= fr.x - 0.5 && drawn.y1 >= fr.y - 0.5 && drawn.x2 <= fr.x + fr.w + 0.5 && drawn.y2 <= fr.y + fr.h + 0.5) return null;
+  const all = { x1: Math.min(fr.x, pic.x1), y1: Math.min(fr.y, pic.y1), x2: Math.max(fr.x + fr.w, pic.x2), y2: Math.max(fr.y + fr.h, pic.y2) };
+  const r = (x: number) => Math.round(x * 100) / 100;
+  return { x: r(all.x1), y: r(all.y1), w: r(all.x2 - all.x1), h: r(all.y2 - all.y1) };
+}
+
 export class FigurePictures {
   private recorded = new WeakMap<Contents, { style: DocStyle; r: Recorded }>();
   private bitmaps = new Map<string, HTMLCanvasElement>();

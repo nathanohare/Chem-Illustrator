@@ -514,11 +514,26 @@ export function captionChemWarning(doc: Doc, c: Caption, m?: Measure): string | 
 /** The species' atoms placed around a point, for counting with the rest of a drawing. */
 export interface PlacedSpecies { graph: MiniGraph; x: number; y: number }
 
-/** These text boxes' species, each at the middle of its box (text boxes that aren't chemistry are left out). */
-export function placeSpecies(doc: Doc, caps: Iterable<Caption>, m: Measure = plainMeasure(doc)): PlacedSpecies[] {
+/**
+ * The species a text box over or under a reaction arrow names when the step's reagents are read
+ * (Copy Reaction as SMILES, Stoichiometry Table): such text stays text in the drawing's own formula
+ * and mass, but Me2SO over the arrow is DMSO to the step. Text set to Plain, or that isn't a
+ * compound (THF, −78 °C), is null.
+ */
+export function reagentSpecies(doc: Doc, c: Caption, m?: Measure): Species | null {
+  const r = captionReading(doc, c, m);
+  if (r.species || r.why !== 'arrow') return r.species;
+  return readSpecies(plainText(c.runs));
+}
+
+/**
+ * These text boxes' species, each at the middle of its box (text boxes that aren't chemistry are
+ * left out); with `reagents`, text over and under arrows is read too (reagentSpecies).
+ */
+export function placeSpecies(doc: Doc, caps: Iterable<Caption>, m: Measure = plainMeasure(doc), reagents = false): PlacedSpecies[] {
   const out: PlacedSpecies[] = [];
   for (const c of caps) {
-    const sp = captionSpecies(doc, c, m);
+    const sp = reagents ? reagentSpecies(doc, c, m) : captionSpecies(doc, c, m);
     if (!sp) continue;
     const b = m.captionBox(c);
     out.push({ graph: sp.graph, x: (b.x1 + b.x2) / 2, y: (b.y1 + b.y2) / 2 });

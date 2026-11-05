@@ -13,6 +13,11 @@ import { slideParts } from '../src/deck/animation';
 import { splitSlide } from '../src/deck/split-slide';
 import { AUTO_STEPS_DEFAULTS, markPieces, stepAnims, stepClicks, stepPieces } from '../src/deck/auto-steps';
 import { buildOffer } from '../src/ui/build-hint';
+import { Deck } from '../src/deck/deck';
+import { writePptx, type PptxOptions } from '../src/io/pptx-write';
+import { readPptx } from '../src/io/pptx-read';
+import { writeCdxml } from '../src/io/cdxml-write';
+import { readCdxml } from '../src/io/cdxml';
 
 const all = (): Selection => ({ atoms: new Set(), bonds: new Set(), captions: new Set(), arrows: new Set(), shapes: new Set() });
 
@@ -75,6 +80,38 @@ describe('Auto-Animate Steps', () => {
     expect(split.drawings.every((d) => d.arrows.size <= 1)).toBe(true);
   });
 
+  it('keeps its pieces through CDXML and PowerPoint, so saving again still animates each step', async () => {
+    // (found in the 2026-11-03 review: the marks were lost on reopening, the pieces merged on the next save
+    // and both animations then pointed at the same picture)
+    const marked = (d: Doc) => [...d.atoms.values(), ...d.captions.values(), ...d.arrows.values()].map((x) => x.piece ?? 0).join(',');
+    const { doc, m } = scheme();
+    const pieces = stepPieces(doc, m, all())!;
+    doc.edit('mark', () => markPieces(doc, pieces));
+    const want = marked(doc);
+    // CDXML, and a second save of what came back
+    const once = readCdxml(writeCdxml(doc)).doc;
+    expect(marked(once)).toBe(want);
+    expect(marked(readCdxml(writeCdxml(once)).doc)).toBe(want);
+    // a marked piece unmarked is unmarked in the file too
+    const first = [...once.arrows.values()][0];
+    once.edit('unmark', () => { first.piece = undefined; });
+    expect([...readCdxml(writeCdxml(once)).doc.arrows.values()][0].piece).toBeUndefined();
+    // PowerPoint: each slide picture is CDXML, so the same marks come back and split the same way
+    const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52, 0, 0, 0, 40, 0, 0, 0, 30]);
+    const opts: PptxOptions = { async picture(d) { const b = d.bounds(); return b ? { png: PNG, svg: '<svg xmlns="http://www.w3.org/2000/svg"/>', box: b } : null; }, async svgToPng() { return PNG; } };
+    const deck = Deck.design(new Doc(), { w: 720, h: 405 });
+    const slide = deck.docOf(0);
+    slide.restoreContents(doc.contents());
+    const { anims } = stepAnims(slide, pieces, AUTO_STEPS_DEFAULTS, []);
+    const back = readPptx(await writePptx({ size: deck.size, master: deck.master, slides: [{ layout: 'blank', doc: slide, notes: '', anims }] }, opts)).slides[0];
+    const again = new Doc();
+    again.restoreContents(back.contents);
+    expect(splitSlide(again).drawings.length).toBe(splitSlide(slide).drawings.length);
+    const back2 = readPptx(await writePptx({ size: deck.size, master: deck.master, slides: [{ layout: 'blank', doc: again, notes: '', anims: back.anims }] }, opts)).slides[0];
+    const targets = (back2.anims ?? []).map((a) => JSON.stringify(a.target));
+    expect(new Set(targets).size).toBe(targets.length);
+  });
+
   it('brings each step on a click: its arrow wipes in the way it points, then its product', () => {
     const { doc, m } = scheme();
     const pieces = stepPieces(doc, m, all())!;
@@ -117,6 +154,49 @@ describe('Auto-Animate Steps', () => {
     expect(new Set(canvas!.keys.map((k) => k.id)).size).toBe(2);
     expect(anims.map((a) => (a.effect === 'camera' ? 'camera' : a.start))).toEqual(['click', 'after', 'camera', 'after', 'after']);
     expect(anims.find((a) => a.effect === 'camera')!.target.id).toBe(canvas!.keys[1].id);
+  });
+
+  it('on a copy of a canvas slide with its own route: the original keeps its keyframes, hidden from the show, in one undo step', () => {
+    const host = new Doc();
+    const d = Deck.blank(host);
+    d.attach();
+    d.addCanvasSlide();
+    const i = d.index;
+    const route = { keys: [{ id: 1, x: 0, y: 0, zoom: 1 }, { id: 2, x: 400, y: 0, zoom: 1 }, { id: 3, x: 800, y: 200, zoom: 1.5 }] };
+    d.setCanvas(route, 'Keyframes', i);
+    const { doc: made, m } = scheme();
+    d.docOf(i).restoreContents(made.contents());
+    const was = JSON.stringify(d.slides[i].canvas!.keys);
+    const count = d.slides.length;
+    // as the app does it
+    const sdoc = d.docOf(i);
+    const pieces = stepPieces(sdoc, m, all())!;
+    const copy = new Doc();
+    copy.style = { ...sdoc.style };
+    copy.restoreContents(sdoc.contents());
+    copy.edit('Auto-Animate Steps', () => markPieces(copy, pieces));
+    const out = stepAnims(copy, pieces, AUTO_STEPS_DEFAULTS, d.slides[i].anims ?? [], { data: d.slides[i].canvas!, size: d.size });
+    d.copyHidingOriginal(i, copy.contents(), { anims: out.anims, canvas: out.canvas }, 'Auto-Animate Steps');
+
+    expect(d.slides.length).toBe(count + 1);
+    expect(d.index).toBe(i + 1);
+    const [orig, built] = [d.slides[i], d.slides[i + 1]];
+    expect(orig.hidden).toBe(true);
+    expect(built.hidden).toBeUndefined();
+    expect(JSON.stringify(orig.canvas!.keys)).toBe(was);
+    expect(built.canvas!.keys.length).toBe(2);
+    expect(built.anims!.some((a) => a.effect === 'camera')).toBe(true);
+    // the original drawing is not split into pieces; the copy's is
+    expect([...d.docOf(i).atoms.values()].some((a) => a.piece !== undefined)).toBe(false);
+    expect([...d.docOf(i + 1).atoms.values()].every((a) => a.piece !== undefined)).toBe(true);
+
+    expect(d.undo()).toBe(true);
+    expect(d.slides.length).toBe(count);
+    expect(d.slides[i].hidden).toBeUndefined();
+    expect(JSON.stringify(d.slides[i].canvas!.keys)).toBe(was);
+    expect(d.redo()).toBe(true);
+    expect(d.slides[i].hidden).toBe(true);
+    expect(d.slides.length).toBe(count + 1);
   });
 
   it('finds nothing to build without a step', () => {
