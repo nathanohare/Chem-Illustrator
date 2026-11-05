@@ -34,6 +34,7 @@ import { chemPieces, showsChem } from '../sheet/cell-text';
 import { type TextRun, looksOf, lookOver, runsFrom, runsOf } from '../sheet/rich-text';
 import { DEFAULT_COL_W, DEFAULT_ROW_H, MAX_AUTO_ROW, structureHeight } from '../sheet/layout';
 import type { Contents } from '../model';
+import type { ExcelStyles } from '../sheet/workbook';
 import type { DocStyle } from '../style';
 import { applyTint } from '../colours';
 import { chartXml, chartAnchorXml, readChartXml, CT_CHART, REL_CHART, C_NS, CX_NS, CT_CHARTEX, REL_CHARTEX, addChartExStyle } from './xlsx-chart';
@@ -305,9 +306,20 @@ class Styles {
   private named = new Map<string, number>();
   private namedXfs = ['<xf numFmtId="0" fontId="0" fillId="0" borderId="0"/>'];
 
-  constructor(private theme: WorkbookTheme | null = null) {
+  /**
+   * `normal` is the look of style 0 (the workbook's Normal style, when it isn't the plain look
+   * here), with its font as the file had it in `kept`.
+   */
+  constructor(private theme: WorkbookTheme | null = null, private normal: CellStyle = {}, kept: ExcelStyles = {}) {
     this.minor = themeOf(theme).minor;
-    this.fonts = [`<font><sz val="11"/><color theme="1"/><name val="${xml(this.minor)}"/><family val="2"/><scheme val="minor"/></font>`];
+    this.fonts = [Object.keys(normal).length && kept.normalFont ? kept.normalFont : `<font><sz val="11"/><color theme="1"/><name val="${xml(this.minor)}"/><family val="2"/><scheme val="minor"/></font>`];
+    if (Object.keys(normal).length) {
+      // style 0 (and the Normal style's base format) in that look: the plain look is a style of its own
+      this.byKey.clear();
+      this.xfs.length = 0;
+      this.xf(normal);
+      this.namedXfs[0] = this.xfs[0].replace(/ xfId="\d+"/, '');
+    }
   }
 
   private fills = ['<fill><patternFill patternType="none"/></fill>', '<fill><patternFill patternType="gray125"/></fill>'];
@@ -363,7 +375,8 @@ class Styles {
 
   /** The font, fill and border numbers for a look. */
   private parts(s: CellStyle): { font: number; fill: number; border: number } {
-    const font = s.bold || s.italic || s.underline || s.color || s.font || s.size
+    const fontLook = (l: CellStyle) => JSON.stringify([!!l.bold, !!l.italic, !!l.underline, l.color, l.font, l.size]);
+    const font = fontLook(s) !== fontLook(this.normal)
       ? this.index(this.fonts, `<font>${s.bold ? '<b/>' : ''}${s.italic ? '<i/>' : ''}${s.underline ? '<u/>' : ''}<sz val="${s.size ?? 11}"/>` +
         `${s.color ? `<color rgb="FF${hex6(s.color)}"/>` : '<color theme="1"/>'}<name val="${xml(s.font ?? this.minor)}"/><family val="2"/>${s.font ? '' : '<scheme val="minor"/>'}</font>`)
       : 0;
@@ -517,7 +530,7 @@ export async function writeXlsx(book: Workbook, deps: XlsxPictures, opts: { macr
 async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: boolean }): Promise<Uint8Array> {
   const pkg = new Package();
   const vba = opts.macros ? book.macros : null;
-  const styles = new Styles(book.theme);
+  const styles = new Styles(book.theme, book.normalStyle, book.excelStyles);
   const strings = new Strings(themeOf(book.theme).minor);
   const model: Model = { app: 'Chem Illustrator', version: 1, drawingStyle: book.drawingStyle, sheets: [], autoChem: book.autoChem, ...(book.customViews.length ? { customViews: book.customViews } : {}), ...(book.queries.length ? { queries: book.queries } : {}) };
   const sheetEntries: string[] = [];
@@ -645,7 +658,8 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
         if (entry) ms.cells.push(entry);
         // a structure's SMILES is in its cell, hidden under the picture (the format ;;; shows nothing)
         const xf = styles.xf(cell?.structure ? { ...style, numFmt: HIDDEN } : style);
-        const sAttr0 = xf ? ` s="${xf}"` : '';
+        // a cell in style 0 in a formatted column says so (some programs give a cell with no style its column's)
+        const sAttr0 = xf ? ` s="${xf}"` : s.colStyles.has(c) && styles.xf(s.colStyles.get(c)) ? ' s="0"' : '';
         const dt = dataTableAt.get(k);
         const blockRef = arrayRef ?? legacyRef;
         const f = dt ? dataTableXml(dt) : formula === null ? '' : blockRef ? `<f t="array" ref="${blockRef}">${xml(formula)}</f>` : `<f>${xml(formula)}</f>`;
@@ -1024,8 +1038,21 @@ const BORDER_STYLES: Record<string, BorderStyle> = {
   dashDot: 'dashed', mediumDashDot: 'dashed', dashDotDot: 'dotted', mediumDashDotDot: 'dashed', slantDashDot: 'dashed', dotted: 'dotted',
 };
 
-/** The cell formats of a file (cellXfs), as cell styles. */
-function readStyles(doc: Document | null, theme: string[]): (CellStyle | undefined)[] {
+/** The parts of a font Excel writes, kept from the Normal style's (font 0) to write it back. */
+const FONT_PARTS = new Set(['b', 'i', 'strike', 'condense', 'extend', 'outline', 'shadow', 'u', 'vertAlign', 'sz', 'color', 'name', 'family', 'charset', 'scheme']);
+
+/** A font element as written again here (its known parts and their values only). */
+function fontXml(f: Element): string {
+  return `<font>${Array.from(f.children).filter((k) => FONT_PARTS.has(k.localName)).map((k) =>
+    `<${k.localName}${Array.from(k.attributes).filter((a) => !a.prefix && /^(val|rgb|theme|indexed|tint|auto)$/.test(a.name)).map((a) => ` ${a.name}="${xmlAttr(a.value)}"`).join('')}/>`).join('')}</font>`;
+}
+
+/**
+ * The cell formats of a file (cellXfs), as cell styles: fonts as they show (a cell in the theme's
+ * body font at 11 pt has no font or size of its own here). `faces` are the theme's fonts; the
+ * Normal style's font as written goes in `kept`.
+ */
+function readStyles(doc: Document | null, theme: string[], faces: { minor: string; major: string } = { minor: 'Calibri', major: 'Calibri Light' }, kept: ExcelStyles = {}): (CellStyle | undefined)[] {
   if (!doc) return [];
   const root = doc.documentElement;
   const formats = new Map<number, string>(Object.entries(BUILTIN_FORMATS).map(([k, v]) => [Number(k), v]));
@@ -1034,7 +1061,9 @@ function readStyles(doc: Document | null, theme: string[]): (CellStyle | undefin
   const val = (el: Element, name: string) => kid(el, name)?.getAttribute('val');
   const on = (el: Element, name: string) => { const k = kid(el, name); return !!k && k.getAttribute('val') !== '0' && k.getAttribute('val') !== 'false' && k.getAttribute('val') !== 'none'; };
   const base = fontEls[0];
-  const baseName = base ? val(base, 'name') ?? 'Calibri' : 'Calibri';
+  // a font in the theme's scheme shows the theme's font, whatever name it was written with
+  const faceOf = (f: Element) => (val(f, 'scheme') === 'minor' ? faces.minor : val(f, 'scheme') === 'major' ? faces.major : val(f, 'name') ?? undefined);
+  const baseFace = (base && faceOf(base)) || faces.minor;
   const baseSize = base ? Number(val(base, 'sz') ?? 11) : 11;
   const fonts: CellStyle[] = fontEls.map((f) => {
     const st: CellStyle = {};
@@ -1042,12 +1071,12 @@ function readStyles(doc: Document | null, theme: string[]): (CellStyle | undefin
     if (on(f, 'i')) st.italic = true;
     if (on(f, 'u')) st.underline = true;
     const sz = Number(val(f, 'sz') ?? baseSize);
-    if (sz !== baseSize || baseSize !== 11) st.size = sz === 11 ? undefined : sz;
+    if (sz !== 11 && sz > 0) st.size = sz;
     const color = readColour(kid(f, 'color'), theme);
     if (color && color !== '#000000') st.color = color;
-    const name = val(f, 'name');
+    const face = faceOf(f) || baseFace;
     // the theme's body font is no font of the cell's own
-    if (name && name !== baseName && name !== 'Calibri' && val(f, 'scheme') !== 'minor') st.font = name;
+    if (face.toLowerCase() !== faces.minor.toLowerCase()) st.font = face;
     return st;
   });
   const fills: (string | undefined)[] = kids(kid(root, 'fills'), 'fill').map((f) => {
@@ -1071,7 +1100,7 @@ function readStyles(doc: Document | null, theme: string[]): (CellStyle | undefin
     const def = cellStyleNamed(cs.getAttribute('name') ?? '') ?? CELL_STYLES.find((d) => cs.getAttribute('builtinId') !== null && d.builtinId === Number(cs.getAttribute('builtinId')));
     if (def && def.name !== 'Normal') named.set(Number(cs.getAttribute('xfId') ?? -1), def.name);
   }
-  return kids(kid(root, 'cellXfs'), 'xf').map((x) => {
+  const xfLook = (x: Element): CellStyle | undefined => {
     const st: CellStyle = { ...fonts[Number(x.getAttribute('fontId') ?? 0)] };
     const styleName = named.get(Number(x.getAttribute('xfId') ?? 0));
     if (styleName) st.cellStyle = styleName;
@@ -1100,7 +1129,12 @@ function readStyles(doc: Document | null, theme: string[]): (CellStyle | undefin
     if (prot?.getAttribute('locked') === '0' || prot?.getAttribute('locked') === 'false') st.unlocked = true;
     if (isOn(prot?.getAttribute('hidden'))) st.formulaHidden = true;
     return Object.keys(st).some((k) => (st as Record<string, unknown>)[k] !== undefined) ? st : undefined;
-  });
+  };
+  const xfs = kids(kid(root, 'cellXfs'), 'xf').map(xfLook);
+  // the Normal style's font as written, when cells with no format of their own don't look as they do here
+  const font0 = fontEls[Number(kids(kid(root, 'cellXfs'), 'xf')[0]?.getAttribute('fontId') ?? 0)];
+  if (xfs[0] && font0) kept.normalFont = fontXml(font0);
+  return xfs;
 }
 
 /** The theme's colours, in the order cell formats number them (light 1, dark 1, light 2, dark 2, accents…). */
@@ -1171,7 +1205,7 @@ function cellRuns(runs: FileRun[] | undefined, style: CellStyle | undefined, min
   const out: TextRun[] = runs.map((r) => {
     const l = r.look;
     if (!l) return { text: r.text };
-    const font = l.font && !l.minor && l.font !== (style?.font ?? minorFont) && !(l.font === 'Calibri' && !style?.font) ? l.font : undefined;
+    const font = l.font && !l.minor && l.font !== (style?.font ?? minorFont) ? l.font : undefined;
     const color = l.color && l.color !== (style?.color ?? '#000000') ? l.color : undefined;
     return {
       text: r.text,
@@ -1231,9 +1265,10 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
   const theme = readTheme(themeDoc);
   const workbookTheme = readWorkbookTheme(themeDoc);
   const stylesDoc = relTarget(RELS.styles) ? pkg.xml(relTarget(RELS.styles)!) : null;
-  const xfs = readStyles(stylesDoc, theme);
-  // the workbook's own font (the Normal style's), which a run of rich text in it isn't set apart by
-  const baseFont = kid(kids(kid(stylesDoc?.documentElement ?? null, 'fonts'), 'font')[0] ?? null, 'name')?.getAttribute('val') ?? themeOf(workbookTheme).minor;
+  const excelStyles: ExcelStyles = {};
+  const xfs = readStyles(stylesDoc, theme, themeOf(workbookTheme), excelStyles);
+  // the font cells show with none of their own (the theme's body font), which a run of rich text in one isn't set apart by
+  const baseFont = themeOf(workbookTheme).minor;
   const colourOf = (el: Element | null) => readColour(el, theme);
   const dxfs = readDxfs(stylesDoc, colourOf);
   const personsPath = relTarget(NOTES_REL.persons);
@@ -1262,6 +1297,9 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
   const names = sheetEls.map((s, i) => s.getAttribute('name') || `Sheet${i + 1}`);
   const book = new Workbook(names);
   book.date1904 = date1904;
+  // the Normal style, when cells with no format of their own don't look as they do here
+  book.normalStyle = xfs[0];
+  if (Object.keys(excelStyles).length) book.excelStyles = excelStyles;
   const activeTab = Number(kid(root, 'bookViews', 'workbookView')?.getAttribute('activeTab') ?? 0);
   if (sheetEls.some((s) => s.getAttribute('state') === 'hidden' || s.getAttribute('state') === 'veryHidden')) notKept.add('hidden sheets (shown here)');
   leftOut.workbook(pkg, wbPath, sheetEls.map((el) => rels.get(rAttr(el, 'id') ?? '')?.type ?? ''));
@@ -1370,14 +1408,14 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
         if (isOn(row.getAttribute('hidden'))) s.setRowHidden(r, true);
         const lv = Number(row.getAttribute('outlineLevel') ?? 0);
         if (lv > 0) s.setRowLevel(r, lv);
-        const rowStyle = isOn(row.getAttribute('customFormat')) && row.getAttribute('s') ? xfs[Number(row.getAttribute('s'))] : undefined;
         let colNo = -1;
         for (const c of kids(row, 'c')) {
           const at = c.getAttribute('r') ? parseRange(c.getAttribute('r')!) : null;
           colNo = at ? at.c1 : colNo + 1;
           const col = colNo;
           maxCol = Math.max(maxCol, col);
-          const style = c.hasAttribute('s') ? xfs[Number(c.getAttribute('s'))] : rowStyle;
+          // a cell's format is all of it, a plain one too (no s is style 0), where its column's or the Normal style would otherwise show
+          const style = xfs[Number(c.getAttribute('s') ?? 0)] ?? (s.colStyles.has(col) || book.normalStyle ? {} : undefined);
           const t = c.getAttribute('t') ?? 'n';
           const v = kid(c, 'v')?.textContent ?? null;
           const f = kid(c, 'f');

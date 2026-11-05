@@ -77,6 +77,12 @@ export interface CellStyle {
   formulaHidden?: boolean;
 }
 
+/** Parts of an Excel file's styles kept to save back with it (see xlsx.ts). */
+export interface ExcelStyles {
+  /** The Normal style's font (font 0) as the file had it. */
+  normalFont?: string;
+}
+
 /** The macros of an .xlsm workbook, as its file held them. */
 export interface Macros {
   /** xl/vbaProject.bin. */
@@ -396,11 +402,19 @@ export class Sheet {
     return normalizeFormula(c.input) !== normalizeFormula(shiftFormula(def.formula, row - def.firstRow, 0));
   }
 
-  /** The formatting that applies to a cell: its column's, then its property column's, then its own. */
+  /**
+   * The formatting that applies to a cell: its own when it has any (all of it, as a cell's format
+   * is in Excel), else its column's, else the workbook's Normal style; a property column's under it.
+   */
   styleAt(row: number, col: number): CellStyle | undefined {
     const def = this.colDefs.get(col);
     const defStyle = def && row >= def.firstRow ? def.style : undefined;
-    return mergeStyle(mergeStyle(this.colStyles.get(col), defStyle), this.cell(row, col)?.style);
+    return mergeStyle(defStyle, this.baseStyle(row, col));
+  }
+
+  /** A cell's own formatting, or what it takes when it has none (its column's, or the Normal style). */
+  private baseStyle(row: number, col: number): CellStyle | undefined {
+    return this.cell(row, col)?.style ?? this.colStyles.get(col) ?? this.wb.normalStyle;
   }
 
   /** What conditional formatting does to a cell (worked out once per change of values or rules). */
@@ -536,7 +550,9 @@ export class Sheet {
 
   /** Replace a cell (undefined or an empty cell removes it). */
   setCell(row: number, col: number, cell: Cell | undefined): void {
-    const next = isBlankCell(cell) ? undefined : cell;
+    // an empty cell set to the plain look stays where it would otherwise take its column's or the Normal style
+    const plain = !!cell?.style && (this.colStyles.has(col) || !!this.wb.normalStyle);
+    const next = isBlankCell(cell) && !plain ? undefined : cell;
     if (sameCell(this.cell(row, col), next)) return;
     this.put('cells', this.cells, keyOf(row, col), next);
     // the used area grows straight away (recalc works it out exactly), so later steps of the same edit reach this cell
@@ -549,7 +565,7 @@ export class Sheet {
     let style = old ? old.style : this.colStyles.get(col);
     const text = input.startsWith('=') ? normalizeFormula(input, this.wb.nameCase()) : input;
     const typed = readTyped(text);
-    if (typed.format && !this.styleAt(row, col)?.numFmt) style = patchStyleWith(style, { numFmt: typed.format });
+    if (typed.format && !this.styleAt(row, col)?.numFmt) style = patchStyleWith(style ?? this.baseStyle(row, col), { numFmt: typed.format });
     this.setCell(row, col, { input: text || undefined, style, link: old?.link });
   }
 
@@ -595,7 +611,7 @@ export class Sheet {
       for (let col = used.c1; col <= used.c2; col++) {
         const c = this.cell(row, col);
         if (!c && !small && !('fill' in patch || 'borders' in patch) && !this.defAt(row, col)) continue;
-        this.setCell(row, col, { ...c, style: patchStyleWith(c?.style, patch) });
+        this.setCell(row, col, { ...c, style: patchStyleWith(this.baseStyle(row, col), patch) });
       }
     }
   }
@@ -617,8 +633,8 @@ export class Sheet {
         }
         if (!Object.keys(sides).length) continue;
         const c = this.cell(row, col);
-        const borders = { ...c?.style?.borders, ...sides } as Partial<Record<Side, Border>>;
-        this.setCell(row, col, { ...c, style: patchStyleWith({ ...c?.style, borders: undefined }, { borders }) });
+        const borders = { ...this.baseStyle(row, col)?.borders, ...sides } as Partial<Record<Side, Border>>;
+        this.setCell(row, col, { ...c, style: patchStyleWith({ ...this.baseStyle(row, col), borders: undefined }, { borders }) });
       }
     }
   }
@@ -1271,6 +1287,13 @@ export class Workbook {
   externalLinks: KeptTree[] = [];
   /** What an Excel file said about the workbook that only Excel uses (its protection, calculation settings), kept to save back. */
   excel?: ExcelBookKept;
+  /**
+   * The look of cells with no formatting of their own, in a column with none: an Excel file's
+   * Normal style (Arial 10…), when it isn't this program's plain look (the theme's body font at 11 pt).
+   */
+  normalStyle: CellStyle | undefined = undefined;
+  /** What an Excel file's styles held that cells here don't (its Normal font as written), saved back with it. */
+  excelStyles: ExcelStyles | undefined = undefined;
   chem: ChemHost | null = null;
   /**
    * Text typed into cells with a formula in it (CH2Cl2, Pd(PPh3)4) is shown as chemistry without
