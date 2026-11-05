@@ -1,20 +1,24 @@
-// Peaks that are not the compound's: the NMR solvent's residual and water peaks (Knowledge Base ▸
-// NMR Solvents), green solvents as trace impurities (Knowledge Base ▸ Green Solvents in NMR,
-// CC BY), and any shift table the user imported into the Knowledge Base (their own copy of a
-// published impurity table). Check Data names extra peaks from these.
+// Peaks that are not the compound's: the NMR solvent's residual and water peaks, and any shift table
+// the user imported into the Knowledge Base (their own copy of a published impurity table). Check
+// Data names extra peaks from these.
 
-import { NMR_SOLVENTS } from '../../kb/data';
 import { cellNumbers, type Cell, type KbTable } from '../../kb/tables';
 import type { CheckNucleus, KnownPeak } from './check';
 
-/** NMR Solvents table formula for each solvent name the panel and peak lists use. */
-const FORMULA: Record<string, string> = {
-  CDCl3: 'CDCl3', 'DMSO-d6': '(CD3)2SO', 'acetone-d6': '(CD3)2CO', C6D6: 'C6D6', CD3CN: 'CD3CN', CD3OD: 'CD3OD',
-  D2O: 'D2O', CD2Cl2: 'CD2Cl2', 'THF-d8': 'C4D8O', 'toluene-d8': 'C6D5CD3', 'pyridine-d5': 'C5D5N',
-};
-/** Green Solvents in NMR table's solvent names. */
-const GREEN: Record<string, string> = {
-  CDCl3: 'CDCl3', 'DMSO-d6': 'DMSO-d6', 'acetone-d6': 'Acetone-d6', CD3CN: 'CD3CN', CD3OD: 'CD3OD', D2O: 'D2O', 'THF-d8': 'THF-d8', 'toluene-d8': 'Toluene-d8',
+/** Residual 1H and 13C peaks and the water (HDO/H2O) peak of the common deuterated solvents, ppm
+ *  (Fulmer et al., Organometallics 2010, 29, 2176; Gottlieb et al., J. Org. Chem. 1997, 62, 7512). */
+const SOLVENT_PEAKS: Record<string, { h: string; c: string | null; water: string | null }> = {
+  CDCl3: { h: '7.26', c: '77.16', water: '1.56' },
+  'acetone-d6': { h: '2.05', c: '29.84, 206.26', water: '2.84' },
+  'DMSO-d6': { h: '2.50', c: '39.52', water: '3.33' },
+  C6D6: { h: '7.16', c: '128.06', water: '0.40' },
+  CD3CN: { h: '1.94', c: '1.32, 118.26', water: '2.13' },
+  CD3OD: { h: '3.31, 4.87 (OH)', c: '49.00', water: '4.87' },
+  D2O: { h: '4.79', c: null, water: '4.79' },
+  CD2Cl2: { h: '5.32', c: '53.84', water: '1.52' },
+  'THF-d8': { h: '3.58, 1.72', c: '67.21, 25.31', water: '2.46' },
+  'toluene-d8': { h: '7.09, 7.01, 6.97, 2.08', c: '137.48, 128.87, 127.96, 125.13, 20.43', water: '0.43' },
+  'pyridine-d5': { h: '8.74, 7.58, 7.22', c: '150.35, 135.91, 123.87', water: null },
 };
 
 const nums = (c: Cell | undefined) => (c === undefined || c === null ? [] : cellNumbers(c));
@@ -22,21 +26,12 @@ const nums = (c: Cell | undefined) => (c === undefined || c === null ? [] : cell
 /** Solvent and impurity peaks for a solvent (case-insensitive name, as a peak list writes it).
  *  imported: the Knowledge Base's imported tables (JSON) or null. */
 export async function knownPeaks(solvent: string, nuc: CheckNucleus, imported: string | null = null): Promise<KnownPeak[]> {
-  const key = Object.keys(FORMULA).find((k) => k.toLowerCase() === solvent.toLowerCase()) ?? solvent;
+  const key = Object.keys(SOLVENT_PEAKS).find((k) => k.toLowerCase() === solvent.toLowerCase()) ?? solvent;
   const out: KnownPeak[] = [];
-  const row = NMR_SOLVENTS.rows.find((r) => r.formula === FORMULA[key]);
+  const row = SOLVENT_PEAKS[key];
   if (row) {
-    for (const v of nums(row[nuc === '1H' ? 'h' : 'c'])) out.push({ name: `Residual ${key}`, shift: v });
+    for (const v of nums(nuc === '1H' ? row.h : row.c)) out.push({ name: `Residual ${key}`, shift: v });
     if (nuc === '1H') for (const v of nums(row.water)) out.push({ name: 'Water', shift: v });
-  }
-  if (GREEN[key]) {
-    try {
-      const { GREEN_NMR_TABLE } = await import('../../kb/green-nmr');
-      for (const r of GREEN_NMR_TABLE.rows) {
-        if (r.solvent !== GREEN[key] || r.nucleus !== nuc) continue;
-        for (const v of nums(r[nuc === '1H' ? 'h' : 'c'])) out.push({ name: String(r.name).replace(/\s*\(.*\)$/, ''), shift: v });
-      }
-    } catch { /* the table could not load: solvent peaks only */ }
   }
   out.push(...importedPeaks(imported, key, nuc));
   return out;
@@ -54,7 +49,7 @@ export function importedPeaks(json: string | null, solvent: string, nuc: CheckNu
   const sol = solvent.toLowerCase();
   const sameSolvent = (v: Cell | undefined) => typeof v === 'string' && v.toLowerCase().replace(/[^a-z0-9]/g, '') === sol.replace(/[^a-z0-9]/g, '');
   for (const t of tables) {
-    if (!t || !Array.isArray(t.rows) || !Array.isArray(t.columns) || t.pdf) continue;
+    if (!t || !Array.isArray(t.rows) || !Array.isArray(t.columns)) continue;
     const shiftCols = t.columns.filter((c) => c.shift === nuc);
     if (!shiftCols.length) continue;
     // a column per solvent ("CDCl3", "1H CDCl3" ...): use only this solvent's
@@ -72,10 +67,10 @@ export function importedPeaks(json: string | null, solvent: string, nuc: CheckNu
 
 /** The residual peaks of a solvent (for referencing a measured spectrum). */
 export function residualPeaks(solvent: string, nuc: CheckNucleus): number[] {
-  const key = Object.keys(FORMULA).find((k) => k.toLowerCase() === solvent.toLowerCase()) ?? solvent;
-  const row = NMR_SOLVENTS.rows.find((r) => r.formula === FORMULA[key]);
+  const key = Object.keys(SOLVENT_PEAKS).find((k) => k.toLowerCase() === solvent.toLowerCase()) ?? solvent;
+  const row = SOLVENT_PEAKS[key];
   if (!row) return [];
-  const cell = row[nuc === '1H' ? 'h' : 'c'];
+  const cell = nuc === '1H' ? row.h : row.c;
   // methanol-d4's OH (4.87) moves; reference to the CHD2 line
-  return nums(typeof cell === 'string' ? cell.replace(/[\d.]+\s*\(OH\)/, '') : cell);
+  return nums(cell === null ? null : cell.replace(/[\d.]+\s*\(OH\)/, ''));
 }
