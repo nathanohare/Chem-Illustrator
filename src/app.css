@@ -3229,6 +3229,8 @@ body:is(.sheet-mode, .doc-mode):not(.floating-drawing):not(.split-view) #structu
 }
 #structure-start svg { width: 26px; height: 26px; color: var(--accent); }
 #structure-start:hover { border-color: var(--line); background: var(--accent-soft); }
+/* Dark Gray: the button sits on the dark dock itself (toolboxes sit on light cards), so it takes the menu bar's colors */
+:root[data-gray]:not([data-shadows='off']) #dock-left > #structure-start { --text: #eceef2; --line: #474b53; --accent-soft: #41464f; }
 
 /* the quick bar beside the menus (Quick Access Toolbar, src/ui/quick-bar.ts): plain icon buttons, a frame only on hover */
 .quick-bar { display: flex; align-items: center; gap: 1px; flex-shrink: 0; margin-right: 6px; }
