@@ -127,6 +127,22 @@ describe('protection (X10)', () => {
     expect(part(again, 'xl/worksheets/sheet1.xml')).toContain('<sheetProtection algorithmName="SHA-512"');
     expect(part(again, 'xl/workbook.xml')).toContain('lockStructure="1"');
   });
+
+  it('keeps a chart sheet\'s protection and view only in the form a worksheet takes', async () => {
+    const chartsheet = `<chartsheet xmlns="${MAIN}" xmlns:r="${R}"><sheetPr><tabColor rgb="FF00B050"/></sheetPr>` +
+      '<sheetViews><sheetView zoomScale="64" workbookViewId="0" zoomToFit="1"/></sheetViews><sheetProtection password="EBF6" content="1" objects="1"/></chartsheet>';
+    const bytes = excelBook([['Data', '<sheetData><row r="1"><c r="A1"><v>1</v></c></row></sheetData>']], {
+      // (the chart sheet's relationship is the workbook's second)
+      workbook: (list) => `<workbook xmlns="${MAIN}" xmlns:r="${R}"><sheets>${list}<sheet name="Chart" sheetId="2" r:id="rId2"/></sheets></workbook>`,
+      parts: [{ path: 'xl/chartsheets/sheet1.xml', xml: chartsheet, rel: `${R}/chartsheet`, target: 'chartsheets/sheet1.xml' }],
+    });
+    const { book } = await readXlsx(bytes);
+    const sheet = part(await writeXlsx(book, pictures), 'xl/worksheets/sheet2.xml');
+    expect(sheet).toContain('<sheetProtection password="EBF6" sheet="1" objects="1"/>');
+    expect(sheet).toContain('<tabColor rgb="FF00B050"/>');
+    expect(sheet).not.toContain('zoomToFit');
+    expect(sheet).not.toContain('content=');
+  });
 });
 
 describe('tables (X11)', () => {

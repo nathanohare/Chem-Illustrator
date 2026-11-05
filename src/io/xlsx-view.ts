@@ -309,14 +309,20 @@ export function mainXml(el: Element): string {
 export function readSheetKept(ws: Element): ExcelSheetKept | undefined {
   const out: ExcelSheetKept = {};
   const prot = kid(ws, 'sheetProtection');
-  if (prot) out.protection = mainXml(prot);
+  if (prot) {
+    // (a chart sheet's protection says content for what a worksheet's calls sheet)
+    const rename = ws.localName === 'chartsheet' ? (n: string) => (n === 'content' ? 'sheet' : n) : (n: string) => n;
+    const attrs = Array.from(prot.attributes).filter((a) => !a.namespaceURI && SHEET_PROTECTION.has(rename(a.name)))
+      .map((a) => ` ${rename(a.name)}="${xmlAttr(a.value)}"`).join('');
+    if (attrs) out.protection = `<sheetProtection${attrs}/>`;
+  }
   const ranges = kid(ws, 'protectedRanges');
   if (ranges && kids(ranges, 'protectedRange').length) out.protectedRanges = mainXml(ranges);
   const tab = kid(ws, 'sheetPr', 'tabColor');
   if (tab) out.tabColor = mainXml(tab);
   const sv = kid(ws, 'sheetViews', 'sheetView');
   if (sv) {
-    const attrs = keptAttrs(sv, (n) => !VIEW_OWN.has(n));
+    const attrs = keptAttrs(sv, (n) => VIEW_KEPT.has(n));
     if (attrs) out.viewAttrs = attrs;
     const pane = kid(sv, 'pane');
     const selection = kids(sv, 'selection').map(mainXml).join('');
@@ -332,9 +338,15 @@ export function readSheetKept(ws: Element): ExcelSheetKept | undefined {
   return Object.keys(out).length ? out : undefined;
 }
 
-/** sheetView's attributes this program writes itself. */
-const VIEW_OWN = new Set(['showGridLines', 'showRowColHeaders', 'showZeros', 'showOutlineSymbols', 'view', 'zoomScale', 'zoomScaleNormal',
-  'zoomScalePageLayoutView', 'zoomScaleSheetLayoutView', 'tabSelected', 'workbookViewId']);
+/**
+ * A worksheet's sheetView attributes kept from the file: those this program doesn't write itself
+ * (a chart sheet's view has others, which a worksheet's can't take).
+ */
+const VIEW_KEPT = new Set(['windowProtection', 'showFormulas', 'rightToLeft', 'showRuler', 'defaultGridColor', 'showWhiteSpace', 'topLeftCell', 'colorId']);
+/** sheetProtection's attributes on a worksheet (18.3.1.85). */
+const SHEET_PROTECTION = new Set(['password', 'algorithmName', 'hashValue', 'saltValue', 'spinCount', 'sheet', 'objects', 'scenarios',
+  'formatCells', 'formatColumns', 'formatRows', 'insertColumns', 'insertRows', 'insertHyperlinks', 'deleteColumns', 'deleteRows',
+  'selectLockedCells', 'sort', 'autoFilter', 'pivotTables', 'selectUnlockedCells']);
 /** calcPr's attributes kept from the file (this program writes calcId and fullCalcOnLoad). */
 const CALC_KEPT = new Set(['calcMode', 'fullPrecision', 'calcOnSave', 'concurrentCalc', 'concurrentManualCount', 'forceFullCalc', 'iterate', 'iterateCount', 'iterateDelta', 'refMode']);
 
