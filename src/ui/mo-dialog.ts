@@ -7,7 +7,7 @@
 // as you type.
 
 import { foldIntoInfo } from './info-tip';
-import { atomLevels, electronLook, MO_ATOMS, setElectrons, MO_PRESETS, moPlain, parseMarkup, toMarkup, toRich, type MoColumn, type MoLevel, type MoSpec } from '../design/mo';
+import { atomLevels, electronLook, fitWidth, MO_ATOMS, setElectrons, MO_PRESETS, moPlain, parseMarkup, toMarkup, toRich, type MoColumn, type MoLevel, type MoSpec } from '../design/mo';
 import { ORBITAL_LOOK_NAMES, type OrbitalLook } from '../chem/orbitals';
 import { RichField } from './rich-field';
 import { newPlate, type PlateData } from '../design/plates';
@@ -22,7 +22,7 @@ const MO_SYMBOLS: [string, string][] = [
 
 const COLUMNS: { col: MoColumn; name: string }[] = [{ col: 'left', name: 'Left atom' }, { col: 'middle', name: 'Molecule' }, { col: 'right', name: 'Right atom' }];
 
-export function askMo(editing: PlateData | null, style: { bondLength: number; captionSize: number; lineWidth: number }, preview?: (d: PlateData, canvas: HTMLCanvasElement) => void): Promise<PlateData | null> {
+export function askMo(editing: PlateData | null, style: { bondLength: number; captionSize: number; lineWidth: number }, preview?: (d: PlateData, canvas: HTMLCanvasElement) => void, roomAt?: (d: PlateData, w: number) => number | undefined): Promise<PlateData | null> {
   return new Promise((resolve) => {
     const base = editing ?? newPlate('mo', style.bondLength);
     const start = base.mo ? toRich(base.mo) : null;
@@ -44,11 +44,11 @@ export function askMo(editing: PlateData | null, style: { bondLength: number; ca
         </section>`).join('')}
       </div>
       <p class="muted small mo-help">Electrons fill by Hund's rule (one per orbital, then pairs). Energies set only the order and spacing, so any order can be typed, as when s–p mixing puts π below σ2p. Atom fills use approximate orbital potential energies in eV.</p>
-      <div class="ask-row"><span>Size</span><span class="energy-pair"><input name="w" type="number" min="40" step="any" aria-label="Width" /> × <input name="h" type="number" min="40" step="any" aria-label="Height" /> pt</span></div>
+      <div class="ask-row"><span>Size</span><span class="mo-inline"><span class="energy-pair"><input name="w" type="number" min="40" step="any" aria-label="Width" /> × <input name="h" type="number" min="40" step="any" aria-label="Height" /> pt</span><button type="button" data-act="fit" title="Fit Width: make the diagram just wide enough to leave a gap between the molecule's orbitals (with their names and pictures) and each atom's">Fit Width</button></span></div>
       <div class="ask-row"><span>Electron arrows</span><span class="mo-inline"><label>Height <input name="arrow" type="number" min="2" max="48" step="any" class="mo-num" /> pt</label><label>Line width <input name="arrowW" type="number" min="0.1" max="6" step="any" class="mo-num" /> pt</label><label>Gap above line <input name="arrowGap" type="number" min="0" max="24" step="any" class="mo-num" /> pt</label></span></div>
       <div class="ask-row"><span>Dashed lines</span><span class="mo-inline"><label>Color <input name="lineColor" type="color" value="#000000" /></label><label>Transparency <input name="lineClear" type="number" min="0" max="90" step="5" class="mo-num" /> %</label></span></div>
-      <div class="ask-row"><span>Names</span><span class="mo-inline"><label>Background <select name="labelBack"><option value="">None</option><option value="white">White</option><option value="boxed">White with border</option></select></label><label class="mo-check"><input name="labelClear" type="checkbox" /> Move clear of the dashed lines</label></span></div>
-      <div class="ask-row"><span>Show</span><span class="mo-inline"><label class="mo-check"><input name="axis" type="checkbox" /> Energy arrow</label><label class="mo-check"><input name="pictures" type="checkbox" /> Orbital mixing pictures</label><select name="look" aria-label="Picture look">${looks}</select></span></div>
+      <div class="ask-row"><span>Names</span><span class="mo-inline"><label class="mo-check"><input name="labelBack" type="checkbox" /> White background</label><label class="mo-check"><input name="labelClear" type="checkbox" /> Move clear of the dashed lines</label></span></div>
+      <div class="ask-row"><span>Show</span><span class="mo-inline"><label class="mo-check"><input name="axis" type="checkbox" /> Energy arrow</label><label class="mo-check"><input name="pictures" type="checkbox" /> Orbital mixing pictures</label><select name="look" aria-label="Picture look">${looks}</select><label>Size <input name="picSize" type="number" min="20" max="400" step="any" class="mo-num" /> %</label></span></div>
       <p class="ask-buttons"><button type="button" data-act="cancel">Cancel</button> <button type="submit" class="primary">${editing ? 'Redraw' : 'Insert'}</button></p>`;
     const $ = <T extends Element>(q: string) => form.querySelector<T>(q)!;
     foldIntoInfo($('.mo-help'), $('h2'));
@@ -187,20 +187,21 @@ export function askMo(editing: PlateData | null, style: { bondLength: number; ca
     // the electrons: what they draw as at this size; typing in one fixes all three, and from then
     // on they grow and shrink with the diagram from the size it had then
     let electronsSet = false;
-    const r2 = (x: number) => String(Math.round(x * 100) / 100);
+    const r1 = (x: number) => String(Math.round(x * 10) / 10);
     const showElectrons = () => {
       if (electronsSet) return;
       const now = electronLook(start ?? { levels: [], titles: ['', '', ''], axis: false }, style, Number($<HTMLInputElement>('input[name=w]').value) || base.w, Number($<HTMLInputElement>('input[name=h]').value) || base.h);
-      set('input[name=arrow]', r2(now.tall));
-      set('input[name=arrowW]', r2(now.thick));
-      set('input[name=arrowGap]', r2(now.lift));
+      set('input[name=arrow]', r1(now.tall));
+      set('input[name=arrowW]', r1(now.thick));
+      set('input[name=arrowGap]', r1(now.lift));
     };
     showElectrons();
     for (const k of ['arrow', 'arrowW', 'arrowGap']) $(`input[name=${k}]`).addEventListener('input', () => { electronsSet = true; });
     for (const k of ['w', 'h']) $(`input[name=${k}]`).addEventListener('input', showElectrons);
     set('input[name=lineColor]', start?.lineColor ?? '#000000');
     set('input[name=lineClear]', String(Math.round((start?.lineTransparency ?? 0) * 100)));
-    set('select[name=labelBack]', start?.labelBack ?? '');
+    $<HTMLInputElement>('input[name=labelBack]').checked = !!start?.labelBack;
+    set('input[name=picSize]', String(Math.round((start?.pictureSize ?? 1) * 100)));
     $<HTMLInputElement>('input[name=labelClear]').checked = !!start?.labelClear;
     $<HTMLInputElement>('input[name=pictures]').checked = !!start?.pictures;
     set('select[name=look]', start?.pictureLook ?? 'shaded');
@@ -223,6 +224,17 @@ export function askMo(editing: PlateData | null, style: { bondLength: number; ca
         redraw();
       });
     }
+    const fit = $<HTMLButtonElement>('[data-act=fit]');
+    fit.hidden = !roomAt;
+    fit.addEventListener('click', () => {
+      if (!roomAt) return;
+      const d = gather();
+      // the gap the C–F example has at its usual size, about 1.7 bond lengths, between the molecule's column and each atom's levels
+      const w = fitWidth((x) => roomAt(d, x), d.w, 1.7 * style.bondLength);
+      set('input[name=w]', String(w));
+      showElectrons();
+      redraw();
+    });
     for (const b of form.querySelectorAll<HTMLButtonElement>('.mo-add')) {
       b.addEventListener('click', () => { read(); levels.push({ column: b.dataset.col as MoColumn, label: '', e: 0, n: 1, electrons: 0 }); draw(); });
     }
@@ -239,7 +251,8 @@ export function askMo(editing: PlateData | null, style: { bondLength: number; ca
       const arrow = n('input[name=arrow]'), arrowW = n('input[name=arrowW]'), arrowGap = n('input[name=arrowGap]');
       const clear = Math.max(0, Math.min(90, n('input[name=lineClear]') ?? 0)) / 100;
       const color = $<HTMLInputElement>('input[name=lineColor]').value.toLowerCase();
-      const back = $<HTMLSelectElement>('select[name=labelBack]').value as '' | 'white' | 'boxed';
+      const back = $<HTMLInputElement>('input[name=labelBack]').checked;
+      const picSize = Math.max(20, Math.min(400, n('input[name=picSize]') ?? 100)) / 100;
       const w = Math.max(40, n('input[name=w]') ?? base.w), h = Math.max(40, n('input[name=h]') ?? base.h);
       /** The electron settings: kept as they were unless typed in here (then fixed at this size). */
       const electrons = (): Pick<MoSpec, 'arrowSize' | 'arrowWidth' | 'arrowGap' | 'arrowAt'> => {
@@ -262,7 +275,8 @@ export function askMo(editing: PlateData | null, style: { bondLength: number; ca
           ...electrons(),
           ...(color && color !== '#000000' ? { lineColor: color } : {}),
           ...(clear ? { lineTransparency: clear } : {}),
-          ...(back ? { labelBack: back } : {}),
+          ...(back ? { labelBack: 'white' as const } : {}),
+          ...(picSize !== 1 ? { pictureSize: picSize } : {}),
           ...($<HTMLInputElement>('input[name=labelClear]').checked ? { labelClear: true } : {}),
           ...($<HTMLInputElement>('input[name=pictures]').checked ? { pictures: true } : {}),
           pictureLook: $<HTMLSelectElement>('select[name=look]').value as OrbitalLook,

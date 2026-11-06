@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { electronLook, hund, mixOf, MO_PRESETS, moPlain, parseMarkup, sources, toMarkup, toRich } from '../src/design/mo';
+import { electronLook, fitWidth, hund, roomBeside, mixOf, MO_PRESETS, moPlain, parseMarkup, sources, toMarkup, toRich } from '../src/design/mo';
 import { orbitalShapes } from '../src/chem/orbitals';
 import { Doc } from '../src/model';
 import { ACS_1996 } from '../src/style';
@@ -141,5 +141,23 @@ describe('MO diagrams', () => {
     const set = { ...spec, arrowSize: 12, arrowWidth: 1, arrowGap: 2, arrowAt: 100 };
     expect(electronLook(set, style, 100, 100)).toEqual({ tall: 12, thick: 1, lift: 2 });
     expect(electronLook(set, style, 50, 50)).toEqual({ tall: 6, thick: 0.5, lift: 1 });
+  });
+
+  it('measures the room beside the molecule only against levels it could crowd', () => {
+    const mid = [{ x1: 100, y1: 0, x2: 140, y2: 10 }];
+    // a level right beside it counts by its sideways gap
+    expect(roomBeside(mid, [{ x1: 40, y1: 2, x2: 90, y2: 8 }], [])).toBe(10);
+    // one far below it is not crowding it, however close it is sideways
+    expect(roomBeside(mid, [{ x1: 40, y1: 100, x2: 98, y2: 106 }], [])).toBeCloseTo(Math.hypot(2, 90), 6);
+    // overlapping is negative
+    expect(roomBeside(mid, [], [{ x1: 130, y1: 0, x2: 160, y2: 10 }])).toBe(-10);
+    expect(roomBeside([], [{ x1: 0, y1: 0, x2: 1, y2: 1 }], [])).toBeUndefined();
+  });
+
+  it('finds the width that leaves the room asked for', () => {
+    // room grows a quarter as fast as the width here, and is 10 at 200
+    const w = fitWidth((x) => 10 + (x - 200) / 4, 200, 25);
+    expect(w).toBeCloseTo(260, 0);
+    expect(fitWidth(() => undefined, 200, 25)).toBe(200);
   });
 });

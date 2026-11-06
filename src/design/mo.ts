@@ -51,14 +51,16 @@ export interface MoSpec {
   /** The dashed lines' color (not set: black) and how see-through they are, 0 to 1. */
   lineColor?: string;
   lineTransparency?: number;
-  /** A white frame behind each name, so a dashed line under it doesn't cut through it: borderless or with a border. */
-  labelBack?: 'white' | 'boxed';
+  /** A white background behind each name: the dashed lines stop at its edge instead of cutting through it. */
+  labelBack?: 'white';
   /** Move the molecular orbitals' names to the side, clear of the dashed lines. */
   labelClear?: boolean;
   /** Pictures of the orbitals mixing: each atomic orbital's shape beside it, and each molecular orbital's in-phase or out-of-phase combination beside it. */
   pictures?: boolean;
   /** The pictures' look, as Chemistry ▸ Orbital draws them. */
   pictureLook?: OrbitalLook;
+  /** The pictures' size, as a part of the usual (1 = 100%); either way they grow and shrink with the diagram. */
+  pictureSize?: number;
 }
 
 /** A piece of rich text: plain, subscript or superscript. */
@@ -361,6 +363,44 @@ function outside(p: Vec, q: Vec, boxes: Rect[]): [Vec, Vec][] {
   return out;
 }
 
+/**
+ * The narrowest clearance between anything in the molecule's column and either atom's levels, in
+ * points: the straight-line gap between their boxes, so a level far above or below a name doesn't
+ * count as crowding it. Negative when they overlap.
+ */
+export function roomBeside(mid: Rect[], left: Rect[], right: Rect[]): number | undefined {
+  if (!mid.length || (!left.length && !right.length)) return undefined;
+  const clear = (a: Rect, b: Rect): number => {
+    // a is left of b
+    const dx = b.x1 - a.x2, dy = Math.max(a.y1 - b.y2, b.y1 - a.y2);
+    return dy > 0 ? Math.hypot(Math.max(0, dx), dy) : dx;
+  };
+  let r = Infinity;
+  for (const m of mid) {
+    for (const s of left) r = Math.min(r, clear(s, m));
+    for (const s of right) r = Math.min(r, clear(m, s));
+  }
+  return r;
+}
+
+/**
+ * The width that leaves `room` points between the molecule's column and the atoms' levels, for a
+ * diagram `h` high: `roomAt(w)` draws it at width w and says how much room there is.
+ */
+export function fitWidth(roomAt: (w: number) => number | undefined, w0: number, room: number): number {
+  let w = Math.max(40, w0), r = roomAt(w);
+  if (r === undefined) return w;
+  for (let i = 0; i < 16 && Math.abs(r - room) > 0.25; i++) {
+    // the room grows about a quarter to a third as fast as the width, so stepping by four times the shortfall settles in a few steps
+    const next = Math.max(40, Math.min(5000, w + (room - r) * 4));
+    const rn = roomAt(next);
+    if (rn === undefined) break;
+    w = next;
+    r = rn;
+  }
+  return Math.round(w);
+}
+
 /** The electrons' height, line width and gap above the line in a diagram w × h. */
 export interface ElectronLook { tall: number; thick: number; lift: number }
 
@@ -386,7 +426,11 @@ export function setElectrons(spec: MoSpec, now: ElectronLook, w: number, h: numb
   return { ...spec, arrowSize: now.tall, arrowWidth: now.thick, arrowGap: now.lift, arrowAt: Math.sqrt(Math.max(1, w * h)) };
 }
 
-export interface MoParts { captions: number[]; arrows: number[]; shapes: number[] }
+export interface MoParts {
+  captions: number[]; arrows: number[]; shapes: number[];
+  /** The narrowest room between the molecule's column (its levels, names and pictures) and either atom's levels, in points. */
+  room?: number;
+}
 
 /** Draw the diagram in the box w × h with its top left at `at`. Call inside an edit. */
 export function drawMo(doc: Doc, m: Measure, spec: MoSpec, at: Vec, w: number, h: number): MoParts {
@@ -481,10 +525,18 @@ export function drawMo(doc: Doc, m: Measure, spec: MoSpec, at: Vec, w: number, h
   // the dashed lines, stopping at the names' frames when they have them
   const frames = spec.labelBack ? [...labelBox.values()].map((b) => ({ x1: b.x1 - pad, y1: b.y1 - pad, x2: b.x2 + pad, y2: b.y2 + pad })) : [];
   for (const [p, q] of dashes) for (const [a, b] of outside(p, q, frames)) line(a.x, a.y, b.x, b.y, { dashed: true, lineWidth: lw * 0.7, color: dashColor });
-  if (spec.labelBack === 'boxed') for (const f of frames) out.shapes.push(doc.addShape({ kind: 'rect', ...f, filled: false, color: '#000000', lineWidth: lw * 0.6 }).id);
   out.shapes.push(...levelLines);
   let leftmost = Infinity;
+  // what the molecule's column takes up (its levels, names and pictures), for the room left beside it
+  const mid: Rect[] = [];
+  const levelBox = (l: MoLevel): Rect => { const [s0, s1] = span(l), yy = y(l.e); return { x1: s0, y1: yy - L * 0.6, x2: s1, y2: yy + lw }; };
+  for (const l of levels.filter((x) => x.column === 'middle')) {
+    mid.push(levelBox(l));
+    const b = labelBox.get(l);
+    if (b) mid.push(b);
+  }
   if (pics) drawPictures();
+  out.room = roomBeside(mid, levels.filter((x) => x.column === 'left').map(levelBox), levels.filter((x) => x.column === 'right').map(levelBox));
   const bottom = at.y + h + 1.2 * L;
   (['left', 'middle', 'right'] as const).forEach((c, i) => { if (spec.titles[i]?.trim()) caption(spec.titles[i].trim(), { x: colX[c], y: bottom }, 'below'); });
   if (spec.axis) {
@@ -504,7 +556,8 @@ export function drawMo(doc: Doc, m: Measure, spec: MoSpec, at: Vec, w: number, h
    */
   function drawPictures(): void {
     const look = spec.pictureLook ?? 'shaded';
-    const u = Math.min(0.42 * L, w * 0.035);
+    // the usual size at 14 × 12 bond lengths, growing and shrinking with the diagram
+    const u = 0.42 * Math.sqrt(Math.max(1, w * h) / (14 * 12)) * Math.max(0.2, Math.min(4, spec.pictureSize ?? 1));
     const put = (pieces: Piece[]) => { for (const p of pieces) out.shapes.push(doc.addShape(p).id); };
     const side = (col: 'left' | 'right') => {
       // atomic orbitals: one picture per name, outside it (the degenerate p orbitals share one)
@@ -527,6 +580,7 @@ export function drawMo(doc: Doc, m: Measure, spec: MoSpec, at: Vec, w: number, h
       const cy = Math.max(y(l.e), floor + pic.h + lw * 2);
       floor = cy + pic.h;
       const x = nameLeft.has(l) ? (b ? b.x1 : s0) - gap - pic.w : (b ? b.x2 : s1) + gap + pic.w;
+      mid.push({ x1: x - pic.w, y1: cy - pic.h, x2: x + pic.w, y2: cy + pic.h });
       put(pic.draw({ x, y: cy }));
     }
   }

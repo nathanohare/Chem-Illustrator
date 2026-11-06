@@ -577,6 +577,9 @@ export class StylePanel {
         const now = electronLook(mo, this.doc.style, d.w, d.h);
         this.number('Electron arrow height (pt)', Math.round(now.tall * 10) / 10, 0.5, 2, 48, (v) => this.plate?.restyle(sh.id, { mo: setElectrons(mo, { ...now, tall: v }, d.w, d.h) }));
         this.check('Orbital mixing pictures', !!mo.pictures, (v) => this.plate?.restyle(sh.id, { mo: { ...mo, pictures: v || undefined } }));
+        this.check('White background behind names', !!mo.labelBack, (v) => this.plate?.restyle(sh.id, { mo: { ...mo, labelBack: v ? 'white' : undefined } }));
+        this.check('Move names clear of the dashed lines', !!mo.labelClear, (v) => this.plate?.restyle(sh.id, { mo: { ...mo, labelClear: v || undefined } }));
+        if (mo.pictures) this.number('Picture size (%)', Math.round((mo.pictureSize ?? 1) * 100), 10, 20, 400, (v) => this.plate?.restyle(sh.id, { mo: { ...mo, pictureSize: v / 100 } }));
         if (mo.pictures) this.select('Phases', ORBITAL_LOOK_NAMES.map((k): Opt<OrbitalLook> => [k.value, k.label]), mo.pictureLook ?? 'shaded', (v) => this.plate?.restyle(sh.id, { mo: { ...mo, pictureLook: v } }));
       }
       this.help('Change the orbitals, energies and electrons in the window; drag a corner to resize it.');

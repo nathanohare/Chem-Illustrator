@@ -76,6 +76,7 @@ import { energyFrameOf, plotFromBox, putEnergy, refitEnergy, type EnergyData } f
 import { arrangeSmart, formatSmart, stepToHolder, stepHolderToText, fillHolder, fillHoldersDrawn, holderFrameOf, holderToSlotText, insertSlot, makeSmart, moveSlot, refitSmart, removeSlot, setSlotRuns, setSlotText, setStepRuns, setStepText, smartFrameOf, smartMarks, slotToHolder, ungroupSmart, type SmartData, type StepPart, type TextPart } from '../chem/smart-scheme';
 import type { SmartFormat } from '../chem/smart-format';
 import { plateFrameOf, plateFromBox, putPlate, refitPlates, type PlateData } from '../design/plates';
+import { drawMo } from '../design/mo';
 import { newmanCentre, newmanFrameOf, putMark, putNewman, refitNewman, type NewmanData } from '../design/newman';
 import { putTorsion, refitTorsion, torsionFrameOf, type TorsionData } from '../design/torsion';
 import { diagramContents, diagramFrameOf, heldLines, putDiagram, refitDiagramFigures, refitDiagrams, ungroupDiagram, type DiagramData } from '../design/diagrams';
@@ -3923,6 +3924,17 @@ export class Editor {
     let id = 0;
     tmp.edit('Preview', () => { id = putPlate(tmp, this.fullMeasure(), d, { x: 0, y: 0 }); });
     return { doc: tmp, box: shapeBox(tmp.shapes.get(id)!) };
+  }
+
+  /** An MO diagram drawn aside at width w: how much room its molecule's column leaves beside the atoms' levels (Fit Width). */
+  moRoom(d: PlateData, w: number): number | undefined {
+    if (!d.mo) return undefined;
+    const tmp = new Doc();
+    tmp.style = { ...this.doc.style };
+    tmp.textStyles = this.doc.textStyles;
+    let room: number | undefined;
+    tmp.edit('Fit', () => { room = drawMo(tmp, this.fullMeasure(), d.mo!, { x: 0, y: 0 }, w, d.h).room; });
+    return room;
   }
 
   /** Insert ▸ TLC Plate or Gel: draw one with its middle at `at` (or draw plate `id` again), and select it. */
