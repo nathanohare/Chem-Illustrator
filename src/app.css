@@ -3865,6 +3865,7 @@ dialog.hotkeys:not([data-view="board"]) .hk-board { display: none; }
 .smart-pane .sp-step-fields { flex: 1; display: grid; gap: 2px; min-width: 0; }
 .smart-pane .sp-step-fields input { font-size: var(--fs-xs); }
 .smart-pane .sp-foot { display: flex; justify-content: space-between; gap: 6px; }
+.smart-pane .sp-foot-right { display: flex; gap: 4px; margin-left: auto; }
 .smart-pane .sp-add { border: none; background: none; color: var(--accent); font-weight: 600; cursor: pointer; padding: 2px 0; }
 .smart-pane .sp-ungroup { padding: 2px 8px; }
 /* the rows show their text as it looks on the page; the bar formats the row being typed in */
