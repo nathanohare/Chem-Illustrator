@@ -2638,6 +2638,11 @@ dialog.animate-dialog .animate-credit { margin: 0 0 8px; font-size: 0.85em; }
 .animate-side .ask-row.ask-check { grid-template-columns: auto 1fr; }
 .animate-side .ask-row select { grid-column: 2; width: 100%; }
 .animate-side .ask-row:has(select) { grid-template-columns: 6em 1fr; }
+.animate-side .ask-row.animate-colors { grid-template-columns: 6em 1fr; }
+.animate-side .ask-row.animate-colors[hidden] { display: none; }
+.animate-swatches { display: flex; gap: 10px; flex-wrap: wrap; }
+.animate-swatch { display: inline-flex; align-items: center; gap: 4px; }
+.animate-swatch input[type=color] { width: 26px; height: 20px; padding: 0 1px; border: 1px solid var(--line); border-radius: var(--r-control); background: var(--panel); }
 .animate-step { padding: 6px 0; border-top: 1px solid var(--line); }
 .animate-step:first-child { border-top: 0; }
 .animate-step-head { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
