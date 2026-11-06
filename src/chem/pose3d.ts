@@ -6,7 +6,7 @@
 
 import { Molecule, ConformerGenerator, ForceFieldMMFF94 } from 'openchemlib';
 import { choosePose, type DepthCues, type PoseProblem, type V3 } from './perspective';
-import { absoluteMolfile } from './model3d-build';
+import { absoluteMolfile, putBackIons, withoutLoneIons } from './model3d-build';
 
 export interface Pose {
   /** Every atom (the molfile's first, in its order, then added hydrogens), Å, the 3-D window's frame: x right, y up, z towards the reader. */
@@ -38,13 +38,14 @@ export function buildPose(molblock: string, cues: DepthCues, L: number, count = 
   const fail = (p: PoseProblem | 'build'): PoseResult => ({ problem: p, message: PROBLEM[p] });
   const mol = Molecule.fromMolfile(absoluteMolfile(molblock));
   if (!mol.getAllAtoms()) return fail('build');
+  const { core, ions } = withoutLoneIons(mol);
   const gen = new ConformerGenerator(seed);
-  if (!gen.initializeConformers(mol)) return fail('build');
+  if (!gen.initializeConformers(core)) return fail('build');
   const confs: Molecule[] = [];
   for (let k = 0; k < count; k++) {
     const c = gen.getNextConformerAsMolecule();
     if (!c) break;
-    confs.push(c);
+    confs.push(putBackIons(c, mol, ions));
   }
   if (!confs.length) return fail('build');
   const first = confs[0];
