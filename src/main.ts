@@ -10128,7 +10128,7 @@ async function drawingPreferences(): Promise<void> {
       help: 'Labels on biaryls and allenes follow the choice at once. Ra is the same as M, and Sa as P.' },
     { name: 'charges', label: 'Charges from the + and − keys', value: editor.options.circledCharges ? 'circled' : 'plain', options: [{ value: 'plain', label: 'Plain sign (N+)' }, { value: 'circled', label: 'In a circle (⊕, ⊖)' }], inline: (v) => chargeSwatch(v === 'circled'),
       help: 'Charges already drawn keep their look; the circle tools on the Object toolbox always draw a circled charge.' },
-    { name: 'textAtom', label: 'An atom or group typed with the Text tool beside a bond end (Br, OMe) becomes that atom', type: 'checkbox', value: String(editor.options.textToAtom) },
+    { name: 'textAtom', label: 'An atom or group typed with the Text tool (N, OMe) becomes an atom, or the atom at a bond end it is typed beside', type: 'checkbox', value: String(editor.options.textToAtom) },
     { name: 'ionCharges', label: 'Add charges to common counterions typed as text (BF4 becomes BF4⁻, NBu4 becomes NBu4⁺)', type: 'checkbox', value: String(chemText.ionCharges),
       help: 'Off, a counterion typed without its charge is still read as that ion, and flagged until the charge is added.' },
     { name: 'saltGroups', label: 'Group a counterion typed as text with the structure or ion of opposite charge next to it, as one salt', type: 'checkbox', value: String(chemText.saltGroups),

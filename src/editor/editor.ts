@@ -7,7 +7,7 @@ import { DEFAULT_CURSOR_AIDS, drawCursorAids, hintLines, modifierHints, readoutT
 import { Sketcher } from './sketch';
 import { installPenAndTouch } from './touch';
 import { labelAtoms, labelLookOf, setLabelFont, setLabelSize, toggleLabelBold } from './label-font';
-import { Doc, Atom, Bond, BondDisplay, PARTIAL, Arrow, Shape, Caption, isMetalAtom, isWedge, applyBase, captionBase, stripBase, type StepRoles, type Justify, type HighlightStyle, type Entity } from '../model';
+import { Doc, Atom, Bond, BondDisplay, PARTIAL, ELEMENT_WITH_H, Arrow, Shape, Caption, isMetalAtom, isWedge, applyBase, captionBase, stripBase, type StepRoles, type Justify, type HighlightStyle, type Entity } from '../model';
 import { scaleOwnWidths } from '../style';
 import { CaptionEditor } from '../ui/caption-editor';
 import { followLink, linkTip } from '../ui/links-ui';
@@ -30,6 +30,7 @@ import * as rt from '../richtext';
 import { applyFormat, formatWhole, type TextFormat } from '../text/format';
 import { cleanUpOptions, type CleanUpOption } from '../chem/cleanup';
 import { Renderer, measureText } from '../render/renderer';
+import { captionReading, readSpecies } from '../chem/species';
 import { tidyStyle } from '../render/highlight';
 import { ASCENT, blankRoomAt } from '../text/layout';
 import { cellAlign, insertRow, nextCell, partAt, partRuns, setColumnWidth, setPart, spanOf, NOTE_SCALE, type TablePart } from '../table';
@@ -82,7 +83,7 @@ import { attachWhereItIs, defaultGap, placeAttached, refitAttached } from './att
 import { frameAround, frameBox, frameMembers, refitFrames, defaultPad, thingsInside } from './frames';
 import { atomsBox, Align, Measure, POINTS, Snapshot, type TurnText, units, joinGroups, clearOffset, alignOffsets, distributeOffsets, moveUnit, selectionBox, snapshot, transform, withFrameContents, rotation, mirrorX, mirrorY } from './arrange';
 import { elementNumber, hasImplicitH, implicitHydrogens, SYMBOLS } from '../chem/elements';
-import { tokenize, addNicknames, isBuiltInNickname, labelGraph, labelPieces, labelLook, styleLabel, CAP, SUB_SCALE } from '../chem/labels';
+import { tokenize, addNicknames, isBuiltInNickname, labelGraph, labelOverValent, labelPieces, labelLook, styleLabel, CAP, SUB_SCALE } from '../chem/labels';
 import {
   Handle, type HandleId, arrowEllipseFrame, arrowHit, shapeHit, arrowHandles, shapeHandles, dragArrowHandle, dragShapeHandle, dragCropHandle, shapeBox, shapeMid, shapeTurn,
   arrowPoints, bracketHalves, type BracketForm, bracketLip, unionRect,
@@ -429,7 +430,7 @@ export class Editor {
     methylStyle: 'Me' as MethylStyle,
     /** + and − on an atom give a charge in a circle (⊕, ⊖) rather than a plain sign in the label (Edit > Settings). */
     circledCharges: false,
-    /** An atom or group typed with the Text tool beside a bond end (Br, OMe) becomes that atom (Edit > Settings). */
+    /** An atom or group typed with the Text tool (N, OMe) becomes an atom, or the atom at a bond end it is typed beside (Edit > Settings). */
     textToAtom: true,
     /** A click on something in a group selects the whole group, or just that thing (Edit > Settings). */
     groupClick: 'group' as 'group' | 'item',
@@ -6435,7 +6436,7 @@ export class Editor {
       const d = dist(a, at);
       if (d <= doc.style.bondLength * 0.6 * (a.s ?? 1) && d < bestD) { best = a; bestD = d; }
     }
-    if (!best) return false;
+    if (!best) return this.atomFromText(caption, text);
     const id = best.id;
     const styled = styleLabel(text.trim());
     doc.edit('Text to Atom', () => {
@@ -6445,6 +6446,50 @@ export class Editor {
     });
     this.lastEdited = id;
     this.say(`${text} is now an atom on the bond. Undo (Ctrl+Z) to keep it as text, or turn this off in Edit > Settings.`);
+    return true;
+  }
+
+  /**
+   * Text typed with the Text tool away from any bond that is only an atom, a formula of one atom
+   * (N, NH2, H2O) or a group (OMe, CO2Me) becomes an atom with that label, as a drawn atom is: a
+   * ring or bond drawn on it takes it in (benzene on N makes pyridine). It reads as written, with
+   * no hydrogens it doesn't show (N is N, not NH3; molfile.ts). A compound of more than one atom
+   * (CH2Cl2, DMAP, MeOH), an ion and text over or under a reaction arrow stay text, read as
+   * chemistry as before (chem/species.ts). True when it did.
+   */
+  private atomFromText(caption: number, text: string): boolean {
+    const doc = this.doc;
+    const c = doc.captions.get(caption);
+    // (II, IV: numbers, not atoms)
+    if (!c || /[+\-−–]$/.test(text) || /^[IVXL]{2,}$/.test(text)) return false;
+    const sp = readSpecies(text);
+    if (sp ? sp.charge || sp.graph.atoms.filter((a) => a.z !== 1).length > 1 : labelOverValent(text, 1).length) return false;
+    const read = captionReading(doc, c, this.measure());
+    if (!read.species && read.why === 'arrow') return false;
+    // the label's first letter where the text's was
+    const run = c.runs[0];
+    const size = run?.size ?? doc.style.captionSize;
+    const box = this.r.captionBox(c);
+    const first = measureText([...text][0], size, run?.font ?? doc.style.captionFont, '');
+    const p = { x: box.x1 + first / 2, y: c.y - size * 0.36 };
+    const styled = styleLabel(text);
+    // one element with or without hydrogens (N, NH2, H2O) is shown and read just as written
+    // until it is bonded (Doc.addBond), not with the hydrogens worked out (NH3, OH2)
+    const el = ELEMENT_WITH_H.exec(text)?.[1];
+    const z = el && el !== 'D' && el !== 'T' ? elementNumber(el) : undefined;
+    let id = 0;
+    doc.edit('Text to Atom', () => {
+      doc.removeCaption(caption);
+      id = doc.addAtom(p.x, p.y, 6, { asTyped: true }).id;
+      if (z !== undefined) {
+        doc.updateAtom(id, { z, label: text });
+      } else {
+        this.applyLabel(id, styled.label);
+        if (styled.marks && doc.atoms.get(id)?.label) doc.updateAtom(id, { labelMarks: styled.marks });
+      }
+    });
+    this.lastEdited = id;
+    this.say(`${text} is now an atom. Undo (Ctrl+Z) to keep it as text, or turn this off in Edit > Settings.`);
     return true;
   }
 
