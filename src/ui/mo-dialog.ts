@@ -7,7 +7,7 @@
 // as you type.
 
 import { foldIntoInfo } from './info-tip';
-import { atomLevels, MO_ATOMS, MO_PRESETS, moPlain, parseMarkup, toMarkup, toRich, type MoColumn, type MoLevel, type MoSpec } from '../design/mo';
+import { atomLevels, electronLook, MO_ATOMS, setElectrons, MO_PRESETS, moPlain, parseMarkup, toMarkup, toRich, type MoColumn, type MoLevel, type MoSpec } from '../design/mo';
 import { ORBITAL_LOOK_NAMES, type OrbitalLook } from '../chem/orbitals';
 import { RichField } from './rich-field';
 import { newPlate, type PlateData } from '../design/plates';
@@ -22,13 +22,9 @@ const MO_SYMBOLS: [string, string][] = [
 
 const COLUMNS: { col: MoColumn; name: string }[] = [{ col: 'left', name: 'Left atom' }, { col: 'middle', name: 'Molecule' }, { col: 'right', name: 'Right atom' }];
 
-/** How the three groups sit: side by side as the diagram is, or one above the other. */
-export type MoLayout = 'side' | 'stack';
-export const MO_LAYOUT: { value: MoLayout } = { value: 'side' };
-
-export function askMo(editing: PlateData | null, L: number, fontSize: number, preview?: (d: PlateData, canvas: HTMLCanvasElement) => void): Promise<PlateData | null> {
+export function askMo(editing: PlateData | null, style: { bondLength: number; captionSize: number; lineWidth: number }, preview?: (d: PlateData, canvas: HTMLCanvasElement) => void): Promise<PlateData | null> {
   return new Promise((resolve) => {
-    const base = editing ?? newPlate('mo', L);
+    const base = editing ?? newPlate('mo', style.bondLength);
     const start = base.mo ? toRich(base.mo) : null;
     const d = el('dialog', { className: 'ask plate-dialog mo-dialog' });
     d.setAttribute('aria-label', 'MO diagram');
@@ -40,7 +36,7 @@ export function askMo(editing: PlateData | null, L: number, fontSize: number, pr
       <div class="mo-bar" role="toolbar" aria-label="Text formatting">
         <button type="button" class="mo-fmt" data-fmt="sub" title="Subscript (Ctrl+=)" aria-label="Subscript">X<sub>2</sub></button><button type="button" class="mo-fmt" data-fmt="sup" title="Superscript (Ctrl+Shift+=)" aria-label="Superscript">X<sup>2</sup></button><span class="mo-bar-gap"></span><button type="button" class="mo-fmt" data-sym="σ" title="Insert σ (sigma)">σ</button><button type="button" class="mo-fmt" data-sym="π" title="Insert π (pi)">π</button><button type="button" class="mo-fmt" data-sym="*" title="Insert * (antibonding)">*</button><span class="mo-more-wrap"><button type="button" class="mo-fmt mo-more" title="Symbol… (other letters and signs used on MO diagrams)" aria-label="Symbol" aria-haspopup="true" aria-expanded="false">Ω ▾</button><div class="mo-symbols" role="group" aria-label="Symbols" hidden></div></span>
       </div>
-      <div class="mo-groups mo-${MO_LAYOUT.value}">${COLUMNS.map(({ col, name }) => `
+      <div class="mo-groups">${COLUMNS.map(({ col, name }) => `
         <section class="mo-group" data-col="${col}">
           <div class="mo-group-head"><span class="mo-group-name">${name}</span><span class="mo-title" data-col="${col}"></span>${col === 'middle' ? '' : `<select class="mo-atom" aria-label="Fill ${name.toLowerCase()} from an atom"><option value="">Atom…</option>${MO_ATOMS.map((a) => `<option value="${a.id}">${a.name}</option>`).join('')}</select>`}</div>
           <div class="mo-table-wrap"><table class="plate-table mo-table"><thead><tr><th>Name</th><th title="Sets the order and spacing only">Energy</th><th title="Degenerate orbitals at this level">Orbitals</th><th>Electrons</th>${col === 'middle' ? '<th title="The atomic orbitals it is made from, joined to it by dashed lines">Made from</th>' : ''}<th></th></tr></thead><tbody></tbody></table></div>
@@ -49,7 +45,7 @@ export function askMo(editing: PlateData | null, L: number, fontSize: number, pr
       </div>
       <p class="muted small mo-help">Electrons fill by Hund's rule (one per orbital, then pairs). Energies set only the order and spacing, so any order can be typed, as when s–p mixing puts π below σ2p. Atom fills use approximate orbital potential energies in eV.</p>
       <div class="ask-row"><span>Size</span><span class="energy-pair"><input name="w" type="number" min="40" step="any" aria-label="Width" /> × <input name="h" type="number" min="40" step="any" aria-label="Height" /> pt</span></div>
-      <div class="ask-row"><span>Electron arrows</span><span class="mo-inline"><label>Height <input name="arrow" type="number" min="2" max="48" step="0.5" class="mo-num" /> pt</label><label>Line width <input name="arrowW" type="number" min="0.1" max="6" step="0.1" class="mo-num" /> pt</label><label>Gap above line <input name="arrowGap" type="number" min="0" max="24" step="0.25" class="mo-num" /> pt</label></span></div>
+      <div class="ask-row"><span>Electron arrows</span><span class="mo-inline"><label>Height <input name="arrow" type="number" min="2" max="48" step="any" class="mo-num" /> pt</label><label>Line width <input name="arrowW" type="number" min="0.1" max="6" step="any" class="mo-num" /> pt</label><label>Gap above line <input name="arrowGap" type="number" min="0" max="24" step="any" class="mo-num" /> pt</label></span></div>
       <div class="ask-row"><span>Dashed lines</span><span class="mo-inline"><label>Color <input name="lineColor" type="color" value="#000000" /></label><label>Transparency <input name="lineClear" type="number" min="0" max="90" step="5" class="mo-num" /> %</label></span></div>
       <div class="ask-row"><span>Names</span><span class="mo-inline"><label>Background <select name="labelBack"><option value="">None</option><option value="white">White</option><option value="boxed">White with border</option></select></label><label class="mo-check"><input name="labelClear" type="checkbox" /> Move clear of the dashed lines</label></span></div>
       <div class="ask-row"><span>Show</span><span class="mo-inline"><label class="mo-check"><input name="axis" type="checkbox" /> Energy arrow</label><label class="mo-check"><input name="pictures" type="checkbox" /> Orbital mixing pictures</label><select name="look" aria-label="Picture look">${looks}</select></span></div>
@@ -188,11 +184,20 @@ export function askMo(editing: PlateData | null, L: number, fontSize: number, pr
     const set = (q: string, v: string) => { $<HTMLInputElement>(q).value = v; };
     set('input[name=w]', String(Math.round(base.w)));
     set('input[name=h]', String(Math.round(base.h)));
-    set('input[name=arrow]', String(start?.arrowSize ?? Math.round(fontSize * 0.8 * 10) / 10));
-    set('input[name=arrowW]', String(start?.arrowWidth ?? ''));
-    $<HTMLInputElement>('input[name=arrowW]').placeholder = 'auto';
-    set('input[name=arrowGap]', String(start?.arrowGap ?? ''));
-    $<HTMLInputElement>('input[name=arrowGap]').placeholder = 'auto';
+    // the electrons: what they draw as at this size; typing in one fixes all three, and from then
+    // on they grow and shrink with the diagram from the size it had then
+    let electronsSet = false;
+    const r2 = (x: number) => String(Math.round(x * 100) / 100);
+    const showElectrons = () => {
+      if (electronsSet) return;
+      const now = electronLook(start ?? { levels: [], titles: ['', '', ''], axis: false }, style, Number($<HTMLInputElement>('input[name=w]').value) || base.w, Number($<HTMLInputElement>('input[name=h]').value) || base.h);
+      set('input[name=arrow]', r2(now.tall));
+      set('input[name=arrowW]', r2(now.thick));
+      set('input[name=arrowGap]', r2(now.lift));
+    };
+    showElectrons();
+    for (const k of ['arrow', 'arrowW', 'arrowGap']) $(`input[name=${k}]`).addEventListener('input', () => { electronsSet = true; });
+    for (const k of ['w', 'h']) $(`input[name=${k}]`).addEventListener('input', showElectrons);
     set('input[name=lineColor]', start?.lineColor ?? '#000000');
     set('input[name=lineClear]', String(Math.round((start?.lineTransparency ?? 0) * 100)));
     set('select[name=labelBack]', start?.labelBack ?? '');
@@ -235,17 +240,26 @@ export function askMo(editing: PlateData | null, L: number, fontSize: number, pr
       const clear = Math.max(0, Math.min(90, n('input[name=lineClear]') ?? 0)) / 100;
       const color = $<HTMLInputElement>('input[name=lineColor]').value.toLowerCase();
       const back = $<HTMLSelectElement>('select[name=labelBack]').value as '' | 'white' | 'boxed';
+      const w = Math.max(40, n('input[name=w]') ?? base.w), h = Math.max(40, n('input[name=h]') ?? base.h);
+      /** The electron settings: kept as they were unless typed in here (then fixed at this size). */
+      const electrons = (): Pick<MoSpec, 'arrowSize' | 'arrowWidth' | 'arrowGap' | 'arrowAt'> => {
+        if (!electronsSet) return start ? { arrowSize: start.arrowSize, arrowWidth: start.arrowWidth, arrowGap: start.arrowGap, arrowAt: start.arrowAt } : {};
+        const now = electronLook(start ?? { levels: [], titles: ['', '', ''], axis: false }, style, w, h);
+        const fixed = setElectrons({ levels: [], titles: ['', '', ''], axis: false }, {
+          tall: arrow && arrow > 0 ? Math.min(48, Math.max(2, arrow)) : now.tall,
+          thick: arrowW && arrowW > 0 ? Math.min(6, arrowW) : now.thick,
+          lift: arrowGap !== undefined && arrowGap >= 0 ? Math.min(24, arrowGap) : now.lift,
+        }, w, h);
+        return { arrowSize: fixed.arrowSize, arrowWidth: fixed.arrowWidth, arrowGap: fixed.arrowGap, arrowAt: fixed.arrowAt };
+      };
       return {
         ...base,
-        w: Math.max(40, n('input[name=w]') ?? base.w),
-        h: Math.max(40, n('input[name=h]') ?? base.h),
+        w, h,
         mo: {
           levels: levels.map((l) => ({ ...l, electrons: Math.min(l.electrons, 2 * l.n) })),
           titles: COLUMNS.map(({ col }) => markupOf(titles.get(col)!)) as [string, string, string],
           axis: $<HTMLInputElement>('input[name=axis]').checked, rich: true,
-          ...(arrow && arrow > 0 ? { arrowSize: Math.min(48, Math.max(2, arrow)) } : {}),
-          ...(arrowW && arrowW > 0 ? { arrowWidth: Math.min(6, arrowW) } : {}),
-          ...(arrowGap !== undefined && arrowGap >= 0 ? { arrowGap: Math.min(24, arrowGap) } : {}),
+          ...electrons(),
           ...(color && color !== '#000000' ? { lineColor: color } : {}),
           ...(clear ? { lineTransparency: clear } : {}),
           ...(back ? { labelBack: back } : {}),

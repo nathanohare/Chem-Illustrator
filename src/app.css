@@ -3510,10 +3510,8 @@ dialog.plate-dialog { width: min(96vw, 560px); max-height: 92vh; }
 .plate-rows { display: flex; align-items: center; gap: 8px; margin: 6px 0; flex-wrap: wrap; }
 .plate-ladder { display: flex; align-items: center; gap: 6px; }
 dialog.mo-dialog { width: min(96vw, 1080px); max-width: none; }
-dialog.mo-dialog:has(.mo-stack) { width: min(96vw, 720px); }
 .mo-dialog .plate-preview { height: 240px; }
-.mo-groups { display: grid; gap: 8px; margin: 2px 0 4px; }
-.mo-groups.mo-side { grid-template-columns: minmax(0, 1fr) minmax(0, 1.45fr) minmax(0, 1fr); align-items: start; }
+.mo-groups { display: grid; gap: 8px; margin: 2px 0 4px; grid-template-columns: minmax(0, 1fr) minmax(0, 1.45fr) minmax(0, 1fr); align-items: start; }
 .mo-group { min-width: 0; border: 1px solid var(--line); border-radius: var(--r-tab); padding: 3px 4px 4px; }
 .mo-group-head { display: flex; align-items: center; gap: 6px; margin-bottom: 2px; }
 .mo-group-name { font-weight: 600; font-size: 0.85em; white-space: nowrap; }

@@ -40,12 +40,14 @@ export interface MoSpec {
    * and the window turns them into markup when it opens them.
    */
   rich?: boolean;
-  /** The ↑ and ↓ electrons: how tall, in points (not set: 80% of the caption size). */
+  /** The ↑ and ↓ electrons: how tall, in points (see electronLook for the defaults). */
   arrowSize?: number;
   /** Their line width, in points (not set: the drawing's). */
   arrowWidth?: number;
-  /** How far above the level line they start, in points (not set: twice the drawing's line width). */
+  /** How far above the level line they start, in points. */
   arrowGap?: number;
+  /** The diagram's size when the three were set (the square root of its width × height): they grow and shrink with it from there. */
+  arrowAt?: number;
   /** The dashed lines' color (not set: black) and how see-through they are, 0 to 1. */
   lineColor?: string;
   lineTransparency?: number;
@@ -359,6 +361,31 @@ function outside(p: Vec, q: Vec, boxes: Rect[]): [Vec, Vec][] {
   return out;
 }
 
+/** The electrons' height, line width and gap above the line in a diagram w × h. */
+export interface ElectronLook { tall: number; thick: number; lift: number }
+
+/**
+ * The electrons as drawn in a diagram w × h: as set, grown or shrunk with the diagram since; or
+ * the defaults (the caption size high, 1.5 line widths thick, 3.5 line widths up at 14 × 12 bond
+ * lengths), which grow and shrink with it the same way.
+ */
+export function electronLook(spec: MoSpec, style: { captionSize: number; lineWidth: number; bondLength: number }, w: number, h: number): ElectronLook {
+  const now = Math.sqrt(Math.max(1, w * h));
+  const set = spec.arrowAt && spec.arrowAt > 0 ? now / spec.arrowAt : 1;
+  const dflt = now / (Math.sqrt(14 * 12) * style.bondLength);
+  const lw = style.lineWidth;
+  return {
+    tall: spec.arrowSize && spec.arrowSize > 0 ? spec.arrowSize * set : style.captionSize * dflt,
+    thick: spec.arrowWidth && spec.arrowWidth > 0 ? spec.arrowWidth * set : 1.5 * lw * dflt,
+    lift: spec.arrowGap !== undefined && spec.arrowGap >= 0 ? spec.arrowGap * set : 3.5 * lw * dflt,
+  };
+}
+
+/** The electron settings fixed at what they now draw as, with one changed (the window or the Style panel set it). */
+export function setElectrons(spec: MoSpec, now: ElectronLook, w: number, h: number): MoSpec {
+  return { ...spec, arrowSize: now.tall, arrowWidth: now.thick, arrowGap: now.lift, arrowAt: Math.sqrt(Math.max(1, w * h)) };
+}
+
 export interface MoParts { captions: number[]; arrows: number[]; shapes: number[] }
 
 /** Draw the diagram in the box w × h with its top left at `at`. Call inside an edit. */
@@ -410,16 +437,14 @@ export function drawMo(doc: Doc, m: Measure, spec: MoSpec, at: Vec, w: number, h
   }
   // the levels' lines go on top of the dashed lines (drawn after the names, so they can stop at a name's frame)
   const levelLines: Shape['id'][] = [];
-  const tall = spec.arrowSize && spec.arrowSize > 0 ? spec.arrowSize : Math.round(doc.style.captionSize * 0.8 * 10) / 10;
-  const thick = spec.arrowWidth && spec.arrowWidth > 0 ? spec.arrowWidth : lw;
-  const lift = spec.arrowGap !== undefined && spec.arrowGap >= 0 ? spec.arrowGap : lw * 2;
+  const { tall, thick, lift } = electronLook(spec, doc.style, w, h);
   /** An electron: an arrow `tall` high, starting `lift` above the level line, up or down. */
   const electron = (x: number, yy: number, up: boolean) => {
     const lo = { x, y: yy - lift }, hi = { x, y: yy - lift - tall };
     out.arrows.push(doc.addArrow({
       tail: up ? lo : hi, head: up ? hi : lo, headStyle: 'full', tailStyle: 'none', headType: 'solid', line: 'solid',
       noGo: false, equilibrium: false, sweep: 0, headLength: Math.max(tall * 0.32, thick * 3), headWidth: Math.max(tall * 0.12, thick * 1.4),
-      ...(thick !== lw ? { lineWidth: thick } : {}),
+      lineWidth: thick,
     }).id);
   };
   /** Where each label ended up, for the pictures beside them. */

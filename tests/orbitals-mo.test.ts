@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hund, mixOf, MO_PRESETS, moPlain, parseMarkup, sources, toMarkup, toRich } from '../src/design/mo';
+import { electronLook, hund, mixOf, MO_PRESETS, moPlain, parseMarkup, sources, toMarkup, toRich } from '../src/design/mo';
 import { orbitalShapes } from '../src/chem/orbitals';
 import { Doc } from '../src/model';
 import { ACS_1996 } from '../src/style';
@@ -129,5 +129,17 @@ describe('MO diagrams', () => {
     expect(hund(2, at('b2', 'π2p').electrons)).toEqual([1, 1]);
     expect(at('o22-', 'π*2p').electrons).toBe(4);
     expect(at('he2', 'σ*1s').electrons).toBe(2);
+  });
+
+  it('grows and shrinks the electrons with the diagram', () => {
+    const style = { captionSize: 10, lineWidth: 0.6, bondLength: 14.4 };
+    const spec = MO_PRESETS[0].spec;
+    const at = electronLook(spec, style, 14 * 14.4, 12 * 14.4);
+    expect(at.tall).toBeCloseTo(10);
+    expect(electronLook(spec, style, 28 * 14.4, 24 * 14.4).tall).toBeCloseTo(20);
+    // set at one size, they keep their proportion when it changes
+    const set = { ...spec, arrowSize: 12, arrowWidth: 1, arrowGap: 2, arrowAt: 100 };
+    expect(electronLook(set, style, 100, 100)).toEqual({ tall: 12, thick: 1, lift: 2 });
+    expect(electronLook(set, style, 50, 50)).toEqual({ tall: 6, thick: 0.5, lift: 1 });
   });
 });
