@@ -6,7 +6,7 @@ import { tint } from '../colours';
 import { pathId, freeformId } from '../design/geo';
 import { parseGuides } from '../editor/guides';
 import { fillFrameMembers, frameFromTag } from '../editor/frames';
-import { ATTACH_TAG, CHEM_TAG, IGNORE_TAG, attachFromTag, fillAttachments } from '../editor/attached';
+import { ATTACH_TAG, CHEM_TAG, IGNORE_TAG, attachFromTag, attachedNode, fillAttachments } from '../editor/attached';
 import { readSpecies } from '../chem/species';
 import { highlightStyleFromTag } from '../render/highlight';
 import { attachRingFills, ringGeometry, ringsIn } from '../chem/ring-fill';
@@ -87,7 +87,11 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
   const pinTags: [number, string][] = [];
   /** Auto-Animate Steps' pieces, from each thing's hidden tag (set on the things once the file is read). */
   const pieces: [Kind, number, number][] = [];
+  /** Atoms by their ids in the file, and what the file says about each tied caption (fillAttachments). */
+  const atomOfNode = new Map<string, number>();
+  const attachNodes = new Map<number, { node?: string; box?: { x1: number; y1: number; x2: number; y2: number } }>();
   const from = (kind: Kind, id: number, el: Element) => {
+    if (kind === 'a') { const k = el.getAttribute('id'); if (k) atomOfNode.set(k, id); }
     const o = ordOf.get(el);
     if (o !== undefined) ord.set(kind + id, o);
     const piece = Number(kids(el).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === PIECE_TAG)?.getAttribute('Value'));
@@ -581,6 +585,11 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
     if (!c) return;
     const cap = doc.addCaption({ id: idFor(t), ...c });
     from('c', cap.id, t);
+    if (c.attach) {
+      const bb = pts(t.getAttribute('BoundingBox'));
+      const box = bb.length === 4 && bb.every(Number.isFinite) ? { x1: Math.min(bb[0], bb[2]), y1: Math.min(bb[1], bb[3]), x2: Math.max(bb[0], bb[2]), y2: Math.max(bb[1], bb[3]) } : undefined;
+      attachNodes.set(cap.id, { node: attachedNode(kids(t).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === ATTACH_TAG)?.getAttribute('Value') ?? null), box });
+    }
     stats.captions++;
   };
 
@@ -1392,7 +1401,7 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
     fillFrameMembers(doc);
     // Newman projections find their bonds and viewing marks again by where they are drawn
     relinkNewman(doc);
-    fillAttachments(doc);
+    fillAttachments(doc, undefined, new Map([...attachNodes].map(([id, h]) => [id, { atom: h.node === undefined ? undefined : atomOfNode.get(h.node), box: h.box }])));
     readGroups();
     if ((pg && kids(pg).some((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === STACK_TAG)) || shapeOverStructure()) readStack();
   });
