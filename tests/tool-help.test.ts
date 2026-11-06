@@ -52,7 +52,7 @@ const DEFAULTS: Record<string, string> = {
   'command join': 'Ctrl+J', 'command select-all': 'Ctrl+A', 'command next-structure': 'Tab',
 };
 const key: KeyLookup = (a) => DEFAULTS[a];
-const idle: EditorStatus = { drag: 'none', dragKeys: [], copying: false, highlight: null, atoms: 0, bonds: 0, others: 0, whole: false, joinable: false };
+const idle: EditorStatus = { drag: 'none', dragKeys: [], copying: false, highlight: null, atoms: 0, bonds: 0, others: 0, whole: false, joinable: false, partOfOne: false };
 const hint = (name: string, st: Partial<EditorStatus>, one: { name: string; handles: string[] } | null = null, k: KeyLookup = key) =>
   statusHint({ name, label: name, t: TOOLS[name], st: { ...idle, ...st }, step: 0, one, key: k });
 const keysOf = (h: { keys: [string, string][] }) => h.keys.map(([k]) => k);
@@ -77,7 +77,9 @@ describe('status bar hints', () => {
     const h = hint('select', { atoms: 12, bonds: 12, whole: true });
     expect(h.name).toBe('Structure selected');
     expect(h.steps).toEqual(['Ctrl+drag to copy']);
-    expect(h.keys).toEqual([['Ctrl+Arrow', 'Reaction arrow'], ['Alt+Arrow', 'Rotate'], ['Arrow keys', 'Nudge (Shift: farther)'], ['Enter', 'Highlight last atom']]);
+    expect(h.keys).toEqual([['Ctrl+Arrow', 'Reaction arrow'], ['Alt+Arrow', 'Rotate'], ['Arrow keys', 'Nudge (Shift: farther)'], ['Enter', 'Highlight last atom'], ['Tab', 'Next molecule']]);
+    // two whole structures can be joined (joinable: from two different structures)
+    expect(keysOf(hint('select', { atoms: 2, whole: true, joinable: true }))).toContain('Ctrl+J');
   });
 
   it('with part of a structure selected: double-click for the whole, Join for two atoms', () => {
@@ -86,6 +88,8 @@ describe('status bar hints', () => {
     expect(keysOf(h).slice(0, 2)).toEqual(['Double-click', 'Ctrl+J']);
     expect(keysOf(h)).not.toContain('Ctrl+Arrow');
     expect(keysOf(hint('select', { atoms: 3 }))).not.toContain('Ctrl+J');
+    // part of one structure: Space or Tab selects it whole (several structures: double-click)
+    expect(hint('select', { atoms: 1, partOfOne: true }).keys[0]).toEqual(['Space', 'Select molecule']);
     // one atom: nothing to turn
     expect(keysOf(hint('select', { atoms: 1 }))).not.toContain('Alt+Arrow');
   });
@@ -93,7 +97,7 @@ describe('status bar hints', () => {
   it('with an atom highlighted: Space or Tab selects the molecule, the arrows move the highlight', () => {
     const h = hint('bond-single', { highlight: 'atom' });
     expect(h.name).toBe('Atom highlighted');
-    expect(h.keys).toEqual([['Space/Tab', 'Select molecule'], ['Arrow keys', 'Move highlight']]);
+    expect(h.keys).toEqual([['Space', 'Select molecule'], ['Tab', 'Next molecule'], ['Arrow keys', 'Move highlight']]);
   });
 
   it('while dragging, only the drag\'s own keys', () => {
