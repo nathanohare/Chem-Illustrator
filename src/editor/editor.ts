@@ -265,6 +265,26 @@ const emptySel = (): Selection => ({ atoms: new Set(), bonds: new Set(), caption
 /** How quickly a second click must follow for a double-click (the usual system default). */
 const DOUBLE_CLICK_MS = 500;
 
+/** What the status bar's hints go by (Editor.statusState). */
+export interface EditorStatus {
+  /** The drag in hand, once it has moved ('none' when the button is up or it hasn't moved yet). */
+  drag: HintState['drag'];
+  /** The keys that change that drag: [key, what it does]. */
+  dragKeys: [string, string][];
+  /** The drag moves a copy (Ctrl was held at the press). */
+  copying: boolean;
+  /** An atom or bond has the keyboard highlight (hotkeys, Space, Tab and the arrow keys act on it). */
+  highlight: 'atom' | 'bond' | null;
+  /** How many atoms, bonds and other things (captions, arrows, shapes) are selected. */
+  atoms: number;
+  bonds: number;
+  others: number;
+  /** The selected atoms are whole structures (nothing bonded to them is left out). */
+  whole: boolean;
+  /** Two atoms or two bonds are selected: Join (Ctrl+J) makes them one. */
+  joinable: boolean;
+}
+
 interface Drag {
   start: Vec; // doc coords
   startScreen: Vec;
@@ -395,7 +415,14 @@ export class Editor {
    * (or, with `stickyHotspot`, stays when the mouse moves into empty space, as in ChemDraw,
    * and gives way when the mouse rests on something else).
    */
-  private keyHot: Hit = null;
+  private get keyHot(): Hit { return this.keyHotNow; }
+  private set keyHot(h: Hit) {
+    const was = this.keyHotNow;
+    this.keyHotNow = h;
+    // the status bar's hints follow the highlight (Space or Tab selects its molecule)
+    if (was?.kind !== h?.kind) this.onStatus();
+  }
+  private keyHotNow: Hit = null;
   /** What the mouse pointed at when the keyboard highlight was set. */
   private keyHotHover: Hit = null;
   /** Where the mouse was on screen when the keyboard highlight was set. */
@@ -524,6 +551,8 @@ export class Editor {
   onToolChange: (name: string) => void = () => {};
   /** Show a hint for the step in hand in the status bar (empty: the tool's own hint again). */
   onHint: (text: string) => void = () => {};
+  /** The status bar's hints may have changed: a drag began or ended, or the keyboard highlight came or went (see statusState). */
+  onStatus: () => void = () => {};
   /** A message for the person, shown for a few seconds (ms). */
   onNotice: (text: string, ms?: number) => void = () => {};
   /** The 3-D builder and compound check behind the 3-D Perspective tool (none: it turns structures flat). */
@@ -1291,6 +1320,7 @@ export class Editor {
         }
       }
       if (d.mode === 'pan') this.r.overlay.style.cursor = 'grabbing';
+      if (d.moved) this.onStatus();
     }
     if (!d.moved) return;
     if (d.mode === 'spot') {
@@ -7200,6 +7230,33 @@ export class Editor {
       }
     }
     return null;
+  }
+
+  /**
+   * What the status bar's hints go by: the drag in hand (once it has moved) with the keys that
+   * change it (the ones the pointer's label shows), the keyboard highlight, and the selection.
+   */
+  statusState(): EditorStatus {
+    const d = this.drag;
+    const s = d?.moved && d.button === 0 ? this.hintState() : null;
+    const hs = this.keyHot ? this.hotspot() : null;
+    const sel = this.sel;
+    let whole = sel.atoms.size > 0;
+    if (whole) {
+      outer: for (const id of sel.atoms) for (const n of this.doc.neighbors(id)) if (!sel.atoms.has(n.id)) { whole = false; break outer; }
+    }
+    const loose = sel.bonds.size === 2 && [...sel.atoms].every((id) => [...sel.bonds].some((bid) => { const b = this.doc.bonds.get(bid); return b && (b.a1 === id || b.a2 === id); }));
+    return {
+      drag: s ? s.drag : 'none',
+      dragKeys: s ? modifierHints(s, { shift: false, alt: false, ctrl: false }).map((h) => [h.key, h.text[0].toUpperCase() + h.text.slice(1)] as [string, string]) : [],
+      copying: !!d?.moved && d.mode === 'move' && d.ctrl,
+      highlight: hs?.kind === 'atom' || hs?.kind === 'bond' ? hs.kind : null,
+      atoms: sel.atoms.size,
+      bonds: sel.bonds.size,
+      others: sel.captions.size + sel.arrows.size + sel.shapes.size,
+      whole,
+      joinable: (sel.atoms.size === 2 && !sel.bonds.size) || loose,
+    };
   }
 
   /** What the modifier keys care about right now (see modifierHints). */
