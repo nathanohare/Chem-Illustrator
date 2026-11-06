@@ -96,7 +96,7 @@ const ELEMENT: Record<string, string> = {
   Ge: 'Germanium', Sn: 'Tin', B: 'Boron', Se: 'Selenium', Te: 'Tellurium', Hg: 'Mercury', As: 'Arsenic', H: 'Hydrogen',
 };
 
-/** The element that joins the ring, for the "Joined by" filter ("Fused ring (3,4-)" for a group joined at two places). */
+/** The element that joins the ring, for the "Attached through" filter ("Fused ring (3,4-)" for a group joined at two places). */
 export function joinedBy(x: Hammett): string {
   if (!x.smiles) return (x.row !== null && JOINS_UNDRAWN[x.row]) || 'Carbon';
   if (x.smiles.split('[*]').length === 3) return 'Fused ring (3,4-)';

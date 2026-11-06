@@ -297,7 +297,7 @@ import { parseIndex, indexText } from './library/file-index';
 import { libraryHolder } from './ui/library-refs';
 import type { CompoundLibraryWindow, CompoundLibraryHost, StructureIn } from './ui/compound-library';
 import type { KnowledgeBaseHost, KnowledgeBaseWindow } from './ui/knowledge-base';
-import { looksLikeSmiles } from './kb/tables';
+import { joinAttachment, looksLikeSmiles } from './kb/tables';
 import type { FindInFilesWindow, FindInFilesHost, ListedFile } from './ui/find-in-files';
 import { later, madeLater } from './lazy';
 
@@ -5982,11 +5982,29 @@ const knowledgeBaseHost = {
     tool: (t) => { if (typeof t === 'number') editor.pickElement(t); else pickTool(t); overlay.focus(); },
     current: () => (editor.toolName === 'element' ? editor.element : editor.toolName),
     selection: () => selectionContents(),
-    smiles: async (c) => {
+    smiles: async (c, on) => {
       if (!chem.ready) return 'The chemistry engine is still loading; try again in a moment.';
       const d = structureDoc(c, sheetStyle());
+      const points = [...d.atoms.values()].filter((a) => a.attach).length;
+      if (on && points > 1) return `Draw the group out from one attachment point (this drawing has ${points}).`;
       const got = await structuresFor(d, partsOf(d));
-      return got.length ? { smiles: got.map((g) => g.smiles).join('.') } : 'The structure couldn\'t be read (check its valences).';
+      if (!got.length) return 'The structure couldn\'t be read (check its valences).';
+      const smiles = got.map((g) => g.smiles).join('.');
+      if (!on || !points) return { smiles };
+      // a group: its attachment point joined to the structure it sits on (a benzene ring)
+      const joined = joinAttachment(smiles, on);
+      const mb = joined ? await chem.smilesToMol(joined).catch(() => null) : null;
+      const canon = mb ? await chem.molToSmiles(mb).catch(() => null) : null;
+      return canon ? { smiles: canon } : 'The group couldn\'t be read (check its valences).';
+    },
+    group: () => {
+      const d = structureDoc({ atoms: [], bonds: [], captions: [], arrows: [], shapes: [] }, sheetStyle());
+      d.bulk(() => {
+        const point = d.addAtom(0, 0, 0, { attach: 'Wavy' });
+        const first = d.addAtom(d.style.bondLength, 0);
+        d.addBond(point.id, first.id);
+      });
+      return d.contents();
     },
   },
 } satisfies KnowledgeBaseHost;

@@ -136,8 +136,13 @@ export interface KbDrawing {
   current(): string | number;
   /** The structure selected in the drawing (read before the Draw window opens), or a sentence saying why there is none. */
   selection(): Contents | string;
-  /** A drawing's SMILES (several structures joined by "."), or a sentence saying why it can't be read. */
-  smiles(c: Contents): Promise<{ smiles: string } | string>;
+  /**
+   * A drawing's SMILES (several structures joined by "."), or a sentence saying why it can't be
+   * read. With `on`, the drawing's attachment point (if it has one) is joined to that structure.
+   */
+  smiles(c: Contents, on?: string): Promise<{ smiles: string } | string>;
+  /** A drawing of an attachment point (a wavy line) on the end of a bond, to draw a group out from. */
+  group(): Contents;
 }
 
 /** The Draw window's tools: bonds, rings, a chain and the eraser, then common elements. */
@@ -147,6 +152,7 @@ const DRAW_TOOLS: [string, string][] = [
 ];
 const DRAW_ATOMS: [string, number][] = [['C', 6], ['H', 1], ['N', 7], ['O', 8], ['S', 16], ['P', 15], ['F', 9], ['Cl', 17], ['Br', 35], ['I', 53]];
 const DRAW_INFO = 'Draw the structure, or the part of one, to look for: with these buttons, the toolbox and the usual keys (point at an atom and type N, O, Cl…). Search finds that compound, then every compound containing it, in every table. The drawing is kept: Draw… opens it again to change it. Use Selected starts from the structure selected in the drawing.';
+const GROUP_INFO = 'Draw the group to look for out from the attachment point (the wavy line), as the Structure column draws them: point at the carbon and type O, N, Cl…, or draw bonds on from it. Search finds that group, then every group containing it. With no attachment point, a drawing is searched as the whole substituted benzene. The drawing is kept: Draw… opens it again to change it.';
 
 export { looksLikeSmiles };
 
@@ -155,6 +161,8 @@ export class KnowledgeBaseWindow {
   private tables: KbTable[] = [...BUILT_IN_TABLES];
   private current: KbTable = BUILT_IN_TABLES[0];
   private search!: HTMLInputElement;
+  /** Draw… (or Use Selected): hidden with the search box on a table that isn't searched. */
+  private findBtn: HTMLButtonElement | null = null;
   private list!: HTMLDivElement;
   private filters!: HTMLDivElement;
   private about!: HTMLElement;
@@ -189,6 +197,9 @@ export class KnowledgeBaseWindow {
   private drawBox: HTMLDivElement | null = null;
   /** The drawing searched for last: Draw… opens it again. */
   private drawn: Contents | null = null;
+  /** The group last searched for, on a table of groups (Hammett), and whether the Draw window is drawing one, on which structure. */
+  private drawnGroup: Contents | null = null;
+  private drawOn: string | null = null;
   /** The structure selected in the drawing when Draw… was pressed (or why there was none). */
   private drawSelected: Contents | string = '';
   /** Each drawing started (a newer one makes the older one's end not count). */
@@ -228,10 +239,11 @@ export class KnowledgeBaseWindow {
     this.sources = el('p', { className: 'muted kb-sources' });
     this.count = el('span', { className: 'muted' });
     this.removeBtn = button('Remove Table…', 'Remove the imported table showing (only from this computer)', () => void this.removeImported());
+    this.findBtn = this.host.drawing ? button('Draw…', 'Draw the structure to search for: that compound, then every compound containing it', () => this.openDraw())
+      : this.host.selected ? button('Use Selected', 'Search for the structure selected in the drawing: that compound, then every compound containing it', () => void this.useSelected()) : null;
     d.append(
       el('div', { className: 'refs-head kb-head' }, el('h2', { textContent: 'Knowledge Base' }), el('div', { className: 'kb-top' }, this.title, this.filters), this.search,
-        ...(this.host.drawing ? [button('Draw…', 'Draw the structure to search for: that compound, then every compound containing it', () => this.openDraw())]
-          : this.host.selected ? [button('Use Selected', 'Search for the structure selected in the drawing: that compound, then every compound containing it', () => void this.useSelected())] : [])),
+        ...(this.findBtn ? [this.findBtn] : [])),
       el('div', { className: 'kb-body' },
         this.list,
         el('div', { className: 'kb-main' }, this.wrap, this.sources)),
@@ -299,7 +311,7 @@ export class KnowledgeBaseWindow {
   private showList(): void {
     const q = this.search.value.trim();
     this.list.replaceChildren(...this.tables.map((t) => {
-      const n = q ? this.matches(t, false).length : t.rows.length;
+      const n = q && !t.noSearch ? this.matches(t, false).length : t.rows.length;
       const b = el('button', { type: 'button', className: `kb-tab${t === this.current ? ' on' : ''}`, title: t.about },
         el('span', { textContent: t.title }), el('span', { className: 'muted', textContent: String(n) }));
       b.setAttribute('role', 'tab');
@@ -326,6 +338,8 @@ export class KnowledgeBaseWindow {
   }
 
   private findMatches(t: KbTable, filters: Record<string, string>): RowMatch[] {
+    // a table read whole: every row, whatever is typed
+    if (t.noSearch) return findRows(t, '', filters);
     // a structure: the same compound first, then the ones containing it
     if (this.queryCanon) {
       const same: RowMatch[] = [], inside: RowMatch[] = [];
@@ -359,15 +373,19 @@ export class KnowledgeBaseWindow {
     this.casCid = null;
     if (looksLikeSmiles(q)) void this.smilesSearch(q, token);
     if (isCas(q)) void this.casSearch(q, token);
-    // jump to the first table with matches when the one showing has none
-    if (q && !this.matches(this.current).length) {
-      const other = this.tables.find((t) => this.matches(t, false).length);
-      if (other) { this.current = other; this.picked = {}; }
-    }
+    // (a structure moves to a table once its matches are in: its SMILES as words would match another table's)
+    if (!looksLikeSmiles(q)) this.jumpToMatches();
     this.showList();
     this.showTable();
     // what was found starts at the top
     this.wrap.scrollTop = 0;
+  }
+
+  /** Move to the first table a search finds something in, when the one showing has nothing (or is read whole, unsearched). */
+  private jumpToMatches(): void {
+    if (!this.search.value.trim() || (!this.current.noSearch && this.matches(this.current).length)) return;
+    const other = this.tables.find((t) => !t.noSearch && this.matches(t, false).length);
+    if (other) { this.current = other; this.picked = {}; }
   }
 
   /** A CAS number typed: ask PubChem which compound it is, to find rows that carry no CAS number. */
@@ -375,10 +393,7 @@ export class KnowledgeBaseWindow {
     const cid = await this.host.cidForCas?.(q).catch(() => null) ?? null;
     if (token !== this.searchToken || cid === null) return;
     this.casCid = cid;
-    if (!this.matches(this.current).length) {
-      const other = this.tables.find((t) => this.matches(t, false).length);
-      if (other) { this.current = other; this.picked = {}; }
-    }
+    this.jumpToMatches();
     this.showList();
     this.showTable();
   }
@@ -417,7 +432,9 @@ export class KnowledgeBaseWindow {
    */
   private async smilesSearch(q: string, token: number): Promise<void> {
     const c = await this.host.canonical(q);
-    if (token !== this.searchToken || !c) return;
+    if (token !== this.searchToken) return;
+    // not a structure after all: words, found as words
+    if (!c) { this.showFound(); return; }
     for (const t of this.tables) for (const r of t.rows) if ((t.canonicalSmiles || CANONICAL_ROWS.has(r)) && typeof r.smiles === 'string') this.canon.set(r.smiles, r.smiles);
     const todo = this.tables.flatMap((t) => t.rows.map((r) => r.smiles)).filter((s): s is string => typeof s === 'string' && !this.canon.has(s));
     for (const s of todo) this.canon.set(s, await this.host.canonical(s));
@@ -436,10 +453,7 @@ export class KnowledgeBaseWindow {
 
   /** Show what a search found, moving to a table with matches when the one showing has none. */
   private showFound(): void {
-    if (!this.matches(this.current).length) {
-      const other = this.tables.find((t) => this.matches(t, false).length);
-      if (other) { this.current = other; this.picked = {}; }
-    }
+    this.jumpToMatches();
     this.showList();
     this.showTable();
   }
@@ -448,6 +462,7 @@ export class KnowledgeBaseWindow {
   private openDraw(): void {
     const dr = this.host.drawing;
     if (!dr || !this.d || this.drawWin) return;
+    this.drawOn = this.current.drawOn ?? null;
     this.drawSelected = dr.selection();
     const tools = el('div', { className: 'kb-draw-tools', role: 'toolbar' });
     tools.setAttribute('aria-label', 'Drawing tools');
@@ -464,14 +479,15 @@ export class KnowledgeBaseWindow {
     for (const [sym, z] of DRAW_ATOMS) tools.append(tool(z, `${sym}: click an atom to make it ${sym}, or empty space to add one`, null, sym));
     const light = () => { const now = dr.current(); for (const { b, t } of lit) b.classList.toggle('on', t === now); };
     this.drawBox = el('div', { className: 'kb-draw-box' });
-    const title = el('h3', { className: 'kb-draw-title has-info', textContent: 'Draw a Structure to Search' });
-    title.append(infoIcon(DRAW_INFO));
+    const name = this.drawOn ? 'Draw a Group to Search' : 'Draw a Structure to Search';
+    const title = el('h3', { className: 'kb-draw-title has-info', textContent: name });
+    title.append(infoIcon(this.drawOn ? GROUP_INFO : DRAW_INFO));
     const w = (this.drawWin = el('div', { className: 'kb-draw', role: 'dialog' },
       el('div', { className: 'kb-draw-head' }, title, button('✕', 'Close without searching (Esc)', () => dr.finish(false))),
       tools,
       this.drawBox,
       el('div', { className: 'kb-draw-foot' },
-        button('Clear', 'Start again with an empty drawing', () => this.restartDrawing(null)),
+        button('Clear', this.drawOn ? 'Start again from the attachment point' : 'Start again with an empty drawing', () => this.restartDrawing(this.drawStart())),
         button('Use Selected', 'Start from the structure selected in the drawing', () => {
           if (typeof this.drawSelected === 'string') this.host.flash(this.drawSelected || 'Select a structure in the drawing before opening Draw.', 6000);
           else this.restartDrawing(this.drawSelected);
@@ -479,11 +495,16 @@ export class KnowledgeBaseWindow {
         el('span', { className: 'kb-draw-gap' }),
         button('Cancel', 'Close without searching (Esc)', () => dr.finish(false)),
         button('Search', 'Find this compound, then every compound containing it (Ctrl+Enter)', () => dr.finish(true), true))));
-    w.setAttribute('aria-label', 'Draw a Structure to Search');
+    w.setAttribute('aria-label', name);
     this.d.append(w);
-    this.startDrawing(this.drawn);
+    this.startDrawing(this.drawOn ? this.drawnGroup ?? this.drawStart() : this.drawn);
     light();
     this.drawLight = window.setInterval(light, 250);
+  }
+
+  /** What the Draw window starts from afresh: nothing, or an attachment point to draw a group out from. */
+  private drawStart(): Contents | null {
+    return this.drawOn ? this.host.drawing?.group() ?? null : null;
   }
 
   /** The drawing tools start on `c` in the Draw window's box. */
@@ -504,14 +525,15 @@ export class KnowledgeBaseWindow {
   private async drawEnded(got: Contents | null): Promise<void> {
     if (got && !got.atoms.length) {
       this.host.flash('Draw a structure to search for first.');
-      this.startDrawing(null);
+      this.startDrawing(this.drawStart());
       return;
     }
+    const on = this.drawOn;
     this.closeDraw(false);
     if (!got) return;
-    const r = await this.host.drawing!.smiles(got);
+    const r = await this.host.drawing!.smiles(got, on ?? undefined);
     if (typeof r === 'string') { this.host.flash(r, 6000); return; }
-    this.drawn = got;
+    if (on) this.drawnGroup = got; else this.drawn = got;
     if (!this.d) return;
     this.search.value = r.smiles;
     this.searchChanged();
@@ -571,6 +593,10 @@ export class KnowledgeBaseWindow {
     this.titleText.textContent = prettyChem(t.title);
     setInfo(this.about, prettyChem(t.about));
     this.removeBtn.hidden = !t.personal;
+    // a table read whole has no search box (nor Draw…)
+    this.search.hidden = !!t.noSearch;
+    if (this.findBtn) this.findBtn.hidden = !!t.noSearch;
+    if (t.noSearch) this.closeDraw(true);
     // filter lists
     this.filters.replaceChildren(...t.columns.filter((c) => c.filter).map((c) => {
       const s = el('select', { title: `Show only one ${c.label.toLowerCase()}` });
@@ -585,13 +611,14 @@ export class KnowledgeBaseWindow {
         this.showTable();
       });
       if (solvent) s.title = 'The solvent your NMR was taken in: impurity shifts change with it. Remembered for the other impurity tables';
-      return el('label', {}, el('span', { textContent: solvent ? 'NMR taken in' : c.label }), s);
+      return el('label', {}, el('span', { textContent: solvent ? 'NMR taken in' : c.label }), ...(c.hidden && c.info ? [infoIcon(c.info)] : []), s);
     }));
     this.filters.hidden = !this.filters.childElementCount;
     let rows = this.matches(t);
     const sortCol = this.sort && t.columns.find((c) => c.key === this.sort!.key);
-    // a structure search keeps the same compound above the ones containing it, each sorted
-    if (sortCol) rows = this.queryCanon ? [...sortRows(rows.filter((m) => m.same), sortCol, this.sort!.down), ...sortRows(rows.filter((m) => !m.same), sortCol, this.sort!.down)] : sortRows(rows, sortCol, this.sort!.down);
+    // a structure search (not on a table read whole) keeps the same compound above the ones containing it, each sorted
+    const structure = !!this.queryCanon && !t.noSearch;
+    if (sortCol) rows = structure ? [...sortRows(rows.filter((m) => m.same), sortCol, this.sort!.down), ...sortRows(rows.filter((m) => !m.same), sortCol, this.sort!.down)] : sortRows(rows, sortCol, this.sort!.down);
     const span = t.columns.filter((c) => !c.hidden).length + (t.links ? 1 : 0);
     const sameCount = rows.filter((m) => m.same).length;
     // the first rows straight away and the rest as the table is scrolled down: building every
@@ -602,10 +629,10 @@ export class KnowledgeBaseWindow {
       const end = Math.min(rows.length, next + n);
       for (; next < end; next++) {
         // a structure search: a heading over the same compound and over the ones containing it
-        if (this.queryCanon && (next === 0 || rows[next].same !== rows[next - 1].same)) body.append(this.groupRow(span, rows[next].same ? `This compound (${sameCount})` : `Containing it (${rows.length - sameCount})`));
+        if (structure && (next === 0 || rows[next].same !== rows[next - 1].same)) body.append(this.groupRow(span, rows[next].same ? `This compound (${sameCount})` : `Containing it (${rows.length - sameCount})`));
         body.append(this.rowEl(t, rows[next]));
       }
-      if (this.queryCanon && next === rows.length && this.lookingInside) body.append(this.groupRow(span, 'Looking for compounds containing it…'));
+      if (structure && next === rows.length && this.lookingInside) body.append(this.groupRow(span, 'Looking for compounds containing it…'));
     };
     this.moreRows(FIRST_ROWS);
     const table = el('table', { className: 'refs-table kb-table' + (t.picture ? ' kb-pictures' : '') + (t.fit ? ' kb-fit' : '') }, el('thead', {}, el('tr', {}, ...t.columns.filter((c) => !c.hidden).map((c) => this.header(c)), ...(t.links ? [el('th', { textContent: 'Look up' })] : []))), body);
@@ -702,12 +729,12 @@ export class KnowledgeBaseWindow {
 
   /**
    * A miscibility chart: the solvents down the side and across the top, a shaded square where a
-   * pair forms two layers. Solvents matching the search are picked out; resting the pointer on a
-   * square names the pair and lights up its row and column.
+   * pair forms two layers (picked out by a search, on a table that is searched); resting the pointer
+   * on a square names the pair and lights up its row and column.
    */
   private matrixEl(t: KbTable, rows: RowMatch[]): HTMLElement {
     const m = t.matrix!;
-    const q = this.search.value.trim();
+    const q = t.noSearch ? '' : this.search.value.trim();
     const hit = new Set(q ? rows.map((r) => String(r.row.name)) : []);
     const marked = new Set(m.pairs.flatMap(([a, b]) => [`${a}|${b}`, `${b}|${a}`]));
     const head = el('tr', {}, el('th', { className: 'kb-mx-corner' }));
