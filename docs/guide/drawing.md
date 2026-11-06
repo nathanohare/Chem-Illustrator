@@ -12,7 +12,7 @@ The drawing tools run down the left side, in groups. A button with a small arrow
 
 ### Select and eraser
 
-- **Select and move**: click to select, drag a box around things to select them, drag a selection to move it. Double-click an atom or bond to select its whole structure. Delete removes the selection.
+- **Select and move** (Space): click to select, drag a box around things to select them, drag a selection to move it. Canvas mode starts with this tool, and so does each new or opened drawing; a tab you go back to keeps the tool you were using. Double-click an atom or bond to select its whole structure. Delete removes the selection.
 - **Lasso select** (click the Select button again while it is in use, right-click it, or press and hold, then pick the loop): drag a loop around what to select, to pick a few pieces out of a crowded scheme without catching their neighbors. Shift adds to the selection.
 - **Eraser**: click an atom, bond, caption, arrow or shape to remove it.
 

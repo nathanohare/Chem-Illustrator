@@ -938,7 +938,8 @@ editor.onHint = (text) => { stepHintOn = !!text; if (text) setHint(text); else e
 editor.onNotice = (text, ms) => flash(text, ms);
 // a drag under way, or the keyboard highlight coming or going: the status bar's hints follow
 editor.onStatus = () => { if (statusReady) showToolStatus(); };
-editor.setTool('bond-single');
+// Canvas mode starts on Select (the marquee, Space), as new and opened drawings do too
+editor.setTool('select');
 
 // tablets: bigger buttons, long-press menus, double taps and the atom keypad (View > Window and Colours > Touch Mode)
 installTouchUi({
@@ -3808,9 +3809,10 @@ const sizeSel = $<HTMLSelectElement>('#rb-size');
 
 /** View > Window and Colours > Mode Colours: blue for drawings, orange for slides, green for sheets, or the person's own colours. */
 let modeColours: ModeColours = { ...DEFAULT_MODE_COLOURS };
-// Each mode keeps its own tool: slides start with Select (click a placeholder to type), drawings
-// and structures drawn for sheet cells with a bond.
-const modeTool: Record<Tab['mode'], string> = { drawing: 'bond-single', slides: 'select', sheet: 'bond-single', document: 'bond-single', design: 'select' };
+// Each mode keeps its own tool: drawings and slides start with Select (the marquee; on a slide,
+// click a placeholder to type), structures drawn for sheet cells and documents with a bond.
+const START_TOOL: Readonly<Record<Tab['mode'], string>> = { drawing: 'select', slides: 'select', sheet: 'bond-single', document: 'bond-single', design: 'select' };
+const modeTool: Record<Tab['mode'], string> = { ...START_TOOL };
 
 // ---------------------------------------------------------------- sheets
 
@@ -4051,6 +4053,8 @@ function finishTab(): void {
 
 /** Set the window up for a tab that has just come to the front. */
 function enterTab(tab: Tab, opened: boolean): void {
+  // a new or opened drawing starts on Select; going back to a tab keeps the tool last used
+  if (opened && tab.mode === 'drawing') modeTool.drawing = START_TOOL.drawing;
   if (slideSplit && tab !== slideSplit.partner) slideSplit = null;
   splitDrawing = false;
   const deck = tab.deck;
