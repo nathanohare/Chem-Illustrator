@@ -215,10 +215,11 @@ const dirs = (verb: string, names: string[]) => names.map((n) => `${verb} ${n}`)
  * The keys that act on what is selected (or highlighted), in order of use: those that apply,
  * each under the key it has now (none when it has been unbound).
  */
-function selectionKeys(key: KeyLookup, o: { reaction: boolean; enter: string | null; join: boolean; double: boolean; shiftClick: boolean; rotate: boolean }): [string, string][] {
+function selectionKeys(key: KeyLookup, o: { reaction: boolean; enter: string | null; join: boolean; double: boolean; grow?: boolean; shiftClick: boolean; rotate: boolean }): [string, string][] {
   const out: [string, string][] = [];
   const put = (k: string | undefined, what: string) => { if (k) out.push([k, what]); };
-  if (o.double) out.push(['Double-click', 'Select structure']);
+  if (o.grow) out.push(['Space/Tab', 'Select structure']);
+  else if (o.double) out.push(['Double-click', 'Select structure']);
   if (o.join) put(key('command join'), 'Join');
   if (o.reaction) put(arrowFamily(key, dirs('command', ['reaction-left', 'reaction-right', 'reaction-up', 'reaction-down'])), 'Reaction arrow');
   if (o.rotate) put(arrowFamily(key, dirs('command', ['turn-ccw-1', 'turn-cw-1', 'turn-ccw-15', 'turn-cw-15'])), 'Rotate');
@@ -288,12 +289,12 @@ export function statusHint(o: {
       return plain(one.name, [...one.handles, 'Ctrl+drag to copy'], selectionKeys(key, { reaction: false, enter: null, join: false, double: false, shiftClick: false, rotate: true }));
     }
     if (st.atoms && st.whole) {
-      return plain('Structure selected', ['Ctrl+drag to copy'], selectionKeys(key, { reaction: true, enter: 'Highlight last atom', join: st.joinable, double: false, shiftClick: false, rotate: true }));
+      return plain('Structure selected', ['Ctrl+drag to copy'], selectionKeys(key, { reaction: true, enter: 'Highlight last atom', join: false, double: false, shiftClick: false, rotate: true }));
     }
     if (st.atoms || st.bonds) {
       const nm = st.atoms > 1 ? 'Atoms selected' : st.atoms === 1 ? 'Atom selected' : st.bonds > 1 ? 'Bonds selected' : 'Bond selected';
       // (one atom has nothing to turn about)
-      return plain(nm, ['Ctrl+drag to copy'], selectionKeys(key, { reaction: false, enter: st.atoms ? 'Highlight atom' : null, join: st.joinable, double: true, shiftClick: false, rotate: st.atoms + st.bonds > 1 }));
+      return plain(nm, ['Ctrl+drag to copy'], selectionKeys(key, { reaction: false, enter: st.atoms ? 'Highlight atom' : null, join: st.joinable, double: true, grow: st.partOfOne, shiftClick: false, rotate: st.atoms + st.bonds > 1 }));
     }
     return plain('Objects selected', ['Ctrl+drag to copy'], selectionKeys(key, { reaction: false, enter: null, join: false, double: false, shiftClick: true, rotate: true }));
   }

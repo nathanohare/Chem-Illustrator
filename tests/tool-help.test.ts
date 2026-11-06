@@ -52,7 +52,7 @@ const DEFAULTS: Record<string, string> = {
   'command join': 'Ctrl+J', 'command select-all': 'Ctrl+A', 'command next-structure': 'Tab',
 };
 const key: KeyLookup = (a) => DEFAULTS[a];
-const idle: EditorStatus = { drag: 'none', dragKeys: [], copying: false, highlight: null, atoms: 0, bonds: 0, others: 0, whole: false, joinable: false };
+const idle: EditorStatus = { drag: 'none', dragKeys: [], copying: false, highlight: null, atoms: 0, bonds: 0, others: 0, whole: false, joinable: false, partOfOne: false };
 const hint = (name: string, st: Partial<EditorStatus>, one: { name: string; handles: string[] } | null = null, k: KeyLookup = key) =>
   statusHint({ name, label: name, t: TOOLS[name], st: { ...idle, ...st }, step: 0, one, key: k });
 const keysOf = (h: { keys: [string, string][] }) => h.keys.map(([k]) => k);
@@ -78,6 +78,8 @@ describe('status bar hints', () => {
     expect(h.name).toBe('Structure selected');
     expect(h.steps).toEqual(['Ctrl+drag to copy']);
     expect(h.keys).toEqual([['Ctrl+Arrow', 'Reaction arrow'], ['Alt+Arrow', 'Rotate'], ['Arrow keys', 'Nudge (Shift: farther)'], ['Enter', 'Highlight last atom']]);
+    // a whole two-bond structure is no Join
+    expect(keysOf(hint('select', { atoms: 3, bonds: 2, whole: true, joinable: true }))).not.toContain('Ctrl+J');
   });
 
   it('with part of a structure selected: double-click for the whole, Join for two atoms', () => {
@@ -86,6 +88,8 @@ describe('status bar hints', () => {
     expect(keysOf(h).slice(0, 2)).toEqual(['Double-click', 'Ctrl+J']);
     expect(keysOf(h)).not.toContain('Ctrl+Arrow');
     expect(keysOf(hint('select', { atoms: 3 }))).not.toContain('Ctrl+J');
+    // part of one structure: Space or Tab selects it whole (several structures: double-click)
+    expect(hint('select', { atoms: 1, partOfOne: true }).keys[0]).toEqual(['Space/Tab', 'Select structure']);
     // one atom: nothing to turn
     expect(keysOf(hint('select', { atoms: 1 }))).not.toContain('Alt+Arrow');
   });

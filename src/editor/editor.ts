@@ -283,6 +283,8 @@ export interface EditorStatus {
   whole: boolean;
   /** Two atoms or two bonds are selected: Join (Ctrl+J) makes them one. */
   joinable: boolean;
+  /** Part of one structure is selected: Space or Tab selects it whole. */
+  partOfOne: boolean;
 }
 
 interface Drag {
@@ -5725,6 +5727,15 @@ export class Editor {
       this.selectFragment(hs.kind === 'atom' ? hs.id : this.doc.bonds.get(hs.id)!.a1, false);
       return;
     }
+    // Space or Tab with part of one structure selected (a clicked atom or bond): the whole structure
+    if ((chord === 'Space' || chord === 'Tab') && !this.keyHot) {
+      const grow = this.partOfOne();
+      if (grow !== null) {
+        e.preventDefault();
+        this.selectFragment(grow, false);
+        return;
+      }
+    }
     if (chord === 'Enter' && !this.keyHot && !this.hover && this.sel.atoms.size) {
       e.preventDefault();
       const back = this.lastEdited !== null && this.sel.atoms.has(this.lastEdited) ? this.lastEdited : [...this.sel.atoms][0];
@@ -7256,7 +7267,26 @@ export class Editor {
       others: sel.captions.size + sel.arrows.size + sel.shapes.size,
       whole,
       joinable: (sel.atoms.size === 2 && !sel.bonds.size) || loose,
+      partOfOne: this.partOfOne() !== null,
     };
+  }
+
+  /**
+   * An atom of the one structure that is partly selected (its atoms and bonds only, nothing
+   * else), for Space and Tab to select it whole; null otherwise.
+   */
+  private partOfOne(): number | null {
+    const s = this.sel;
+    if (s.captions.size || s.arrows.size || s.shapes.size) return null;
+    const first = s.atoms.size ? [...s.atoms][0] : s.bonds.size ? this.doc.bonds.get([...s.bonds][0])?.a1 : undefined;
+    if (first === undefined || !this.doc.atoms.has(first)) return null;
+    const frag = this.doc.fragmentOf(first);
+    for (const id of s.atoms) if (!frag.has(id)) return null;
+    for (const bid of s.bonds) { const b = this.doc.bonds.get(bid); if (!b || !frag.has(b.a1)) return null; }
+    // already whole: Tab goes on to the next structure
+    let bonds = 0;
+    for (const id of frag) bonds += (this.doc.adj.get(id) ?? []).length;
+    return s.atoms.size === frag.size && s.bonds.size === bonds / 2 ? null : first;
   }
 
   /** What the modifier keys care about right now (see modifierHints). */
