@@ -13,7 +13,7 @@ Download the newest installer from the **Releases** page of the project on GitHu
 ### Windows
 
 1. Download the file ending in `x64-setup.exe` and run it.
-2. Windows may say **"Windows protected your PC"**. This is Windows SmartScreen: it warns about any program that has not been signed with a paid Windows certificate. Click **More info**, then **Run anyway**.
+2. The installer is signed, so Windows shows who made it. If an older copy or a new release still brings up **"Windows protected your PC"** (Windows SmartScreen, which can warn about a signed program until enough people have installed it), click **More info**, then **Run anyway**.
 3. Follow the installer. A newer installer can be run over an older version; you don't need to remove the old one first.
 
 The installer puts the app in your own user folder, so it doesn't need administrator rights. On a computer managed by an IT department, their rules may still block programs that aren't signed; if so, ask them, since neither the installer nor the portable copy below gets around those rules.
@@ -24,7 +24,7 @@ A portable copy runs from a flash drive or any folder, with nothing installed, a
 
 1. Download the file ending in `x64-portable.zip`.
 2. Right-click it, choose **Extract All…**, and put the **Chem Illustrator** folder wherever you want it: a flash drive, Documents, the desktop.
-3. Open the folder and double-click **Chem Illustrator.exe**. The first time, SmartScreen may warn as described above.
+3. Open the folder and double-click **Chem Illustrator.exe**. The first time, SmartScreen may still warn as described above.
 
 The **Chem Illustrator Data** folder next to the app is what makes it portable: your hotkeys, preferences, styles, templates and recent files are saved there instead of on the computer, so the copy behaves the same on every computer you plug it into. Keep the two together, and copy both to move your copy. **Help ▸ Hotkeys and Tips** shows "(portable)" after the version number.
 

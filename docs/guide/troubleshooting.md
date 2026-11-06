@@ -4,7 +4,7 @@ This page covers the problems people meet most often: the program won't install 
 
 ## Installing and starting
 
-**"Windows protected your PC".** This is SmartScreen, which warns about programs that aren't signed with a paid Windows certificate. Click **More info**, then **Run anyway**. An IT department's rules can still block the program; if so, ask them.
+**"Windows protected your PC".** This is SmartScreen. Chem Illustrator's installer is signed, but SmartScreen can still warn about a new release until enough people have installed it. Click **More info**, then **Run anyway**. An IT department's rules can still block the program; if so, ask them.
 
 **Nothing happens when the app starts (Windows).** The app needs Microsoft's WebView2 Runtime. Windows 10 and 11 normally have it, but some managed computers remove it. Install the "Evergreen Standalone Installer" from Microsoft's WebView2 page, then start the app again.
 
