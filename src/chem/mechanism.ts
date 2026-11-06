@@ -857,12 +857,15 @@ export function symbolPin(doc: Doc, s: Shape): Pin | undefined {
 
 /**
  * Where a lone pair, radical dot or charge goes on an atom: in the widest open space between its
- * bonds and anything already sitting round it (`taken`), just clear of its label. Gives the
- * direction from the atom and the symbol's centre, `size` across.
+ * bonds, the H and charge of its label, and anything already sitting round it (`taken`), just
+ * clear of its label. Gives the direction from the atom and the symbol's centre, `size` across.
  */
 export function symbolSpot(doc: Doc, m: Measure, id: number, taken: Vec[], size: number): { dir: Vec; at: Vec } {
   const a = doc.atoms.get(id)!;
-  const avoid = [...bondDirs(doc, id), ...taken.map((p) => norm(sub(p, a)))];
+  // the parts of a label off the atom itself (an H, a charge) take room as a bond does, so a lone
+  // pair on OH goes on the O, not past the H
+  const parts = m.atomBoxes(a).map((b) => ({ x: (b.x1 + b.x2) / 2, y: (b.y1 + b.y2) / 2 })).filter((c) => dist(c, a) > 0.3 * doc.style.bondLength);
+  const avoid = [...bondDirs(doc, id), ...parts.map((p) => norm(sub(p, a))), ...taken.map((p) => norm(sub(p, a)))];
   // with nothing round it, the first goes above (where people look for a charge or lone pair)
   let best = { x: 0, y: -1 }, bestOpen = -Infinity;
   for (let k = 0; k < 24; k++) {

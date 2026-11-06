@@ -17,6 +17,7 @@ import { hasImplicitH, implicitHydrogens, SYMBOLS, valenceOfBonds } from './elem
 import { groupNumber } from './electrons';
 import { headEnd, isAtomSymbol, pairOwner, pushEndAt, symbolPin, symbolSpot, tailEnd, type PushEnd } from './mechanism';
 import { sproutDir } from './chemgeom';
+import { plainMeasure } from './reaction';
 import { atomWarnings } from './warnings';
 
 /** Something wrong (or worth a second look) with the arrows: what, and the arrows, atoms and bonds it is about. */
@@ -358,16 +359,10 @@ export function productDrawing(doc: Doc, m: Measure, reading: PushReading): Draw
     }
 
     // lone pairs, radical dots and circled charges, as the starting drawing showed them
-    // (each label measured as drawn and moved to where its atom now is: a measure that remembers
-    // labels by atom would otherwise give the old place, and a dot would land on a label that moved)
-    const pm = {
-      atomBoxes: (a: Atom) => {
-        const was = doc.atoms.get(a.id);
-        if (!was) return m.atomBoxes(a);
-        const dx = a.x - was.x, dy = a.y - was.y;
-        return m.atomBoxes(was).map((b) => ({ x1: b.x1 + dx, y1: b.y1 + dy, x2: b.x2 + dx, y2: b.y2 + dy }));
-      },
-    } as Measure;
+    // measured on the product itself, not the starting drawing: an atom's label can have moved (a
+    // measure that remembers labels by atom gives the old place, and a dot would land on the label)
+    // or changed (a charge sign, an H more or fewer), and a symbol goes just clear of the label it now has
+    const pm = plainMeasure(out);
     for (const id of atoms) {
       const list = symbols.get(id) ?? [];
       const was = doc.atoms.get(id)!, now = out.atoms.get(id)!;
@@ -386,8 +381,12 @@ export function productDrawing(doc: Doc, m: Measure, reading: PushReading): Draw
         continue;
       }
       const dnA = reading.dn.get(id) ?? 0;
-      const nPairs = pairs.length || (showsPairs && dnA > 0) ? Math.max(0, pairs.length + Math.trunc(dnA / 2)) : 0;
+      // count electrons, not pairs: the drawn pairs and dot, plus what the arrows brought or took,
+      // less the dot it has after. A fishhook from a lone pair leaves one pair fewer and a dot;
+      // one electron onto a radical makes its dot a pair.
       const nDots = x.radical === 'doublet' ? 1 : 0;
+      const drawn = 2 * pairs.length + (was.radical === 'doublet' ? 1 : 0) + dnA - nDots;
+      const nPairs = pairs.length || (showsPairs && dnA > 0) ? Math.max(0, Math.floor(drawn / 2)) : 0;
       const circle = now.hideCharge && Math.abs(now.charge) === 1 ? (now.charge > 0 ? 'CirclePlus' : 'CircleMinus') : null;
       const taken: Vec[] = [];
       const put = (kind: 'LonePair' | 'Electron' | 'CirclePlus' | 'CircleMinus', size: number) => {

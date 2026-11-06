@@ -14,7 +14,7 @@ import { atomNumbers, readMapping, writeMapping, MappingFileError } from '../mor
 import { resolve, MappingError } from '../morph/mapping';
 import { configOf } from '../morph/clip';
 import { encodeGif } from '../morph/gif';
-import { SchemeClip } from '../morph/scheme-clip';
+import { SchemeClip, DEFAULT_CHANGE_COLORS } from '../morph/scheme-clip';
 import { Renderer } from '../render/renderer';
 import { addInfo, infoIcon } from './info-tip';
 import { encodeMp4, mp4Codec } from '../morph/mp4';
@@ -45,14 +45,15 @@ const TIMING_KEY = 'ci-animate-timing';
 
 /** Morph Structures moves each structure into the next; Whole Scheme keeps the scheme on screen and shows the bond changes. */
 export type AnimationStyle = 'morph' | 'scheme';
-type Settings = Timing & { width: number; style: AnimationStyle };
+type Settings = Timing & { width: number; style: AnimationStyle; breakColor: string; formColor: string };
 
 function savedTiming(): Settings {
-  const base: Settings = { ...DEFAULT_TIMING, width: 720, style: 'morph' };
+  const base: Settings = { ...DEFAULT_TIMING, width: 720, style: 'morph', breakColor: DEFAULT_CHANGE_COLORS.breaking, formColor: DEFAULT_CHANGE_COLORS.forming };
   try {
     const v = JSON.parse(localStorage.getItem(TIMING_KEY) ?? '{}');
     const out = { ...base, ...v };
     if (out.style !== 'scheme') out.style = 'morph';
+    for (const k of ['breakColor', 'formColor'] as const) if (!/^#[0-9a-f]{6}$/i.test(String(out[k]))) out[k] = base[k];
     return out;
   } catch { return base; }
 }
@@ -72,6 +73,13 @@ const button = (text: string, title?: string): HTMLButtonElement => {
   return b;
 };
 const tick = () => new Promise((r) => setTimeout(r, 0));
+
+/** " π bonds lost: 1=2. Gained: 4=5." for bonds that only change order (their σ bond stays); empty when none. */
+function piText(sm: { piLost: [string, string][]; piGained: [string, string][] }, n: (k: string) => string): string {
+  const list = (l: [string, string][]) => l.map(([a, b]) => `${n(a)}=${n(b)}`).join(', ');
+  if (!sm.piLost.length && !sm.piGained.length) return '';
+  return ` π bonds lost: ${sm.piLost.length ? list(sm.piLost) : 'none'}. Gained: ${sm.piGained.length ? list(sm.piGained) : 'none'}.`;
+}
 
 export class AnimateDialog {
   private d: HTMLDialogElement | null = null;
@@ -164,10 +172,31 @@ export class AnimateDialog {
       style.append(o);
     }
     style.value = this.timing.style;
-    style.addEventListener('change', () => { this.timing.style = style.value as AnimationStyle; this.remember(); this.remake(); });
     const styleRow = el('label', 'ask-row');
     styleRow.append(el('span', undefined, 'Style'), style);
-    look.append(styleRow);
+    // Whole Scheme's colours for bonds breaking and forming, on one row
+    const colorRow = el('div', 'ask-row animate-colors');
+    const swatch = (id: string, label: string, key: 'breakColor' | 'formColor') => {
+      const lab = el('label', 'animate-swatch');
+      const input = el('input');
+      input.type = 'color';
+      input.id = id;
+      input.value = this.timing[key];
+      input.addEventListener('input', () => { this.timing[key] = input.value; this.remember(); this.remake(); });
+      lab.append(input, el('span', undefined, label));
+      return lab;
+    };
+    const swatches = el('span', 'animate-swatches');
+    swatches.append(swatch('animate-break-color', 'Breaking', 'breakColor'), swatch('animate-form-color', 'Forming', 'formColor'));
+    colorRow.append(el('span', undefined, 'Colors'), swatches);
+    colorRow.hidden = this.timing.style !== 'scheme';
+    style.addEventListener('change', () => {
+      this.timing.style = style.value as AnimationStyle;
+      colorRow.hidden = this.timing.style !== 'scheme';
+      this.remember();
+      this.remake();
+    });
+    look.append(styleRow, colorRow);
     const timing = el('fieldset', 'animate-timing');
     timing.append(el('legend', undefined, 'Timing'));
     const num = (label: string, key: 'duration' | 'fps' | 'hold' | 'pause' | 'width', step: number, min: number, max: number, title: string) => {
@@ -299,7 +328,7 @@ export class AnimateDialog {
       r.showWarnings = false;
       return r;
     })();
-    return new SchemeClip(this.hooks.doc(), this.plan, this.steps, this.timing, this.schemeRenderer, gif);
+    return new SchemeClip(this.hooks.doc(), this.plan, this.steps, this.timing, this.schemeRenderer, gif, { breaking: this.timing.breakColor, forming: this.timing.formColor });
   }
 
   private sizeCanvas(): void {
@@ -370,7 +399,7 @@ export class AnimateDialog {
       edit.addEventListener('click', () => this.editPairing(i));
       head.append(title, how, edit);
       const facts = el('div', 'animate-step-facts');
-      facts.textContent = `${sm.paired} of ${sm.startAtoms} atoms paired. Breaking: ${bondText(sm.breaking)}. Forming: ${bondText(sm.forming)}.`;
+      facts.textContent = `${sm.paired} of ${sm.startAtoms} atoms paired. Breaking: ${bondText(sm.breaking)}. Forming: ${bondText(sm.forming)}.${piText(sm, n)}`;
       if (s.kind === 'turn') {
         const t = s.turn;
         facts.textContent = (t
@@ -477,7 +506,7 @@ export class AnimateDialog {
       const sm = stepSummary({ ...base, map });
       const n = (k: string) => nn(Number(k));
       const bt = (l: [string, string][]) => (l.length ? l.map(([a, b]) => `${n(a)}–${n(b)}`).join(', ') : 'none');
-      facts.textContent = `${sm.paired} of ${sm.startAtoms} atoms paired (${m.pairs?.length ?? 0} by you). Breaking: ${bt(sm.breaking)}. Forming: ${bt(sm.forming)}.`;
+      facts.textContent = `${sm.paired} of ${sm.startAtoms} atoms paired (${m.pairs?.length ?? 0} by you). Breaking: ${bt(sm.breaking)}. Forming: ${bt(sm.forming)}.${piText(sm, n)}`;
       draw();
     };
 

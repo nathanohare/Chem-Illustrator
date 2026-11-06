@@ -1,57 +1,88 @@
 // The Whole Scheme style of Animate Reaction: every structure, arrow and condition stays on screen
 // where it is drawn, and each step in turn shows the bonds it breaks (red, fading) and the bonds
-// it forms (green), then settles back to the scheme as drawn. A bond that loses a line (C=C to
-// C–C) counts as breaking in the starting material; one that gains a line, as forming in the product.
+// it forms (green), then settles back to the scheme as drawn.
+//
+// Electrons are counted as curved arrows count them (IUPAC, "electron pushing" and "curly arrows",
+// Pure Appl. Chem. 2022, 94, 353): an arrow moves one pair, from a lone pair, a σ bond or a π bond.
+// A double bond that becomes a single bond has lost its π pair only: its σ bond is still there, so
+// only its second line is marked as breaking. In the same way a single bond that becomes double has
+// gained one π bond, and only the new line is marked as forming. A whole bond is marked only when
+// the bond itself (its σ bond) goes or comes.
 
 import { Doc } from '../model';
 import type { Rect } from '../geom';
 import type { Renderer } from '../render/renderer';
 import { gifRate, timeline, type Plan, type Step, type Timing } from './clip';
 
+/** A bond a step changes: `lines` 0 for the whole bond (its σ bond goes or comes), else how many π bonds. */
+export interface BondChange { id: number; lines: number }
+
 /** The bonds of the drawing that one step breaks (in its starting materials) and forms (in its products). */
-export interface BondChanges { breaking: number[]; forming: number[] }
+export interface BondChanges { breaking: BondChange[]; forming: BondChange[] }
+
+/** Whole bond orders: an aromatic (1.5) bond is no count of pairs. */
+const pairs = (order: number) => (Number.isInteger(order) ? order : null);
 
 export function bondChanges(s: Step): BondChanges {
-  const breaking: number[] = [], forming: number[] = [];
+  const breaking: BondChange[] = [], forming: BondChange[] = [];
   if (s.kind === 'turn') return { breaking, forming };
   const carried = new Map<string, string>(s.map.bmap);
   for (const [k, sh] of s.map.shifts) carried.set(k, sh.tgt);
   const back = new Map([...carried].map(([a, b]) => [b, a]));
+  // ring bonds that only change Kekulé form are the same aromatic ring drawn the other way
+  const kek = s.opt.kekule?.[0] ?? new Set<string>();
   for (const [k, b] of s.A.bonds) {
     const to = carried.get(k);
-    if (to === undefined || (s.B.bonds.get(to)?.order ?? 0) < b.order) breaking.push(Number(k));
+    if (to === undefined) { breaking.push({ id: Number(k), lines: 0 }); continue; }
+    if (kek.has(k)) continue;
+    const was = pairs(b.order), now = pairs(s.B.bonds.get(to)?.order ?? 0);
+    if (was !== null && now !== null && now < was) breaking.push({ id: Number(k), lines: was - now });
   }
   for (const [k, b] of s.B.bonds) {
     const from = back.get(k);
-    if (from === undefined || (s.A.bonds.get(from)?.order ?? 0) < b.order) forming.push(Number(k));
+    if (from === undefined) { forming.push({ id: Number(k), lines: 0 }); continue; }
+    if (kek.has(from)) continue;
+    const was = pairs(s.A.bonds.get(from)?.order ?? 0), now = pairs(b.order);
+    if (was !== null && now !== null && now > was) forming.push({ id: Number(k), lines: now - was });
   }
-  return { breaking: breaking.filter(Number.isFinite), forming: forming.filter(Number.isFinite) };
+  const real = (c: BondChange) => Number.isFinite(c.id);
+  return { breaking: breaking.filter(real), forming: forming.filter(real) };
 }
 
 type RGB = [number, number, number];
-export const BREAK_RGB: RGB = [214, 40, 40];
-export const FORM_RGB: RGB = [30, 158, 74];
+/** The colours bonds breaking and forming are shown in, unless chosen otherwise. */
+export const DEFAULT_CHANGE_COLORS = { breaking: '#d62828', forming: '#1e9e4a' };
+export interface ChangeColors { breaking: string; forming: string }
 const BLACK: RGB = [0, 0, 0];
+
+export function hexRgb(hex: string, fallback: string): RGB {
+  const m = /^#?([0-9a-f]{6})$/i.exec(hex.trim()) ?? /^#?([0-9a-f]{6})$/i.exec(fallback)!;
+  const n = parseInt(m[1], 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
 
 const mix = (a: RGB, b: RGB, u: number): RGB => [0, 1, 2].map((i) => Math.round(a[i] + (b[i] - a[i]) * u)) as RGB;
 const css = (c: RGB, alpha = 1) => (alpha >= 1 ? `rgb(${c[0]},${c[1]},${c[2]})` : `rgba(${c[0]},${c[1]},${c[2]},${alpha.toFixed(3)})`);
 const ramp = (t: number, lo: number, hi: number) => (t <= lo ? 0 : t >= hi ? 1 : (t - lo) / (hi - lo));
 
 /**
- * A bond's colour part way (t from 0 to 1) through its step. Breaking: black to red, red fading
- * to a pale trace, then back to black as drawn. Forming: black to green, held, then back to black.
+ * A changing bond's colour part way (t from 0 to 1) through its step. Breaking: black to the
+ * breaking colour, fading to a pale trace, then back to black as drawn. Forming: black to the
+ * forming colour, held, then back to black. Undefined while it is still drawn as it is.
  */
-export function changeColor(kind: 'break' | 'form', t: number): string | undefined {
+export function changeColor(kind: 'break' | 'form', t: number, colors: ChangeColors = DEFAULT_CHANGE_COLORS): string | undefined {
   const settle = ramp(t, 0.85, 1);
   if (kind === 'break') {
-    const red = ramp(t, 0, 0.3), fade = ramp(t, 0.35, 0.65);
-    if (settle > 0) return css(mix(BREAK_RGB, BLACK, settle), 0.25 + 0.75 * settle);
-    if (red < 1) return css(mix(BLACK, BREAK_RGB, red));
-    return css(BREAK_RGB, 1 - 0.75 * fade);
+    const c = hexRgb(colors.breaking, DEFAULT_CHANGE_COLORS.breaking);
+    const on = ramp(t, 0, 0.3), fade = ramp(t, 0.35, 0.65);
+    if (settle > 0) return css(mix(c, BLACK, settle), 0.25 + 0.75 * settle);
+    if (on < 1) return css(mix(BLACK, c, on));
+    return css(c, 1 - 0.75 * fade);
   }
-  const green = ramp(t, 0.35, 0.65);
-  if (settle > 0) return css(mix(FORM_RGB, BLACK, settle));
-  return green > 0 ? css(mix(BLACK, FORM_RGB, green)) : undefined;
+  const c = hexRgb(colors.forming, DEFAULT_CHANGE_COLORS.forming);
+  const on = ramp(t, 0.35, 0.65);
+  if (settle > 0) return css(mix(c, BLACK, settle));
+  return on > 0 ? css(mix(BLACK, c, on)) : undefined;
 }
 
 /** The part of the drawing the scheme takes: its structures, and the arrows, text and lines among them. */
@@ -101,7 +132,7 @@ export class SchemeClip {
   private readonly drawing: Doc;
   private readonly plain = new Map<number, string | undefined>();
 
-  constructor(doc: Doc, plan: Plan, readonly steps: Step[], readonly timing: Timing, private r: Renderer, gif = false, pad = 6) {
+  constructor(doc: Doc, plan: Plan, readonly steps: Step[], readonly timing: Timing, private r: Renderer, gif = false, readonly colors: ChangeColors = DEFAULT_CHANGE_COLORS, pad = 6) {
     this.rate = gif ? gifRate(timing.fps) : timing.fps;
     this.frames = timeline(steps.length, timing, this.rate);
     this.drawing = schemeCopy(doc, plan);
@@ -114,23 +145,37 @@ export class SchemeClip {
   get length(): number { return this.frames.length; }
   get seconds(): number { return this.frames.length / this.rate; }
 
-  /** The bond colours at (step, t): the step's changes coloured, everything else as drawn. */
-  colorsAt(step: number, t: number): Map<number, string | undefined> {
-    const out = new Map(this.plain);
+  /**
+   * The colours at (step, t): a whole bond's colour (its σ bond going or coming), and the colour of
+   * the π lines of bonds that only change order; everything else as drawn.
+   */
+  colorsAt(step: number, t: number): { bonds: Map<number, string | undefined>; pi: Map<number, { n: number; color: string }> } {
+    const bonds = new Map(this.plain);
+    const pi = new Map<number, { n: number; color: string }>();
     const ch = this.changes[step];
-    if (!ch) return out;
-    for (const id of ch.breaking) if (out.has(id)) out.set(id, changeColor('break', t) ?? this.plain.get(id));
-    for (const id of ch.forming) if (out.has(id)) out.set(id, changeColor('form', t) ?? this.plain.get(id));
-    return out;
+    if (!ch) return { bonds, pi };
+    const put = (c: BondChange, color: string | undefined) => {
+      if (!bonds.has(c.id) || color === undefined) return;
+      if (c.lines === 0) bonds.set(c.id, color);
+      else pi.set(c.id, { n: c.lines, color });
+    };
+    for (const c of ch.breaking) put(c, changeColor('break', t, this.colors));
+    for (const c of ch.forming) put(c, changeColor('form', t, this.colors));
+    return { bonds, pi };
   }
 
   paintAt(ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D, step: number, t: number): void {
-    const colors = this.colorsAt(step, t);
+    const { bonds, pi } = this.colorsAt(step, t);
     for (const b of this.drawing.bonds.values()) {
-      const c = colors.get(b.id);
+      const c = bonds.get(b.id);
       if (c === undefined) delete b.color; else b.color = c;
     }
-    this.r.drawDocument(ctx as CanvasRenderingContext2D, this.drawing);
+    this.r.piColors = pi.size ? pi : null;
+    try {
+      this.r.drawDocument(ctx as CanvasRenderingContext2D, this.drawing);
+    } finally {
+      this.r.piColors = null;
+    }
   }
 
   draw(ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D, i: number, scale: number, paper = '#ffffff'): void {
