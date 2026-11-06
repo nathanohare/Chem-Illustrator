@@ -40,6 +40,8 @@ export interface PlateData {
   lines: boolean;
   /** Lane names. */
   labels: boolean;
+  /** TLC: the spots can't be dragged (unlocked, dragging a spot up or down its lane changes its Rf). */
+  locked?: boolean;
   /** A line under a TLC plate (the eluent: "20% EtOAc/hexanes") or under a gel. */
   note: string;
   /** Gel: what the sizes are in, and whether the marker's sizes are written beside it. */
@@ -199,13 +201,11 @@ export function drawPlate(doc: Doc, m: Measure, d: PlateData, at: Vec): PlatePar
   if (d.kind === 'tlc') {
     const look = TLC_LOOKS.find((t) => t.id === d.look) ?? TLC_LOOKS[0];
     shape({ kind: 'rect', x1: at.x, y1: at.y, x2: at.x + d.w, y2: at.y + d.h, filled: look.plate !== '#ffffff', fillColor: look.plate, color: '#000000' });
-    const origin = at.y + d.h * 0.88, front = at.y + d.h * 0.08;
+    const { origin, front, yOf, r0 } = tlcGeometry(d, at, L);
     if (d.lines) {
       shape({ kind: 'line', x1: at.x, y1: origin, x2: at.x + d.w, y2: origin, color: '#6b6b6b', lineWidth: lw * 0.6 });
       shape({ kind: 'line', x1: at.x, y1: front, x2: at.x + d.w, y2: front, color: '#6b6b6b', lineWidth: lw * 0.6, dashed: true });
     }
-    const yOf = (rf: number) => origin - Math.max(0, Math.min(1, rf)) * (origin - front);
-    const r0 = Math.min(laneW * 0.2, 0.45 * L);
     const small = { size: Math.round(doc.style.captionSize * 0.8 * 10) / 10 };
     d.lanes.forEach((lane, k) => {
       const cx = x(k);
@@ -276,6 +276,55 @@ export function drawPlate(doc: Doc, m: Measure, d: PlateData, at: Vec): PlatePar
   if (d.labels) d.lanes.forEach((lane, k) => { if (lane.label.trim()) caption(lane.label.trim(), { x: x(k), y: at.y - gap * 0.4 }, 'above'); });
   if (d.note.trim()) caption(d.note.trim(), { x: at.x + d.w / 2, y: at.y + d.h + gap * 0.6 }, 'below');
   return out;
+}
+
+/** What Lock spots does (behind its "i" in the TLC Plate window and the details panel). */
+export const LOCK_SPOTS_INFO = 'Locked spots can\'t be dragged. Unlocked, drag a spot up or down its lane to change its Rf (from 0 at the start line to 1 at the solvent front).';
+
+/** Where a TLC plate's start line (Rf 0) and solvent front (Rf 1) are, how far up a spot of Rf `rf` sits, and a spot's usual half-width. */
+export function tlcGeometry(d: PlateData, at: Vec, L: number): { origin: number; front: number; laneW: number; r0: number; yOf: (rf: number) => number } {
+  const origin = at.y + d.h * 0.88, front = at.y + d.h * 0.08;
+  const laneW = d.w / Math.max(1, d.lanes.length);
+  return { origin, front, laneW, r0: Math.min(laneW * 0.2, 0.45 * L), yOf: (rf: number) => origin - Math.max(0, Math.min(1, rf)) * (origin - front) };
+}
+
+/** The Rf at height `y` on a TLC plate drawn at `at`: kept between 0 (the start line) and 1 (the solvent front), to two decimals. */
+export function rfAtY(d: PlateData, at: Vec, L: number, y: number): number {
+  const { origin, front } = tlcGeometry(d, at, L);
+  const rf = (origin - y) / (origin - front || 1);
+  return Math.round(Math.max(0, Math.min(1, rf)) * 100) / 100;
+}
+
+/** The spot under `p` on a TLC plate drawn at `at` (its lane, and which of the lane's spots), if any. */
+export function tlcSpotAt(d: PlateData, at: Vec, L: number, p: Vec): { lane: number; index: number } | null {
+  if (d.kind !== 'tlc') return null;
+  const { laneW, r0, yOf } = tlcGeometry(d, at, L);
+  const lane = Math.floor((p.x - at.x) / laneW);
+  if (lane < 0 || lane >= d.lanes.length) return null;
+  const cx = at.x + (lane + 0.5) * laneW;
+  let best: { lane: number; index: number } | null = null, bestD = Infinity;
+  parseMarks(d.lanes[lane].marks).forEach((s, index) => {
+    const rx = r0 * s.size, ry = rx * 0.72;
+    const top = yOf(s.at) - ry, bottom = yOf(Math.max(0, s.at - s.tail)) + ry;
+    // (a little slack round small spots, so they are easy to catch)
+    const slack = Math.max(0, 0.15 * L - ry);
+    if (Math.abs(p.x - cx) > rx + slack || p.y < top - slack || p.y > bottom + slack) return;
+    const dist = Math.abs(p.y - yOf(s.at));
+    if (dist < bestD) { bestD = dist; best = { lane, index }; }
+  });
+  return best;
+}
+
+/** A lane's text with its `index`th spot (as parseMarks counts them) at Rf `rf`; the words after the number stay. */
+export function setMarkAt(text: string, index: number, rf: number): string {
+  let n = 0;
+  return text.replace(/[^,;\n]+/g, (part) => {
+    const lead = part.match(/^(\s*)(\S+)/);
+    if (!lead) return part;
+    const at = parseFloat(lead[2].replace(',', '.'));
+    if (!Number.isFinite(at) || at < 0) return part;
+    return n++ === index ? lead[1] + rfText(rf) + part.slice(lead[0].length) : part;
+  });
 }
 
 /** Where the plate goes in its frame's box, and its size (when drawn again, or resized by hand). */

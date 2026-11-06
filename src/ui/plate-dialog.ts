@@ -2,8 +2,8 @@
 // name and its spots or bands typed as a short list, the stain or dye, and what is written on it,
 // with a preview that redraws as you type.
 
-import { foldIntoInfo } from './info-tip';
-import { GEL_LOOKS, LADDERS, TLC_LOOKS, newPlate, type PlateData, type PlateKind, type PlateLane } from '../design/plates';
+import { addInfo, foldIntoInfo } from './info-tip';
+import { GEL_LOOKS, LADDERS, LOCK_SPOTS_INFO, TLC_LOOKS, newPlate, type PlateData, type PlateKind, type PlateLane } from '../design/plates';
 
 /** How the last plate and gel looked, so a new one starts the same way. */
 const lastLook: Record<PlateKind, Partial<PlateData>> = { tlc: {}, gel: {}, mo: {}, crystal: {} };
@@ -33,9 +33,11 @@ export function askPlate(kind: PlateKind, editing: PlateData | null, L: number, 
       <label class="ask-row"><span>Size</span><span class="energy-pair"><input name="w" type="number" min="20" step="any" aria-label="Width" /> × <input name="h" type="number" min="20" step="any" aria-label="Height" /> pt</span></label>
       ${tlc ? '<label class="ask-row ask-check"><input name="rf" type="checkbox" /><span>Write the Rf values</span></label><label class="ask-row ask-check"><input name="lines" type="checkbox" /><span>Start and solvent-front lines</span></label>' : '<label class="ask-row ask-check"><input name="sizes" type="checkbox" /><span>Write the marker sizes</span></label>'}
       <label class="ask-row ask-check"><input name="labels" type="checkbox" /><span>Lane names</span></label>
+      ${tlc ? '<label class="ask-row ask-check"><input name="locked" type="checkbox" /><span class="plate-lock">Lock spots</span></label>' : ''}
       <p class="ask-buttons"><button type="button" data-act="cancel">Cancel</button> <button type="submit" class="primary">${editing ? 'Redraw' : 'Insert'}</button></p>`;
     const $ = <T extends Element>(q: string) => form.querySelector<T>(q)!;
     foldIntoInfo($('.plate-help'), form.querySelectorAll('.plate-table th')[1]);
+    if (tlc) addInfo($('.plate-lock'), LOCK_SPOTS_INFO);
     const body = $<HTMLTableElement>('.plate-table').tBodies[0];
 
     const read = () => {
@@ -75,7 +77,7 @@ export function askPlate(kind: PlateKind, editing: PlateData | null, L: number, 
     $<HTMLInputElement>('input[name=w]').value = String(Math.round(start.w));
     $<HTMLInputElement>('input[name=h]').value = String(Math.round(start.h));
     $<HTMLInputElement>('input[name=labels]').checked = start.labels;
-    if (tlc) { $<HTMLInputElement>('input[name=rf]').checked = start.rf; $<HTMLInputElement>('input[name=lines]').checked = start.lines; }
+    if (tlc) { $<HTMLInputElement>('input[name=rf]').checked = start.rf; $<HTMLInputElement>('input[name=lines]').checked = start.lines; $<HTMLInputElement>('input[name=locked]').checked = !!start.locked; }
     else $<HTMLInputElement>('input[name=sizes]').checked = start.sizes;
 
     form.querySelector('[data-act=lane]')!.addEventListener('click', () => { read(); lanes.push({ label: String(lanes.length + 1), marks: '' }); draw(); body.rows[body.rows.length - 1]?.querySelector('input')?.focus(); });
@@ -116,6 +118,7 @@ export function askPlate(kind: PlateKind, editing: PlateData | null, L: number, 
         rf: tlc ? $<HTMLInputElement>('input[name=rf]').checked : start.rf,
         lines: tlc ? $<HTMLInputElement>('input[name=lines]').checked : start.lines,
         labels: $<HTMLInputElement>('input[name=labels]').checked,
+        ...(tlc && $<HTMLInputElement>('input[name=locked]').checked ? { locked: true } : {}),
         note: $<HTMLInputElement>('input[name=note]').value,
         unit: tlc ? start.unit : ($<HTMLSelectElement>('select[name=unit]').value as PlateData['unit']),
         sizes: tlc ? start.sizes : $<HTMLInputElement>('input[name=sizes]').checked,
@@ -136,8 +139,8 @@ export function askPlate(kind: PlateKind, editing: PlateData | null, L: number, 
     form.addEventListener('submit', (e) => {
       e.preventDefault();
       const out = gather();
-      const { look, rf, lines, labels, unit, sizes, w, h } = out;
-      lastLook[kind] = { look, rf, lines, labels, unit, sizes, w, h };
+      const { look, rf, lines, labels, unit, sizes, w, h, locked } = out;
+      lastLook[kind] = { look, rf, lines, labels, unit, sizes, w, h, locked };
       d.close();
       finish(out);
     });

@@ -1,8 +1,11 @@
+// @vitest-environment jsdom
 import { describe, expect, it } from 'vitest';
 import { Doc } from '../src/model';
 import { ACS_1996 } from '../src/style';
 import { POINTS } from '../src/editor/arrange';
-import { bandPosition, mix, newPlate, parseMarks, putPlate, plateFrameOf } from '../src/design/plates';
+import { writeCdxml } from '../src/io/cdxml-write';
+import { readCdxml } from '../src/io/cdxml';
+import { bandPosition, mix, newPlate, parseMarks, putPlate, plateFrameOf, plateFromBox, rfAtY, setMarkAt, tlcGeometry, tlcSpotAt } from '../src/design/plates';
 
 describe('TLC plates and gels', () => {
   it('reads spots with their words', () => {
@@ -55,5 +58,54 @@ describe('TLC plates and gels', () => {
     expect(texts).toContain('10');
     expect(texts).toContain('0.5');
     expect(texts).toContain('kb');
+  });
+
+  it('moves one spot to a new Rf and keeps its words', () => {
+    expect(setMarkAt('0.55 streak, 0.30 faint', 0, 0.7)).toBe('0.70 streak, 0.30 faint');
+    expect(setMarkAt('0.55 streak, 0.30 faint', 1, 0.12)).toBe('0.55 streak, 0.12 faint');
+    // (what parseMarks skips isn't counted)
+    expect(setMarkAt('abc, 0.4; 0.2 blue', 1, 0.25)).toBe('abc, 0.4; 0.25 blue');
+    expect(setMarkAt('0.5', 3, 0.1)).toBe('0.5');
+  });
+
+  it('reads the Rf from a height on the plate, between the start line and the solvent front', () => {
+    const d = newPlate('tlc', 30);
+    const at = { x: 0, y: 0 };
+    const g = tlcGeometry(d, at, 30);
+    expect(rfAtY(d, at, 30, g.origin)).toBe(0);
+    expect(rfAtY(d, at, 30, g.front)).toBe(1);
+    expect(rfAtY(d, at, 30, (g.origin + g.front) / 2)).toBe(0.5);
+    expect(rfAtY(d, at, 30, g.origin + 50)).toBe(0);
+    expect(rfAtY(d, at, 30, g.front - 50)).toBe(1);
+  });
+
+  it('finds the spot under the pointer', () => {
+    const doc = new Doc();
+    doc.style = { ...ACS_1996 };
+    const L = doc.style.bondLength;
+    const d = newPlate('tlc', L);
+    let id = 0;
+    doc.edit('TLC', () => { id = putPlate(doc, POINTS, d, { x: 10, y: 20 }); });
+    const s = doc.shapes.get(id)!;
+    const at = plateFromBox({ x1: s.x1, y1: s.y1, x2: s.x2, y2: s.y2 }, s.plate!, L).at;
+    expect(at.x).toBeCloseTo(10, 5);
+    expect(at.y).toBeCloseTo(20, 5);
+    const g = tlcGeometry(d, at, L);
+    // lane 2 ("co"): 0.55 and 0.30
+    const cx = at.x + 1.5 * g.laneW;
+    expect(tlcSpotAt(d, at, L, { x: cx, y: g.yOf(0.3) })).toEqual({ lane: 1, index: 1 });
+    expect(tlcSpotAt(d, at, L, { x: cx, y: g.yOf(0.55) })).toEqual({ lane: 1, index: 0 });
+    expect(tlcSpotAt(d, at, L, { x: cx, y: g.yOf(0.9) })).toBeNull();
+    expect(tlcSpotAt(d, at, L, { x: at.x - 5, y: g.yOf(0.3) })).toBeNull();
+  });
+
+  it('keeps a locked plate locked through a saved file', () => {
+    const doc = new Doc();
+    doc.style = { ...ACS_1996 };
+    doc.edit('TLC', () => { putPlate(doc, POINTS, { ...newPlate('tlc', doc.style.bondLength), locked: true }, { x: 0, y: 0 }); });
+    const back = readCdxml(writeCdxml(doc)).doc;
+    const plate = [...back.shapes.values()].find((s) => s.plate)?.plate;
+    expect(plate?.locked).toBe(true);
+    expect(plate?.lanes.map((l) => l.marks)).toEqual(['0.55', '0.55, 0.30', '0.55 faint, 0.30']);
   });
 });

@@ -75,7 +75,7 @@ import { refitTableFigures, tableContents } from './table-figs';
 import { energyFrameOf, plotFromBox, putEnergy, refitEnergy, type EnergyData } from '../design/energy';
 import { arrangeSmart, formatSmart, stepToHolder, stepHolderToText, fillHolder, fillHoldersDrawn, holderFrameOf, holderToSlotText, insertSlot, makeSmart, moveSlot, refitSmart, removeSlot, setSlotRuns, setSlotText, setStepRuns, setStepText, smartFrameOf, smartMarks, slotToHolder, ungroupSmart, type SmartData, type StepPart, type TextPart } from '../chem/smart-scheme';
 import type { SmartFormat } from '../chem/smart-format';
-import { plateFrameOf, plateFromBox, putPlate, refitPlates, type PlateData } from '../design/plates';
+import { plateFrameOf, plateFromBox, putPlate, refitPlates, rfAtY, setMarkAt, tlcSpotAt, type PlateData } from '../design/plates';
 import { newmanCentre, newmanFrameOf, putMark, putNewman, refitNewman, type NewmanData } from '../design/newman';
 import { putTorsion, refitTorsion, torsionFrameOf, type TorsionData } from '../design/torsion';
 import { diagramContents, diagramFrameOf, heldLines, putDiagram, refitDiagramFigures, refitDiagrams, ungroupDiagram, type DiagramData } from '../design/diagrams';
@@ -274,8 +274,10 @@ interface Drag {
   shift: boolean;
   alt: boolean;
   ctrl: boolean;
-  mode: 'none' | 'pan' | 'move' | 'marquee' | 'draw' | 'handle' | 'rotate' | 'text' | 'sketch' | 'route' | 'pen' | 'reshape' | 'turn3d' | 'guide';
+  mode: 'none' | 'pan' | 'move' | 'marquee' | 'draw' | 'handle' | 'rotate' | 'text' | 'sketch' | 'route' | 'pen' | 'reshape' | 'turn3d' | 'guide' | 'spot';
   last: Vec;
+  /** A TLC plate's spot pressed (the plate not locked): dragging moves it up or down its lane, changing its Rf. */
+  spot?: { frame: number; lane: number; index: number; at: Vec };
   panOrigin?: { ox: number; oy: number };
   /** The arrow or shape handle being dragged. */
   handle?: Handle;
@@ -1145,6 +1147,12 @@ export class Editor {
     // the selection tool on a guide (where nothing else is): the guide is dragged
     const gh = e.button === 0 && !handle && !rotating && !painting && !hit && this.tool.kind === 'select' ? this.guideUnder(p) : null;
     if (gh) { this.drag.mode = 'guide'; this.drag.guideGrab = gh; }
+    // an unlocked TLC plate's spot (with the selection tool, or any tool once the plate is selected):
+    // dragging it moves it up or down its lane
+    if (e.button === 0 && !handle && !rotating && !painting && !e.shiftKey && !e.ctrlKey && !e.metaKey && this.tool.kind !== 'eraser') {
+      const sp = this.tlcSpotUnder(p, hit);
+      if (sp && (this.tool.kind === 'select' || this.sel.shapes.has(sp.frame))) this.drag.spot = sp;
+    }
     // a curved arrow tool on a selected S-shaped (or longer) arrow's line: dragging there reshapes it
     if (e.button === 0 && !handle && !rotating && !painting && !e.shiftKey && hit?.kind === 'arrow' && this.curvedTool() && this.isSelected(hit)) {
       const r = this.pathArrow(hit.id);
@@ -1218,6 +1226,11 @@ export class Editor {
       const gh = !h && !handle && !onRotate && !slot && this.tool.kind === 'select' ? this.guideUnder(p) : null;
       if (gh) this.r.overlay.style.cursor = gh.part === 'middle' ? 'move' : gh.part === 'x' ? 'col-resize' : 'row-resize';
       if (slot) this.r.overlay.style.cursor = 'pointer';
+      // over an unlocked TLC plate's spot: it can be dragged up or down
+      if (!handle && !onRotate && !slot && this.tool.kind !== 'eraser' && !this.painter) {
+        const sp = this.tlcSpotUnder(p, h);
+        if (sp && (this.tool.kind === 'select' || this.sel.shapes.has(sp.frame))) this.r.overlay.style.cursor = 'ns-resize';
+      }
       this.requestOverlay(e.timeStamp);
       return;
     }
@@ -1240,7 +1253,12 @@ export class Editor {
     const sp = { x: e.clientX - rect.left, y: e.clientY - rect.top };
     if (!d.moved && Math.hypot(sp.x - d.startScreen.x, sp.y - d.startScreen.y) > 3) {
       d.moved = true;
-      if (d.mode === 'none') d.mode = this.dragModeFor(d);
+      if (d.mode === 'none') d.mode = d.spot ? 'spot' : this.dragModeFor(d);
+      if (d.mode === 'spot') {
+        this.r.overlay.style.cursor = 'ns-resize';
+        this.doc.begin('Move Spot');
+        this.selectOnly({ kind: 'shape', id: d.spot!.frame });
+      }
       if (d.mode === 'reshape') this.doc.begin('Bend arrow');
       if (d.mode === 'handle') this.doc.begin(d.handle!.which === 'mid' || d.handle!.which[0] === 'b' ? 'Bend arrow' : d.handle!.which === 'ea' || d.handle!.which === 'eb' ? 'Reshape arc' : this.cropping === d.handle!.id ? 'Crop picture' : 'Resize');
       if (d.mode === 'rotate') this.doc.begin('Rotate');
@@ -1272,6 +1290,12 @@ export class Editor {
       if (d.mode === 'pan') this.r.overlay.style.cursor = 'grabbing';
     }
     if (!d.moved) return;
+    if (d.mode === 'spot') {
+      this.dragSpot(d.spot!, p);
+      d.last = p;
+      this.requestScene(e.timeStamp);
+      return;
+    }
     if (d.mode === 'guide') {
       const g = this.doc.guides, gg = d.guideGrab!;
       const x = g?.list[gg.index];
@@ -1483,7 +1507,7 @@ export class Editor {
     if (!d) return;
     this.drag = null;
     this.guideLines = [];
-    if (d.moved && (d.mode === 'move' || d.mode === 'rotate' || d.mode === 'handle' || (d.mode === 'turn3d' && d.persp?.begun))) {
+    if (d.moved && (d.mode === 'move' || d.mode === 'spot' || d.mode === 'rotate' || d.mode === 'handle' || (d.mode === 'turn3d' && d.persp?.begun))) {
       this.doc.abandon();
       this.afterUndo();
     }
@@ -1543,6 +1567,7 @@ export class Editor {
       return;
     }
     if (d.mode === 'reshape' && d.moved) { this.doc.commit(); this.changed(); return; }
+    if (d.mode === 'spot') { this.doc.commit(); this.changed(); return; }
     if (d.mode === 'turn3d') { this.finishTurn(d); return; }
     if (d.mode === 'handle' || d.mode === 'rotate') {
       if (d.moved) { this.doc.commit(); this.changed(); }
@@ -3919,6 +3944,41 @@ export class Editor {
     let id = 0;
     tmp.edit('Preview', () => { id = putPlate(tmp, this.fullMeasure(), d, { x: 0, y: 0 }); });
     return { doc: tmp, box: shapeBox(tmp.shapes.get(id)!) };
+  }
+
+  /**
+   * The spot of an unlocked TLC plate under `p` (with what the press hit, which is the plate's or
+   * nothing: a notebook-sketch spot is only an outline), and where its plate is drawn.
+   */
+  private tlcSpotUnder(p: Vec, hit: Hit): Drag['spot'] | null {
+    let frames: number[];
+    if (hit) {
+      const g = hit.kind === 'caption' || hit.kind === 'arrow' || hit.kind === 'shape' ? plateFrameOf(this.doc, hit.kind, hit.id) : null;
+      if (g === null) return null;
+      frames = [g];
+    } else frames = [...this.doc.shapes.values()].filter((s) => s.plate?.kind === 'tlc').map((s) => s.id);
+    const L = this.doc.style.bondLength;
+    for (const id of frames) {
+      const s = this.doc.shapes.get(id);
+      if (!s?.plate || s.plate.kind !== 'tlc' || s.plate.locked) continue;
+      const at = plateFromBox(shapeBox(s), s.plate, L).at;
+      const spot = tlcSpotAt(s.plate, at, L, p);
+      if (spot) return { frame: id, ...spot, at };
+    }
+    return null;
+  }
+
+  /** Dragging a TLC plate's spot: it goes to the Rf at the pointer's height (0 to 1) and the plate is drawn again. */
+  private dragSpot(sp: NonNullable<Drag['spot']>, p: Vec): void {
+    const s = this.doc.shapes.get(sp.frame);
+    const d = s?.plate;
+    if (!d) return;
+    const rf = rfAtY(d, sp.at, this.doc.style.bondLength, p.y);
+    const lane = d.lanes[sp.lane];
+    if (!lane) return;
+    const marks = setMarkAt(lane.marks, sp.index, rf);
+    if (marks === lane.marks) return;
+    putPlate(this.doc, this.fullMeasure(), { ...d, lanes: d.lanes.map((l, i) => (i === sp.lane ? { ...l, marks } : l)) }, sp.at, sp.frame);
   }
 
   /** Insert ▸ TLC Plate or Gel: draw one with its middle at `at` (or draw plate `id` again), and select it. */
