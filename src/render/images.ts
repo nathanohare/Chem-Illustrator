@@ -76,8 +76,8 @@ const rasters = new Map<string, string | null>();
  * about `w` by `h` pixels, for files that hold only some picture types (ChemDraw's). Null while
  * it is still loading, or when it can't be drawn. Made at once, so a save or copy needs no wait.
  */
-export function rasterPng(src: string, w: number, h: number): string | null {
-  const key = `${Math.round(w)}x${Math.round(h)}:${src}`;
+export function rasterPng(src: string, w: number, h: number, background?: string): string | null {
+  const key = `${Math.round(w)}x${Math.round(h)}:${background ?? ''}:${src}`;
   if (rasters.has(key)) return rasters.get(key)!;
   const img = imageFor(src);
   if (!img || typeof document === 'undefined') return null;
@@ -87,7 +87,11 @@ export function rasterPng(src: string, w: number, h: number): string | null {
     c.width = Math.max(1, Math.round(w));
     c.height = Math.max(1, Math.round(h));
     const ctx = c.getContext('2d');
-    if (ctx) { ctx.drawImage(img, 0, 0, c.width, c.height); out = c.toDataURL('image/png'); }
+    if (ctx) {
+      if (background) { ctx.fillStyle = background; ctx.fillRect(0, 0, c.width, c.height); }
+      ctx.drawImage(img, 0, 0, c.width, c.height);
+      out = c.toDataURL('image/png');
+    }
     if (!out?.startsWith('data:image/png')) out = null;
   } catch {
     out = null;

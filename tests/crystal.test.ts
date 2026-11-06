@@ -20,6 +20,7 @@ import { ACS_1996 } from '../src/style';
 import { POINTS } from '../src/editor/arrange';
 import { writeCdxml } from '../src/io/cdxml-write';
 import { readCdxml } from '../src/io/cdxml';
+import { drawingSvg } from '../src/io/clipboard';
 
 const file = (name: string) => readFileSync(join(__dirname, 'crystal', name), 'utf8');
 const kinds = (items: { kind: string }[]) => items.reduce<Record<string, number>>((m, s) => ((m[s.kind] = (m[s.kind] ?? 0) + 1), m), {});
@@ -188,6 +189,20 @@ describe('crystal structure figures', () => {
     return { doc, id, d };
   };
   const svgOf = (src: string) => new TextDecoder().decode(fromDataUrl(src).bytes);
+
+  it('copies as SVG: the picture\'s own shapes when picked alone, a drawing of everything otherwise', () => {
+    const { doc, id } = placed();
+    const pic = doc.shapes.get(id)!;
+    const sel = { atoms: new Set<number>(), bonds: new Set<number>(), captions: new Set<number>(), arrows: new Set<number>(), shapes: new Set([id]) };
+    const own = drawingSvg(doc, sel)!;
+    expect(own.match(/<(ellipse|circle) /g)?.length).toBe(15);
+    expect(own).toContain(`width="${+Math.abs(pic.x2 - pic.x1).toFixed(2)}pt"`);
+    expect(own).not.toContain('<image');
+    doc.edit('Atom', () => { doc.addAtom(400, 400); });
+    const all = drawingSvg(doc, null)!;
+    expect(all).toMatch(/^<svg /);
+    expect(all).toContain('<image');
+  });
 
   it('places a figure as one picture that keeps its data, saved in CDXML with a vector copy for ChemDraw', () => {
     const { doc, id } = placed();

@@ -27,11 +27,11 @@ import { measureText } from '../render/renderer';
 import { fitPasted, typicalBondLength } from './fit-drawing';
 
 export { fitPasted, typicalBondLength };
-import { recordPicture, pictureEmf, pictureCanvas, canvasPng, canvasDib } from '../render/picture';
+import { recordPicture, pictureEmf, pictureSvg, pictureCanvas, canvasPng, canvasDib } from '../render/picture';
 import { emfToSvg } from '../render/emf-read';
 import type { Item } from '../render/vector';
 import { itemsToEmf, withDrawing, drawingInEmf, type EmfBox } from '../render/emf';
-import { imageSize } from '../render/images';
+import { imageSize, fromDataUrl } from '../render/images';
 import { isReactionSmiles } from '../chem/reaction-io';
 
 /** Our own clipboard format: the drawing as CDXML text. */
@@ -339,7 +339,8 @@ export async function copyDrawing(doc: Doc, sel: Selection | null): Promise<stri
   // still counts (Safari insists on this).
   const { canvas } = pictureCanvas(part, pic);
   lastPictureSize = { w: canvas.width, h: canvas.height };
-  const png = canvasPng(canvas);
+  // (on white, as the desktop app's bitmap is: ChemDraw shows a PNG's see-through parts as black)
+  const png = canvasPng(canvas, '#ffffff');
   try {
     const formats: Record<string, Blob | Promise<Blob>> = { 'image/png': png };
     if (table) {
@@ -365,11 +366,58 @@ export async function copyPictureItems(items: Item[], box: EmfBox, canvas: HTMLC
     return 'Copied as a picture. Paste into Word, PowerPoint or a slide here.';
   }
   try {
-    await navigator.clipboard.write([new ClipboardItem({ 'image/png': canvasPng(canvas) })]);
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': canvasPng(canvas, '#ffffff') })]);
   } catch {
     return 'This browser would not take the picture. Use Save as Picture instead.';
   }
   return 'Copied as a picture.';
+}
+
+/**
+ * Put an SVG picture on the clipboard: as SVG, which Word, PowerPoint, Inkscape and Illustrator
+ * paste as a picture they can scale (and ungroup into shapes), and as its text, for code and web
+ * pages. Browsers that can't hand other programs SVG get the text only.
+ */
+export async function copySvg(svg: string): Promise<string> {
+  forgetCopy();
+  const bytes = new TextEncoder().encode(svg);
+  if (nativeClipboard) {
+    await invoke('clipboard_write', packFormats([['image/svg+xml', bytes], ['CF_UNICODETEXT', bytes]]));
+    return 'Copied as SVG.';
+  }
+  const formats: Record<string, Blob> = { 'text/plain': new Blob([svg], { type: 'text/plain' }) };
+  if (svgFormatOk()) formats['image/svg+xml'] = new Blob([svg], { type: 'image/svg+xml' });
+  try {
+    await navigator.clipboard.write([new ClipboardItem(formats)]);
+  } catch {
+    try {
+      await navigator.clipboard.writeText(svg);
+    } catch {
+      return 'This browser would not take the SVG. Use Save as Picture instead.';
+    }
+  }
+  return formats['image/svg+xml'] ? 'Copied as SVG.' : 'Copied as SVG text. This browser can only hand other programs the text.';
+}
+
+/**
+ * The selected things (everything when `sel` is null) as an SVG picture, or null when there is
+ * nothing to show. A picture made as SVG here (a crystal structure, say) picked on its own goes
+ * out as that SVG itself, so other programs get its shapes rather than a picture inside a picture.
+ */
+export function drawingSvg(doc: Doc, sel: Selection | null): string | null {
+  const part = extractDrawing(doc, sel);
+  if (isEmpty(part)) return null;
+  const only = part.shapes.size === 1 && part.atoms.size + part.captions.size + part.arrows.size === 0 ? [...part.shapes.values()][0] : null;
+  if (only?.kind === 'picture' && only.src && /^data:image\/svg\+xml/.test(only.src) && !only.rot && !only.crop) {
+    try {
+      const text = new TextDecoder().decode(fromDataUrl(only.src).bytes);
+      const w = Math.abs(only.x2 - only.x1), h = Math.abs(only.y2 - only.y1);
+      // (sized as placed, in points)
+      return text.replace(/<svg\b([^>]*?)\swidth="[^"]*"([^>]*?)\sheight="[^"]*"/, `<svg$1 width="${+w.toFixed(2)}pt"$2 height="${+h.toFixed(2)}pt"`);
+    } catch { /* drawn below instead */ }
+  }
+  const pic = recordPicture(part);
+  return pic ? pictureSvg(pic) : null;
 }
 
 /**
@@ -418,6 +466,14 @@ const ownTable = (text: string) => !!lastCopy && lastTableText !== null && text.
 const hasPictures = (d: Doc) => [...d.shapes.values()].some((s) => s.kind === 'picture');
 
 /** Whether this browser takes a format of the page's own on the clipboard. */
+function svgFormatOk(): boolean {
+  try {
+    return typeof ClipboardItem !== 'undefined' && !!(ClipboardItem as unknown as { supports?: (t: string) => boolean }).supports?.('image/svg+xml');
+  } catch {
+    return false;
+  }
+}
+
 function webFormatOk(): boolean {
   try {
     return typeof ClipboardItem !== 'undefined' && !!(ClipboardItem as unknown as { supports?: (t: string) => boolean }).supports?.(WEB_FORMAT);

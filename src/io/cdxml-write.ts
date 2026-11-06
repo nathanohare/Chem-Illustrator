@@ -2159,7 +2159,8 @@ class CdxmlWriter {
       // equation itself rides along in its tag, and our own clipboard keeps the original)
       if (!png && /^data:image\//.test(s.src)) {
         const w = Math.abs(s.x2 - s.x1), h = Math.abs(s.y2 - s.y1), k = Math.min(300 / 72, 4000 / Math.max(w, h, 1));
-        const made = (this.opts.raster ?? rasterPng)(s.src, Math.max(1, w * k), Math.max(1, h * k));
+        // (on white: ChemDraw shows a PNG's see-through parts as black)
+        const made = (this.opts.raster ?? ((src, pw, ph) => rasterPng(src, pw, ph, '#ffffff')))(s.src, Math.max(1, w * k), Math.max(1, h * k));
         png = !!made && put(made);
       }
       png ||= emf;

@@ -160,7 +160,7 @@ const HOTSPOT_ACTIONS: Record<string, string> = {
 export const COMMAND_NAMES: Record<string, string> = {
   new: 'New Canvas', open: 'Open…', save: 'Save', 'save-as': 'Save As…', 'export-mol': 'Export Molfile…',
   undo: 'Undo', redo: 'Redo', cut: 'Cut', copy: 'Copy', paste: 'Paste',
-  'copy-smiles': 'Copy as SMILES', 'paste-smiles': 'Paste SMILES', 'copy-mol': 'Copy as Molfile', 'copy-cdxml': 'Copy as CDXML Text',
+  'copy-smiles': 'Copy as SMILES', 'paste-smiles': 'Paste SMILES', 'copy-mol': 'Copy as Molfile', 'copy-cdxml': 'Copy as CDXML Text', 'copy-svg': 'Copy as SVG',
   'select-all': 'Select All', 'next-structure': 'Select the Next Structure', 'prev-structure': 'Select the Previous Structure',
   'nudge-left': 'Nudge Left 1 pt', 'nudge-right': 'Nudge Right 1 pt', 'nudge-up': 'Nudge Up 1 pt', 'nudge-down': 'Nudge Down 1 pt',
   'nudge-far-left': 'Nudge Left 10 pt', 'nudge-far-right': 'Nudge Right 10 pt', 'nudge-far-up': 'Nudge Up 10 pt', 'nudge-far-down': 'Nudge Down 10 pt',
