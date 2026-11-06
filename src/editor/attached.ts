@@ -235,9 +235,22 @@ export function nearestStructure(doc: Doc, cap: Rect, m: Measure, maxDist = Infi
  * Descriptors keep the signature of the structure they were worked out for, so a structure
  * changed in ChemDraw since gets them worked out again when the file is opened.
  */
-export function attachTag(a: Attachment): string {
+export function attachTag(a: Attachment, on?: string): string {
   const { atoms: _atoms, ...rest } = a;
-  return JSON.stringify(rest);
+  // `on`: an atom of the structure (its id in the file), so the tie is found again as it was
+  // instead of guessed from where the caption sits (issue #573)
+  return JSON.stringify(on ? { ...rest, on } : rest);
+}
+
+/** The atom (its id in the file) a saved tie names, if any. */
+export function attachedNode(text: string | null): string | undefined {
+  if (!text) return undefined;
+  try {
+    const v = JSON.parse(text) as { on?: unknown };
+    return typeof v.on === 'string' && v.on ? v.on : typeof v.on === 'number' ? String(v.on) : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 const SIDES: AttachSide[] = ['below', 'above', 'left', 'right'];
@@ -260,11 +273,53 @@ export function attachFromTag(text: string | null): Attachment | undefined {
   }
 }
 
-/** After reading a file: tie each saved attached caption to the structure beside it. */
-export function fillAttachments(doc: Doc, m: Measure = POINTS): void {
+/** What a file says about a saved tie: the atom it names, and the caption's box as the file has it. */
+export interface AttachHint {
+  atom?: number;
+  box?: Rect;
+}
+
+/** How far a box is from another (0 when they touch or overlap). */
+function boxGap(a: Rect, b: Rect): number {
+  return Math.hypot(Math.max(0, b.x1 - a.x2, a.x1 - b.x2), Math.max(0, b.y1 - a.y2, a.y1 - b.y2));
+}
+
+/**
+ * The structure a saved caption was placed against: the one it would move least to take its saved
+ * place beside (its side, gap and shift), among those within `reach` of it. Figures packed tight
+ * put a label nearer the next row's structure than its own, so the nearest isn't enough.
+ */
+function fittingStructure(doc: Doc, cap: Rect, a: Attachment, m: Measure, reach: number): Set<number> | null {
+  let best: Set<number> | null = null, bd = Infinity;
+  for (const f of doc.fragments()) {
+    const b = structureBox(doc, f, m);
+    if (!b || boxGap(b, cap) > reach) continue;
+    const d = attachOffset(b, cap, a);
+    const miss = Math.hypot(d.x, d.y);
+    if (miss < bd) { bd = miss; best = f; }
+  }
+  return best;
+}
+
+/**
+ * After reading a file: tie each saved attached caption to its structure. That is the structure
+ * the file names, while the caption is still beside it (it may have been moved in ChemDraw); else
+ * the structure nearest the caption's whole box, not only its anchor point, which could sit
+ * nearer the next structure along and tie the label to that one (issue #573).
+ */
+export function fillAttachments(doc: Doc, m: Measure = POINTS, hints?: ReadonlyMap<number, AttachHint>): void {
+  const reach = doc.style.bondLength * 6;
   for (const c of [...doc.captions.values()]) {
     if (!c.attach || c.attach.atoms.length) continue;
-    const f = nearestStructure(doc, m.captionBox(c), m, doc.style.bondLength * 6);
+    const hint = hints?.get(c.id);
+    const cap = hint?.box ?? m.captionBox(c);
+    let f: Set<number> | null = null;
+    if (hint?.atom !== undefined && doc.atoms.has(hint.atom)) {
+      const named = doc.fragmentOf(hint.atom);
+      const b = structureBox(doc, named, m);
+      if (b && boxGap(b, cap) <= reach) f = named;
+    }
+    f ??= hint?.box ? fittingStructure(doc, cap, c.attach, m, reach) : nearestStructure(doc, cap, m, reach);
     // descriptors saved with a signature keep it, so they are redone if the structure no longer
     // matches it (changed in ChemDraw); older files had none, so theirs are taken to match
     if (f) doc.updateCaption(c.id, { attach: { ...c.attach, atoms: [...f], ...(c.attach.role === 'descriptors' ? { sig: c.attach.sig ?? structureSig(doc, f) } : {}) } });

@@ -1511,7 +1511,10 @@ class CdxmlWriter {
       }
     }
     if (tag) t.appendChild(this.el('objecttag', { TagType: 'String', Name: TEXT_TAG, Value: JSON.stringify(tag), Visible: 'no' }));
-    if (c.attach) t.appendChild(this.el('objecttag', { TagType: 'String', Name: ATTACH_TAG, Value: attachTag(c.attach), Visible: 'no' }));
+    if (c.attach) {
+      const on = c.attach.atoms.find((id) => this.doc.atoms.has(id));
+      t.appendChild(this.el('objecttag', { TagType: 'String', Name: ATTACH_TAG, Value: attachTag(c.attach, on === undefined ? undefined : this.nodeId(on)), Visible: 'no' }));
+    }
     if (c.ignoreWarnings) t.appendChild(this.el('objecttag', { TagType: 'String', Name: IGNORE_TAG, Value: 'yes', Visible: 'no' }));
     // text read as chemistry is marked for ChemDraw (Interpret Chemically); a choice made by hand is kept for us
     if (c.chem !== undefined) t.appendChild(this.el('objecttag', { TagType: 'String', Name: CHEM_TAG, Value: c.chem ? 'yes' : 'no', Visible: 'no' }));
