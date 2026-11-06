@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { hund, MO_PRESETS, sources } from '../src/design/mo';
+import { hund, mixOf, MO_PRESETS, moPlain, parseMarkup, sources, toMarkup, toRich } from '../src/design/mo';
 import { orbitalShapes } from '../src/chem/orbitals';
 import { Doc } from '../src/model';
 import { ACS_1996 } from '../src/style';
@@ -43,13 +43,13 @@ describe('MO diagrams', () => {
 
   it('O2 has two unpaired electrons in π*', () => {
     const o2 = MO_PRESETS.find((p) => p.id === 'o2')!.spec;
-    const pistar = o2.levels.find((l) => l.label.startsWith('π*'))!;
+    const pistar = o2.levels.find((l) => moPlain(l.label).startsWith('π*'))!;
     expect(hund(pistar.n, pistar.electrons)).toEqual([1, 1]);
   });
 
   it('joins a molecular orbital to the atomic orbitals it is made from', () => {
     const n2 = MO_PRESETS.find((p) => p.id === 'n2')!.spec;
-    const sigma = n2.levels.find((l) => l.label === 'σ_{2s}')!;
+    const sigma = n2.levels.find((l) => moPlain(l.label) === 'σ2s')!;
     expect(sources(n2.levels, sigma).map((l) => l.column)).toEqual(['left', 'right']);
   });
 
@@ -64,5 +64,54 @@ describe('MO diagrams', () => {
     const lines = f.frame!.shapes.map((s) => doc.shapes.get(s)!).filter((s) => s.kind === 'line');
     expect(lines.filter((s) => s.dashed).length).toBe(4);
     expect(lines.filter((s) => !s.dashed).length).toBe(4);
+  });
+
+  it('keeps names as rich text that reads back the same', () => {
+    const parts = [{ text: 'σ' }, { text: '*', sup: true }, { text: '2s', sub: true }, { text: ' a_b^c\\' }];
+    expect(parseMarkup(toMarkup(parts))).toEqual(parts);
+    expect(parseMarkup('σ^*_{2p}')).toEqual([{ text: 'σ' }, { text: '*', sup: true }, { text: '2p', sub: true }]);
+    expect(moPlain('φ_{A}')).toBe('φA');
+  });
+
+  it('turns an older diagram into rich text that draws the same', () => {
+    const old = { titles: ['N', 'N_2', 'H2O'] as [string, string, string], axis: true, levels: [
+      { column: 'left' as const, label: 'φ_A', e: 0, n: 1, electrons: 1 },
+      { column: 'middle' as const, label: 'σ_{2s}', e: -1, n: 1, electrons: 2, from: 'φ_A' },
+    ] };
+    const rich = toRich(old);
+    expect(rich.rich).toBe(true);
+    expect(parseMarkup(rich.titles[1])).toEqual([{ text: 'N' }, { text: '2', sub: true }]);
+    expect(parseMarkup(rich.titles[2])).toEqual([{ text: 'H' }, { text: '2', sub: true }, { text: 'O' }]);
+    expect(sources(rich.levels, rich.levels[1]).length).toBe(1);
+    // the older form still finds its atomic orbitals
+    expect(sources(old.levels, old.levels[1]).length).toBe(1);
+  });
+
+  it('works out how each molecular orbital mixes', () => {
+    const n2 = MO_PRESETS.find((p) => p.id === 'n2')!.spec;
+    const mix = (name: string) => mixOf(n2.levels, n2.levels.find((l) => moPlain(l.label) === name)!);
+    expect(mix('σ2s')).toEqual({ ao: 's', sym: 'σ', bonding: true });
+    expect(mix('σ*2s')).toEqual({ ao: 's', sym: 'σ', bonding: false });
+    expect(mix('π2p')).toEqual({ ao: 'p', sym: 'π', bonding: true });
+    expect(mix('σ*2p')).toEqual({ ao: 'p', sym: 'σ', bonding: false });
+    // no σ or π in the name: above the atomic orbitals is out of phase
+    const blank = MO_PRESETS.find((p) => p.id === 'blank')!.spec;
+    expect(blank.levels.filter((l) => l.column === 'middle').map((l) => mixOf(blank.levels, l)?.bonding)).toEqual([true, false]);
+  });
+
+  it('draws the mixing pictures and sized electrons when asked', () => {
+    const doc = new Doc();
+    doc.style = { ...ACS_1996 };
+    const plate = newPlate('mo', doc.style.bondLength);
+    const plain = new Doc();
+    plain.style = { ...ACS_1996 };
+    let a = 0, b = 0;
+    plain.edit('MO', () => { a = putPlate(plain, POINTS, plate, { x: 0, y: 0 }); });
+    doc.edit('MO', () => { b = putPlate(doc, POINTS, { ...plate, mo: { ...plate.mo!, pictures: true, arrowSize: 14 } }, { x: 0, y: 0 }); });
+    const shapes = (d: Doc, id: number) => d.shapes.get(id)!.frame!.shapes.length;
+    // H2: two s spheres, one merged σ and two spheres for σ*
+    expect(shapes(doc, b) - shapes(plain, a)).toBe(5);
+    const arrows = doc.shapes.get(b)!.frame!.captions.map((c) => doc.captions.get(c)!).filter((c) => /[↑↓]/.test(c.runs[0].text));
+    expect(arrows.every((c) => c.runs[0].size === 14)).toBe(true);
   });
 });

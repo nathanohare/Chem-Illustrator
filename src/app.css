@@ -3513,7 +3513,28 @@ dialog.mo-dialog { width: min(96vw, 720px); }
 .mo-table td input.mo-num { width: 4.5em; text-align: right; }
 .mo-table td select { font: inherit; }
 .mo-titles { display: flex; gap: 6px; }
-.mo-titles input { width: 7em; min-width: 0; }
+.mo-titles .mo-rich { width: 7em; flex: none; }
+.mo-table td .mo-rich { width: 100%; min-width: 9em; }
+.mo-table td input[data-k=from] { width: 7em; }
+.mo-rich { min-height: 22px; box-sizing: border-box; padding: 2px 4px; border: 1px solid var(--line); border-radius: var(--r-control); background: var(--panel); color: var(--text); font-family: Arial, Arimo, sans-serif; white-space: pre; overflow: hidden; outline: none; line-height: 1.35; cursor: text; }
+.mo-rich:focus { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.mo-rich.empty::before { content: attr(data-placeholder); color: var(--muted); }
+.mo-rich sub, .mo-rich sup { font-size: 0.72em; line-height: 0; }
+.mo-bar { display: flex; align-items: center; gap: 2px; margin: 4px 0 2px; }
+.mo-bar-gap { width: 1px; height: 16px; background: var(--line); margin: 0 3px; }
+.mo-fmt { min-width: 24px; height: 22px; padding: 0 5px; border: 1px solid var(--line); border-radius: var(--r-control); background: var(--panel); color: var(--text); cursor: pointer; line-height: 1; font-family: Arial, Arimo, sans-serif; }
+.mo-fmt sub, .mo-fmt sup { font-size: 9px; }
+.mo-fmt:disabled { opacity: 0.45; cursor: default; }
+.mo-fmt[aria-pressed='true'] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.mo-symbols { display: grid; grid-template-columns: repeat(20, 1fr); gap: 2px; margin-bottom: 4px; }
+.mo-symbols[hidden] { display: none; }
+.mo-symbols .mo-fmt { min-width: 0; padding: 0; }
+.mo-sizes { display: flex; align-items: center; gap: 14px; }
+.mo-arrow-size { display: inline-flex; align-items: center; gap: 4px; }
+.mo-arrow-size input { width: 4em; text-align: right; }
+.mo-pics-row { display: flex; align-items: center; gap: 8px; }
+.mo-pics-row label { display: inline-flex; align-items: center; gap: 6px; }
+.mo-pics-row select { font: inherit; }
 
 /* Insert ▸ Lab Figures ▸ Crystal Structure (CIF)… */
 dialog.crystal-dialog { width: min(96vw, 860px); max-height: 94vh; }

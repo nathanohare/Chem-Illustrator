@@ -570,7 +570,13 @@ export class StylePanel {
     const d = sh.plate!;
     if (d.kind === 'mo') {
       this.heading('MO diagram');
-      if (d.mo) this.check('Energy arrow', d.mo.axis, (v) => this.plate?.restyle(sh.id, { mo: { ...d.mo!, axis: v } }));
+      if (d.mo) {
+        const mo = d.mo;
+        this.check('Energy arrow', mo.axis, (v) => this.plate?.restyle(sh.id, { mo: { ...mo, axis: v } }));
+        this.number('Electron arrows (pt)', mo.arrowSize ?? Math.round(this.doc.style.captionSize * 0.9 * 10) / 10, 0.5, 3, 48, (v) => this.plate?.restyle(sh.id, { mo: { ...mo, arrowSize: v } }));
+        this.check('Orbital mixing pictures', !!mo.pictures, (v) => this.plate?.restyle(sh.id, { mo: { ...mo, pictures: v || undefined } }));
+        if (mo.pictures) this.select('Phases', ORBITAL_LOOK_NAMES.map((k): Opt<OrbitalLook> => [k.value, k.label]), mo.pictureLook ?? 'shaded', (v) => this.plate?.restyle(sh.id, { mo: { ...mo, pictureLook: v } }));
+      }
       this.help('Change the orbitals, energies and electrons in the window; drag a corner to resize it.');
       const row = document.createElement('div');
       row.className = 'style-buttons';
