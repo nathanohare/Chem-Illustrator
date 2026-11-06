@@ -8,7 +8,11 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { cifMarked, cifNumber, cifPlain, cifUncertainty, readCif } from '../src/chem/cif';
 import { CrystalError, crystalTable, elementOf, grow, parseSymop, structureFromCif } from '../src/chem/crystal';
-import { bestRotation, crystalShapes, shapesBounds, specAtoms, defaultView } from '../src/design/xray';
+import { bestRotation, crystalShapes, shapesBounds, specAtoms, defaultView, labelText, type XView } from '../src/design/xray';
+import { fromDataUrl } from '../src/render/images';
+import { Deck } from '../src/deck/deck';
+import { writePptx, type PptxOptions } from '../src/io/pptx-write';
+import { readPptx } from '../src/io/pptx-read';
 import { crystalFromBlock } from '../src/ui/crystal-dialog';
 import { putPlate, newPlate } from '../src/design/plates';
 import { Doc } from '../src/model';
@@ -174,33 +178,112 @@ Cl1 Cl 0.5 0 0
 });
 
 describe('crystal structure figures', () => {
-  it('places a figure in a frame that is saved in CDXML and comes back', () => {
+  const placed = () => {
     const doc = new Doc();
     doc.style = { ...ACS_1996 };
     const [block] = readCif(file('test-acid.cif'));
     const d = { ...newPlate('crystal', doc.style.bondLength), crystal: crystalFromBlock(block) };
     let id = 0;
     doc.edit('Crystal', () => { id = putPlate(doc, POINTS, d, { x: 0, y: 0 }); });
-    const frame = doc.shapes.get(id)!;
-    expect(frame.plate?.kind).toBe('crystal');
-    const ovals = frame.frame!.shapes.filter((s) => doc.shapes.get(s)?.kind === 'oval');
-    expect(ovals.length).toBe(15);
-    expect(frame.frame!.captions.length).toBe(10);
-    // drawn again in place: no shapes left behind
-    const before = doc.shapes.size;
-    doc.edit('Again', () => { putPlate(doc, POINTS, { ...frame.plate!, crystal: { ...frame.plate!.crystal!, view: { ...frame.plate!.crystal!.view, labels: false } } }, { x: 0, y: 0 }, id); });
-    expect(doc.shapes.get(id)!.frame!.captions.length).toBe(0);
-    expect(doc.shapes.size).toBe(before);
+    return { doc, id, d };
+  };
+  const svgOf = (src: string) => new TextDecoder().decode(fromDataUrl(src).bytes);
 
-    const back = readCdxml(writeCdxml(doc)).doc;
+  it('places a figure as one picture that keeps its data, saved in CDXML with a vector copy for ChemDraw', () => {
+    const { doc, id } = placed();
+    const pic = doc.shapes.get(id)!;
+    expect(pic.kind).toBe('picture');
+    expect(pic.plate?.kind).toBe('crystal');
+    expect(pic.frame).toBeUndefined();
+    const svg = svgOf(pic.src!);
+    expect(svg.match(/<(ellipse|circle) /g)?.length).toBe(15);
+    expect(svg.match(/<text /g)?.length).toBe(10);
+    // one shape on the page, however many atoms
+    expect(doc.shapes.size).toBe(1);
+    expect(doc.captions.size).toBe(0);
+    // drawn again in place: the same picture, nothing left behind
+    doc.edit('Again', () => { putPlate(doc, POINTS, { ...pic.plate!, crystal: { ...pic.plate!.crystal!, view: { ...pic.plate!.crystal!.view, labels: false } } }, { x: 0, y: 0 }, id); });
+    expect(doc.shapes.size).toBe(1);
+    expect(svgOf(doc.shapes.get(id)!.src!)).not.toContain('<text ');
+
+    const xml = writeCdxml(doc);
+    expect(xml).toMatch(/EnhancedMetafile="[0-9A-F]{100,}"/);
+    const back = readCdxml(xml).doc;
     const plates = [...back.shapes.values()].filter((s) => s.plate?.kind === 'crystal');
     expect(plates.length).toBe(1);
+    expect(plates[0].kind).toBe('picture');
     expect(plates[0].plate!.crystal!.atoms.length).toBe(15);
     expect(plates[0].plate!.crystal!.table?.length).toBeGreaterThan(5);
-    // the ellipsoids keep their turn (ChemDraw reads the turned axes)
-    const turned = (d: Doc) => [...d.shapes.values()].filter((s) => s.kind === 'oval' && s.rot).map((s) => +s.rot!.toFixed(1)).sort();
-    expect(turned(back).length).toBeGreaterThan(5);
-    const want = turned(doc).map((r) => ((r % 180) + 180) % 180).sort((a, b) => a - b);
-    turned(back).sort((a, b) => a - b).forEach((r, k) => expect(r).toBeCloseTo(want[k], 0));
+    expect(svgOf(plates[0].src!).match(/<(ellipse|circle) /g)?.length).toBe(15);
+  });
+
+  it('keeps its data on a PowerPoint slide, so it opens in its window again', async () => {
+    const deck = Deck.design(new Doc(), { w: 960, h: 540 });
+    const d = deck.docOf(0);
+    const [block] = readCif(file('test-acid.cif'));
+    const plate = { ...newPlate('crystal', 14.4), crystal: crystalFromBlock(block) };
+    d.edit('Crystal', () => { putPlate(d, POINTS, plate, { x: 100, y: 100 }); });
+    const png = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]);
+    const opts: PptxOptions = { async picture() { return { png, svg: '<svg xmlns="http://www.w3.org/2000/svg"/>', box: { x1: 0, y1: 0, x2: 1, y2: 1 } }; }, async svgToPng() { return png; } };
+    const bytes = await writePptx({ size: deck.size, master: deck.master, design: true, slides: [{ layout: 'blank', doc: d, notes: '' }] }, opts);
+    const back = readPptx(bytes).slides[0].contents;
+    const pic = [...back.shapes.values()].find((s) => s.kind === 'picture')!;
+    expect(pic.plate?.crystal?.atoms.length).toBe(15);
+    expect(svgOf(pic.src!).match(/<(ellipse|circle) /g)?.length).toBe(15);
+  });
+
+  it('turns a figure placed before (a frame round its shapes) into a picture when it is drawn again', () => {
+    const { doc, id } = placed();
+    const plate = doc.shapes.get(id)!.plate!;
+    // an old figure: an invisible frame round an oval and a label
+    let frameId = 0;
+    doc.edit('Old', () => {
+      doc.removeShape(id);
+      const oval = doc.addShape({ kind: 'oval', x1: 10, y1: 10, x2: 20, y2: 16, filled: true, fillColor: '#cccccc', color: '#000000', lineWidth: 0.7 }).id;
+      const cap = doc.addCaption({ x: 22, y: 14, runs: [{ text: 'C1' }], justify: 'left', chem: false }).id;
+      frameId = doc.addShape({ kind: 'geo', geo: 'rect', x1: 0, y1: 0, x2: plate.w, y2: plate.h, filled: false, lineWidth: 0, color: '#000000', frame: { atoms: [], captions: [cap], arrows: [], shapes: [oval], padX: 4, padY: 4, fit: true }, plate }).id;
+    });
+    let now = 0;
+    doc.edit('Again', () => { now = putPlate(doc, POINTS, plate, { x: 0, y: 0 }, frameId); });
+    expect(doc.shapes.size).toBe(1);
+    expect(doc.captions.size).toBe(0);
+    expect(doc.shapes.get(now)!.kind).toBe('picture');
+  });
+
+  it('places labels clear of each other, as chosen, and only on the atoms checked', () => {
+    const [block] = readCif(file('test-acid.cif'));
+    const c = crystalFromBlock(block);
+    const texts = (v: Partial<XView>) => crystalShapes(c, { ...c.view, ...v }).filter((s) => s.kind === 'text');
+    const box = (s: ReturnType<typeof texts>[number]) => [s.centre![0], s.centre![1] - 0.72 * s.size!, s.centre![0] + 0.58 * s.size! * s.text!.length, s.centre![1]];
+    const overlap = (list: ReturnType<typeof texts>) => {
+      let n = 0;
+      for (let i = 0; i < list.length; i++) for (let j = i + 1; j < list.length; j++) {
+        const a = box(list[i]), b = box(list[j]);
+        n += Math.max(0, Math.min(a[2], b[2]) - Math.max(a[0], b[0])) * Math.max(0, Math.min(a[3], b[3]) - Math.max(a[1], b[1]));
+      }
+      return n;
+    };
+    // a big label size crowds them: auto overlaps less than the open side alone
+    const auto = texts({ labelPlace: 'auto', labelSize: 16 }), open = texts({ labelPlace: 'open', labelSize: 16 });
+    expect(auto.length).toBe(open.length);
+    expect(overlap(auto)).toBeLessThanOrEqual(overlap(open));
+    // right of every atom: each label starts right of its atom
+    for (const s of texts({ labelPlace: 'right' })) expect(s.centre![0]).toBeGreaterThan(s.anchor![0]);
+    // one atom's own side wins
+    const first = texts({})[0].key!;
+    const left = texts({ labelPlace: 'right', labelSides: { [first]: 'left' } }).find((s) => s.key === first)!;
+    expect(left.centre![0] + 0.58 * left.size! * left.text!.length).toBeLessThan(left.anchor![0]);
+    // unchecked atoms have no label; a hydrogen checked has one
+    const h = c.atoms.find((a) => a.el === 'H')!.label;
+    const some = texts({ labelAtoms: { [first]: false, [h]: true } }).map((s) => s.key);
+    expect(some).not.toContain(first);
+    expect(some).toContain(h);
+    // C(1) style
+    expect(labelText('C12A', 'paren')).toBe('C(12A)');
+    expect(labelText('Cl1', 'paren')).toBe('Cl(1)');
+    expect(labelText('O1', 'plain')).toBe('O1');
+    // leader lines where a label sits away from its atom (dragged off)
+    const far = crystalShapes(c, { ...c.view, leaders: true, labelOffsets: { [first]: [60, 60] } });
+    expect(far.some((s) => s.kind === 'polyline' && s.key === 'leader')).toBe(true);
   });
 });

@@ -35,6 +35,7 @@ import { arialWidth } from '../text-metrics';
 import { cleanScheme } from '../drawing-styles';
 import { freshBox, type ChartBox } from '../sheet/chart-box';
 import { relinkNewman } from '../design/newman';
+import { crystalSrc, type PlateData } from '../design/plates';
 
 export interface ReadStats {
   atoms: number;
@@ -1288,12 +1289,20 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
               fx = tag ? tidyFx(JSON.parse(tag) as PictureFx) : undefined;
             } catch { fx = undefined; }
             const alt = kids(ch).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === ALT_TAG)?.getAttribute('Value') || undefined;
+            let plate: PlateData | undefined;
+            try {
+              const tag = kids(ch).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === PLATE_TAG)?.getAttribute('Value');
+              const got = tag ? JSON.parse(tag) as PlateData : undefined;
+              if (got?.kind === 'crystal' && got.crystal && Array.isArray(got.crystal.atoms)) plate = got;
+            } catch { plate = undefined; }
+            // a crystal structure is drawn again from its data (sharper than ChemDraw's copy of the picture)
+            if (plate?.crystal && pic) { pic.src = crystalSrc(plate.crystal, bb[2] - bb[0], bb[3] - bb[1]); pic.px = { w: Math.round(bb[2] - bb[0]), h: Math.round(bb[3] - bb[1]) }; pic.crop = null; }
             // where ChemDraw draws it among the other objects, and turned as ChemDraw turns it (BoundingBox is the unturned frame)
             const z = num(ch, 'Z', 0);
             const ang = (Number(ch.getAttribute('RotationAngle') ?? NaN) / 65536) % 360;
             const rot = Number.isFinite(ang) && Math.abs(ang) > 1e-3 ? +(ang > 180 ? ang - 360 : ang < -180 ? ang + 360 : ang).toFixed(3) : 0;
             const sh = pic
-              ? doc.addShape({ id: idFor(ch), kind: 'picture', z, ...(rot ? { rot } : {}), x1: bb[0], y1: bb[1], x2: bb[2], y2: bb[3], src: pic.src, px: pic.px, ...(pic.crop ? { crop: pic.crop } : {}), ...(chart ? { chart } : {}), ...(math ? { math } : {}), ...(fx ? { fx } : {}), ...(alt ? { alt } : {}) })
+              ? doc.addShape({ id: idFor(ch), kind: 'picture', z, ...(rot ? { rot } : {}), x1: bb[0], y1: bb[1], x2: bb[2], y2: bb[3], src: pic.src, px: pic.px, ...(pic.crop ? { crop: pic.crop } : {}), ...(chart ? { chart } : {}), ...(math ? { math } : {}), ...(fx ? { fx } : {}), ...(alt ? { alt } : {}), ...(plate ? { plate: { ...plate, w: bb[2] - bb[0], h: bb[3] - bb[1] } } : {}) })
               // only pictures this program can't show: mark where they sit, and keep them as they are
               : doc.addShape({ id: idFor(ch), kind: 'rect', x1: bb[0], y1: bb[1], x2: bb[2], y2: bb[3], dashed: true, color: '#9aa4b2', picture: true });
             from('s', sh.id, ch);
@@ -1855,6 +1864,8 @@ export const MATH_TAG = 'Chem Illustrator equation';
 export const PICTURE_FX_TAG = 'Chem Illustrator picture format';
 /** Alt text written for a structure (on one of its atoms) or a picture, which ChemDraw doesn't have. */
 export const ALT_TAG = 'Chem Illustrator alt text';
+/** A picture that is a lab figure (a crystal structure): its data, so it opens in its window again. */
+export const PLATE_TAG = 'Chem Illustrator lab figure';
 export const OWN_PICTURE = 'ChemIllustratorPicture';
 export const OWN_CROP = 'ChemIllustratorCrop';
 

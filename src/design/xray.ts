@@ -16,6 +16,7 @@ import type { Measure } from '../editor/arrange';
 import type { Vec } from '../geom';
 import { COVALENT, eigSym3, ident3, mmul, mT, mvec, sub3, type M3, type V3 } from '../chem/crystal';
 import { inkId } from './geo';
+import { VectorContext, type Item } from '../render/vector';
 
 /** The ellipsoid's size for a probability: c with P(χ²₃ ≤ c²) = p. */
 export const PROBABILITY_SCALE: Record<number, number> = { 30: 1.1932, 50: 1.5382, 70: 1.9144, 90: 2.5003 };
@@ -61,6 +62,22 @@ export interface XView {
   labelSize: number;
   /** Label → offset from its atom (pt), where dragged. */
   labelOffsets: Record<string, [number, number]>;
+  /**
+   * Where labels go: auto, clear of the other labels, the atoms and the bonds; open, in the widest
+   * gap between the atom's bonds (figures placed before there was a choice); or on one side of
+   * every atom, or on the atom itself. Not set: open.
+   */
+  labelPlace?: LabelPlace;
+  /** The space between an atom and its label (pt); 2.5 when not set. */
+  labelGap?: number;
+  /** A thin line from an atom to its label where the label sits away from it. */
+  leaders?: boolean;
+  /** How a label is written: C1, or C(1). */
+  labelStyle?: 'plain' | 'paren';
+  /** Where one atom's label goes, by label, where chosen (otherwise `labelPlace`). */
+  labelSides?: Record<string, LabelPlace>;
+  /** Atoms labelled or not, by label, where chosen (otherwise every atom but hydrogen). */
+  labelAtoms?: Record<string, boolean>;
   hiddenMolecules: number[];
   hiddenParts: string[];
   /** Atoms (by index) left out, and atoms drawn faded (see-through), `fade` of the way to white (0.6 when not set). */
@@ -68,6 +85,8 @@ export interface XView {
   fadedAtoms?: number[];
   fade?: number;
 }
+
+export type LabelPlace = 'auto' | 'open' | 'right' | 'left' | 'above' | 'below' | 'center';
 
 /** Van der Waals radii (Å, Bondi), for space-filling; others 2.0. */
 const VDW: Record<string, number> = { H: 1.2, D: 1.2, B: 1.92, C: 1.7, N: 1.55, O: 1.52, F: 1.47, Si: 2.1, P: 1.8, S: 1.8, Cl: 1.75, Br: 1.85, I: 1.98, Li: 1.82, Na: 2.27, K: 2.75, Mg: 1.73, Ni: 1.63, Cu: 1.4, Zn: 1.39, Pd: 1.63, Ag: 1.72, Pt: 1.75, Au: 1.66, Se: 1.9, Sn: 2.17 };
@@ -95,8 +114,20 @@ export interface CrystalSpec {
 
 export const defaultView = (): XView => ({
   rotation: ident3(), zoom: 1, style: 'ortep', probability: 50, hydrogens: true, colour: true, principal: true,
-  labels: true, labelSize: 9, labelOffsets: {}, hiddenMolecules: [], hiddenParts: [],
+  labels: true, labelSize: 9, labelOffsets: {}, hiddenMolecules: [], hiddenParts: [], labelPlace: 'auto',
 });
+
+/** Whether an atom is labelled (when labels are on): as chosen, else every atom but hydrogen. */
+export function labelled(v: XView, a: { label: string; el: string }): boolean {
+  return v.labelAtoms?.[a.label] ?? !isH(a.el);
+}
+
+/** A label as written: "C12A", or "C(12A)" (the element in front, the number in brackets). */
+export function labelText(label: string, style: XView['labelStyle']): string {
+  if (style !== 'paren') return label;
+  const m = /^([A-Z][a-z]?)(.+)$/.exec(label);
+  return m && !m[2].startsWith('(') ? `${m[1]}(${m[2]})` : label;
+}
 
 const uMat = (u: XAtom['u']): M3 => [[u[0], u[3], u[4]], [u[3], u[1], u[5]], [u[4], u[5], u[2]]];
 const isH = (el: string) => el === 'H' || el === 'D';
@@ -303,7 +334,7 @@ export function crystalShapes(c: CrystalSpec, v: XView): XShape[] {
     }
   }
   out.sort((p, q) => p.depth - q.depth);
-  if (v.labels) out.push(...labels(c, keep, screen, radius, scale, v, pt));
+  if (v.labels) out.push(...labels(c, keep, screen, radius, scale, v, pt, out));
   return out;
 }
 
@@ -351,46 +382,188 @@ function stick(a: V3, b: V3, scale: number, c: CrystalSpec, i: number, j: number
 }
 
 /**
- * Labels of the non-hydrogen atoms, on the open side of each (away from its bonds), or where
- * dragged. An atom shown twice (a molecule completed by symmetry) is labelled once: on the
- * asymmetric unit's own atom, else the nearest copy.
+ * The atom labels (every atom but hydrogen, unless chosen otherwise), where chosen (`labelPlace`)
+ * or dragged. An atom shown twice (a molecule completed by symmetry) is labelled once: on the
+ * asymmetric unit's own atom, else the nearest copy. Auto places each label where it covers the
+ * fewest other labels, atoms and bonds, close to its atom, the most crowded atoms first.
  */
-function labels(c: CrystalSpec, keep: number[], screen: Map<number, V3>, radius: Map<number, number>, scale: number, v: XView, pt: (p: V3) => [number, number]): XShape[] {
+function labels(c: CrystalSpec, keep: number[], screen: Map<number, V3>, radius: Map<number, number>, scale: number, v: XView, pt: (p: V3) => [number, number], drawn: XShape[]): XShape[] {
   const kept = new Set(keep);
   const nbr = new Map<number, number[]>();
   for (const [i, j] of c.bonds) if (kept.has(i) && kept.has(j)) { nbr.set(i, [...(nbr.get(i) ?? []), j]); nbr.set(j, [...(nbr.get(j) ?? []), i]); }
-  const out: XShape[] = [];
   const seen = new Set<string>();
+  const which: number[] = [];
   for (const i of [...keep].sort((p, q) => Number(!c.atoms[p].own) - Number(!c.atoms[q].own) || screen.get(q)![2] - screen.get(p)![2])) {
     const a = c.atoms[i];
-    if (isH(a.el) || seen.has(a.label)) continue;
+    if (!labelled(v, a) || seen.has(a.label)) continue;
     seen.add(a.label);
+    which.push(i);
+  }
+  const all = v.labelPlace ?? 'open';
+  const gap = v.labelGap ?? 2.5;
+  const size = v.labelSize;
+  const text = new Map(which.map((i) => [i, labelText(c.atoms[i].label, v.labelStyle)]));
+  const width = (t: string) => 0.58 * size * t.length, height = 0.72 * size;
+  const rad = (i: number) => (radius.get(i) ?? 0.3) * scale;
+  // the offset (text start on its baseline) of a label `dist` from its atom's edge in direction `angle` (y up)
+  const along = (i: number, angle: number, dist: number): [number, number] => {
+    const t = text.get(i)!, w = width(t), h = height;
+    const dx = Math.cos(angle), dy = -Math.sin(angle);
+    const d = rad(i) + dist + Math.abs(dx) * (w / 2) + Math.abs(dy) * (h / 2);
+    return [dx * d - w / 2, dy * d + h / 2];
+  };
+  const offsets = new Map<number, [number, number]>();
+  const fixed = new Set<number>();
+  for (const i of which) {
+    const dragged = v.labelOffsets[c.atoms[i].label];
+    if (dragged) { offsets.set(i, dragged); fixed.add(i); continue; }
+    const t = text.get(i)!;
+    const place = v.labelSides?.[c.atoms[i].label] ?? all;
+    if (place !== 'auto') fixed.add(i);
+    if (place === 'open' || place === 'auto') offsets.set(i, along(i, openAngle(i, nbr.get(i) ?? [], screen), gap));
+    else if (place === 'right') offsets.set(i, along(i, 0, gap));
+    else if (place === 'left') offsets.set(i, along(i, Math.PI, gap));
+    else if (place === 'above') offsets.set(i, along(i, Math.PI / 2, gap));
+    else if (place === 'below') offsets.set(i, along(i, -Math.PI / 2, gap));
+    else offsets.set(i, [-width(t) / 2, height / 2]);
+  }
+  if (which.length > fixed.size) autoPlace(which, fixed, offsets, { c, keep, screen, nbr, pt, drawn, text, width, height, gap, rad, along });
+  const out: XShape[] = [];
+  for (const i of which) {
     const [x, y] = pt(screen.get(i)!);
-    const off = v.labelOffsets[a.label] ?? openSide(i, nbr.get(i) ?? [], screen, (radius.get(i) ?? 0.3) * scale, a.label, v.labelSize);
-    out.push({ kind: 'text', depth: 1e9, centre: [x + off[0], y + off[1]], anchor: [x, y], text: a.label, size: v.labelSize, key: a.label, fill: '#000000', stroke: 'none', width: 0 });
+    const off = offsets.get(i)!;
+    const t = text.get(i)!;
+    if (v.leaders && (v.labelSides?.[c.atoms[i].label] ?? all) !== 'center') {
+      // a leader where the label's box is well clear of the atom: from the atom's edge to the box's
+      const box = { x0: x + off[0] - 1, y0: y + off[1] - height - 1, x1: x + off[0] + width(t) + 1, y1: y + off[1] + 0.25 * size + 1 };
+      const near: [number, number] = [Math.min(box.x1, Math.max(box.x0, x)), Math.min(box.y1, Math.max(box.y0, y))];
+      const d = Math.hypot(near[0] - x, near[1] - y);
+      if (d > rad(i) + gap + 0.9 * size) {
+        const u = [(near[0] - x) / d, (near[1] - y) / d];
+        out.push({ kind: 'polyline', depth: 1e9 - 1, points: [[x + u[0] * (rad(i) + 0.8), y + u[1] * (rad(i) + 0.8)], near], fill: 'none', stroke: '#000000', width: 0.4, key: 'leader' });
+      }
+    }
+    out.push({ kind: 'text', depth: 1e9, centre: [x + off[0], y + off[1]], anchor: [x, y], text: t, size, key: c.atoms[i].label, fill: '#000000', stroke: 'none', width: 0 });
   }
   return out;
 }
 
-/** Where a label goes from its atom (pt, y down; the text's start on its baseline): in the middle of the widest open angle between the atom's bonds as seen, just outside the atom. */
-function openSide(i: number, bonded: number[], screen: Map<number, V3>, radiusPt: number, text: string, size: number): [number, number] {
+/** The direction (radians, y up) of the middle of the widest open angle between an atom's bonds as seen. */
+function openAngle(i: number, bonded: number[], screen: Map<number, V3>): number {
   const angles: number[] = [];
   const p = screen.get(i)!;
   for (const j of bonded) { const q = screen.get(j)!; const dx = q[0] - p[0], dy = q[1] - p[1]; if (Math.hypot(dx, dy) > 1e-6) angles.push(Math.atan2(dy, dx)); }
-  let angle: number;
-  if (!angles.length) angle = Math.PI / 4;
-  else {
-    angles.sort((a, b) => a - b);
-    const gaps = angles.map((a, k) => ((angles[(k + 1) % angles.length] - a + 2 * Math.PI) % (2 * Math.PI)) || 2 * Math.PI);
-    let best = 0;
-    const key = (m: number) => [Math.round(gaps[m] * 1000), -Math.abs(Math.sin(angles[m] + gaps[m] / 2 - Math.PI / 4))];
-    for (let m = 1; m < gaps.length; m++) { const a = key(m), b = key(best); if (a[0] > b[0] || (a[0] === b[0] && a[1] > b[1])) best = m; }
-    angle = angles[best] + gaps[best] / 2;
+  if (!angles.length) return Math.PI / 4;
+  angles.sort((a, b) => a - b);
+  const gaps = angles.map((a, k) => ((angles[(k + 1) % angles.length] - a + 2 * Math.PI) % (2 * Math.PI)) || 2 * Math.PI);
+  let best = 0;
+  const key = (m: number) => [Math.round(gaps[m] * 1000), -Math.abs(Math.sin(angles[m] + gaps[m] / 2 - Math.PI / 4))];
+  for (let m = 1; m < gaps.length; m++) { const a = key(m), b = key(best); if (a[0] > b[0] || (a[0] === b[0] && a[1] > b[1])) best = m; }
+  return angles[best] + gaps[best] / 2;
+}
+
+interface PlaceCtx {
+  c: CrystalSpec; keep: number[]; screen: Map<number, V3>; nbr: Map<number, number[]>; pt: (p: V3) => [number, number]; drawn: XShape[];
+  text: Map<number, string>; width: (t: string) => number; height: number; gap: number; rad: (i: number) => number;
+  along: (i: number, angle: number, dist: number) => [number, number];
+}
+
+/** Move the labels (all but `fixed`) to where each covers least: other labels, atoms, bonds. */
+function autoPlace(which: number[], fixed: Set<number>, offsets: Map<number, [number, number]>, k: PlaceCtx): void {
+  type Box = [number, number, number, number];
+  const at = new Map(which.map((i) => [i, k.pt(k.screen.get(i)!)]));
+  const boxOf = (i: number, off: [number, number]): Box => {
+    const [x, y] = at.get(i)!, w = k.width(k.text.get(i)!);
+    return [x + off[0], y + off[1] - k.height, x + off[0] + w, y + off[1] + 0.2 * k.height];
+  };
+  // what a label should not cover: the atoms (as drawn) and the bonds (centre lines)
+  const blobs: { c: [number, number]; a: number; b: number; angle: number }[] = [];
+  for (const s of k.drawn) if (s.kind === 'ellipse' || s.kind === 'ball') blobs.push({ c: s.centre!, a: s.axes![0] + 0.6, b: s.axes![1] + 0.6, angle: ((s.angle ?? 0) * Math.PI) / 180 });
+  const kept = new Set(k.keep);
+  const sticks: [number, number, number, number][] = [];
+  for (const [i, j] of k.c.bonds) if (kept.has(i) && kept.has(j)) { const p = k.pt(k.screen.get(i)!), q = k.pt(k.screen.get(j)!); sticks.push([p[0], p[1], q[0], q[1]]); }
+  // (labels keep a little space between them, so two never read as one)
+  const sp = 0.15 * k.height;
+  const area = (p: Box, q: Box) => Math.max(0, Math.min(p[2], q[2]) - Math.max(p[0], q[0]) + 2 * sp) * Math.max(0, Math.min(p[3], q[3]) - Math.max(p[1], q[1]) + 2 * sp);
+  const blobHit = (b: Box, e: (typeof blobs)[number]) => {
+    // how far the box reaches into the ellipse (pt), 0 when clear
+    const nx = Math.min(b[2], Math.max(b[0], e.c[0])), ny = Math.min(b[3], Math.max(b[1], e.c[1]));
+    const dx = nx - e.c[0], dy = ny - e.c[1], d = Math.hypot(dx, dy);
+    if (d < 1e-9) return Math.max(e.a, e.b);
+    const phi = Math.atan2(dy, dx) - e.angle;
+    const r = (e.a * e.b) / Math.hypot(e.b * Math.cos(phi), e.a * Math.sin(phi));
+    return Math.max(0, r - d);
+  };
+  const crosses = (b: Box, s: [number, number, number, number]) => {
+    // Liang–Barsky: the length of the segment inside the box
+    let t0 = 0, t1 = 1;
+    const dx = s[2] - s[0], dy = s[3] - s[1];
+    for (const [p, q] of [[-dx, s[0] - b[0]], [dx, b[2] - s[0]], [-dy, s[1] - b[1]], [dy, b[3] - s[1]]]) {
+      if (Math.abs(p) < 1e-12) { if (q < 0) return 0; continue; }
+      const t = q / p;
+      if (p < 0) { if (t > t1) return 0; if (t > t0) t0 = t; } else { if (t < t0) return 0; if (t < t1) t1 = t; }
+    }
+    return (t1 - t0) * Math.hypot(dx, dy);
+  };
+  // only what is within reach of an atom's farthest candidate can be covered by its label
+  const reach = (i: number) => k.width(k.text.get(i)!) + 2.6 * k.height + k.gap + k.rad(i);
+  const near = new Map<number, { blobs: typeof blobs; sticks: typeof sticks; labels: number[] }>();
+  for (const i of which) {
+    const [x, y] = at.get(i)!, r = reach(i);
+    const segDist = (s: [number, number, number, number]) => {
+      const dx = s[2] - s[0], dy = s[3] - s[1], l2 = dx * dx + dy * dy;
+      const t = l2 ? Math.max(0, Math.min(1, ((x - s[0]) * dx + (y - s[1]) * dy) / l2)) : 0;
+      return Math.hypot(s[0] + t * dx - x, s[1] + t * dy - y);
+    };
+    near.set(i, {
+      blobs: blobs.filter((e) => Math.hypot(e.c[0] - x, e.c[1] - y) < r + Math.max(e.a, e.b)),
+      sticks: sticks.filter((st) => segDist(st) < r),
+      labels: which.filter((j) => j !== i && Math.hypot(at.get(j)![0] - x, at.get(j)![1] - y) < r + reach(j)),
+    });
   }
-  const dx = Math.cos(angle), dy = -Math.sin(angle);
-  const w = 0.58 * size * text.length, h = 0.72 * size;
-  const dist = radiusPt + 2.5 + Math.abs(dx) * (w / 2) + Math.abs(dy) * (h / 2);
-  return [dx * dist - w / 2, dy * dist + h / 2];
+  const cost = (i: number, b: Box, others: Box[]) => {
+    const n = near.get(i)!;
+    let s = 0;
+    for (const o of others) s += 4 * area(b, o);
+    for (const e of n.blobs) s += 6 * blobHit(b, e) * k.height;
+    for (const st of n.sticks) s += 3 * crosses(b, st) * k.height;
+    return s;
+  };
+  const free = which.filter((i) => !fixed.has(i));
+  // the candidates: 24 directions at three distances; the open side a little preferred
+  const cands = new Map<number, { off: [number, number]; extra: number }[]>();
+  for (const i of free) {
+    const open = openAngle(i, k.nbr.get(i) ?? [], k.screen);
+    const list: { off: [number, number]; extra: number }[] = [];
+    for (const [step, dist] of [[0, k.gap], [1, k.gap + 0.6 * k.height], [2, k.gap + 1.4 * k.height]] as [number, number][]) {
+      for (let m = 0; m < 24; m++) {
+        const angle = (m * Math.PI) / 12;
+        const turn = Math.abs(Math.atan2(Math.sin(angle - open), Math.cos(angle - open)));
+        list.push({ off: k.along(i, angle, dist), extra: k.height * k.height * (0.6 * turn + 2.5 * step * step) });
+      }
+    }
+    cands.set(i, list);
+  }
+  const boxes = new Map<number, Box>(which.map((i) => [i, boxOf(i, offsets.get(i)!)]));
+  // the most crowded atoms (most bonds as seen) choose first
+  const order = [...free].sort((p, q) => (k.nbr.get(q)?.length ?? 0) - (k.nbr.get(p)?.length ?? 0));
+  const placed = new Set<number>(fixed);
+  for (let pass = 0; pass < 3; pass++) {
+    let moved = false;
+    for (const i of order) {
+      const others = near.get(i)!.labels.filter((j) => placed.has(j)).map((j) => boxes.get(j)!);
+      let best: [number, number] = offsets.get(i)!, bestCost = Infinity;
+      for (const cand of cands.get(i)!) {
+        const s = cost(i, boxOf(i, cand.off), others) + cand.extra;
+        if (s < bestCost - 1e-9) { bestCost = s; best = cand.off; }
+      }
+      if (best !== offsets.get(i)) moved = true;
+      offsets.set(i, best);
+      boxes.set(i, boxOf(i, best));
+      placed.add(i);
+    }
+    if (!moved && pass) break;
+  }
 }
 
 /** [x0, y0, x1, y1] the shapes cover (pt), labels included. */
@@ -426,13 +599,25 @@ export function paintShapes(ctx: CanvasRenderingContext2D, items: XShape[], font
       ctx.stroke();
     } else if (s.kind === 'ball') {
       const [x, y] = s.centre!, r = s.axes![0];
-      const g = ctx.createRadialGradient(x - 0.3 * r, y - 0.3 * r, 0, x - 0.3 * r, y - 0.3 * r, 1.3 * r);
-      g.addColorStop(0, '#ffffff');
-      g.addColorStop(1, s.fill);
       ctx.beginPath();
       ctx.arc(x, y, r, 0, 2 * Math.PI);
-      ctx.fillStyle = g;
-      ctx.fill();
+      if (typeof ctx.createRadialGradient === 'function') {
+        const g = ctx.createRadialGradient(x - 0.3 * r, y - 0.3 * r, 0, x - 0.3 * r, y - 0.3 * r, 1.3 * r);
+        g.addColorStop(0, '#ffffff');
+        g.addColorStop(1, s.fill);
+        ctx.fillStyle = g;
+        ctx.fill();
+      } else {
+        // (a vector picture, which has no gradients: the colour, with a lighter spot where the light falls)
+        ctx.fillStyle = s.fill;
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(x - 0.3 * r, y - 0.3 * r, 0.4 * r, 0, 2 * Math.PI);
+        ctx.fillStyle = towardWhite(s.fill, 0.55);
+        ctx.fill();
+        ctx.beginPath();
+        ctx.arc(x, y, r, 0, 2 * Math.PI);
+      }
       ctx.stroke();
     } else if (s.kind === 'polyline' || s.kind === 'polygon') {
       ctx.beginPath();
@@ -443,7 +628,7 @@ export function paintShapes(ctx: CanvasRenderingContext2D, items: XShape[], font
       ctx.font = `${s.size}px ${font}`;
       ctx.lineWidth = s.size! * 0.25;
       ctx.strokeStyle = '#ffffff';
-      ctx.strokeText(s.text!, s.centre![0], s.centre![1]);
+      if (typeof ctx.strokeText === 'function') ctx.strokeText(s.text!, s.centre![0], s.centre![1]);
       ctx.fillStyle = '#000000';
       ctx.fillText(s.text!, s.centre![0], s.centre![1]);
     }
@@ -451,6 +636,60 @@ export function paintShapes(ctx: CanvasRenderingContext2D, items: XShape[], font
 }
 
 // ---------------------------------------------------------------- on the page
+
+/** The shapes fitted to a `w` × `h` point box with its top left at 0, 0 (as Place on Page draws them). */
+function fittedShapes(c: CrystalSpec, w: number, h: number): XShape[] {
+  const v: XView = { ...c.view, zoom: fittingZoom(c, c.view, w, h) };
+  const items = crystalShapes(c, v);
+  const b = shapesBounds(items);
+  const dx = w / 2 - (b[0] + b[2]) / 2, dy = h / 2 - (b[1] + b[3]) / 2;
+  const P = (p: [number, number]): [number, number] => [p[0] + dx, p[1] + dy];
+  return items.map((s) => ({ ...s, ...(s.centre ? { centre: P(s.centre) } : {}), ...(s.anchor ? { anchor: P(s.anchor) } : {}), ...(s.points ? { points: s.points.map(P) } : {}) }));
+}
+
+const svgNum = (x: number) => String(Math.round(x * 100) / 100);
+const svgEsc = (t: string) => t.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+/**
+ * The structure as one SVG picture, `w` × `h` points (one point to one unit), drawn as the
+ * viewer draws it: what Place on Page puts on the page, so the figure is one object to move,
+ * copy and save, however many atoms it has.
+ */
+export function crystalSvg(c: CrystalSpec, w: number, h: number, font = 'Arial'): string {
+  const out: string[] = [];
+  const defs: string[] = [];
+  const grads = new Map<string, string>();
+  for (const s of fittedShapes(c, w, h)) {
+    const stroke = s.stroke === 'none' ? 'none' : s.stroke;
+    const line = `stroke="${stroke}" stroke-width="${svgNum(s.width)}"`;
+    if (s.kind === 'ellipse') {
+      const [x, y] = s.centre!;
+      out.push(`<ellipse cx="${svgNum(x)}" cy="${svgNum(y)}" rx="${svgNum(Math.max(0.01, s.axes![0]))}" ry="${svgNum(Math.max(0.01, s.axes![1]))}"${s.angle ? ` transform="rotate(${svgNum(s.angle)} ${svgNum(x)} ${svgNum(y)})"` : ''} fill="${s.fill}" ${line}/>`);
+    } else if (s.kind === 'ball') {
+      let g = grads.get(s.fill);
+      if (!g) {
+        g = `b${grads.size}`;
+        grads.set(s.fill, g);
+        defs.push(`<radialGradient id="${g}" cx="0.35" cy="0.35" r="0.65"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="${s.fill}"/></radialGradient>`);
+      }
+      out.push(`<circle cx="${svgNum(s.centre![0])}" cy="${svgNum(s.centre![1])}" r="${svgNum(s.axes![0])}" fill="url(#${g})" ${line}/>`);
+    } else if (s.kind === 'polyline' || s.kind === 'polygon') {
+      const pts = s.points!.map(([x, y]) => `${svgNum(x)},${svgNum(y)}`).join(' ');
+      out.push(`<${s.kind} points="${pts}" fill="${s.kind === 'polygon' ? s.fill : 'none'}" ${line}/>`);
+    } else if (s.kind === 'text') {
+      out.push(`<text x="${svgNum(s.centre![0])}" y="${svgNum(s.centre![1])}" font-family="${svgEsc(font)}" font-size="${svgNum(s.size!)}" fill="#000000" stroke="#ffffff" stroke-width="${svgNum(s.size! * 0.25)}" stroke-linejoin="round" paint-order="stroke">${svgEsc(s.text!)}</text>`);
+    }
+  }
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${svgNum(w)}pt" height="${svgNum(h)}pt" viewBox="0 0 ${svgNum(w)} ${svgNum(h)}">` +
+    (defs.length ? `<defs>${defs.join('')}</defs>` : '') + `<g stroke-linecap="round" stroke-linejoin="round">${out.join('')}</g></svg>`;
+}
+
+/** The structure as vector drawing items (`w` × `h` points, top left at 0, 0): for an EMF picture, which ChemDraw and Office keep sharp. */
+export function crystalItems(c: CrystalSpec, w: number, h: number, font = 'Arial'): Item[] {
+  const ctx = new VectorContext();
+  paintShapes(ctx as unknown as CanvasRenderingContext2D, fittedShapes(c, w, h), font);
+  return ctx.items;
+}
 
 export interface CrystalParts { captions: number[]; arrows: number[]; shapes: number[] }
 

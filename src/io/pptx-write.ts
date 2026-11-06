@@ -96,6 +96,8 @@ export const TAG = {
   highlight: 'CHEMILLUSTRATOR_HIGHLIGHT',
   /** A Slide Zoom or a Summary Zoom's part: whether the show comes back, and where the part ends. */
   zoom: 'CHEMILLUSTRATOR_ZOOM',
+  /** A picture that is a lab figure (a crystal structure): its data, so it opens in its window again. */
+  plate: 'CHEMILLUSTRATOR_PLATE',
   /** The slide's id here, so links kept in our own tags find their slide again. */
   slideId: 'CHEMILLUSTRATOR_SLIDE_ID',
   /** A SmartArt-style diagram (a group of shapes): its text and look, kept on the group. */
@@ -1381,7 +1383,9 @@ class Writer {
         if (baked) t.print = bytesHash(baked);
         t.fx = { ...(fx?.bg ? { bg: fx.bg } : {}), ...(fx?.sharpen ? { sharpen: fx.sharpen } : {}) };
       }
-      return Object.keys(t).length ? this.addTags(from, { [TAG.picture]: JSON.stringify({ v: 1, ...t }), ...(orig ? { [TAG.pictureOrig]: dataUrl(orig.bytes, orig.mime) } : {}) }) : null;
+      // a crystal structure keeps its data, so it opens in its window again
+      const plate = pic?.plate ? { [TAG.plate]: JSON.stringify(pic.plate) } : {};
+      return Object.keys(t).length || pic?.plate ? this.addTags(from, { ...(Object.keys(t).length ? { [TAG.picture]: JSON.stringify({ v: 1, ...t }) } : {}), ...(orig ? { [TAG.pictureOrig]: dataUrl(orig.bytes, orig.mime) } : {}), ...plate }) : null;
     };
     if (ext === 'svg') {
       // PowerPoint shows the SVG; older programs the PNG beside it (300 dots per inch)
