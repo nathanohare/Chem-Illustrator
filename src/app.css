@@ -1760,14 +1760,6 @@ body.slides-mode #canvas-ribbon, body.design-mode #canvas-ribbon, body.sheet-mod
 .canvas-ribbon button.cr-major .cr-line { display: block; }
 .canvas-ribbon.cr-simple button.cr-major .cr-line { display: inline; }
 .canvas-ribbon.cr-simple button.cr-major .rb-icon, .canvas-ribbon.cr-simple button.cr-major .rb-icon svg { width: 18px; height: 18px; line-height: 18px; }
-/* an object's own tab (Arrow, Ring, Bond): amber, as Office marks its tool tabs */
-.canvas-ribbon .rb-tabs button.cr-ctx-tab { color: #9a6a00; background: color-mix(in srgb, #e8a400 12%, transparent); }
-.canvas-ribbon .rb-tabs button.cr-ctx-tab[aria-selected='true'] { color: #8a5c00; background: color-mix(in srgb, #e8a400 18%, var(--panel)); box-shadow: inset 0 -3px 0 #d39400; }
-body.mode-window .canvas-ribbon .rb-tabs button.cr-ctx-tab:not([aria-selected='true']) { color: #ffd77a; }
-/* on a dark tab row (Dark Gray, Dark) the contextual tab's amber is a light one, so its word reads (4.5:1 and more) */
-:root[data-gray] .canvas-ribbon .rb-tabs button.cr-ctx-tab, :root[data-theme='dark'] .canvas-ribbon .rb-tabs button.cr-ctx-tab { color: #f6c86f; }
-@media (prefers-color-scheme: dark) { :root:not([data-theme='light']) .canvas-ribbon .rb-tabs button.cr-ctx-tab { color: #f6c86f; } }
-.canvas-ribbon > .rb-panel.cr-ctx-panel { background: color-mix(in srgb, #e8a400 6%, var(--panel)); }
 /* the warnings at the right of the tabs; Analysis at the right of the buttons */
 .canvas-ribbon .cr-tab-end { margin-left: auto; display: flex; align-items: center; padding: 0 2px 1px; }
 .canvas-ribbon .rb-tabs .rb-collapse { margin-left: 4px; }
