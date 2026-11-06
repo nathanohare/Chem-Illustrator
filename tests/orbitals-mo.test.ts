@@ -37,7 +37,7 @@ describe('MO diagrams', () => {
     for (const p of MO_PRESETS) {
       const atoms = p.spec.levels.filter((l) => l.column !== 'middle').reduce((n, l) => n + l.electrons, 0);
       const mos = p.spec.levels.filter((l) => l.column === 'middle').reduce((n, l) => n + l.electrons, 0);
-      expect(mos, p.id).toBe(atoms);
+      expect(mos, p.id).toBe(atoms - (p.charge ?? 0));
     }
   });
 
@@ -90,10 +90,15 @@ describe('MO diagrams', () => {
   it('works out how each molecular orbital mixes', () => {
     const n2 = MO_PRESETS.find((p) => p.id === 'n2')!.spec;
     const mix = (name: string) => mixOf(n2.levels, n2.levels.find((l) => moPlain(l.label) === name)!);
-    expect(mix('σ2s')).toEqual({ ao: 's', sym: 'σ', bonding: true });
-    expect(mix('σ*2s')).toEqual({ ao: 's', sym: 'σ', bonding: false });
-    expect(mix('π2p')).toEqual({ ao: 'p', sym: 'π', bonding: true });
-    expect(mix('σ*2p')).toEqual({ ao: 'p', sym: 'σ', bonding: false });
+    expect(mix('σ2s')).toEqual({ left: 's', right: 's', sym: 'σ', bonding: true });
+    expect(mix('σ*2s')).toEqual({ left: 's', right: 's', sym: 'σ', bonding: false });
+    expect(mix('π2p')).toEqual({ left: 'p', right: 'p', sym: 'π', bonding: true });
+    expect(mix('σ*2p')).toEqual({ left: 'p', right: 'p', sym: 'σ', bonding: false });
+    // a hybrid with a p orbital, and HF's nonbonding F orbitals (one side only)
+    const cf = MO_PRESETS.find((p) => p.id === 'cf')!.spec;
+    expect(mixOf(cf.levels, cf.levels.find((l) => l.column === 'middle')!)).toEqual({ left: 'sp3', right: 'p', sym: 'σ', bonding: true });
+    const hf = MO_PRESETS.find((p) => p.id === 'hf')!.spec;
+    expect(mixOf(hf.levels, hf.levels.find((l) => moPlain(l.label) === '1π')!)).toEqual({ left: null, right: 'p', sym: 'π', bonding: true });
     // no σ or π in the name: above the atomic orbitals is out of phase
     const blank = MO_PRESETS.find((p) => p.id === 'blank')!.spec;
     expect(blank.levels.filter((l) => l.column === 'middle').map((l) => mixOf(blank.levels, l)?.bonding)).toEqual([true, false]);
@@ -111,7 +116,18 @@ describe('MO diagrams', () => {
     const shapes = (d: Doc, id: number) => d.shapes.get(id)!.frame!.shapes.length;
     // H2: two s spheres, one merged σ and two spheres for σ*
     expect(shapes(doc, b) - shapes(plain, a)).toBe(5);
-    const arrows = doc.shapes.get(b)!.frame!.captions.map((c) => doc.captions.get(c)!).filter((c) => /[↑↓]/.test(c.runs[0].text));
-    expect(arrows.every((c) => c.runs[0].size === 14)).toBe(true);
+    // H2's electrons: one arrow on each atom, a pair in σ, all 14 pt tall (the energy arrow is the other)
+    const arrows = doc.shapes.get(b)!.frame!.arrows.map((a) => doc.arrows.get(a)!).filter((a) => a.tail.x === a.head.x && Math.abs(a.tail.y - a.head.y) < 20);
+    expect(arrows.length).toBe(4);
+    expect(arrows.every((a) => Math.abs(Math.abs(a.tail.y - a.head.y) - 14) < 1e-6)).toBe(true);
+  });
+
+  it('orders the 2p set by s-p mixing and fills by the aufbau principle', () => {
+    const at = (id: string, name: string) => { const sp = MO_PRESETS.find((p) => p.id === id)!.spec; return sp.levels.find((l) => moPlain(l.label) === name)!; };
+    expect(at('n2', 'π2p').e).toBeLessThan(at('n2', 'σ2p').e);
+    expect(at('o2', 'σ2p').e).toBeLessThan(at('o2', 'π2p').e);
+    expect(hund(2, at('b2', 'π2p').electrons)).toEqual([1, 1]);
+    expect(at('o22-', 'π*2p').electrons).toBe(4);
+    expect(at('he2', 'σ*1s').electrons).toBe(2);
   });
 });
