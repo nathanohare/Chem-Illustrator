@@ -40,7 +40,7 @@ function rowOf(x: Hammett): Record<string, Cell> {
 export const HAMMETT_TABLE: KbTable = {
   id: 'hammett',
   title: 'Hammett Constants',
-  about: 'Hammett σm, σp, σp⁺ and σp⁻, and the field (F) and resonance (R) parameters (Swain–Lupton, as modified by Hansch, Leo and Taft; σp ≈ F + R), of substituents on a benzene ring: every group in Tables I and V of Hansch, Leo and Taft (Chem. Rev. 1991), the most used ones first. Search by group (NO2, OMe), name or structure, or filter by the atom that joins the ring. Values in brackets are ones the paper marks as less certain. Each row names the original paper each value was measured in.',
+  about: 'Hammett σm, σp, σp⁺ and σp⁻, and the field (F) and resonance (R) parameters (Swain–Lupton, as modified by Hansch, Leo and Taft; σp ≈ F + R), of substituents on a benzene ring: every group in Tables I and V of Hansch, Leo and Taft (Chem. Rev. 1991), the most used ones first. Search by group (NO2, OMe), name or structure, or filter by the atom it is attached through. Values in brackets are ones the paper marks as less certain. Each row names the original paper each value was measured in.',
   columns: [
     { key: 'pic', label: 'Structure', picture: true },
     { key: 'group', label: 'Group' },
@@ -53,9 +53,10 @@ export const HAMMETT_TABLE: KbTable = {
     { key: 'R', label: 'R', numeric: true, info: FR_INFO },
     { key: 'refs', label: 'Original source', prose: true, info: 'The paper(s) each value was measured or first reported in, as Hansch, Leo and Taft cite them (Table I for σm and σp, Table V for σp⁺ and σp⁻). Hydrogen is 0 by definition.' },
     { key: 'row', label: 'Table I no.', numeric: true, narrow: true },
-    { key: 'joins', label: 'Joined by', filter: true, hidden: true },
+    { key: 'joins', label: 'Attached through', filter: true, hidden: true, info: 'The atom that bonds the group to the benzene ring: carbon for CF₃, oxygen for OMe, nitrogen for NO₂. Pick one to compare only groups attached the same way. Halogen is F, Cl, Br or I itself; Fused ring (3,4-) is a ring joined to the benzene at two places.' },
   ],
   picture: (row: Record<string, Cell>) => groupPicture(String(row.id)),
+  drawOn: 'c1ccccc1',
   rows: HAMMETT.map(rowOf),
   sources: [HANSCH_1991, { label: 'Original papers for each value: the Original source column (as cited in Tables I and V)' }, { label: 'Names, SMILES, drawings and order by Chem Illustrator' }],
 };

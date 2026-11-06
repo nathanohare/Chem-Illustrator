@@ -10,6 +10,7 @@ import type { Measure } from '../editor/arrange';
 import { readSmart, slotName, stepHolder, stepPartKind, SMART_LAYOUTS, type SmartData, type SmartLayout, type SmartLink, type StepPart, type TextPart } from '../chem/smart-scheme';
 import type { TextRun } from '../model';
 import { RichField } from './rich-field';
+import { SYMBOLS } from './symbol-list';
 import { dropTarget, type BoxPlace } from './toolboxes';
 import { PIN_ICON, PINNED_ICON } from './float-box';
 import { formatDefaults, type SmartFormat } from '../chem/smart-format';
@@ -48,6 +49,8 @@ export interface SmartPaneHooks {
   secondLoop(id: number): void;
   /** Give the scheme its own font, text sizes, arrows and spacing (undefined: the drawing style's). */
   format(id: number, fmt: SmartFormat | undefined): void;
+  /** Clean Up Cycle: the cycle's species onto one ellipse, its arrows along it. */
+  cleanUpCycle(id: number): void;
   ungroup(id: number): void;
 }
 
@@ -64,14 +67,6 @@ let folded = false;
 /** Chemical interpretation of what is typed in the rows (remembered between uses). */
 let chemOn = (() => { try { return localStorage.getItem('smartPaneChem') !== 'off'; } catch { return true; } })();
 
-/** The symbols the Ω button offers, with their names. */
-const SYMBOLS: [string, string][] = [
-  ['α', 'alpha'], ['β', 'beta'], ['γ', 'gamma'], ['δ', 'delta'], ['ε', 'epsilon'], ['η', 'eta'], ['θ', 'theta'], ['κ', 'kappa'],
-  ['λ', 'lambda'], ['μ', 'mu'], ['ν', 'nu'], ['π', 'pi'], ['σ', 'sigma'], ['τ', 'tau'], ['φ', 'phi'], ['χ', 'chi'],
-  ['ψ', 'psi'], ['ω', 'omega'], ['Δ', 'Delta (heat)'], ['Σ', 'Sigma'], ['Ω', 'Omega'], ['→', 'arrow'], ['⇌', 'equilibrium'], ['↑', 'gas given off'],
-  ['↓', 'precipitate'], ['⊕', 'circled plus'], ['⊖', 'circled minus'], ['+', 'plus'], ['−', 'minus'], ['±', 'plus or minus'], ['·', 'middle dot'], ['×', 'times'],
-  ['≡', 'triple bond'], ['≈', 'about'], ['″', 'double prime'], ['‰', 'per mille'], ['℃', 'degrees Celsius'], ['Å', 'ångström'], ['ħ', 'h-bar'], ['ν̃', 'wavenumber'],
-];
 
 /** Caption runs as the pieces a row shows. */
 const runParts = (runs: TextRun[]): TextPart[] => runs.map((r) => ({ text: r.text, ...(r.sub ? { sub: true } : r.sup ? { sup: true } : {}) }));
@@ -433,7 +428,12 @@ export class SmartPane {
     const foot = document.createElement('div');
     foot.className = 'sp-foot';
     if (read.chain) foot.append(btn('+ Add Species', 'Add a species at the end, with an arrow to it', 'sp-add', () => this.hooks.add(id, read.slots.length - 1)));
-    foot.append(btn('Ungroup', 'Make it ordinary structures, text and arrows again', 'sp-ungroup', () => this.hooks.ungroup(id)));
+    const right = document.createElement('div');
+    right.className = 'sp-foot-right';
+    // a cycle drawn into a mess by hand: back onto one ellipse
+    if (data.layout === 'cycle' && !data.free && read.closed && read.slots.length >= 3) right.append(btn('Clean Up', 'Clean Up Cycle: move the species onto one ellipse that fits where they are, with the arrows along it', 'sp-ungroup sp-cleanup', () => this.hooks.cleanUpCycle(id)));
+    right.append(btn('Ungroup', 'Make it ordinary structures, text and arrows again', 'sp-ungroup', () => this.hooks.ungroup(id)));
+    foot.append(right);
     this.el.append(foot);
   }
 

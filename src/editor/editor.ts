@@ -8,7 +8,7 @@ import { Sketcher } from './sketch';
 import { installPenAndTouch } from './touch';
 import { labelAtoms, labelLookOf, setLabelFont, setLabelSize, toggleLabelBold } from './label-font';
 import { Doc, Atom, Bond, BondDisplay, PARTIAL, ELEMENT_WITH_H, Arrow, Shape, Caption, isMetalAtom, isWedge, applyBase, captionBase, stripBase, type StepRoles, type Justify, type HighlightStyle, type Entity } from '../model';
-import { scaleOwnWidths } from '../style';
+import { doubleBondGap, scaleOwnWidths } from '../style';
 import { CaptionEditor } from '../ui/caption-editor';
 import { followLink, linkTip } from '../ui/links-ui';
 import { stopAtEdge } from '../ui/scrollbars';
@@ -45,7 +45,7 @@ export type TextBoxChange =
   | { kind: 'fit'; fit: 'grow' | 'shrink' | 'fixed' };
 import {
   sproutDir, sprout, bondTo, bondLength, straightenAt, linearDir, atomAt, freeRing, fusedRing, fuseSide, ringOnAtom, ringDir,
-  placeRing, chainPoints, chainFrom, MERGE_FRACTION,
+  placeRing, ringAtomsAt, ringDoubles, chainPoints, chainFrom, MERGE_FRACTION,
 } from '../chem/chemgeom';
 import { keymap, chordOf, parseAction, KeyContext } from './keymap';
 import { sproutGroup, fuseChair, SPROUT_KINDS, SproutKind, nextNumber } from '../chem/sprouts';
@@ -61,21 +61,22 @@ import { fillRings, refitRingFills, ringFillsOn } from '../chem/ring-fill';
 import { setMethylStyle, toggleChainEndLabels, toggleExplicitHydrogens, type MethylStyle } from '../chem/hydrogens';
 import { selectedGroup } from '../chem/group-smiles';
 import { restack as restackObjects, stackItems, usesStacking, type StackMove } from './stacking';
-import { groupMembers, groupSelection, selectedGroups, ungroupSelection, withGroups } from './groups';
+import { bracketPartner, groupMembers, groupSelection, newBracketPair, selectedGroups, ungroupSelection, withBracketPartners, withGroups } from './groups';
 import { circleRing, circleRings, kekulize } from '../chem/aromatic';
 import { bondLayer, crossingBonds, layerByDepth } from '../chem/crossing';
 import { RING_VIEW_NAMES, stepRing, viewNow, viewRingOf, type RingStep } from '../chem/ring-views';
 import { nextNumber as nextCompound, planNumbers, type NumberOptions } from '../chem/compound-numbers';
-import { arrowClash, bendSide, cleanUpArrow, endCentre, endPointToward, headEnd, isAtomSymbol, pushArrow, pushEndAt, pushPins, sameEnd, symbolAt, symbolPin, symbolSpot, tailEnd, SMALL_HEAD, type PushArrow, type PushEnd } from '../chem/mechanism';
+import { arrowClash, bendSide, isSBez, cleanUpArrow, endCentre, endPointToward, headEnd, isAtomSymbol, pushArrow, pushEndAt, pushPins, sameEnd, symbolAt, symbolPin, symbolSpot, tailEnd, SMALL_HEAD, type PushArrow, type PushEnd } from '../chem/mechanism';
 import { followPins, hasPins, makePin, mirrorBend } from '../chem/pins';
 import { applyArrange, planArrange, readingOrder, type ArrangeOptions } from '../chem/scheme-arrange';
 import { buildCycle, type CycleLook, type CycleSpec } from '../chem/cycles';
 import { rebuildSmartCycle, smartCycleStart, structureReagents, type SmartCycleStart } from '../chem/smart-cycle';
 import { refitTableFigures, tableContents } from './table-figs';
 import { energyFrameOf, plotFromBox, putEnergy, refitEnergy, type EnergyData } from '../design/energy';
-import { arrangeSmart, formatSmart, stepToHolder, stepHolderToText, fillHolder, fillHoldersDrawn, holderFrameOf, holderToSlotText, insertSlot, makeSmart, moveSlot, refitSmart, removeSlot, setSlotRuns, setSlotText, setStepRuns, setStepText, smartFrameOf, smartMarks, slotToHolder, ungroupSmart, type SmartData, type StepPart, type TextPart } from '../chem/smart-scheme';
+import { arrangeSmart, cleanUpCycle, formatSmart, stepToHolder, stepHolderToText, fillHolder, fillHoldersDrawn, holderFrameOf, holderToSlotText, insertSlot, makeSmart, moveSlot, refitSmart, removeSlot, setSlotRuns, setSlotText, setStepRuns, setStepText, smartFrameOf, smartMarks, slotToHolder, ungroupSmart, type SmartData, type StepPart, type TextPart } from '../chem/smart-scheme';
 import type { SmartFormat } from '../chem/smart-format';
-import { plateFrameOf, plateFromBox, putPlate, refitPlates, type PlateData } from '../design/plates';
+import { plateFrameOf, plateFromBox, putPlate, refitPlates, rfAtY, setMarkAt, tlcSpotAt, type PlateData } from '../design/plates';
+import { drawMo } from '../design/mo';
 import { newmanCentre, newmanFrameOf, putMark, putNewman, refitNewman, type NewmanData } from '../design/newman';
 import { putTorsion, refitTorsion, torsionFrameOf, type TorsionData } from '../design/torsion';
 import { diagramContents, diagramFrameOf, heldLines, putDiagram, refitDiagramFigures, refitDiagrams, ungroupDiagram, type DiagramData } from '../design/diagrams';
@@ -265,6 +266,26 @@ const emptySel = (): Selection => ({ atoms: new Set(), bonds: new Set(), caption
 /** How quickly a second click must follow for a double-click (the usual system default). */
 const DOUBLE_CLICK_MS = 500;
 
+/** What the status bar's hints go by (Editor.statusState). */
+export interface EditorStatus {
+  /** The drag in hand, once it has moved ('none' when the button is up or it hasn't moved yet). */
+  drag: HintState['drag'];
+  /** The keys that change that drag: [key, what it does]. */
+  dragKeys: [string, string][];
+  /** The drag moves a copy (Ctrl was held at the press). */
+  copying: boolean;
+  /** An atom or bond has the keyboard highlight (hotkeys, Space, Tab and the arrow keys act on it). */
+  highlight: 'atom' | 'bond' | null;
+  /** How many atoms, bonds and other things (captions, arrows, shapes) are selected. */
+  atoms: number;
+  bonds: number;
+  others: number;
+  /** The selected atoms are whole structures (nothing bonded to them is left out). */
+  whole: boolean;
+  /** Two atoms or two bonds are selected: Join (Ctrl+J) makes them one. */
+  joinable: boolean;
+}
+
 interface Drag {
   start: Vec; // doc coords
   startScreen: Vec;
@@ -274,8 +295,10 @@ interface Drag {
   shift: boolean;
   alt: boolean;
   ctrl: boolean;
-  mode: 'none' | 'pan' | 'move' | 'marquee' | 'draw' | 'handle' | 'rotate' | 'text' | 'sketch' | 'route' | 'pen' | 'reshape' | 'turn3d' | 'guide';
+  mode: 'none' | 'pan' | 'move' | 'marquee' | 'draw' | 'handle' | 'rotate' | 'text' | 'sketch' | 'route' | 'pen' | 'reshape' | 'turn3d' | 'guide' | 'spot';
   last: Vec;
+  /** A TLC plate's spot pressed (the plate not locked): dragging moves it up or down its lane, changing its Rf. */
+  spot?: { frame: number; lane: number; index: number; at: Vec };
   panOrigin?: { ox: number; oy: number };
   /** The arrow or shape handle being dragged. */
   handle?: Handle;
@@ -303,6 +326,8 @@ interface Drag {
   charge?: number;
   /** Moving an atom: the atom it has been dropped on, which it becomes one with at the lift (closing a ring). */
   joinTo?: number;
+  /** Moving the end atom of a bond on its own: it swings round the atom at the other end, keeping the bond's length (Alt: any length). */
+  pivot?: { id: number; about: Vec; r: number } | null;
   /** Turning structures in perspective (the Perspective tools). */
   persp?: PerspDrag;
   /** A guide being dragged: which, and by its middle or one of its lines. */
@@ -391,7 +416,14 @@ export class Editor {
    * (or, with `stickyHotspot`, stays when the mouse moves into empty space, as in ChemDraw,
    * and gives way when the mouse rests on something else).
    */
-  private keyHot: Hit = null;
+  private get keyHot(): Hit { return this.keyHotNow; }
+  private set keyHot(h: Hit) {
+    const was = this.keyHotNow;
+    this.keyHotNow = h;
+    // the status bar's hints follow the highlight (Space or Tab selects its molecule)
+    if (was?.kind !== h?.kind) this.onStatus();
+  }
+  private keyHotNow: Hit = null;
   /** What the mouse pointed at when the keyboard highlight was set. */
   private keyHotHover: Hit = null;
   /** Where the mouse was on screen when the keyboard highlight was set. */
@@ -520,6 +552,8 @@ export class Editor {
   onToolChange: (name: string) => void = () => {};
   /** Show a hint for the step in hand in the status bar (empty: the tool's own hint again). */
   onHint: (text: string) => void = () => {};
+  /** The status bar's hints may have changed: a drag began or ended, or the keyboard highlight came or went (see statusState). */
+  onStatus: () => void = () => {};
   /** A message for the person, shown for a few seconds (ms). */
   onNotice: (text: string, ms?: number) => void = () => {};
   /** The 3-D builder and compound check behind the 3-D Perspective tool (none: it turns structures flat). */
@@ -1145,6 +1179,12 @@ export class Editor {
     // the selection tool on a guide (where nothing else is): the guide is dragged
     const gh = e.button === 0 && !handle && !rotating && !painting && !hit && this.tool.kind === 'select' ? this.guideUnder(p) : null;
     if (gh) { this.drag.mode = 'guide'; this.drag.guideGrab = gh; }
+    // an unlocked TLC plate's spot (with the selection tool, or any tool once the plate is selected):
+    // dragging it moves it up or down its lane
+    if (e.button === 0 && !handle && !rotating && !painting && !e.shiftKey && !e.ctrlKey && !e.metaKey && this.tool.kind !== 'eraser') {
+      const sp = this.tlcSpotUnder(p, hit);
+      if (sp && (this.tool.kind === 'select' || this.sel.shapes.has(sp.frame))) this.drag.spot = sp;
+    }
     // a curved arrow tool on a selected S-shaped (or longer) arrow's line: dragging there reshapes it
     if (e.button === 0 && !handle && !rotating && !painting && !e.shiftKey && hit?.kind === 'arrow' && this.curvedTool() && this.isSelected(hit)) {
       const r = this.pathArrow(hit.id);
@@ -1218,6 +1258,11 @@ export class Editor {
       const gh = !h && !handle && !onRotate && !slot && this.tool.kind === 'select' ? this.guideUnder(p) : null;
       if (gh) this.r.overlay.style.cursor = gh.part === 'middle' ? 'move' : gh.part === 'x' ? 'col-resize' : 'row-resize';
       if (slot) this.r.overlay.style.cursor = 'pointer';
+      // over an unlocked TLC plate's spot: it can be dragged up or down
+      if (!handle && !onRotate && !slot && this.tool.kind !== 'eraser' && !this.painter) {
+        const sp = this.tlcSpotUnder(p, h);
+        if (sp && (this.tool.kind === 'select' || this.sel.shapes.has(sp.frame))) this.r.overlay.style.cursor = 'ns-resize';
+      }
       this.requestOverlay(e.timeStamp);
       return;
     }
@@ -1240,7 +1285,12 @@ export class Editor {
     const sp = { x: e.clientX - rect.left, y: e.clientY - rect.top };
     if (!d.moved && Math.hypot(sp.x - d.startScreen.x, sp.y - d.startScreen.y) > 3) {
       d.moved = true;
-      if (d.mode === 'none') d.mode = this.dragModeFor(d);
+      if (d.mode === 'none') d.mode = d.spot ? 'spot' : this.dragModeFor(d);
+      if (d.mode === 'spot') {
+        this.r.overlay.style.cursor = 'ns-resize';
+        this.doc.begin('Move Spot');
+        this.selectOnly({ kind: 'shape', id: d.spot!.frame });
+      }
       if (d.mode === 'reshape') this.doc.begin('Bend arrow');
       if (d.mode === 'handle') this.doc.begin(d.handle!.which === 'mid' || d.handle!.which[0] === 'b' ? 'Bend arrow' : d.handle!.which === 'ea' || d.handle!.which === 'eb' ? 'Reshape arc' : this.cropping === d.handle!.id ? 'Crop picture' : 'Resize');
       if (d.mode === 'rotate') this.doc.begin('Rotate');
@@ -1260,6 +1310,7 @@ export class Editor {
           else {
             this.addToSel(this.groupFirst(d.hit));
             if (this.options.groupClick === 'group') this.sel = withGroups(this.doc, this.sel);
+            this.sel = withBracketPartners(this.doc, this.sel);
           }
         }
         // Ctrl+drag: a copy goes with the pointer and the original stays where it was
@@ -1270,8 +1321,15 @@ export class Editor {
         }
       }
       if (d.mode === 'pan') this.r.overlay.style.cursor = 'grabbing';
+      if (d.moved) this.onStatus();
     }
     if (!d.moved) return;
+    if (d.mode === 'spot') {
+      this.dragSpot(d.spot!, p);
+      d.last = p;
+      this.requestScene(e.timeStamp);
+      return;
+    }
     if (d.mode === 'guide') {
       const g = this.doc.guides, gg = d.guideGrab!;
       const x = g?.list[gg.index];
@@ -1295,12 +1353,21 @@ export class Editor {
     }
     if (d.mode === 'move') {
       // Shift keeps the move straight across or straight up and down from where it started
-      const want = e.shiftKey ? lockAxis(sub(p, d.start)) : sub(p, d.start);
+      const free = sub(p, d.start);
+      let want = e.shiftKey ? lockAxis(free) : free;
       const done = d.applied ?? { x: 0, y: 0 };
+      // the end of a bond dragged on its own keeps the bond's length, swinging round the other end (Alt: any length; Shift: straight across or down)
+      if (d.pivot === undefined) d.pivot = this.bondEndPivot(d);
+      const pv = !e.shiftKey && !e.altKey ? d.pivot : null;
+      if (pv) {
+        const from = sub(this.doc.atoms.get(pv.id)!, done);
+        const aim = sub(add(from, free), pv.about);
+        if (len(aim) > 1e-6) want = sub(add(pv.about, mul(norm(aim), pv.r)), from);
+      }
       let to = want;
       this.guideLines = [];
       // smart guides: edges and middles snap into line with other shapes and the page (Alt: off)
-      if (this.smartGuides && !e.altKey) {
+      if (this.smartGuides && !e.altKey && !pv) {
         if (!d.guide) {
           // (measured where the drag started: Alt may have moved the selection already)
           const box = this.selBox();
@@ -1317,7 +1384,7 @@ export class Editor {
       }
       // the drawing's guides: the atom or bond end grabbed goes onto a guide and its ticks (Alt: off)
       this.guideSnapped = [];
-      if (this.guidesSnap() && !e.altKey) {
+      if (this.guidesSnap() && !e.altKey && !pv) {
         if (!d.grabbed) { const g0 = this.grabbedPoint(d); if (g0) d.grabbed = sub(g0, done); }
         if (d.grabbed) {
           const target = add(d.grabbed, to);
@@ -1328,7 +1395,7 @@ export class Editor {
         }
       }
       // the grid and drawing guides (Slides; Alt: off)
-      if (this.moveSnap && !e.altKey) {
+      if (this.moveSnap && !e.altKey && !pv) {
         if (!d.snapBox) { const b = this.selBox(); if (b) d.snapBox = { x1: b.x1 - done.x, y1: b.y1 - done.y, x2: b.x2 - done.x, y2: b.y2 - done.y }; }
         if (d.snapBox) {
           const snapped = this.moveSnap(d.snapBox, to, this.tol(6));
@@ -1338,7 +1405,8 @@ export class Editor {
       // an atom dragged onto another atom sticks to it, and the two become one at the lift (Alt: off)
       d.joinTo = undefined;
       if (d.hit?.kind === 'atom' && d.charge === undefined && !d.ctrl && !e.altKey) {
-        const t = this.joinTarget(d.hit.id, add(this.doc.atoms.get(d.hit.id)!, sub(to, done)));
+        // (a bond end keeping its length still joins an atom the pointer is on)
+        const t = this.joinTarget(d.hit.id, add(this.doc.atoms.get(d.hit.id)!, sub(pv ? free : to, done)));
         if (t) { d.joinTo = t.id; to = add(done, sub(t, this.doc.atoms.get(d.hit.id)!)); this.guideLines = []; }
       }
       // nothing goes past a fixed edge of the page grid
@@ -1483,7 +1551,7 @@ export class Editor {
     if (!d) return;
     this.drag = null;
     this.guideLines = [];
-    if (d.moved && (d.mode === 'move' || d.mode === 'rotate' || d.mode === 'handle' || (d.mode === 'turn3d' && d.persp?.begun))) {
+    if (d.moved && (d.mode === 'move' || d.mode === 'spot' || d.mode === 'rotate' || d.mode === 'handle' || (d.mode === 'turn3d' && d.persp?.begun))) {
       this.doc.abandon();
       this.afterUndo();
     }
@@ -1543,6 +1611,7 @@ export class Editor {
       return;
     }
     if (d.mode === 'reshape' && d.moved) { this.doc.commit(); this.changed(); return; }
+    if (d.mode === 'spot') { this.doc.commit(); this.changed(); return; }
     if (d.mode === 'turn3d') { this.finishTurn(d); return; }
     if (d.mode === 'handle' || d.mode === 'rotate') {
       if (d.moved) { this.doc.commit(); this.changed(); }
@@ -1837,6 +1906,11 @@ export class Editor {
         if (pick) this.toggleSel(pick);
         // a click on something grouped picks its whole group (unless set to pick the one thing)
         if (pick && this.options.groupClick === 'group' && this.isSelected(pick)) this.sel = withGroups(this.doc, this.sel);
+        // one half of a bracket pair brings the other with it (the Style panel's Deselect Partner leaves it)
+        if (pick?.kind === 'shape' && this.isSelected(pick)) {
+          const mate = bracketPartner(this.doc, pick.id);
+          if (mate !== undefined) this.sel.shapes.add(mate);
+        }
         if (h?.kind === 'shape') this.noteTablePart(h.id, p);
         if (this.cropping !== null && !this.sel.shapes.has(this.cropping)) this.cropping = null;
         this.onChange();
@@ -2527,6 +2601,22 @@ export class Editor {
    * The atom that an atom being moved to `at` would land on: one that is not moving with it and
    * not already bonded to it, close enough to grab it. Null when there is none.
    */
+  /**
+   * The bond end a move drags, when it keeps its bond's length: one atom moved on its own (nothing
+   * else picked) with one bond, to an atom that stays where it is. Null otherwise.
+   */
+  private bondEndPivot(d: Drag): { id: number; about: Vec; r: number } | null {
+    const doc = this.doc, s = this.sel;
+    if (d.hit?.kind !== 'atom' || d.charge !== undefined || d.ctrl) return null;
+    const id = d.hit.id;
+    if (s.atoms.size !== 1 || !s.atoms.has(id) || s.bonds.size || s.captions.size || s.arrows.size || s.shapes.size) return null;
+    const nbrs = doc.neighbors(id);
+    if (nbrs.length !== 1) return null;
+    const a = doc.atoms.get(id)!, about = { x: nbrs[0].x, y: nbrs[0].y };
+    const r = dist(a, about);
+    return r > 1e-6 ? { id, about, r } : null;
+  }
+
   private joinTarget(id: number, at: Vec): Atom | null {
     const doc = this.doc;
     const r = Math.max(this.tol(10), doc.style.bondLength * 0.2);
@@ -2723,8 +2813,8 @@ export class Editor {
     const from = which === 'tail' ? here : tailEnd(doc, other, r.tail);
     const to = which === 'head' ? here : headEnd(doc, other, r.head);
     if (sameEnd(from, to)) return null;
-    // keep the side it bends to, and its S shape
-    const push = pushArrow(doc, m, from, to, { side: bendSide(r), s: !!r.bez?.length, arcOnly: !r.bez?.length, self: r.id });
+    // keep the side it bends to, and its shape: an arc stays an arc, a drawn curve or S keeps its curve
+    const push = pushArrow(doc, m, from, to, { side: bendSide(r), ...(r.bez?.length ? { keep: r.bez } : { arcOnly: true }), self: r.id });
     if (!push) return null;
     return { ...this.pushPatch(r, push), pin: pushPins(doc, push) };
   }
@@ -2798,7 +2888,7 @@ export class Editor {
   setArrowS(s: boolean): number {
     const doc = this.doc;
     const m = this.measure();
-    const arrows = [...this.sel.arrows].map((id) => doc.arrows.get(id)).filter((r): r is Arrow => !!r && isCurved(r) && !r.equilibrium && !r.elbow && !!r.bez?.length !== s);
+    const arrows = [...this.sel.arrows].map((id) => doc.arrows.get(id)).filter((r): r is Arrow => !!r && isCurved(r) && !r.equilibrium && !r.elbow && (s ? !isSBez(r.bez) : !!r.bez?.length));
     if (!arrows.length) return 0;
     doc.edit(s ? 'S-shaped arrow' : 'Single-curve arrow', () => {
       for (const r of arrows) {
@@ -3277,7 +3367,7 @@ export class Editor {
   private readArrows(arrows: Arrow[]): PushReading {
     const m = this.measure();
     const reading = readPushes(this.doc, m, arrows);
-    productDrawing(this.doc, m, reading);
+    productDrawing(this.doc, reading);
     return reading;
   }
 
@@ -3308,7 +3398,7 @@ export class Editor {
     if (arrows === 'many') return 'many';
     if (!arrows.length) return 'none';
     const reading = readPushes(doc, m, arrows);
-    const out = productDrawing(doc, m, reading);
+    const out = productDrawing(doc, reading);
     const errors = reading.issues.filter((i) => i.level === 'error');
     if (!reading.steps.length && !errors.length) return 'none';
     if (errors.length || !out) { this.pickIssues(errors); return { drawn: false, issues: reading.issues }; }
@@ -3520,7 +3610,10 @@ export class Editor {
   private putBrackets(r: Rect, bracket: NonNullable<Shape['bracket']>, form: BracketForm | undefined, fresh: boolean): void {
     const doc = this.doc;
     if (fresh) this.sel = emptySel();
-    for (const b of bracketHalves(r, bracket, form)) this.sel.shapes.add(doc.addShape(b).id);
+    const halves = bracketHalves(r, bracket, form);
+    // (a pair: a click on either half selects both)
+    const pair = halves.length === 2 ? newBracketPair(doc) : undefined;
+    for (const b of halves) this.sel.shapes.add(doc.addShape(pair !== undefined ? { ...b, bracketPair: pair } : b).id);
     if (form !== 'ts') return;
     const L = doc.style.bondLength;
     const c = doc.addCaption({ x: 0, y: 0, runs: [{ text: '‡' }], justify: 'left' });
@@ -3840,6 +3933,8 @@ export class Editor {
     this.changed();
     return smart !== null;
   }
+  /** Clean Up Cycle: the selected (or given) Smart Scheme's cycle onto one ellipse that fits it, its arrows along the ellipse. */
+  smartCleanUpCycle(id = this.selectedSmart()): boolean { return id !== null && this.smartEdit(id, 'Clean Up Cycle', (m) => cleanUpCycle(this.doc, m, id)); }
   smartFormat(id: number, fmt: SmartFormat | undefined): boolean { return this.smartEdit(id, 'Format Smart Scheme', (m) => formatSmart(this.doc, m, id, fmt)); }
   smartArrange(id: number, patch?: Partial<SmartData>): boolean { return this.smartEdit(id, 'Arrange Smart Scheme', (m) => arrangeSmart(this.doc, m, id, patch)); }
 
@@ -3919,6 +4014,52 @@ export class Editor {
     let id = 0;
     tmp.edit('Preview', () => { id = putPlate(tmp, this.fullMeasure(), d, { x: 0, y: 0 }); });
     return { doc: tmp, box: shapeBox(tmp.shapes.get(id)!) };
+  }
+
+  /** An MO diagram drawn aside at width w: how much room its molecule's column leaves beside the atoms' levels (Fit Width). */
+  moRoom(d: PlateData, w: number): number | undefined {
+    if (!d.mo) return undefined;
+    const tmp = new Doc();
+    tmp.style = { ...this.doc.style };
+    tmp.textStyles = this.doc.textStyles;
+    let room: number | undefined;
+    tmp.edit('Fit', () => { room = drawMo(tmp, this.fullMeasure(), d.mo!, { x: 0, y: 0 }, w, d.h).room; });
+    return room;
+  }
+
+  /**
+   * The spot of an unlocked TLC plate under `p` (with what the press hit, which is the plate's or
+   * nothing: a notebook-sketch spot is only an outline), and where its plate is drawn.
+   */
+  private tlcSpotUnder(p: Vec, hit: Hit): Drag['spot'] | null {
+    let frames: number[];
+    if (hit) {
+      const g = hit.kind === 'caption' || hit.kind === 'arrow' || hit.kind === 'shape' ? plateFrameOf(this.doc, hit.kind, hit.id) : null;
+      if (g === null) return null;
+      frames = [g];
+    } else frames = [...this.doc.shapes.values()].filter((s) => s.plate?.kind === 'tlc').map((s) => s.id);
+    const L = this.doc.style.bondLength;
+    for (const id of frames) {
+      const s = this.doc.shapes.get(id);
+      if (!s?.plate || s.plate.kind !== 'tlc' || s.plate.locked) continue;
+      const at = plateFromBox(shapeBox(s), s.plate, L).at;
+      const spot = tlcSpotAt(s.plate, at, L, p);
+      if (spot) return { frame: id, ...spot, at };
+    }
+    return null;
+  }
+
+  /** Dragging a TLC plate's spot: it goes to the Rf at the pointer's height (0 to 1) and the plate is drawn again. */
+  private dragSpot(sp: NonNullable<Drag['spot']>, p: Vec): void {
+    const s = this.doc.shapes.get(sp.frame);
+    const d = s?.plate;
+    if (!d) return;
+    const rf = rfAtY(d, sp.at, this.doc.style.bondLength, p.y);
+    const lane = d.lanes[sp.lane];
+    if (!lane) return;
+    const marks = setMarkAt(lane.marks, sp.index, rf);
+    if (marks === lane.marks) return;
+    putPlate(this.doc, this.fullMeasure(), { ...d, lanes: d.lanes.map((l, i) => (i === sp.lane ? { ...l, marks } : l)) }, sp.at, sp.frame);
   }
 
   /** Insert ▸ TLC Plate or Gel: draw one with its middle at `at` (or draw plate `id` again), and select it. */
@@ -5695,6 +5836,33 @@ export class Editor {
     return true;
   }
 
+  /**
+   * The Style panel's Select Partner / Deselect Partner for brackets drawn as a pair: whether the
+   * selected brackets' other halves can be added ('select') or taken out ('deselect'), or null when
+   * no selected bracket has one.
+   */
+  bracketPartnerState(): 'select' | 'deselect' | null {
+    const mates = [...this.sel.shapes].map((id) => bracketPartner(this.doc, id)).filter((x): x is number => x !== undefined);
+    if (!mates.length) return null;
+    return mates.every((m) => this.sel.shapes.has(m)) ? 'deselect' : 'select';
+  }
+
+  /** Select the other halves of the selected bracket pairs, or (with both halves selected) leave only the one picked first. */
+  toggleBracketPartner(): void {
+    const state = this.bracketPartnerState();
+    if (!state) return;
+    const sel = { ...this.sel, shapes: new Set(this.sel.shapes) };
+    if (state === 'select') for (const id of this.sel.shapes) { const m = bracketPartner(this.doc, id); if (m !== undefined) sel.shapes.add(m); }
+    else {
+      // keep the half that was clicked: the one first in the selection
+      const keep = new Set<number>();
+      for (const id of this.sel.shapes) { const m = bracketPartner(this.doc, id); if (m !== undefined && !keep.has(m)) keep.add(id); }
+      for (const id of this.sel.shapes) if (bracketPartner(this.doc, id) !== undefined && !keep.has(id)) sel.shapes.delete(id);
+    }
+    this.sel = sel;
+    this.changed();
+  }
+
   /** Format > Ungroup: the groups the selection is in come apart (it stays selected). */
   ungroup(): boolean {
     let done = false;
@@ -7030,6 +7198,9 @@ export class Editor {
     const m = { shift: e.shiftKey, alt: e.altKey, ctrl: e.ctrlKey || e.metaKey };
     if (m.shift === this.mods.shift && m.alt === this.mods.alt && m.ctrl === this.mods.ctrl) return;
     this.mods = m;
+    // a ring being dragged out: Shift moves its double bonds round and Ctrl puts in the circle, as the keys go down and up
+    const d = this.drag;
+    if (d && d.mode === 'draw' && this.tool.kind === 'ring') { d.shift = m.shift; d.ctrl = m.ctrl; this.requestOverlay(); }
     if (redraw && this.aids.hints && this.pointerInside) this.requestOverlay();
   }
 
@@ -7073,6 +7244,33 @@ export class Editor {
     return null;
   }
 
+  /**
+   * What the status bar's hints go by: the drag in hand (once it has moved) with the keys that
+   * change it (the ones the pointer's label shows), the keyboard highlight, and the selection.
+   */
+  statusState(): EditorStatus {
+    const d = this.drag;
+    const s = d?.moved && d.button === 0 ? this.hintState() : null;
+    const hs = this.keyHot ? this.hotspot() : null;
+    const sel = this.sel;
+    let whole = sel.atoms.size > 0;
+    if (whole) {
+      outer: for (const id of sel.atoms) for (const n of this.doc.neighbors(id)) if (!sel.atoms.has(n.id)) { whole = false; break outer; }
+    }
+    const loose = sel.bonds.size === 2 && [...sel.atoms].every((id) => [...sel.bonds].some((bid) => { const b = this.doc.bonds.get(bid); return b && (b.a1 === id || b.a2 === id); }));
+    return {
+      drag: s ? s.drag : 'none',
+      dragKeys: s ? modifierHints(s, { shift: false, alt: false, ctrl: false }).map((h) => [h.key, h.text[0].toUpperCase() + h.text.slice(1)] as [string, string]) : [],
+      copying: !!d?.moved && d.mode === 'move' && d.ctrl,
+      highlight: hs?.kind === 'atom' || hs?.kind === 'bond' ? hs.kind : null,
+      atoms: sel.atoms.size,
+      bonds: sel.bonds.size,
+      others: sel.captions.size + sel.arrows.size + sel.shapes.size,
+      whole,
+      joinable: (sel.atoms.size === 2 && !sel.bonds.size) || loose,
+    };
+  }
+
   /** What the modifier keys care about right now (see modifierHints). */
   private hintState(): HintState {
     const d = this.drag;
@@ -7094,6 +7292,7 @@ export class Editor {
       fixedLength: this.options.fixedLength,
       snapping: this.smartGuides || !!this.moveSnap || this.guidesSnap(),
       asksChain: !!this.askChainLength,
+      bondEnd: d?.mode === 'move' && !!d.pivot,
     };
   }
 
@@ -7604,6 +7803,26 @@ export class Editor {
       if (close) ctx.closePath();
       ctx.stroke();
     };
+    // bonds as they will be drawn: a double bond's second line on the side its neighbors are (inside a ring), else either side of the middle
+    const bonds = (list: { a: Vec; b: Vec; order: number; side?: Vec | null }[]) => {
+      const gap = doubleBondGap(doc.style) * (L / doc.style.bondLength);
+      ctx.beginPath();
+      for (const { a, b, order, side } of list) {
+        const u = norm(sub(b, a)), n = perp(u), l = dist(a, b);
+        const line = (off: number, trim: number) => {
+          const p = add(add(a, mul(n, off)), mul(u, trim)), q = add(add(b, mul(n, off)), mul(u, -trim));
+          ctx.moveTo(p.x, p.y); ctx.lineTo(q.x, q.y);
+        };
+        const k = Math.round(order);
+        if (k === 2 && side) {
+          line(0, 0);
+          line(dot(sub(side, a), n) >= 0 ? gap : -gap, Math.min(gap, l * 0.2));
+        } else if (k === 2) { line(gap / 2, 0); line(-gap / 2, 0); }
+        else if (k >= 3) { line(0, 0); line(gap, 0); line(-gap, 0); }
+        else line(0, 0);
+      }
+      ctx.stroke();
+    };
     if (t.kind === 'symbol') {
       // the symbol where it will go, turned toward the pointer
       const aim = startAtom && this.symbolAim(d, d.last);
@@ -7636,7 +7855,7 @@ export class Editor {
       ctx.restore();
     } else if (t.kind === 'bond') {
       const end = this.snapEnd(start, d.last, L, startAtom?.id, d.alt, t.order);
-      poly([start, end.pt], false);
+      bonds([{ a: start, b: end.pt, order: t.display === 'solid' || t.display === 'bold' ? t.order : 1 }]);
     } else if (t.kind === 'chain') {
       const pts = chainPoints(start, d.last, L, doc.style.chainAngle, this.chainFirstUp(start, d.last));
       poly(pts, false);
@@ -7652,7 +7871,17 @@ export class Editor {
       } else if (startAtom) {
         pts = ringOnAtom(startAtom, norm(fromAngle(snapAngle(angleOf(sub(d.last, startAtom))))), t.size, L);
       } else pts = freeRing(d.start, t.size, L, d.last);
-      poly(pts, true);
+      // the whole ring as it will be drawn: its double bonds where they will go (Shift moves them round), and the circle with Ctrl
+      const ids = ringAtomsAt(doc, pts, h && h.kind === 'bond' ? [doc.bonds.get(h.id)!.a1, doc.bonds.get(h.id)!.a2] : startAtom ? [startAtom.id] : undefined);
+      const dbl = ringDoubles(doc, ids, { aromatic: t.aromatic, shiftPhase: d.shift });
+      const c = pts.reduce((s, q) => add(s, mul(q, 1 / pts.length)), { x: 0, y: 0 });
+      const circled = t.aromatic && d.ctrl;
+      bonds(pts.map((a, i) => {
+        const b = pts[(i + 1) % pts.length];
+        const ex = ids[i] !== undefined && ids[(i + 1) % pts.length] !== undefined ? doc.bondBetween(ids[i]!, ids[(i + 1) % pts.length]!) : undefined;
+        return { a, b, order: circled ? 1 : Math.max(ex?.order ?? 1, dbl[i] ? 2 : 1), side: c };
+      }));
+      if (circled) { ctx.beginPath(); ctx.arc(c.x, c.y, dist(c, pts[0]) * 0.62, 0, Math.PI * 2); ctx.stroke(); }
     } else if (t.kind === 'arrow') {
       if (this.freehand(d)) { poly(d.path ?? [d.start, d.last], false); return; }
       const push = this.pushFor(d, d.last);
@@ -7689,7 +7918,14 @@ export class Editor {
       if (tp && place) {
         const pts = templatePoints(tp, place.pl);
         ctx.beginPath();
-        for (const [a, b] of tp.bonds) { ctx.moveTo(pts[a].x, pts[a].y); ctx.lineTo(pts[b].x, pts[b].y); }
+        // (its double and triple bonds too, each second line on the side of the bond's neighbors)
+        const nbrs = (i: number, skip: number) => tp.bonds.flatMap(([p, q]) => (p === i && q !== skip ? [pts[q]] : q === i && p !== skip ? [pts[p]] : []));
+        bonds(tp.bonds.map(([a, b, order, display]) => {
+          const around = [...nbrs(a, b), ...nbrs(b, a)];
+          const side = around.length ? around.reduce((s, q) => add(s, mul(q, 1 / around.length)), { x: 0, y: 0 }) : null;
+          return { a: pts[a], b: pts[b], order: !display || display === 'solid' || display === 'bold' ? order : 1, side };
+        }));
+        ctx.beginPath();
         if (place.bondFrom !== undefined) { const f = doc.atoms.get(place.bondFrom)!; ctx.moveTo(f.x, f.y); ctx.lineTo(pts[tp.attach].x, pts[tp.attach].y); }
         for (const [kind, x1, y1, x2, y2] of tp.shapes ?? []) {
           const a = placePoint(place.pl, x1, y1), b = placePoint(place.pl, x2, y2);

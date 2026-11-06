@@ -18,6 +18,7 @@ import { setStereoShown, setStereoText } from '../chem/stereo';
 import { arialWidth } from '../text-metrics';
 import { Selection } from '../editor/editor';
 import { freeformPoints } from '../design/geo';
+import { electronLook, setElectrons } from '../design/mo';
 import { ORBITAL_KIND_NAMES, ORBITAL_LOOK_NAMES, orbitalsAmong, readOrbital, type OrbitalKind, type OrbitalLook, type OrbitalSpec } from '../chem/orbitals';
 import { isSmoothPath, reshapeFreeform } from '../design/freeform';
 import { DEG, normDegrees, mul, type Vec } from '../geom';
@@ -40,7 +41,7 @@ import { colourButton } from './colour-picker';
 import { centreEnd, haptoText, splitHapto } from '../chem/hapto';
 import { straightenAt } from '../chem/chemgeom';
 import type { EnergyData } from '../design/energy';
-import { TLC_LOOKS, GEL_LOOKS, type PlateData } from '../design/plates';
+import { TLC_LOOKS, GEL_LOOKS, LOCK_SPOTS_INFO, type PlateData } from '../design/plates';
 import { DIAGRAM_COLOURS, DIAGRAM_LAYOUTS, type DiagramData } from '../design/diagrams';
 
 /** What the table controls need from the editor. */
@@ -148,6 +149,8 @@ export class StylePanel {
   orbital: { edit(): void; restyle(shapeIds: number[], patch: Partial<OrbitalSpec>): void } | null = null;
   /** Tie captions to the structure nearest each (Tie to Structure). */
   tie: ((captionIds: number[]) => void) | null = null;
+  /** Brackets drawn as a pair: whether the other halves can be selected or deselected now, and doing it. */
+  bracketPartner: { state(): 'select' | 'deselect' | null; toggle(): void } | null = null;
 
   /** Open a chart's data and settings (Edit chart…). */
   onEditChart: (id: number) => void = () => {};
@@ -266,7 +269,6 @@ export class StylePanel {
     this.select('Head shape', HEAD_TYPES, r.headType, (v) => set('Arrowhead shape', () => ({ headType: v })));
     this.select('Line', LINES, r.line, (v) => set('Arrow line', () => ({ line: v })));
     this.select('No-go', NO_GOS, r.noGo ? r.noGoKind ?? 'cross' : 'none', (v) => set('No-go arrow', () => ({ noGo: v !== 'none', noGoKind: v === 'hash' ? 'hash' : undefined })));
-    this.check('Dipole', !!r.dipole, (v) => set('Dipole arrow', () => ({ dipole: v || undefined })));
     if (r.headType === 'solid' && (r.headStyle !== 'none' || r.tailStyle !== 'none')) {
       this.number('Head center (pt)', round(r.headLength * (r.headCenter ?? 0.75), 2), 0.25, 0, 100,
         (v) => set('Arrowhead center', (a) => ({ headCenter: a.headLength > 0 ? Math.max(0, Math.min(1, v / a.headLength)) : undefined })),
@@ -503,6 +505,18 @@ export class StylePanel {
     }
     const br = any((x) => x.kind === 'bracket');
     if (br) this.select('Bracket', BRACKETS, br.bracket ?? 'square', (v) => set('Bracket shape', (x) => x.kind === 'bracket', () => ({ bracket: v })));
+    const mate = br && this.bracketPartner?.state();
+    if (mate) {
+      const row = document.createElement('div');
+      row.className = 'style-buttons';
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = mate === 'select' ? 'Select Partner' : 'Deselect Partner';
+      btn.title = mate === 'select' ? 'Select the other bracket of the pair too' : 'Leave only this bracket selected, to change or move it on its own';
+      btn.addEventListener('click', () => this.bracketPartner?.toggle());
+      row.append(btn);
+      this.body.append(row);
+    }
     // the border together: its colour, weight, dashes, corners and shadow
     // (ring fills have no line, so no line colour: it only stood in for a fill colour that wasn't set)
     const box = any((x) => x.kind === 'rect');
@@ -570,7 +584,17 @@ export class StylePanel {
     const d = sh.plate!;
     if (d.kind === 'mo') {
       this.heading('MO diagram');
-      if (d.mo) this.check('Energy arrow', d.mo.axis, (v) => this.plate?.restyle(sh.id, { mo: { ...d.mo!, axis: v } }));
+      if (d.mo) {
+        const mo = d.mo;
+        this.check('Energy arrow', mo.axis, (v) => this.plate?.restyle(sh.id, { mo: { ...mo, axis: v } }));
+        const now = electronLook(mo, this.doc.style, d.w, d.h);
+        this.number('Electron arrow height (pt)', Math.round(now.tall * 10) / 10, 0.5, 2, 48, (v) => this.plate?.restyle(sh.id, { mo: setElectrons(mo, { ...now, tall: v }, d.w, d.h) }));
+        this.check('Orbital mixing pictures', !!mo.pictures, (v) => this.plate?.restyle(sh.id, { mo: { ...mo, pictures: v || undefined } }));
+        this.check('White background behind names', !!mo.labelBack, (v) => this.plate?.restyle(sh.id, { mo: { ...mo, labelBack: v ? 'white' : undefined } }));
+        this.check('Move names clear of the dashed lines', !!mo.labelClear, (v) => this.plate?.restyle(sh.id, { mo: { ...mo, labelClear: v || undefined } }));
+        if (mo.pictures) this.number('Picture size (%)', Math.round((mo.pictureSize ?? 1) * 100), 10, 20, 400, (v) => this.plate?.restyle(sh.id, { mo: { ...mo, pictureSize: v / 100 } }));
+        if (mo.pictures) this.select('Phases', ORBITAL_LOOK_NAMES.map((k): Opt<OrbitalLook> => [k.value, k.label]), mo.pictureLook ?? 'shaded', (v) => this.plate?.restyle(sh.id, { mo: { ...mo, pictureLook: v } }));
+      }
       this.help('Change the orbitals, energies and electrons in the window; drag a corner to resize it.');
       const row = document.createElement('div');
       row.className = 'style-buttons';
@@ -612,6 +636,10 @@ export class StylePanel {
     else this.select('Dye', GEL_LOOKS.map((l) => [l.id, l.name]), d.look, (v) => set({ look: v }));
     if (tlc) this.check('Write the Rf values', d.rf, (v) => set({ rf: v }));
     if (tlc) this.check('Start and solvent-front lines', d.lines, (v) => set({ lines: v }));
+    if (tlc) {
+      this.check('Lock spots', !!d.locked, (v) => set({ locked: v }));
+      addInfo(this.body.lastElementChild?.querySelector('span'), LOCK_SPOTS_INFO);
+    }
     if (!tlc) this.check('Write the marker sizes', d.sizes, (v) => set({ sizes: v }));
     this.check('Lane names', d.labels, (v) => set({ labels: v }));
     this.note(`${d.lanes.length} lane${d.lanes.length === 1 ? '' : 's'}.`);

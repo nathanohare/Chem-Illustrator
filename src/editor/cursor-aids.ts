@@ -102,6 +102,8 @@ export interface HintState {
   snapping: boolean;
   /** The chain tool asks how long a chain to draw. */
   asksChain: boolean;
+  /** The end of a bond is being dragged, keeping the bond's length. */
+  bondEnd?: boolean;
 }
 
 /**
@@ -114,7 +116,8 @@ export function modifierHints(s: HintState, m: Mods): ModHint[] {
   switch (s.drag) {
     case 'move':
       add('Shift', 'straight across or down');
-      if (s.snapping) add('Alt', 'no snapping');
+      if (s.bondEnd) add('Alt', s.snapping ? 'any length, no snapping' : 'any length');
+      else if (s.snapping) add('Alt', 'no snapping');
       return out;
     case 'rotate':
       add('Shift', '15° steps');

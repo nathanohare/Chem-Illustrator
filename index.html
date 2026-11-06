@@ -2991,15 +2991,13 @@
       </section>
       <section id="start-view" class="welcome-card start-view" aria-label="Start" hidden>
         <div class="sv-new">
-          <button type="button" data-start="new-slides">New Presentation<small>slideshow</small></button>
-          <button type="button" data-start="new-sheet">New Spreadsheet<small>tables, charts, dashboards</small></button>
-          <button type="button" data-start="new-document">New Document<small>text</small></button>
-          <button type="button" data-start="new-design">New Design<small>TOC graphic, abstract, poster, figure</small></button>
-          <button type="button" data-start="new-from-template">From Template…</button>
-          <button type="button" data-start="open">Open…</button>
+          <button type="button" class="sv-mode-slides" data-start="new-slides" data-mode="slides"><span class="sv-icon"></span><span>New Presentation</span><small>slideshow</small></button>
+          <button type="button" class="sv-mode-sheet" data-start="new-sheet" data-mode="sheet"><span class="sv-icon"></span><span>New Spreadsheet</span><small>tables, charts, dashboards</small></button>
+          <button type="button" class="sv-mode-document" data-start="new-document" data-mode="document"><span class="sv-icon"></span><span>New Document</span><small>text</small></button>
+          <button type="button" class="sv-mode-design" data-start="new-design" data-mode="design"><span class="sv-icon"></span><span>New Design</span><small>TOC graphic, abstract, poster, figure</small></button>
         </div>
         <div class="sv-recent" hidden><h3>Recent</h3><div class="sv-files"></div></div>
-        <p class="welcome-buttons"><label class="sv-again"><input type="checkbox" checked> Show at start</label><span class="grow"></span><button type="button" class="primary" data-start="draw">Start drawing</button></p>
+        <p class="welcome-buttons"><button type="button" data-start="open">Open…</button><span class="grow"></span><label class="sv-again"><input type="checkbox" checked> Show at start</label><button type="button" class="primary" data-start="draw">Start drawing</button></p>
       </section>
     </div>
     <div id="main-snap" hidden title="Click to work on the slide again"><canvas></canvas></div>

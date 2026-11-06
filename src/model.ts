@@ -839,6 +839,12 @@ export interface Pin {
   /** Where the point was when it was last put in place: when it is elsewhere, it was moved by hand. */
   was: Vec;
   /**
+   * On an atom: the length of the line from the first atom to the second when it was stuck, which
+   * `at` is measured in from then on, so the point keeps its distance from the atom when that bond
+   * is stretched (a lone pair or an orbital's lobes stay on the atom). Not set on a bond or gap.
+   */
+  len?: number;
+  /**
    * Which way the thing points in the same frame (a lone pair's two dots, an orbital's lobe), so
    * it turns with its atoms as well as going with them. Not set for things that point no way.
    */
@@ -1015,6 +1021,11 @@ export interface Shape {
   bracket?: 'square' | 'round' | 'curly';
   /** Brackets: draw both halves of the pair. */
   pair?: boolean;
+  /**
+   * Brackets drawn as a pair with the bracket tool: both halves carry the same number, and a click
+   * on one selects the other too (editor/groups.ts bracketPartner).
+   */
+  bracketPair?: number;
   /**
    * Brackets: the label of a repeat group, shown by the bracket's lower end: n (or another letter)
    * for a polymer's repeat unit, or a number for a group repeated that many times (chem/polymer.ts).
