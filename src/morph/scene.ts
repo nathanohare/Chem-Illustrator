@@ -155,6 +155,14 @@ export class MScene {
     return { x1, y1, x2, y2 };
   }
 
+  /** Only the atoms (and bonds among them) not in `drop`. */
+  without(drop: Set<string>): MScene {
+    const out = new MScene(this.style);
+    for (const [k, n] of this.nodes) if (!drop.has(k)) out.nodes.set(k, n);
+    for (const [k, b] of this.bonds) if (out.nodes.has(b.b) && out.nodes.has(b.e)) out.bonds.set(k, b);
+    return out;
+  }
+
   /** Only the atoms (and bonds among them) of one drawn fragment. */
   fragment(frag: string): MScene {
     const out = new MScene(this.style);
