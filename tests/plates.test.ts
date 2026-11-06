@@ -5,7 +5,7 @@ import { ACS_1996 } from '../src/style';
 import { POINTS } from '../src/editor/arrange';
 import { writeCdxml } from '../src/io/cdxml-write';
 import { readCdxml } from '../src/io/cdxml';
-import { bandPosition, mix, newPlate, parseMarks, putPlate, plateFrameOf, plateFromBox, rfAtY, setMarkAt, tlcGeometry, tlcSpotAt } from '../src/design/plates';
+import { bandPosition, mix, spotRows, spotSummary, spotText, newPlate, parseMarks, putPlate, plateFrameOf, plateFromBox, rfAtY, setMarkAt, tlcGeometry, tlcSpotAt } from '../src/design/plates';
 
 describe('TLC plates and gels', () => {
   it('reads spots with their words', () => {
@@ -107,5 +107,23 @@ describe('TLC plates and gels', () => {
     const plate = [...back.shapes.values()].find((s) => s.plate)?.plate;
     expect(plate?.locked).toBe(true);
     expect(plate?.lanes.map((l) => l.marks)).toEqual(['0.55', '0.55, 0.30', '0.55 faint, 0.30']);
+  });
+
+  it('shows a lane\'s spots as rows (Rf and Description) and writes them back', () => {
+    const rows = spotRows('0.55 faint streak, 0.30; 0.1 big blue, 0.2 dark tiny grey');
+    expect(rows).toEqual([
+      { rf: '0.55', strength: 'faint', size: '', streak: true, color: '' },
+      { rf: '0.30', strength: '', size: '', streak: false, color: '' },
+      { rf: '0.1', strength: '', size: 'large', streak: false, color: 'blue' },
+      { rf: '0.2', strength: 'strong', size: 'small', streak: false, color: 'gray' },
+    ]);
+    const text = spotText(rows);
+    expect(text).toBe('0.55 faint streak, 0.30, 0.1 large blue, 0.2 strong small gray');
+    // the plate draws the same spots from the rewritten text
+    expect(parseMarks(text)).toEqual(parseMarks('0.55 faint streak, 0.30; 0.1 big blue, 0.2 dark tiny grey'));
+    expect(spotText([...rows, { rf: ' ', strength: 'faint', size: '', streak: false, color: '' }])).toBe(text);
+    expect(spotSummary(rows[0])).toBe('Faint, streak');
+    expect(spotSummary(rows[1])).toBe('Normal');
+    expect(spotSummary(rows[2])).toBe('Large, blue');
   });
 });

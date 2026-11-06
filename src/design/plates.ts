@@ -103,6 +103,57 @@ const COLOURS: Record<string, string> = {
   purple: '#7b3c8f', violet: '#6b4bb0', brown: '#8a5a2b', black: '#222222', grey: '#777777', gray: '#777777', white: '#ffffff',
 };
 
+/** The spot colors offered in the TLC Plate window (words parseMarks reads). */
+export const SPOT_COLORS = ['red', 'pink', 'orange', 'yellow', 'green', 'blue', 'purple', 'brown', 'black'] as const;
+
+/** A spot color word's color ('blue' → '#2b5bb5'). */
+export const spotColorHex = (name: string): string | undefined => COLOURS[name];
+
+/** One spot as the TLC Plate window shows it: its Rf as typed, and how it looks. */
+export interface SpotRow {
+  rf: string;
+  strength: '' | 'faint' | 'strong';
+  size: '' | 'small' | 'large';
+  streak: boolean;
+  /** A color word ('blue') or '#rrggbb'; '' for the stain's own color. */
+  color: string;
+}
+
+/** A lane's text as rows of spots (the words after each number read as parseMarks reads them). */
+export function spotRows(text: string): SpotRow[] {
+  const out: SpotRow[] = [];
+  for (const part of text.split(/[,;\n]+/)) {
+    const words = part.trim().split(/\s+/).filter(Boolean);
+    if (!words.length) continue;
+    const r: SpotRow = { rf: words[0], strength: '', size: '', streak: false, color: '' };
+    for (const raw of words.slice(1)) {
+      const w = raw.toLowerCase();
+      if (/^(faint|weak|trace)$/.test(w)) r.strength = 'faint';
+      else if (/^(strong|dark|heavy|intense)$/.test(w)) r.strength = 'strong';
+      else if (/^(big|large|wide)$/.test(w)) r.size = 'large';
+      else if (/^(small|tiny)$/.test(w)) r.size = 'small';
+      else if (/^(streak|streaky|tail|tailing)$/.test(w)) r.streak = true;
+      else if (COLOURS[w]) r.color = w === 'grey' ? 'gray' : w;
+      else if (/^#[0-9a-f]{6}$/.test(w)) r.color = w;
+    }
+    out.push(r);
+  }
+  return out;
+}
+
+/** Rows of spots as a lane's text ("0.55 faint streak, 0.30"); rows with no Rf are left out. */
+export function spotText(rows: SpotRow[]): string {
+  return rows.filter((r) => r.rf.trim()).map((r) => [r.rf.trim(), r.strength, r.size, r.streak ? 'streak' : '', r.color].filter(Boolean).join(' ')).join(', ');
+}
+
+/** How a spot looks, in words for its Description menu: "Normal", or "Faint, large, streak, blue". */
+export function spotSummary(r: SpotRow): string {
+  const parts = [r.strength, r.size, r.streak ? 'streak' : '', r.color.startsWith('#') ? 'custom color' : r.color].filter(Boolean);
+  if (!parts.length) return 'Normal';
+  const t = parts.join(', ');
+  return t[0].toUpperCase() + t.slice(1);
+}
+
 /** The spots or bands in a lane's text: numbers, each with words after it (faint, strong, big, small, streak, a colour). */
 export function parseMarks(text: string): PlateMark[] {
   const out: PlateMark[] = [];
