@@ -6,7 +6,7 @@
 
 import { readCif, type CifBlock } from '../chem/cif';
 import { CrystalError, crystalTable, grow, marksHtml, marksPlain, structureFromCif, type M3 } from '../chem/crystal';
-import { axisRotation, bestRotation, crystalShapes, defaultView, fittingZoom, paintShapes, shapesBounds, specAtoms, turnView, type CrystalSpec, type LabelPlace, type XShape, type XView } from '../design/xray';
+import { atomPoints, axisRotation, bestRotation, crystalShapes, elementColour, labelled, defaultView, fittingZoom, paintShapes, shapesBounds, specAtoms, turnView, type CrystalSpec, type LabelPlace, type XShape, type XView } from '../design/xray';
 import { newPlate, type PlateData } from '../design/plates';
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, props: Partial<HTMLElementTagNameMap[K]> = {}): HTMLElementTagNameMap[K] => Object.assign(document.createElement(tag), props);
@@ -83,9 +83,14 @@ export function askCrystal(editing: PlateData | null, L: number, opts: CrystalOp
             <p><button type="button" data-act="labels" data-info="Labels you dragged go back to their automatic places">Reset Label Positions</button></p>
           </fieldset>
           <fieldset><legend>View</legend>
-            <p class="crystal-views"><button type="button" data-view="best" title="Its longest extent across the page, looking along its thinnest direction">Best</button> <button type="button" data-view="0">Along a</button> <button type="button" data-view="1">Along b</button> <button type="button" data-view="2">Along c</button></p>
+            <p class="crystal-views"><button type="button" data-view="best" title="Its longest extent across the page, looking along its thinnest direction">Auto</button><button type="button" data-view="0" title="Look along the a axis"><i>a</i></button><button type="button" data-view="1" title="Look along the b axis"><i>b</i></button><button type="button" data-view="2" title="Look along the c axis"><i>c</i></button></p>
           </fieldset>
           <fieldset class="crystal-shown"><legend>Shown</legend><div class="crystal-parts"></div></fieldset>
+        </div>
+        <div class="crystal-atoms">
+          <div class="crystal-atoms-head"><span data-info="Check an atom to label it, and choose where its label goes (Default: as Labels ▸ Position). Point at a row to find its atom in the drawing.">Atoms</span><span class="crystal-fill"></span><button type="button" class="link" data-act="atoms-all">All</button><button type="button" class="link" data-act="atoms-none">None</button></div>
+          <input type="search" class="crystal-find" placeholder="Find (C1, N…)" aria-label="Find an atom" />
+          <div class="crystal-atom-list" role="list"></div>
         </div>
       </div>
       <div class="crystal-page" role="tabpanel" hidden>
@@ -172,6 +177,73 @@ export function askCrystal(editing: PlateData | null, L: number, opts: CrystalOp
       $<HTMLElement>('.crystal-shown').hidden = !box.childElementCount;
     };
 
+    // ---- the atom list: label each atom or not, and where
+    const SIDES: [LabelPlace | '', string][] = [['', 'Default'], ['auto', 'Auto'], ['right', 'Right'], ['left', 'Left'], ['above', 'Above'], ['below', 'Below'], ['center', 'On atom']];
+    let hot: string | null = null;
+    const fillAtoms = () => {
+      const list = $<HTMLElement>('.crystal-atom-list');
+      list.innerHTML = '';
+      if (!spec) return;
+      const s = spec;
+      const seen = new Set<string>();
+      const atoms = s.atoms.filter((a) => {
+        if (seen.has(a.label) || ((a.el === 'H' || a.el === 'D') && !s.view.hydrogens)) return false;
+        seen.add(a.label);
+        return true;
+      });
+      // the other atoms first, then the hydrogens, each by label (C2 before C10)
+      atoms.sort((p, q) => Number(p.el === 'H' || p.el === 'D') - Number(q.el === 'H' || q.el === 'D') || p.label.localeCompare(q.label, undefined, { numeric: true }));
+      const find = $<HTMLInputElement>('.crystal-find').value.trim().toLowerCase();
+      for (const a of atoms) {
+        if (find && !a.label.toLowerCase().startsWith(find)) continue;
+        const row = el('div', { className: 'crystal-atom' });
+        row.setAttribute('role', 'listitem');
+        const box = el('label');
+        const c = el('input', { type: 'checkbox', checked: labelled(s.view, a) });
+        c.setAttribute('aria-label', `Label ${a.label}`);
+        c.addEventListener('change', () => {
+          const all = { ...s.view.labelAtoms };
+          if (c.checked === !(a.el === 'H' || a.el === 'D')) delete all[a.label]; else all[a.label] = c.checked;
+          s.view.labelAtoms = all;
+          draw();
+        });
+        const dot = el('i');
+        dot.style.background = elementColour(a.el);
+        box.append(c, dot, el('span', { textContent: a.label }));
+        const side = el('select');
+        side.setAttribute('aria-label', `Where the ${a.label} label goes`);
+        for (const [v, t] of SIDES) side.append(el('option', { value: v, textContent: t }));
+        side.value = s.view.labelSides?.[a.label] ?? '';
+        side.addEventListener('change', (e) => {
+          e.stopPropagation();
+          const all = { ...s.view.labelSides };
+          if (side.value) all[a.label] = side.value as LabelPlace; else delete all[a.label];
+          s.view.labelSides = all;
+          // (a label dragged by hand goes where it is now told)
+          delete s.view.labelOffsets[a.label];
+          draw();
+        });
+        row.append(box, side);
+        row.addEventListener('pointerenter', () => { hot = a.label; draw(); });
+        row.addEventListener('pointerleave', () => { if (hot === a.label) { hot = null; draw(); } });
+        list.append(row);
+      }
+    };
+    /** All: every atom shown labelled (hydrogens too, when shown). None: no labels. */
+    const setAllLabels = (on: boolean) => {
+      if (!spec) return;
+      const all: Record<string, boolean> = {};
+      for (const a of spec.atoms) {
+        const h = a.el === 'H' || a.el === 'D';
+        if (!on) all[a.label] = false;
+        else if (h && spec.view.hydrogens) all[a.label] = true;
+      }
+      spec.view.labelAtoms = all;
+      fillAtoms();
+      draw();
+    };
+    $<HTMLInputElement>('.crystal-find').addEventListener('input', (e) => { e.stopPropagation(); fillAtoms(); });
+
     const fillTable = () => {
       const body = $<HTMLTableElement>('.crystal-table').tBodies[0];
       body.innerHTML = '';
@@ -231,6 +303,19 @@ export function askCrystal(editing: PlateData | null, L: number, opts: CrystalOp
       ctx.setLineDash([]);
       ctx.translate(-cx, -cy);
       paintShapes(ctx, shown);
+      // the atom pointed at in the list: a ring round it
+      if (hot) {
+        const at = atomPoints(spec, v);
+        ctx.strokeStyle = getComputedStyle(form).getPropertyValue('--accent').trim() || '#0e7c93';
+        ctx.lineWidth = 2 / k;
+        spec.atoms.forEach((a, i) => {
+          const p = a.label === hot ? at.get(i) : undefined;
+          if (!p) return;
+          ctx.beginPath();
+          ctx.arc(p[0], p[1], 7 / k + 4, 0, 2 * Math.PI);
+          ctx.stroke();
+        });
+      }
       ctx.restore();
       shiftX = cx;
       shiftY = cy;
@@ -310,6 +395,7 @@ export function askCrystal(editing: PlateData | null, L: number, opts: CrystalOp
       }
       show();
       fillParts();
+      fillAtoms();
       fillTable();
       draw();
     };
@@ -322,7 +408,7 @@ export function askCrystal(editing: PlateData | null, L: number, opts: CrystalOp
       if (!blocks.length) {
         spec = null;
         status.textContent = 'This file has no structure: no data block with atoms (_atom_site_ table).';
-        show(); fillParts(); fillTable(); draw();
+        show(); fillParts(); fillAtoms(); fillTable(); draw();
         return;
       }
       useBlock(0);
@@ -336,7 +422,8 @@ export function askCrystal(editing: PlateData | null, L: number, opts: CrystalOp
       const act = b.dataset.act, view = b.dataset.view;
       if (act === 'cancel') { d.close(); finish(null); }
       else if (act === 'open') { const f = await opts.pickFile(); if (f) openText(f.name, f.text); }
-      else if (act === 'labels' && spec) { spec.view.labelOffsets = {}; draw(); }
+      else if (act === 'labels' && spec) { spec.view.labelOffsets = {}; spec.view.labelSides = {}; fillAtoms(); draw(); }
+      else if ((act === 'atoms-all' || act === 'atoms-none') && spec) setAllLabels(act === 'atoms-all');
       else if (act === 'copy-table' && spec?.table) {
         const rows = spec.table;
         await opts.copy(rows.map(([l, v]) => `${marksPlain(l)}\t${marksPlain(v)}`).join('\n'), `<table>${rows.map(([l, v]) => `<tr><td>${marksHtml(l)}</td><td>${marksHtml(v)}</td></tr>`).join('')}</table>`);
@@ -347,7 +434,7 @@ export function askCrystal(editing: PlateData | null, L: number, opts: CrystalOp
         draw();
       }
     });
-    form.addEventListener('change', () => { read(); draw(); });
+    form.addEventListener('change', (e) => { read(); if ((e.target as HTMLElement).matches('input[name=hydrogens], input[name=labels]')) fillAtoms(); draw(); });
     form.addEventListener('input', (e) => { if ((e.target as HTMLElement).matches('input[type=number]')) { read(); draw(); } });
     form.addEventListener('submit', (e) => {
       e.preventDefault();
@@ -366,6 +453,7 @@ export function askCrystal(editing: PlateData | null, L: number, opts: CrystalOp
     d.showModal();
     show();
     fillParts();
+    fillAtoms();
     fillTable();
     if (opts.file) openText(opts.file.name, opts.file.text);
     else {

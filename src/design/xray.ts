@@ -25,6 +25,9 @@ const H_RADIUS = 0.14;
 const BOND_WIDTH = 0.085;
 const STICK_RADIUS = 0.1;
 
+/** An element's colour as drawn (for the atom list's dots). */
+export const elementColour = (el: string): string => COLOURS[el] ?? '#b0b0b0';
+
 /** Element colours (as in Jmol/CPK, a little darker for print). */
 const COLOURS: Record<string, string> = {
   H: '#ffffff', C: '#8c8c8c', N: '#3050f8', O: '#e60d0d', F: '#7fd34d', Cl: '#1fbf1f', Br: '#a62929', I: '#940094', S: '#e6c21f', P: '#ff8000',
