@@ -430,8 +430,6 @@ export class Editor {
     methylStyle: 'Me' as MethylStyle,
     /** + and − on an atom give a charge in a circle (⊕, ⊖) rather than a plain sign in the label (Edit > Settings). */
     circledCharges: false,
-    /** An atom or group typed with the Text tool (N, OMe) becomes an atom, or the atom at a bond end it is typed beside (Edit > Settings). */
-    textToAtom: true,
     /** A click on something in a group selects the whole group, or just that thing (Edit > Settings). */
     groupClick: 'group' as 'group' | 'item',
     /** Selecting part of a group outlines the whole group (Edit > Settings). */
@@ -456,8 +454,6 @@ export class Editor {
   say: (msg: string) => void = () => {};
   /** The angle and length beside the pointer while drawing, and the modifier keys' hints (Settings ▸ Drawing). */
   aids: CursorAidPrefs = { ...DEFAULT_CURSOR_AIDS };
-  /** The units lengths beside the pointer are written in (the rulers'). */
-  lengthUnits: () => 'in' | 'cm' = () => this.aids.units;
   /** The modifier keys held now (for the hints beside the pointer). */
   private mods: Mods = { shift: false, alt: false, ctrl: false };
   /** Run a menu command by name; false when it doesn't apply, so the key does nothing. */
@@ -6428,7 +6424,7 @@ export class Editor {
    * next to the end of a bond, becomes that atom's label, as if typed on the atom. True when it did.
    */
   private labelFromText(caption: number, text: string, at: Vec): boolean {
-    if (!this.options.textToAtom || this.textFirst || !isAtomText(text)) return false;
+    if (this.textFirst || !isAtomText(text)) return false;
     const doc = this.doc;
     let best: Atom | null = null, bestD = Infinity;
     for (const a of doc.atomsNear(at, doc.style.bondLength * 0.6 * 1.5)) {
@@ -6445,7 +6441,7 @@ export class Editor {
       if (styled.marks && doc.atoms.get(id)?.label) doc.updateAtom(id, { labelMarks: styled.marks });
     });
     this.lastEdited = id;
-    this.say(`${text} is now an atom on the bond. Undo (Ctrl+Z) to keep it as text, or turn this off in Edit > Settings.`);
+    this.say(`${text} is now an atom on the bond. Undo (Ctrl+Z) to keep it as text.`);
     return true;
   }
 
@@ -6489,7 +6485,7 @@ export class Editor {
       }
     });
     this.lastEdited = id;
-    this.say(`${text} is now an atom. Undo (Ctrl+Z) to keep it as text, or turn this off in Edit > Settings.`);
+    this.say(`${text} is now an atom. Undo (Ctrl+Z) to keep it as text.`);
     return true;
   }
 
@@ -7086,7 +7082,7 @@ export class Editor {
     const a = this.aids;
     if ((!a.angle && !a.length && !a.hints) || !this.pointerInside || this.captionEd || this.paused) return;
     const seg = a.angle || a.length ? this.drawnSegment() : null;
-    const readout = seg ? readoutText(seg.a, seg.b, { ...a, units: this.lengthUnits() }) : '';
+    const readout = seg ? readoutText(seg.a, seg.b, a) : '';
     const d = this.drag;
     // while the button is up the hints show only as a key is held, saying what it will do
     const held = this.mods.shift || this.mods.alt || this.mods.ctrl;
