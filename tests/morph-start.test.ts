@@ -8,6 +8,7 @@ import { describe, expect, it } from 'vitest';
 import { Doc } from '../src/model';
 import { planOf, buildSteps } from '../src/morph/clip';
 import { summary } from '../src/morph/mapping';
+import { bondChanges, schemeCopy, changeColor } from '../src/morph/scheme-clip';
 import { Renderer, withMeasure } from '../src/render/renderer';
 import { arialWidth } from '../src/text-metrics';
 
@@ -84,4 +85,30 @@ describe('the enol + ketone step animates', () => {
     expect(sum.forming.length).toBe(1);
     expect(sum.breaking.length).toBe(0);
   }));
+});
+
+describe('Whole Scheme: the bond changes each step shows', () => {
+  it('breaks the C=C and C=O lines and forms the C–C bond and the C=O+ line', () => withMeasure((t, s) => arialWidth(t, s), () => {
+    const { doc, enol, ketone, product } = build(true, 9);
+    const plan = planOf(doc);
+    const [step] = buildSteps(doc, plan, new Renderer({ getContext: () => null } as unknown as HTMLCanvasElement, { getContext: () => null } as unknown as HTMLCanvasElement));
+    const ends = (id: number) => { const b = doc.bonds.get(id)!; return [b.a1, b.a2].sort((x, y) => x - y).join('-'); };
+    const pair = (a: number, b: number) => [a, b].sort((x, y) => x - y).join('-');
+    const ch = bondChanges(step);
+    expect(ch.breaking.map(ends).sort()).toEqual([pair(enol[0], enol[2]), pair(ketone[0], ketone[3])].sort());
+    expect(ch.forming.map(ends).sort()).toEqual([pair(product[2], product[3]), pair(product[1], product[6])].sort());
+    // the drawing copied for the clip holds the whole scheme: structures and every arrow
+    const copy = schemeCopy(doc, plan);
+    expect(copy.atoms.size).toBe(16);
+    expect(copy.arrows.size).toBe(doc.arrows.size);
+  }));
+
+  it('colours change only part way through a step, and settle back to the drawing', () => {
+    expect(changeColor('break', 0)).toBe('rgb(0,0,0)');
+    expect(changeColor('break', 0.32)).toBe('rgb(214,40,40)');
+    expect(changeColor('form', 0.1)).toBeUndefined();
+    expect(changeColor('form', 0.7)).toBe('rgb(30,158,74)');
+    expect(changeColor('break', 1)).toBe('rgb(0,0,0)');
+    expect(changeColor('form', 1)).toBe('rgb(0,0,0)');
+  });
 });

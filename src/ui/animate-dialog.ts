@@ -7,7 +7,6 @@
 
 import type { Doc, MorphStep } from '../model';
 import type { Rect, Vec } from '../geom';
-import type { Renderer } from '../render/renderer';
 import { planOf, buildSteps, stepSummary, Clip, DEFAULT_TIMING, gifDelayMs, type Plan, type Step, type Timing } from '../morph/clip';
 import { frame } from '../morph/frame';
 import { paintFrame, framesBox } from '../morph/paint';
@@ -15,7 +14,9 @@ import { atomNumbers, readMapping, writeMapping, MappingFileError } from '../mor
 import { resolve, MappingError } from '../morph/mapping';
 import { configOf } from '../morph/clip';
 import { encodeGif } from '../morph/gif';
-import { addInfo } from './info-tip';
+import { SchemeClip } from '../morph/scheme-clip';
+import { Renderer } from '../render/renderer';
+import { addInfo, infoIcon } from './info-tip';
 import { encodeMp4, mp4Codec } from '../morph/mp4';
 import { saveFileDialog, openFileDialog, writeFile, showError, withExtension, type FileType } from '../io/files';
 import { zipSync } from 'fflate';
@@ -42,12 +43,21 @@ const ZIP: FileType = { description: 'PNG frames (zip)', extension: 'zip', mime:
 const MAPPING: FileType = { description: 'cdxmorph pairing', extension: 'json', mime: 'application/json' };
 const TIMING_KEY = 'ci-animate-timing';
 
-function savedTiming(): Timing & { width: number } {
+/** Morph Structures moves each structure into the next; Whole Scheme keeps the scheme on screen and shows the bond changes. */
+export type AnimationStyle = 'morph' | 'scheme';
+type Settings = Timing & { width: number; style: AnimationStyle };
+
+function savedTiming(): Settings {
+  const base: Settings = { ...DEFAULT_TIMING, width: 720, style: 'morph' };
   try {
     const v = JSON.parse(localStorage.getItem(TIMING_KEY) ?? '{}');
-    return { ...DEFAULT_TIMING, width: 720, ...v };
-  } catch { return { ...DEFAULT_TIMING, width: 720 }; }
+    const out = { ...base, ...v };
+    if (out.style !== 'scheme') out.style = 'morph';
+    return out;
+  } catch { return base; }
 }
+
+const STYLE_TIP = 'Morph Structures moves each structure into the next. Whole Scheme keeps every structure, arrow and condition on screen, and animates only the bonds that break (red) and form (green), step by step.';
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: string): HTMLElementTagNameMap[K] => {
   const e = document.createElement(tag);
@@ -69,7 +79,9 @@ export class AnimateDialog {
   /** Each step's settings, as saved on its arrow or changed here. */
   private morphs: (MorphStep | undefined)[] = [];
   private steps: Step[] = [];
-  private clip: Clip | null = null;
+  private clip: Clip | SchemeClip | null = null;
+  /** Draws the scheme for Whole Scheme (its own, so the drawing's caches are left alone). */
+  private schemeRenderer: Renderer | null = null;
   private timing = savedTiming();
   private frameNo = 0;
   private playing = false;
@@ -140,6 +152,22 @@ export class AnimateDialog {
 
     // settings
     const side = (this.side = el('div', 'animate-side'));
+    const look = el('fieldset', 'animate-timing animate-style');
+    const lookLegend = el('legend', undefined, 'Animation ');
+    lookLegend.append(infoIcon(STYLE_TIP));
+    look.append(lookLegend);
+    const style = el('select');
+    style.id = 'animate-style';
+    for (const [v, t] of [['morph', 'Morph Structures'], ['scheme', 'Whole Scheme']] as const) {
+      const o = el('option', undefined, t);
+      o.value = v;
+      style.append(o);
+    }
+    style.value = this.timing.style;
+    style.addEventListener('change', () => { this.timing.style = style.value as AnimationStyle; this.remember(); this.remake(); });
+    const styleRow = el('label', 'ask-row');
+    styleRow.append(el('span', undefined, 'Style'), style);
+    look.append(styleRow);
     const timing = el('fieldset', 'animate-timing');
     timing.append(el('legend', undefined, 'Timing'));
     const num = (label: string, key: 'duration' | 'fps' | 'hold' | 'pause' | 'width', step: number, min: number, max: number, title: string) => {
@@ -191,7 +219,7 @@ export class AnimateDialog {
     stepsBox.append(el('legend', undefined, 'Steps'));
     this.stepsList = el('div');
     stepsBox.append(this.stepsList);
-    side.append(timing, stepsBox);
+    side.append(look, timing, stepsBox);
 
     this.status = el('p', 'animate-status');
     this.status.setAttribute('role', 'status');
@@ -256,11 +284,22 @@ export class AnimateDialog {
 
   /** Make the clip again (the timing changed). */
   private remake(): void {
-    this.clip = new Clip(this.steps, this.timing);
+    this.clip = this.makeClip();
     this.scrub.max = String(Math.max(0, this.clip.length - 1));
     this.frameNo = Math.min(this.frameNo, this.clip.length - 1);
     this.sizeCanvas();
     this.show(this.frameNo);
+  }
+
+  /** The clip in the chosen style (`gif`: frames counted at the rate a GIF really plays at). */
+  private makeClip(gif = false): Clip | SchemeClip {
+    if (this.timing.style !== 'scheme') return new Clip(this.steps, this.timing, gif);
+    this.schemeRenderer ??= (() => {
+      const r = new Renderer(el('canvas'), el('canvas'));
+      r.showWarnings = false;
+      return r;
+    })();
+    return new SchemeClip(this.hooks.doc(), this.plan, this.steps, this.timing, this.schemeRenderer, gif);
   }
 
   private sizeCanvas(): void {
@@ -624,8 +663,7 @@ export class AnimateDialog {
     const target = await saveFileDialog(withExtension(this.hooks.name(), 'gif'), GIF).catch(async (e) => { await showError(String(e)); return null; });
     if (!target) return;
     // GIFs keep delays in hundredths of a second: count frames at the rate they will really play at
-    const steps = this.steps;
-    const clip = new Clip(steps, this.timing, true);
+    const clip = this.makeClip(true);
     const keep = this.clip;
     this.clip = clip;
     const f = this.frames();
@@ -698,7 +736,7 @@ export class AnimateDialog {
         return;
       }
       // no video encoder here: an animated GIF plays in PowerPoint too
-      const clip = new Clip(this.steps, this.timing, true);
+      const clip = this.makeClip(true);
       const keep = this.clip;
       this.clip = clip;
       const f = this.frames();
