@@ -245,7 +245,7 @@ import { structureDoc, structureMolfile } from './sheet/structure-doc';
 import { StructurePictures } from './ui/structure-pictures';
 import { LabelTooltip } from './ui/label-tooltip';
 import { ToolTip } from './ui/tool-tip';
-import { toolHelp, arrowHandleHelp, shapeHandleHelp, splitTitle, withoutKeys } from './ui/tool-help';
+import { toolHelp, allKeys, statusHint, arrowHandleHelp, shapeHandleHelp, splitTitle, withoutKeys } from './ui/tool-help';
 import { starAtoms } from './chem/label-tip';
 import { structurePlace } from './sheet/layout';
 // sheet and document files' readers and writers load the first time one is opened or saved
@@ -852,15 +852,17 @@ function showToolStatus(): void {
   }
   const name = editor.toolName, t = TOOLS[name];
   const sel = editor.sel;
-  const one = sel.atoms.size + sel.bonds.size + sel.captions.size === 0 && sel.arrows.size + sel.shapes.size === 1;
-  if (one && toolStep === 0 && (t?.kind === 'select' || t?.kind === 'arrow' && sel.arrows.size)) {
+  // one arrow or shape selected: what its handles do
+  let one: { name: string; handles: string[] } | null = null;
+  if (sel.atoms.size + sel.bonds.size + sel.captions.size === 0 && sel.arrows.size + sel.shapes.size === 1) {
     const r = sel.arrows.size ? editor.doc.arrows.get([...sel.arrows][0]) : undefined;
     const sh = sel.shapes.size ? editor.doc.shapes.get([...sel.shapes][0]) : undefined;
-    const g = r ? arrowHandleHelp(r) : sh && (sh.kind === 'rect' || sh.kind === 'oval' || sh.kind === 'line') ? shapeHandleHelp(sh.kind === 'line') : null;
-    if (g) { setStatus({ name: g.name, steps: g.handles, numbered: false, at: -1, keys: g.keys, full: `${g.name}. ${g.handles.join('. ')}.` }); return; }
+    one = r ? arrowHandleHelp(r) : sh && (sh.kind === 'rect' || sh.kind === 'oval' || sh.kind === 'line') ? shapeHandleHelp(sh.kind === 'line') : null;
   }
-  const h = toolHelp(name, t);
-  setStatus({ name: toolLabel(name), steps: h.steps, numbered: h.steps.length > 1 && name !== 'select', at: Math.min(toolStep, h.steps.length - 1), keys: h.keys, full: h.what });
+  const s = statusHint({ name, label: toolLabel(name), t, st: editor.statusState(), step: toolStep, one, key: (action, ctx = 'command') => keysOf(ctx, action)[0] });
+  // (the same hint again leaves the bar alone: this runs on every change to the drawing)
+  if (lastStatus && $('#hint').classList.contains('steps') && JSON.stringify(s) === JSON.stringify(lastStatus)) return;
+  setStatus(s);
 }
 /** The keys that work in the text being typed ("Enter: new paragraph · …"), shown in the status bar; null when nothing is typed. */
 let typingKeys: string | null = null;
@@ -906,8 +908,8 @@ const toolTip = new ToolTip((b) => {
   const title = b.getAttribute('aria-label') ?? toolTitles[name] ?? name;
   const known = !!t || name.startsWith('geo:');
   const h = known ? toolHelp(name, t) : null;
-  const { name: label, rest } = splitTitle(title, !!h?.keys.length);
-  return { name: label, hotkey: keysOf('space', `tool ${name}`)[0] ?? '', body: rest || (h ? withoutKeys(h.what) : ''), keys: h?.keys ?? [], more: b.dataset.tipMore };
+  const { name: label, rest } = splitTitle(title, !!h && allKeys(h).length > 0);
+  return { name: label, hotkey: keysOf('space', `tool ${name}`)[0] ?? '', body: rest || (h ? withoutKeys(h.what) : ''), keys: h ? allKeys(h) : [], more: b.dataset.tipMore };
 }, isMac);
 // the step in hand: pressing on the drawing starts the second step, letting go goes back to the first
 host.addEventListener('pointerdown', (e) => { if (e.button === 0 && toolStep === 0) { toolStep = 1; showToolStatus(); } });
@@ -934,6 +936,8 @@ function setHint(text: string): void {
 let stepHintOn = false;
 editor.onHint = (text) => { stepHintOn = !!text; if (text) setHint(text); else editor.onToolChange(editor.toolName); };
 editor.onNotice = (text, ms) => flash(text, ms);
+// a drag under way, or the keyboard highlight coming or going: the status bar's hints follow
+editor.onStatus = () => { if (statusReady) showToolStatus(); };
 editor.setTool('bond-single');
 
 // tablets: bigger buttons, long-press menus, double taps and the atom keypad (View > Window and Colours > Touch Mode)
