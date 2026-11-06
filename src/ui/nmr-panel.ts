@@ -7,7 +7,8 @@ import { protonGroups } from '../chem/nmr/coupling';
 import { envCodes } from '../chem/nmr/env';
 import { ShiftTable, type AtomShifts, type ShiftHit } from '../chem/nmr/lookup';
 import { MeasuredStore } from '../chem/nmr/measured';
-import { ShiftNet } from '../chem/nmr/net';
+import { blendNet, ShiftNet } from '../chem/nmr/net';
+import { netInBackground } from '../chem/nmr/net-client';
 import { predictSpectrum, type NmrQuality, type PredictedSpectrum } from '../chem/nmr/spectrum';
 import { exchangeRange, type ExchangeRange } from '../chem/nmr/exchange';
 import { spectrumInBackground } from '../chem/nmr/spectrum-client';
@@ -463,12 +464,23 @@ export class NmrPanel {
     const body = d.querySelector<HTMLElement>('.nmr-body')!;
     if (!item) return;
     try {
-      const [table, store, net, { graph }] = await Promise.all([this.load(), this.loadStore(), this.loadNet(), this.host.graph(item.molblock)]);
+      const [table, store, { graph }] = await Promise.all([this.load(), this.loadStore(), this.host.graph(item.molblock)]);
       if (seq !== this.seq) return;
       const heavy = molfileHeavyAtoms(item.molblock);
       if (!graph || graph.atoms.length !== heavy.length) { body.innerHTML = '<p class="muted small">No prediction for this structure.</p>'; return; }
       const shifts = table.predictAll(graph, this.solvent);
-      net?.apply(graph, shifts, this.solvent);
+      // the networks run in the background worker (a few tenths of a second), or here without one
+      const solvent = this.solvent, url = this.host.netUrl;
+      const bg = url ? netInBackground(url, graph, solvent)?.catch(() => null) : null;
+      if (bg) {
+        const r = await bg;
+        if (seq !== this.seq) return;
+        if (r?.net) blendNet(r.blend, graph, shifts, r.net);
+      } else {
+        const net = await this.loadNet();
+        if (seq !== this.seq) return;
+        net?.apply(graph, shifts, solvent);
+      }
       store?.apply(graph, shifts, this.solvent);
       const rows = nmrRows(graph, shifts);
       for (const r of rows) r.exch = exchangeRange(graph, r.atoms[0], this.solvent);

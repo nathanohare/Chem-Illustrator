@@ -150,27 +150,41 @@ export class ShiftNet {
    * papers). The value and its error bar change; the lookup's radius and count stay for the chip.
    */
   apply(g: EnvGraph, shifts: AtomShifts[], solvent: string | null): void {
-    const net = this.predict(g, solvent);
-    shifts.forEach((s, i) => {
-      const n = net[i];
-      if (s.c13 !== undefined && g.atoms[i].el === 'C') s.c13 = this.blendOne('13C', s.c13, n.c13, n.c13sd);
-      if (g.atoms[i].h > 0) s.h1 = this.blendOne('1H', s.h1, n.h1, n.h1sd);
-      if (g.atoms[i].el === 'C' && g.atoms[i].h === 2 && Number.isFinite(n.h1gap)) s.h1gap = n.h1gap;
-    });
+    blendNet(this.head.blend ?? null, g, shifts, this.predict(g, solvent));
   }
 
-  private blendOne(nuc: Nucleus, look: ShiftHit | null, mean: number, sd: number): ShiftHit {
-    const p = this.head.blend?.[nuc] ?? { g: [1e6, 1e6, 1e6], b: 0, d: 0 };
-    const base = nuc === '13C' ? 2.0 : 0.17; // blend_tune.py BASE
-    const sn = base * (1 + (p.d * sd) / base);
-    let value = mean;
-    if (look) {
-      const grp = look.radius >= 4 ? 2 : look.radius >= 2 ? 1 : 0;
-      const sl = base * p.g[grp] + p.b * look.spread;
-      const wl = 1 / sl ** 2, wn = 1 / sn ** 2;
-      value = (look.value * wl + mean * wn) / (wl + wn);
-    }
-    const spread = p.calib ? p.calib.c0 + p.calib.c1 * sd : look?.spread ?? base;
-    return { value, spread, radius: look?.radius ?? 0, n: look?.n ?? 0 };
+  /** How this file weighs the lookup against the networks (sent along with background predictions). */
+  get blend(): NetBlend { return this.head.blend ?? null; }
+}
+
+export type NetBlend = Record<Nucleus, BlendParams> | null;
+
+/**
+ * Blends network shifts (`net`, from {@link ShiftNet.predict}, here or in the background worker)
+ * into the lookup's predictions: inverse-variance weights tuned on held-out papers. The value and
+ * its error bar change; the lookup's radius and count stay for the chip.
+ */
+export function blendNet(blend: NetBlend, g: EnvGraph, shifts: AtomShifts[], net: NetShift[]): void {
+  shifts.forEach((s, i) => {
+    const n = net[i];
+    if (!n) return;
+    if (s.c13 !== undefined && g.atoms[i].el === 'C') s.c13 = blendOne(blend, '13C', s.c13, n.c13, n.c13sd);
+    if (g.atoms[i].h > 0) s.h1 = blendOne(blend, '1H', s.h1, n.h1, n.h1sd);
+    if (g.atoms[i].el === 'C' && g.atoms[i].h === 2 && Number.isFinite(n.h1gap)) s.h1gap = n.h1gap;
+  });
+}
+
+function blendOne(blend: NetBlend, nuc: Nucleus, look: ShiftHit | null, mean: number, sd: number): ShiftHit {
+  const p = blend?.[nuc] ?? { g: [1e6, 1e6, 1e6], b: 0, d: 0 };
+  const base = nuc === '13C' ? 2.0 : 0.17; // blend_tune.py BASE
+  const sn = base * (1 + (p.d * sd) / base);
+  let value = mean;
+  if (look) {
+    const grp = look.radius >= 4 ? 2 : look.radius >= 2 ? 1 : 0;
+    const sl = base * p.g[grp] + p.b * look.spread;
+    const wl = 1 / sl ** 2, wn = 1 / sn ** 2;
+    value = (look.value * wl + mean * wn) / (wl + wn);
   }
+  const spread = p.calib ? p.calib.c0 + p.calib.c1 * sd : look?.spread ?? base;
+  return { value, spread, radius: look?.radius ?? 0, n: look?.n ?? 0 };
 }
