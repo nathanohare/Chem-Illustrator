@@ -13818,6 +13818,11 @@ let welcomeWatch: (() => void) | null = null;
 function showStartView(): void {
   if (!startView || doc.atoms.size || doc.captions.size || doc.shapes.size || doc.arrows.size || deckNow() || ws.active.mode !== 'drawing' || ws.tabs.length > 1) return;
   const card = $('#start-view');
+  // the New buttons carry the tabs' mode icons
+  for (const b of card.querySelectorAll<HTMLElement>('.sv-new [data-mode]')) {
+    const icon = b.querySelector('.sv-icon')!;
+    if (!icon.firstChild) icon.innerHTML = TAB_ICONS[b.dataset.mode as Tab['mode']][0];
+  }
   const files = recentFiles.slice(0, 6).map((p) => {
     const b = document.createElement('button');
     b.type = 'button';
