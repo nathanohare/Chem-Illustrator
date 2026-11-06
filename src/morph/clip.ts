@@ -7,7 +7,7 @@
 import type { Arrow, Doc, MorphStep } from '../model';
 import type { Rect, Vec } from '../geom';
 import type { Renderer } from '../render/renderer';
-import { itemFinder, reactionSteps, schemeItems, plainMeasure, type Item } from '../chem/reaction';
+import { itemFinder, reactionSteps, schemeItems, plainMeasure, arrowFrame, inFrame, type Item } from '../chem/reaction';
 import type { Measure } from '../editor/arrange';
 import { sceneOf, type MScene } from './scene';
 import { resolve, summary, type Mapping, type StepConfig, type StepSummary } from './mapping';
@@ -94,6 +94,42 @@ function signLinks(doc: Doc, drawn: Item[]): Set<string> {
 }
 
 /**
+ * Structures an electron-pushing (curved) arrow joins: one whose tail is on one structure and head
+ * on another (or in the gap between them) says they react together. Ends are read from what the
+ * arrow is stuck to, or else the nearest atom within a bond length.
+ */
+function mechanismLinks(doc: Doc, drawn: Item[]): Map<string, Set<string>> {
+  const owner = new Map<number, string>();
+  for (const it of drawn) for (const a of it.atoms) owner.set(a, it.ref);
+  const reach = doc.style.bondLength;
+  const at = (p: Vec, pin: { ref: number[] } | undefined): string[] => {
+    if (pin?.ref.length) return [...new Set(pin.ref.map((a) => owner.get(a)).filter((r): r is string => !!r))];
+    let best: string | undefined, bestD = reach;
+    for (const [id, ref] of owner) {
+      const a = doc.atoms.get(id);
+      if (!a) continue;
+      const d = Math.hypot(a.x - p.x, a.y - p.y);
+      if (d < bestD) { bestD = d; best = ref; }
+    }
+    return best ? [best] : [];
+  };
+  const out = new Map<string, Set<string>>();
+  const join = (a: string, b: string) => {
+    if (a === b) return;
+    if (!out.has(a)) out.set(a, new Set());
+    if (!out.has(b)) out.set(b, new Set());
+    out.get(a)!.add(b); out.get(b)!.add(a);
+  };
+  for (const r of doc.arrows.values()) {
+    if (r.step || !(r.sweep || r.bez?.length)) continue;
+    const from = at(r.tail, r.pin?.tail), to = at(r.head, r.pin?.head);
+    const ends = [...from, ...to];
+    for (const a of ends) for (const b of ends) join(a, b);
+  }
+  return out;
+}
+
+/**
  * What to animate. With an arrow, just that step. Otherwise the scheme is followed from its first
  * step along the structures each step shares with the next (a later step may bring in a new
  * starting material); with no reaction arrows, the structures are taken from left to right.
@@ -134,6 +170,39 @@ export function planOf(doc: Doc, opts: { arrow?: number; atoms?: Set<number>; me
       return { arrow: arrow.id, r: side(roles.reactants, dir), p: side(roles.products, dir) };
     })
     .filter((s) => s.r.length && s.p.length);
+
+  // A starting material the scheme reader leaves out because no + sign joins it to the others
+  // (an enol drawn beside the ketone it attacks, curved arrows between them): any structure that
+  // no arrow claims, before the arrow's tail, and joined to a starting material by a curved arrow
+  // or drawn in line with them, belongs with them. Kept in reading order along the arrow.
+  const claimed = new Set(reactionSteps(doc, items).flatMap(({ roles }) => [...roles.reactants, ...roles.products, ...roles.above, ...roles.below]));
+  const mech = mechanismLinks(doc, drawn);
+  const reach = 4.5 * doc.style.bondLength;
+  for (const s of steps) {
+    if (s.r.length !== 1) continue;
+    const r = doc.arrows.get(s.arrow);
+    if (!r) continue;
+    const f = arrowFrame(r);
+    const g = s.r[0];
+    for (let more = true; more;) {
+      more = false;
+      for (const it of drawn) {
+        if (claimed.has(it.ref) || g.includes(it) || !wanted(it)) continue;
+        const sp = inFrame(f, it.box);
+        if ((sp.t1 + sp.t2) / 2 >= 0) continue;
+        const byArrow = g.some((x) => mech.get(x.ref)?.has(it.ref));
+        const inLine = sp.s1 <= 0 && sp.s2 >= 0 && g.some((x) => {
+          const q = inFrame(f, x.box);
+          return Math.max(0, q.t1 - sp.t2, sp.t1 - q.t2) <= reach;
+        });
+        if (!byArrow && !inLine) continue;
+        g.push(it);
+        claimed.add(it.ref);
+        more = true;
+      }
+    }
+    if (g.length > 1) g.sort((a, b) => { const p = centre(a), q = centre(b); return (p.x - q.x) * f.u.x + (p.y - q.y) * f.u.y; });
+  }
 
   const groups: Item[][] = [];
   const arrows: (number | null)[] = [];
