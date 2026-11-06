@@ -29,7 +29,7 @@ const bond = (doc: Doc, a: number, b: number): PushEnd => ({ kind: 'bond', id: d
 function run(doc: Doc) {
   const m = plainMeasure(doc);
   const reading = readPushes(doc, m, pushArrowsOf(doc, doc.arrows.keys()));
-  const out = productDrawing(doc, m, reading);
+  const out = productDrawing(doc, reading);
   return { reading, out: out!, errors: reading.issues.filter((i) => i.level === 'error') };
 }
 

@@ -82,7 +82,7 @@ describe('radical dots drawn by Draw Next Intermediate', () => {
     // the app's measure remembers each label by atom (where it was drawn), as the renderer does
     const m = { ...plain, atomBoxes: (a: Atom) => plain.atomBoxes(doc.atoms.get(a.id) ?? a) };
     const reading = readPushes(doc, m, pushArrowsOf(doc, doc.arrows.keys()));
-    const out = productDrawing(doc, m, reading)!;
+    const out = productDrawing(doc, reading)!;
     expect(out.atoms.get(cl)!.radical).toBe('doublet');
     const clNow = out.atoms.get(cl)!;
     // the Cl came away from the carbon

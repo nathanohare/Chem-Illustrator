@@ -3336,7 +3336,7 @@ export class Editor {
   private readArrows(arrows: Arrow[]): PushReading {
     const m = this.measure();
     const reading = readPushes(this.doc, m, arrows);
-    productDrawing(this.doc, m, reading);
+    productDrawing(this.doc, reading);
     return reading;
   }
 
@@ -3367,7 +3367,7 @@ export class Editor {
     if (arrows === 'many') return 'many';
     if (!arrows.length) return 'none';
     const reading = readPushes(doc, m, arrows);
-    const out = productDrawing(doc, m, reading);
+    const out = productDrawing(doc, reading);
     const errors = reading.issues.filter((i) => i.level === 'error');
     if (!reading.steps.length && !errors.length) return 'none';
     if (errors.length || !out) { this.pickIssues(errors); return { drawn: false, issues: reading.issues }; }

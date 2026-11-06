@@ -275,7 +275,7 @@ const turn = (p: Vec, ang: number): Vec => ({ x: p.x * Math.cos(ang) - p.y * Mat
  * radical dots and circled charges are drawn as the starting drawing had them. The atoms keep
  * their ids (new bonds and symbols get new ones). Null when there is nothing to draw.
  */
-export function productDrawing(doc: Doc, m: Measure, reading: PushReading): Drawing | null {
+export function productDrawing(doc: Doc, reading: PushReading): Drawing | null {
   const touched = pushedAtoms(reading);
   if (!touched.size) return null;
   const atoms = new Set<number>();
