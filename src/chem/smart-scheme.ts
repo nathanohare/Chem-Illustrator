@@ -19,7 +19,9 @@ import { applyArrange, planArrange, readScheme, type ArrangeKind, type Scope } f
 import type { Item } from './reaction';
 import { spacing, withSchemePrefs } from './scheme-layout';
 import { cleanFormat, formatPrefs, restyleSmart, type SmartFormat } from './smart-format';
-import { arrowMid } from '../objects';
+import { arrowMid, sweepThrough } from '../objects';
+import { bezFrom, pathPoints } from '../arrow-path';
+import { alongCurve, cycleCurves, fitEllipse, ontoEllipse, type Ellipse } from './cycle-path';
 
 export type SmartLayout = Extract<ArrangeKind, 'line' | 'rows' | 'snake' | 'down' | 'cycle'>;
 
@@ -711,6 +713,12 @@ export function refitSmart(doc: Doc, before: ReadonlyMap<string, Entity | null>,
     const read = readSmart(doc, m, s.id);
     if (!read) continue;
     const gap = s.smart.fmt?.structGap ?? spacing(doc.style.bondLength).gap;
+    // round a cycle, every step's arrow follows one smooth path through all the species (once one
+    // of them has moved: one only retyped or recolored leaves the arrows where they are)
+    if (simpleLoop(s.smart, read)) {
+      if (read.slots.some((sl) => slotMoved(doc, sl, before))) refitCycle(doc, read, gap);
+      continue;
+    }
     for (const l of read.links) {
       const a = read.slots[l.from], b = read.slots[l.to];
       if (!a || !b) continue;
@@ -741,6 +749,121 @@ export function refitSmart(doc: Doc, before: ReadonlyMap<string, Entity | null>,
       for (const x of [...doc.arrows.values()]) if (x.reagentFor === r.id) doc.updateArrow(x.id, { tail: { x: x.tail.x + d.x, y: x.tail.y + d.y }, head: { x: x.head.x + d.x, y: x.head.y + d.y } });
     }
   }
+}
+
+/** Whether a Smart Scheme is one loop that its arrows go round in order (what Clean Up Cycle and the smooth path work on). */
+function simpleLoop(data: SmartData, read: SmartRead): boolean {
+  const n = read.slots.length;
+  return data.layout === 'cycle' && !data.free && read.closed && read.chain && n >= 2 && read.links.length === n
+    && read.links.every((l, k) => l.from === k && l.to === (k + 1) % n);
+}
+
+/** Move everything of a species by d. */
+function shiftSlot(doc: Doc, slot: Slot, d: Vec): void {
+  if (Math.hypot(d.x, d.y) < 1e-9) return;
+  for (const it of [...slot.items, ...slot.labels]) {
+    if (it.atoms.length) doc.moveAtoms(new Set(it.atoms), d.x, d.y);
+    if (it.caption !== undefined) { const c = doc.captions.get(it.caption); if (c) doc.updateCaption(c.id, { x: c.x + d.x, y: c.y + d.y }); }
+    if (it.shape !== undefined) {
+      const h = doc.shapes.get(it.shape);
+      if (h) doc.updateShape(h.id, { x1: h.x1 + d.x, y1: h.y1 + d.y, x2: h.x2 + d.x, y2: h.y2 + d.y, ...(h.poly ? { poly: h.poly.map((p) => ({ x: p.x + d.x, y: p.y + d.y })) } : {}) });
+    }
+  }
+  slot.box = { x1: slot.box.x1 + d.x, y1: slot.box.y1 + d.y, x2: slot.box.x2 + d.x, y2: slot.box.y2 + d.y };
+}
+
+/**
+ * Clean Up Cycle: the species of a Smart Scheme's cycle go onto the upright ellipse that best fits
+ * where they are now (each along the line from its middle), and the step arrows follow its arcs.
+ * False when it isn't a single loop of three or more species. Call inside an edit.
+ */
+export function cleanUpCycle(doc: Doc, m: Measure, frameId: number): boolean {
+  const data = doc.shapes.get(frameId)?.smart;
+  const read = data && readSmart(doc, m, frameId);
+  if (!data || !read || !simpleLoop(data, read) || read.slots.length < 3) return false;
+  const e = fitEllipse(read.slots.map((sl) => mid(sl.box)));
+  if (!e) return false;
+  for (const sl of read.slots) { const c = mid(sl.box), p = ontoEllipse(e, c); shiftSlot(doc, sl, { x: p.x - c.x, y: p.y - c.y }); }
+  refitCycle(doc, read, data.fmt?.structGap ?? spacing(doc.style.bondLength).gap, e);
+  return true;
+}
+
+/**
+ * A cycle where a species moved: the arrows of every step run along one smooth closed path through
+ * all the species (so each arrow leaves a species the way the one before came in), their names and
+ * what comes in and goes out going with them.
+ */
+function refitCycle(doc: Doc, read: SmartRead, gap: number, ellipse?: Ellipse): void {
+  const n = read.slots.length, bond = doc.style.bondLength;
+  const pts = read.slots.map((sl) => mid(sl.box));
+  const boxes = read.slots.map((sl) => ({ x1: sl.box.x1 - gap, y1: sl.box.y1 - gap, x2: sl.box.x2 + gap, y2: sl.box.y2 + gap }));
+  const curves = cycleCurves(pts, boxes, ellipse);
+  const centre = { x: pts.reduce((a, p) => a + p.x, 0) / n, y: pts.reduce((a, p) => a + p.y, 0) / n };
+  read.links.forEach((l, k) => {
+    const c = curves[k], r = l.arrow;
+    if (!c || r.bent) return;
+    const oldPath = pathPoints(r);
+    const fwd = r.headStyle !== 'none' || r.tailStyle === 'none';
+    const path = fwd ? c : [...c].reverse();
+    const tail = path[0], head = path[path.length - 1];
+    const next = { tail, head, sweep: 0, bez: bezFrom(tail, head, path), ellipse: undefined };
+    doc.updateArrow(r.id, next);
+    // what comes in and goes out on small arrows: back on the arrow, outside the loop
+    const smalls = [...doc.arrows.values()].filter((x) => x.reagentFor === r.id);
+    const outward = (p: Vec, dir: Vec) => { const nrm = { x: -dir.y, y: dir.x }; return (nrm.x * (p.x - centre.x) + nrm.y * (p.y - centre.y)) >= 0 ? nrm : { x: dir.y, y: -dir.x }; };
+    const placed = new Map<number, Vec>();
+    for (const x of smalls) {
+      // coming in (its head on the arrow) or going out (its tail on it)
+      const coming = nearCurve(oldPath, x.head) < nearCurve(oldPath, x.tail);
+      const span = curveLength(c);
+      const delta = Math.min(0.3, (1.6 * bond) / Math.max(span, 1e-6));
+      const touch = coming ? 0.38 : 0.62, far = coming ? touch - delta : touch + delta;
+      const at = (t: number, off: number) => { const { p, d: dir } = alongCurve(c, t); const o = outward(p, dir); return { x: p.x + o.x * off, y: p.y + o.y * off }; };
+      const dd = 1.5 * bond;
+      const oldFar = coming ? x.tail : x.head;
+      const t2 = at(far, dd), h2 = at(touch, 0.12 * bond);
+      const bend = at(touch + (far - touch) * 0.3, dd * 0.7);
+      const tl = coming ? t2 : h2, hd = coming ? h2 : t2;
+      doc.updateArrow(x.id, { tail: tl, head: hd, sweep: sweepThrough(tl, hd, bend) });
+      placed.set(coming ? 0 : 1, { x: t2.x - oldFar.x, y: t2.y - oldFar.y });
+    }
+    const moveCaps = (its: Item[], by: Vec) => {
+      for (const it of its) {
+        if (it.caption === undefined) continue;
+        const cap = doc.captions.get(it.caption);
+        if (cap) doc.updateCaption(cap.id, { x: cap.x + by.x, y: cap.y + by.y });
+      }
+    };
+    // the step's name (and, without small arrows, what comes in and goes out) keeps its place
+    // beside the middle of the arrow, turning as the arrow there turns
+    const a0 = alongCurve(oldPath, 0.5), a1 = alongCurve(path, 0.5);
+    const beside = (its: Item[]) => {
+      for (const it of its) {
+        if (it.caption === undefined) continue;
+        const cap = doc.captions.get(it.caption);
+        if (!cap) continue;
+        const o = { x: cap.x - a0.p.x, y: cap.y - a0.p.y };
+        const along = o.x * a0.d.x + o.y * a0.d.y, across = -o.x * a0.d.y + o.y * a0.d.x;
+        doc.updateCaption(cap.id, { x: a1.p.x + along * a1.d.x - across * a1.d.y, y: a1.p.y + along * a1.d.y + across * a1.d.x });
+      }
+    };
+    if (placed.has(0)) moveCaps(l.above, placed.get(0)!); else beside(l.above);
+    if (placed.has(1)) moveCaps(l.below, placed.get(1)!); else beside(l.below);
+    beside(l.inside);
+  });
+}
+
+/** How near p comes to a run of cubic pieces. */
+function nearCurve(c: Vec[], p: Vec): number {
+  let best = Infinity;
+  for (let i = 0; i <= 40; i++) { const q = alongCurve(c, i / 40).p; best = Math.min(best, Math.hypot(q.x - p.x, q.y - p.y)); }
+  return best;
+}
+
+function curveLength(c: Vec[]): number {
+  let s = 0, prev = c[0];
+  for (let i = 1; i <= 40; i++) { const q = alongCurve(c, i / 40).p; s += Math.hypot(q.x - prev.x, q.y - prev.y); prev = q; }
+  return s;
 }
 
 /** Whether something of a species was moved in the change (not just retyped or restyled). */

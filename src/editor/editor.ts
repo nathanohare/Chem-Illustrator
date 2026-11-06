@@ -73,7 +73,7 @@ import { buildCycle, type CycleLook, type CycleSpec } from '../chem/cycles';
 import { rebuildSmartCycle, smartCycleStart, structureReagents, type SmartCycleStart } from '../chem/smart-cycle';
 import { refitTableFigures, tableContents } from './table-figs';
 import { energyFrameOf, plotFromBox, putEnergy, refitEnergy, type EnergyData } from '../design/energy';
-import { arrangeSmart, formatSmart, stepToHolder, stepHolderToText, fillHolder, fillHoldersDrawn, holderFrameOf, holderToSlotText, insertSlot, makeSmart, moveSlot, refitSmart, removeSlot, setSlotRuns, setSlotText, setStepRuns, setStepText, smartFrameOf, smartMarks, slotToHolder, ungroupSmart, type SmartData, type StepPart, type TextPart } from '../chem/smart-scheme';
+import { arrangeSmart, cleanUpCycle, formatSmart, stepToHolder, stepHolderToText, fillHolder, fillHoldersDrawn, holderFrameOf, holderToSlotText, insertSlot, makeSmart, moveSlot, refitSmart, removeSlot, setSlotRuns, setSlotText, setStepRuns, setStepText, smartFrameOf, smartMarks, slotToHolder, ungroupSmart, type SmartData, type StepPart, type TextPart } from '../chem/smart-scheme';
 import type { SmartFormat } from '../chem/smart-format';
 import { plateFrameOf, plateFromBox, putPlate, refitPlates, type PlateData } from '../design/plates';
 import { newmanCentre, newmanFrameOf, putMark, putNewman, refitNewman, type NewmanData } from '../design/newman';
@@ -3877,6 +3877,8 @@ export class Editor {
     this.changed();
     return smart !== null;
   }
+  /** Clean Up Cycle: the selected (or given) Smart Scheme's cycle onto one ellipse that fits it, its arrows along the ellipse. */
+  smartCleanUpCycle(id = this.selectedSmart()): boolean { return id !== null && this.smartEdit(id, 'Clean Up Cycle', (m) => cleanUpCycle(this.doc, m, id)); }
   smartFormat(id: number, fmt: SmartFormat | undefined): boolean { return this.smartEdit(id, 'Format Smart Scheme', (m) => formatSmart(this.doc, m, id, fmt)); }
   smartArrange(id: number, patch?: Partial<SmartData>): boolean { return this.smartEdit(id, 'Arrange Smart Scheme', (m) => arrangeSmart(this.doc, m, id, patch)); }
 
