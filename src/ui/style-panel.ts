@@ -148,6 +148,8 @@ export class StylePanel {
   orbital: { edit(): void; restyle(shapeIds: number[], patch: Partial<OrbitalSpec>): void } | null = null;
   /** Tie captions to the structure nearest each (Tie to Structure). */
   tie: ((captionIds: number[]) => void) | null = null;
+  /** Brackets drawn as a pair: whether the other halves can be selected or deselected now, and doing it. */
+  bracketPartner: { state(): 'select' | 'deselect' | null; toggle(): void } | null = null;
 
   /** Open a chart's data and settings (Edit chart…). */
   onEditChart: (id: number) => void = () => {};
@@ -502,6 +504,18 @@ export class StylePanel {
     }
     const br = any((x) => x.kind === 'bracket');
     if (br) this.select('Bracket', BRACKETS, br.bracket ?? 'square', (v) => set('Bracket shape', (x) => x.kind === 'bracket', () => ({ bracket: v })));
+    const mate = br && this.bracketPartner?.state();
+    if (mate) {
+      const row = document.createElement('div');
+      row.className = 'style-buttons';
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = mate === 'select' ? 'Select Partner' : 'Deselect Partner';
+      btn.title = mate === 'select' ? 'Select the other bracket of the pair too' : 'Leave only this bracket selected, to change or move it on its own';
+      btn.addEventListener('click', () => this.bracketPartner?.toggle());
+      row.append(btn);
+      this.body.append(row);
+    }
     // the border together: its colour, weight, dashes, corners and shadow
     // (ring fills have no line, so no line colour: it only stood in for a fill colour that wasn't set)
     const box = any((x) => x.kind === 'rect');

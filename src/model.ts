@@ -1016,6 +1016,11 @@ export interface Shape {
   /** Brackets: draw both halves of the pair. */
   pair?: boolean;
   /**
+   * Brackets drawn as a pair with the bracket tool: both halves carry the same number, and a click
+   * on one selects the other too (editor/groups.ts bracketPartner).
+   */
+  bracketPair?: number;
+  /**
    * Brackets: the label of a repeat group, shown by the bracket's lower end: n (or another letter)
    * for a polymer's repeat unit, or a number for a group repeated that many times (chem/polymer.ts).
    */

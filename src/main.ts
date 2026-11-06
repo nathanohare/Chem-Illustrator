@@ -181,7 +181,6 @@ import { setStereoShown, shownDescriptor, axialStyle } from './chem/stereo';
 import { keymap, COMMAND_NAMES, registerToolNames, displayChord, actionName, chordOf, parseAction, KeyContext, KeyOverrides } from './editor/keymap';
 import { loadSettings, saveSettings, settingsLocation, exportText, importSettings, Settings, SLIDE_PANE_MIN, SLIDE_PANE_MAX, NOTES_MIN, NOTES_MAX } from './settings';
 import { arrowGaps } from './chem/mechanism';
-import { showDialog } from './ui/dialog-host';
 import { HotkeysDialog } from './ui/hotkeys-dialog';
 import { TypingDialog } from './ui/typing-dialog';
 import { ModeColoursDialog, ModeColours, DEFAULT_MODE_COLOURS, applyModeColours as applyModeColoursOnly, modeColour } from './ui/mode-colours';
@@ -190,7 +189,7 @@ import { NicknameChooser } from './ui/nickname-chooser';
 import { ask, askChoice, type Field } from './ui/ask';
 import { ACTION_LINKS, geoShapeStyle } from './design/geo';
 import { BuildHint } from './ui/build-hint';
-import { alkylPreview, bondEndSwatch, chargeSwatch, cursorAidSwatch, mechanismPreview, methylSwatch, navigationPreview, pageGridPreview, readingPreview, stylePreview } from './ui/settings-previews';
+import { alkylPreview, bondEndSwatch, chargeSwatch, cursorAidSwatch, mechanismPreview, methylSwatch, navigationPreview, schemePreview, pageGridPreview, readingPreview, stylePreview } from './ui/settings-previews';
 import { AUTO_STEPS_DEFAULTS, markPieces, stepAnims, stepClicks, stepPieces, type AutoStepsOptions, type StepPiece } from './deck/auto-steps';
 import { UpdateUI } from './ui/update-ui';
 import { canUpdate, appVersion, portableInfo, STAGE, STAGE_NOTE, UPDATE_CHANNELS, type UpdateChannel } from './updates';
@@ -3027,6 +3026,18 @@ async function cleanUpChoices(): Promise<void> {
  * arrows (size, alignment, gap, the + boxes, fitting the arrow to it). A blank distance follows
  * the drawing's bond length.
  */
+/** Scheme settings as typed in Settings ▸ Schemes. */
+function schemeFrom(got: Record<string, string>): Partial<SchemePrefs> {
+  const len = (v: string | undefined) => { const n = Number(v); return !v || v.trim() === '' || !isFinite(n) || n < 0 ? null : Math.min(500, n); };
+  return {
+    structGap: len(got.structGap), plusGap: len(got.plusGap), textGap: len(got.textGap), lead: len(got.lead), headGap: len(got.headGap),
+    // (its size and font are the drawing style's now: Settings > Drawing Style)
+    textSize: null,
+    textAlign: got.textAlign === 'left' || got.textAlign === 'right' ? got.textAlign : 'center',
+    helpers: got.helpers === 'true', fit: got.fit === 'true', sameLength: got.sameLength === 'true',
+  };
+}
+
 async function schemeSettings(): Promise<void> {
   finishTyping();
   const p = schemePrefs;
@@ -3043,17 +3054,10 @@ async function schemeSettings(): Promise<void> {
     { name: 'sameLength', label: 'Clean Up Reaction makes arrows the same length', value: String(p.sameLength), type: 'checkbox' },
     { name: 'lead', label: 'Arrow before the text starts', value: pt(p.lead), type: 'number', unit: 'pt', placeholder: auto(SPACING.overhang) },
     { name: 'headGap', label: 'Space between text and arrowhead', value: pt(p.headGap), type: 'number', unit: 'pt', placeholder: auto(SPACING.overhang) },
-  ], { ok: 'Save', note: 'Used when you type text beside an arrow, and by Clean Up Reaction and Arrange Scheme. These are the usual values for every file; a drawing style can have its own (Drawing Style ▸ Reaction arrows, with a preview), and those win. The text\'s size and font are in Drawing Style too. Leave a distance blank to scale it with the bond length. Existing schemes change when you next clean them up.' });
+  ], { ok: 'Save', note: 'Used when you type text beside an arrow, and by Clean Up Reaction and Arrange Scheme. These are the usual values for every file; a drawing style can have its own (Drawing Style ▸ Reaction arrows, with a preview), and those win. The text\'s size and font are in Drawing Style too. Leave a distance blank to scale it with the bond length. Existing schemes change when you next clean them up.',
+    preview: { title: 'Preview', below: true, draw: (v) => schemePreview(doc.style, schemeFrom(v)) } });
   if (!got) return;
-  const len = (v: string) => { const n = Number(v); return v.trim() === '' || !isFinite(n) || n < 0 ? null : Math.min(500, n); };
-  const next: Partial<SchemePrefs> = {
-    structGap: len(got.structGap), plusGap: len(got.plusGap), textGap: len(got.textGap), lead: len(got.lead), headGap: len(got.headGap),
-    // (its size and font are the drawing style's now: Settings > Drawing Style)
-    textSize: null,
-    textAlign: got.textAlign === 'left' || got.textAlign === 'right' ? got.textAlign : 'center',
-    helpers: got.helpers === 'true', fit: got.fit === 'true', sameLength: got.sameLength === 'true',
-  };
-  setSchemePrefs(next);
+  setSchemePrefs(schemeFrom(got));
   storeSettings();
   editor.requestOverlay();
 }
@@ -10266,7 +10270,11 @@ async function generalPreferences(): Promise<void> {
     { name: 'pptxStructures', label: 'Save structures in PowerPoint files as', value: officeStructures.pptx, options: STRUCTURES_AS, help: STRUCTURES_AS_HELP },
     { name: 'reviewer', label: 'Your name on tracked changes in documents', value: reviewAuthor() },
     { name: 'startView', label: 'Show the start view (new tabs, recent files) when the program opens', type: 'checkbox', value: String(startView) },
-  ], { ok: 'Save' });
+  ], { ok: 'Save', actions: {
+    label: 'Settings file',
+    help: 'One file holds all settings: shortcuts, toolboxes, preferences, templates, abbreviations, drawing styles, palettes, slide themes and highlight styles. Export to back up or move to another computer; Import to load one. Recent files aren\'t included.',
+    buttons: [{ text: 'Export Settings…', run: (say) => void exportSettings(say) }, { text: 'Import Settings…', run: (say) => void importSettingsFile(say) }],
+  } });
   if (!r) return;
   editor.options.groupClick = r.groupClick === 'item' ? 'item' : 'group';
   editor.options.groupOutline = r.groupOutline === 'true';
@@ -10551,21 +10559,6 @@ async function importSettingsFile(say: (text: string) => void = flash): Promise<
   applySettings(read.settings);
   storeSettings();
   say(read.only === 'hotkeys' ? `Using the keys from ${got.name}.` : `Now using the settings from ${got.name}: shortcuts, toolboxes, preferences, templates, abbreviations, styles and palettes. Recent files are unchanged.`);
-}
-
-/** Settings > Import and Export: both, with a word on what goes in the file. */
-function settingsTransfer(): void {
-  const d = document.createElement('dialog');
-  d.className = 'ask settings-transfer';
-  d.innerHTML = `<h2 data-info="One file holds all settings: shortcuts, toolboxes, preferences, templates, abbreviations, drawing styles, palettes, slide themes and highlight styles. Export to back up or move to another computer; Import to load one. Recent files aren't included.">Import and Export Settings</h2>
-    <div class="ask-buttons"><button type="button" data-act="export">Export Settings…</button><button type="button" data-act="import">Import Settings…</button><button type="button" class="primary" data-act="close">Close</button></div>
-    <p class="muted small" aria-live="polite"></p>`;
-  const say = (t: string) => { d.querySelector('p.small')!.textContent = t; };
-  d.querySelector('[data-act=export]')!.addEventListener('click', () => void exportSettings(say));
-  d.querySelector('[data-act=import]')!.addEventListener('click', () => void importSettingsFile(say));
-  d.querySelector('[data-act=close]')!.addEventListener('click', () => d.close());
-  d.addEventListener('close', () => d.remove());
-  showDialog(d);
 }
 
 /** The key for a menu command as things are now (in Slides mode PowerPoint's keys come first, in sheets Excel's). */
@@ -11797,6 +11790,7 @@ stylePanel.onEquationColour = (ids, color) => {
 };
 stylePanel.applyLabel = (id, text) => editor.applyLabel(id, text);
 stylePanel.tie = (ids) => tieCaptions(ids);
+stylePanel.bracketPartner = { state: () => editor.bracketPartnerState(), toggle: () => editor.toggleBracketPartner() };
 
 /**
  * Tie captions (text boxes) to a structure: `to` (a selected structure's atoms), or else the one
@@ -13467,7 +13461,7 @@ watchRibbons((on) => { ribbonChosen = on; storeSettings(); });
 // the Canvas ribbon's arrow switches it between Classic and Simplified (Settings ▸ Toolboxes and Ribbon has both too)
 addLookToggle(canvasRibbon.el, { simple: () => ribbonLook === 'simple', toggle: () => { setRibbonLook(ribbonLook === 'simple' ? 'classic' : 'simple'); storeSettings(); } });
 const SETTINGS_PAGES: SettingsPage[] = [
-  { id: 'general', title: 'General', words: 'groups selecting click outline linked text above below ask whole page tracked changes reviewer name start view recent files chemdraw objects ole word powerpoint docx pptx save structures pictures svg png compatibility', open: generalPreferences },
+  { id: 'general', title: 'General', words: 'backup back up copy move settings file new computer install reinstall export import groups selecting click outline linked text above below ask whole page tracked changes reviewer name start view recent files chemdraw objects ole word powerpoint docx pptx save structures pictures svg png compatibility', open: generalPreferences },
   { id: 'preferences', title: 'Preferences', words: 'personal personalize habits enter return key finish text tool box new line alt option escape esc taste alkyl prefix italic dash hyphen tbu t-bu ipr i-pr nbu sbu ibu tert-butyl isopropyl', open: personalPreferences },
   { id: 'drawing', title: 'Drawing', words: 'bond ends round rounded square caps mitre corners methyl me ch3 axial chirality ra sa helicity charges circled ammonium nh4 r groups superscript mechanism arrows reroute wrap around block path gap arrow width arrowhead head size length units pixels px millimeters mm inches angle readout look box plain solid pointer cursor hints modifier shift alt ctrl keys', open: drawingPreferences },
   { id: 'style', perFile: true, title: 'Drawing Style', words: 'bond length line width font journal acs rsc wiley elsevier thieme hash spacing margin arrow text reagents conditions above below size smaller reaction arrows gap fit alignment line up structures plus scheme', open: drawingStyleDialog },
@@ -13484,7 +13478,6 @@ const SETTINGS_PAGES: SettingsPage[] = [
   { id: 'autosave', title: 'AutoSave and Recovery', words: 'autosave recovery versions backup copies shared folders onedrive', open: () => keeper.optionsCommand() },
   { id: 'ai', title: 'AI Model', words: 'ai artificial intelligence claude anthropic chatgpt gpt openai gemini google ollama openrouter api key llm model link connect', open: () => aiSettings() },
   { id: 'online', title: 'Online', words: 'pubchem internet names lookup updates check version privacy stable latest channel beta', open: onlinePreferences },
-  { id: 'transfer', actions: true, title: 'Import and Export', words: 'backup back up copy move settings file new computer install reinstall export import toolboxes hotkeys', open: settingsTransfer },
   { id: 'files', actions: true, title: 'File Types', words: 'open with default app explorer finder associations cdxml cdx mol sdf docx pptx xlsx double-click', open: () => fileTypesPage(fileTypesHost) },
 ];
 // Apply on a Settings page uses its settings and keeps them. Pages about the open file (Drawing

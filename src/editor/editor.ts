@@ -61,7 +61,7 @@ import { fillRings, refitRingFills, ringFillsOn } from '../chem/ring-fill';
 import { setMethylStyle, toggleChainEndLabels, toggleExplicitHydrogens, type MethylStyle } from '../chem/hydrogens';
 import { selectedGroup } from '../chem/group-smiles';
 import { restack as restackObjects, stackItems, usesStacking, type StackMove } from './stacking';
-import { groupMembers, groupSelection, selectedGroups, ungroupSelection, withGroups } from './groups';
+import { bracketPartner, groupMembers, groupSelection, newBracketPair, selectedGroups, ungroupSelection, withBracketPartners, withGroups } from './groups';
 import { circleRing, circleRings, kekulize } from '../chem/aromatic';
 import { bondLayer, crossingBonds, layerByDepth } from '../chem/crossing';
 import { RING_VIEW_NAMES, stepRing, viewNow, viewRingOf, type RingStep } from '../chem/ring-views';
@@ -1260,6 +1260,7 @@ export class Editor {
           else {
             this.addToSel(this.groupFirst(d.hit));
             if (this.options.groupClick === 'group') this.sel = withGroups(this.doc, this.sel);
+            this.sel = withBracketPartners(this.doc, this.sel);
           }
         }
         // Ctrl+drag: a copy goes with the pointer and the original stays where it was
@@ -1837,6 +1838,11 @@ export class Editor {
         if (pick) this.toggleSel(pick);
         // a click on something grouped picks its whole group (unless set to pick the one thing)
         if (pick && this.options.groupClick === 'group' && this.isSelected(pick)) this.sel = withGroups(this.doc, this.sel);
+        // one half of a bracket pair brings the other with it (the Style panel's Deselect Partner leaves it)
+        if (pick?.kind === 'shape' && this.isSelected(pick)) {
+          const mate = bracketPartner(this.doc, pick.id);
+          if (mate !== undefined) this.sel.shapes.add(mate);
+        }
         if (h?.kind === 'shape') this.noteTablePart(h.id, p);
         if (this.cropping !== null && !this.sel.shapes.has(this.cropping)) this.cropping = null;
         this.onChange();
@@ -3520,7 +3526,10 @@ export class Editor {
   private putBrackets(r: Rect, bracket: NonNullable<Shape['bracket']>, form: BracketForm | undefined, fresh: boolean): void {
     const doc = this.doc;
     if (fresh) this.sel = emptySel();
-    for (const b of bracketHalves(r, bracket, form)) this.sel.shapes.add(doc.addShape(b).id);
+    const halves = bracketHalves(r, bracket, form);
+    // (a pair: a click on either half selects both)
+    const pair = halves.length === 2 ? newBracketPair(doc) : undefined;
+    for (const b of halves) this.sel.shapes.add(doc.addShape(pair !== undefined ? { ...b, bracketPair: pair } : b).id);
     if (form !== 'ts') return;
     const L = doc.style.bondLength;
     const c = doc.addCaption({ x: 0, y: 0, runs: [{ text: '‡' }], justify: 'left' });
@@ -5693,6 +5702,33 @@ export class Editor {
     this.sel = withGroups(this.doc, this.sel);
     this.changed();
     return true;
+  }
+
+  /**
+   * The Style panel's Select Partner / Deselect Partner for brackets drawn as a pair: whether the
+   * selected brackets' other halves can be added ('select') or taken out ('deselect'), or null when
+   * no selected bracket has one.
+   */
+  bracketPartnerState(): 'select' | 'deselect' | null {
+    const mates = [...this.sel.shapes].map((id) => bracketPartner(this.doc, id)).filter((x): x is number => x !== undefined);
+    if (!mates.length) return null;
+    return mates.every((m) => this.sel.shapes.has(m)) ? 'deselect' : 'select';
+  }
+
+  /** Select the other halves of the selected bracket pairs, or (with both halves selected) leave only the one picked first. */
+  toggleBracketPartner(): void {
+    const state = this.bracketPartnerState();
+    if (!state) return;
+    const sel = { ...this.sel, shapes: new Set(this.sel.shapes) };
+    if (state === 'select') for (const id of this.sel.shapes) { const m = bracketPartner(this.doc, id); if (m !== undefined) sel.shapes.add(m); }
+    else {
+      // keep the half that was clicked: the one first in the selection
+      const keep = new Set<number>();
+      for (const id of this.sel.shapes) { const m = bracketPartner(this.doc, id); if (m !== undefined && !keep.has(m)) keep.add(id); }
+      for (const id of this.sel.shapes) if (bracketPartner(this.doc, id) !== undefined && !keep.has(id)) sel.shapes.delete(id);
+    }
+    this.sel = sel;
+    this.changed();
   }
 
   /** Format > Ungroup: the groups the selection is in come apart (it stays selected). */

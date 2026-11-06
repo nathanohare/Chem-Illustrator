@@ -92,7 +92,12 @@ export function sampleDrawing(style: DocStyle, scheme: Partial<SchemePrefs> = {}
     doc.updateAtom(nh, { charge: 1 });
     number(box(first), '2');
   });
-  // laid out as the scheme settings say, by the same Clean Up Reaction the canvas uses
+  laidOut(doc, scheme);
+  return doc;
+}
+
+/** A sample scheme laid out as the scheme settings say, by the same Clean Up Reaction the canvas uses. */
+function laidOut(doc: Doc, scheme: Partial<SchemePrefs>): void {
   try {
     const r = new Renderer(noCanvas, noCanvas);
     r.showWarnings = false;
@@ -102,7 +107,39 @@ export function sampleDrawing(style: DocStyle, scheme: Partial<SchemePrefs> = {}
       if (plan) applySchemePlan(doc, m, plan);
     });
   } catch { /* (no text measuring here: left roughly placed) */ }
-  return doc;
+}
+
+/**
+ * A generic scheme for Settings ▸ Schemes: two starting materials (a + between them), an arrow with
+ * a catalyst above and conditions below, and the product, laid out by Clean Up Reaction in the
+ * scheme settings `scheme`, `w` CSS pixels wide.
+ */
+export function schemePreview(style: DocStyle, scheme: Partial<SchemePrefs>, w = 460): HTMLElement {
+  const doc = new Doc();
+  // (the settings being edited, not a drawing style's own scheme spacing)
+  doc.style = { ...style, scheme: undefined };
+  const L = style.bondLength;
+  /** A benzene ring at x with one group on it, written as `label`. */
+  const aryl = (x: number, label: string) => {
+    const ring = placeRing(doc, freeRing({ x, y: 0 }, 6, L), { aromatic: true });
+    doc.updateAtom(sprout(doc, ring[1]).id, { label });
+  };
+  doc.bulk(() => {
+    aryl(0, 'Br');
+    doc.addCaption({ x: L * 2.2, y: L * 0.2, runs: [{ text: '+', ...newTextLook(doc) }], justify: 'left' });
+    aryl(L * 4, 'B(OH)2');
+    const x0 = L * 7.5, lw = style.arrowWidth ?? style.lineWidth;
+    doc.addArrow({
+      tail: { x: x0, y: 0 }, head: { x: x0 + L * 4, y: 0 }, headStyle: 'full', tailStyle: 'none', headType: 'solid', line: 'solid', noGo: false, equilibrium: false, sweep: 0,
+      headLength: style.arrowHeadLength ?? lw * 10, headWidth: style.arrowHeadWidth ?? lw * 2.5, ...(style.arrowWidth !== undefined ? { lineWidth: style.arrowWidth } : {}),
+    });
+    const look = newTextLook(doc);
+    doc.addCaption({ x: x0 + L * 0.3, y: -L * 0.3, runs: [{ text: 'Pd(PPh' }, { text: '3', sub: true }, { text: ')' }, { text: '4', sub: true }].map((r) => ({ ...r, ...look })), justify: 'left' });
+    doc.addCaption({ x: x0 + L * 0.3, y: L * 0.75, runs: [{ text: 'K' }, { text: '2', sub: true }, { text: 'CO' }, { text: '3', sub: true }, { text: ', 80 °C' }].map((r) => ({ ...r, ...look })), justify: 'left' });
+    aryl(x0 + L * 6, 'Ph');
+  });
+  laidOut(doc, scheme);
+  return drawingCanvas(doc, w, Math.round(w * 0.22), 6);
 }
 
 /** A drawing on a canvas, fitted into `w` × `h` CSS pixels on white (or not at all where the browser can't draw). */
