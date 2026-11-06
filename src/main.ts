@@ -54,7 +54,7 @@ import { allSpecies, captionChemWarning, captionReading, captionSpecies, chargeS
 import { bestFit, fitMove, fitMatters } from './chem/orient';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { getCurrentWindow } from '@tauri-apps/api/window';
-import { copyDrawing, copyImage, forgetCopy, looksLikeChemistry, extractDrawing, insertDrawing, isEmpty, nativeClipboard, readClipboardText, readNativeClipboard, readPasteEvent, readWebClipboard, clipboardFormats, fitPasted, typicalBondLength, Pasted,
+import { copyDrawing, copyImage, copySvg, drawingSvg, forgetCopy, looksLikeChemistry, extractDrawing, insertDrawing, isEmpty, nativeClipboard, readClipboardText, readNativeClipboard, readPasteEvent, readWebClipboard, clipboardFormats, fitPasted, typicalBondLength, Pasted,
   nativeFirst, writeNativeFormats, looksLikeCdxml, cfHtml, fromCfHtml, CELLS_FORMAT, OWN_FORMAT, CDX_FORMAT, setWordObjects, embeddedPicture, packFormats } from './io/clipboard';
 import { cdxToCdxml, cdxmlToCdx } from './io/cdx';
 import { writeCdxml } from './io/cdxml-write';
@@ -3711,6 +3711,13 @@ function copyCdxmlText(): Promise<void> | void {
   const part = extractDrawing(doc, chemistrySelection(doc, editor.sel, editor.hasSelection()));
   if (isEmpty(part)) { flash('There is nothing to copy.'); return; }
   return copyText(writeCdxml(part, { name: 'Clipboard.cdxml', textMeasure: measureText }), 'Copied as CDXML text.');
+}
+
+/** Copy the selection (or the whole drawing) as an SVG picture: structures, shapes, diagrams and pictures alike. */
+function copySvgOfSelection(): Promise<void> | void {
+  const svg = drawingSvg(doc, editor.hasSelection() ? editor.sel : null);
+  if (!svg) { flash('There is nothing to copy.'); return; }
+  return copySvg(svg).then(flash, (err) => flash('Could not copy: ' + String(err)));
 }
 
 let lastTurn = { angle: '90', dir: 'cw' };
@@ -7861,6 +7868,12 @@ const SHEET_COMMANDS: Record<string, () => unknown> = {
     if (!d) { flash('Select a cell with a structure in it.'); return; }
     return copyText(writeCdxml(d, { name: 'Clipboard.cdxml', textMeasure: measureText }), 'Copied as CDXML text.');
   },
+  'copy-svg': () => {
+    const d = activeStructureDoc();
+    const svg = d && drawingSvg(d, null);
+    if (!svg) { flash('Select a cell with a structure in it, or right-click a chart for Copy as SVG.'); return; }
+    return copySvg(svg).then(flash);
+  },
   'name-to-structure': () => sheetMode.run('structure-from-name'),
   'zoom-in': () => sheetMode.view.setZoom(sheetMode.view.zoom * 1.25),
   'zoom-out': () => sheetMode.view.setZoom(sheetMode.view.zoom * 0.8),
@@ -8047,6 +8060,24 @@ function pickedFigureDoc(): Doc | null {
   return o?.kind === 'drawing' ? structureDoc(o.contents, f!.t.drawingStyle) : null;
 }
 
+/** The structure, diagram or picture picked in the document, as SVG (a picture that isn't SVG goes inside one). */
+function pickedFigureSvg(): string | null {
+  const d = pickedFigureDoc();
+  if (d) return drawingSvg(d, null);
+  const f = ws.active.document;
+  const id = docMode?.pickedObject();
+  const o = f && id !== null ? f.t.objects[id] : null;
+  if (o?.kind !== 'picture' || o.crop || o.rot) return null;
+  const k = o.scale ?? 1, w = +(o.w * k).toFixed(2), h = +(o.h * k).toFixed(2);
+  if (/^data:image\/svg\+xml/.test(o.src)) {
+    try {
+      return new TextDecoder().decode(fromDataUrl(o.src).bytes);
+    } catch { /* goes inside an SVG below */ }
+  }
+  const esc = o.src.replace(/&/g, '&amp;').replace(/"/g, '&quot;');
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}pt" height="${h}pt" viewBox="0 0 ${w} ${h}"><image width="${w}" height="${h}" preserveAspectRatio="none" href="${esc}"/></svg>`;
+}
+
 /** Menu commands that work differently while a document shows. */
 const DOC_COMMANDS: Record<string, () => unknown> = {
   'insert-shapes': () => {
@@ -8078,6 +8109,11 @@ const DOC_COMMANDS: Record<string, () => unknown> = {
     const d = pickedFigureDoc();
     if (!d) { flash('Click a structure first, then Copy as CDXML Text.'); return; }
     return copyText(writeCdxml(d, { name: 'Clipboard.cdxml', textMeasure: measureText }), 'Copied as CDXML text.');
+  },
+  'copy-svg': () => {
+    const svg = pickedFigureSvg();
+    if (!svg) { flash('Click a structure, diagram or picture first, then Copy as SVG.'); return; }
+    return copySvg(svg).then(flash);
   },
   'paste-smiles': async () => {
     let text = '';
@@ -8726,6 +8762,7 @@ const COMMANDS: Record<string, () => unknown> = {
   'paste-smiles': () => pasteSmiles(),
   'copy-mol': () => copyMolfile(),
   'copy-cdxml': () => copyCdxmlText(),
+  'copy-svg': () => copySvgOfSelection(),
   'select-all': () => editor.selectAll(),
   delete: () => { finishTyping(); editor.deleteSelection(); },
   'next-structure': () => editor.selectNextStructure(1),
@@ -12169,7 +12206,7 @@ function drawingMenu(): MenuItem[] {
     ] }] : []),
     ...(atoms || shapes.some((x) => x.kind === 'ring') ? [{ label: 'Highlight and Fill', items: [{ cmd: 'highlight' }, { cmd: 'remove-highlight' }, { cmd: 'highlight-look' }, { cmd: 'select-highlight' }, null, { cmd: 'smooth-highlight' }, { cmd: 'centre-highlight' }, { cmd: 'soft-highlight' }, { cmd: 'outline-highlight' }, { cmd: 'shadow-highlight' }, { cmd: 'glow-highlight' }, { cmd: 'save-highlight-look' }, null, { cmd: 'fill-rings' }, { cmd: 'ring-shadow' }] }] : []),
     null,
-    ...(atoms || texts ? [{ label: 'Copy As', items: [{ cmd: 'copy-smiles' }, { cmd: 'copy-mol' }, { cmd: 'copy-cdxml' }] }] : []),
+    { label: 'Copy As', items: [...(atoms || texts ? [{ cmd: 'copy-smiles' }, { cmd: 'copy-mol' }, { cmd: 'copy-cdxml' }] : []), { cmd: 'copy-svg' }] },
     { label: 'Format', items: [
       { cmd: 'format-painter' }, { cmd: 'save-format-favorite' },
       ...(favorites.length ? [{ label: 'Format Favorites', items: favorites.slice(0, 20).map((f, i): MenuItem => ({ cmd: `format-favorite-${i}`, label: f.name })) }] : []),

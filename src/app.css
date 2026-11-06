@@ -3586,7 +3586,7 @@ dialog.mo-dialog { width: min(96vw, 1080px); max-width: none; }
 .mo-dialog .ask-row { margin: 3px 0; }
 
 /* Insert ▸ Lab Figures ▸ Crystal Structure (CIF)… */
-dialog.crystal-dialog { width: min(96vw, 860px); max-height: 94vh; }
+dialog.crystal-dialog { width: min(96vw, 1060px); max-width: min(96vw, 1060px); max-height: 94vh; }
 .crystal-file { display: flex; align-items: center; gap: 8px; margin: 0 0 6px; }
 .crystal-file .crystal-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 50%; }
 .crystal-tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); margin-bottom: 6px; }
@@ -3595,26 +3595,44 @@ dialog.crystal-dialog { width: min(96vw, 860px); max-height: 94vh; }
 .crystal-page { display: flex; gap: 10px; min-height: 0; }
 .crystal-page[hidden] { display: none; }
 .crystal-main { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.crystal-canvas { display: block; width: 100%; height: min(56vh, 420px); border: 1px solid var(--line); border-radius: var(--r-tab); background: #fff; cursor: grab; touch-action: none; }
+.crystal-canvas { display: block; width: 100%; height: min(64vh, 500px); border: 1px solid var(--line); border-radius: var(--r-tab); background: #fff; cursor: grab; touch-action: none; }
 .crystal-canvas:focus-visible { outline: 2px solid var(--accent, #1a7f8e); outline-offset: 1px; }
 .crystal-status { margin: 4px 0 0; min-height: 1.2em; }
-.crystal-side { width: 230px; flex: none; display: flex; flex-direction: column; gap: 6px; overflow: auto; max-height: min(60vh, 460px); }
+.crystal-side { width: 230px; flex: none; display: flex; flex-direction: column; gap: 6px; overflow: hidden auto; max-height: min(68vh, 540px); }
 .crystal-side fieldset { border: 1px solid var(--line); border-radius: var(--r-tab); margin: 0; padding: 4px 8px 6px; }
 .crystal-side legend { font-size: 11px; font-weight: 600; padding: 0 4px; }
 .crystal-side label.ask-check { display: flex; align-items: center; gap: 6px; margin: 2px 0; }
 .crystal-row { display: flex; align-items: center; gap: 4px; margin: 3px 0; }
 .crystal-row > span:first-child { flex: none; min-width: 72px; }
 .crystal-row input[type=number] { width: 56px; }
+.crystal-row select { flex: 1; min-width: 0; }
+.crystal-row .crystal-fill { flex: 1; }
+.crystal-row label.ask-check { margin: 0; }
 .crystal-views { display: flex; flex-wrap: wrap; gap: 4px; margin: 2px 0 4px; }
 .crystal-side p { margin: 0; }
 .crystal-shown[hidden] { display: none; }
+.crystal-views button { padding-inline: 8px; }
+.crystal-views button:has(i) { min-width: 28px; }
+.crystal-atoms { width: 156px; flex: none; display: flex; flex-direction: column; gap: 3px; max-height: min(68vh, 540px); min-height: 0; }
+.crystal-atoms-head { display: flex; align-items: center; gap: 2px; font-size: 11px; font-weight: 600; }
+.crystal-atoms-head .link { border: none; background: none; color: var(--accent); padding: 0 3px; min-height: 0; font-size: 11px; font-weight: 600; text-decoration: none; cursor: pointer; }
+.crystal-atoms-head .link:hover { text-decoration: underline; }
+.crystal-find { width: 100%; box-sizing: border-box; font-size: 12px; }
+.crystal-atom-list { flex: 1; min-height: 0; overflow: auto; border: 1px solid var(--line); border-radius: var(--r-tab); padding: 1px 0; }
+.crystal-atom { display: flex; align-items: center; gap: 4px; padding: 0 3px; font-size: 12px; }
+.crystal-atom:hover { background: var(--accent-soft); }
+.crystal-atom label { display: flex; align-items: center; gap: 4px; flex: 1; min-width: 0; }
+.crystal-atom input { margin: 0; }
+.crystal-atom i { width: 7px; height: 7px; border-radius: 50%; flex: none; box-shadow: 0 0 0 0.5px rgba(0, 0, 0, 0.35); }
+.crystal-atom span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.crystal-atom select { width: 64px; font-size: 11px; padding: 0 2px; height: 19px; }
 .crystal-parts { max-height: 120px; overflow: auto; }
 .crystal-page .crystal-table-wrap { flex: 1; max-height: min(56vh, 420px); overflow: auto; border: 1px solid var(--line); border-radius: var(--r-tab); }
 .crystal-table { border-collapse: collapse; width: 100%; font-size: 12px; }
 .crystal-table td { padding: 3px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
 .crystal-table td:first-child { color: var(--muted, #555); white-space: nowrap; }
 .crystal-page:has(.crystal-table-wrap) { flex-direction: column; }
-@media (max-width: 700px) { .crystal-page { flex-direction: column; } .crystal-side { width: auto; max-height: none; } }
+@media (max-width: 700px) { .crystal-page { flex-direction: column; } .crystal-side, .crystal-atoms { width: auto; max-height: none; } .crystal-atom-list { max-height: 200px; } }
 
 /* ---- the icon set (src/ui/icon-set.ts): each drawing's parts coloured by role, in the look picked
    (html[data-icons]: accent = neutral outline with the mode's colour on one part, the default;

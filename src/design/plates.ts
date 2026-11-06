@@ -11,7 +11,8 @@ import { frameBox, frameMembers } from '../editor/frames';
 import { shapeBox } from '../objects';
 import { chemRuns } from '../text/chemtext';
 import { drawMo, MO_PRESETS, type MoSpec } from './mo';
-import { drawCrystal, type CrystalSpec } from './xray';
+import { crystalSvg, type CrystalSpec } from './xray';
+import { dataUrl } from '../render/images';
 import { isInkId } from './geo';
 
 /** A TLC plate, a gel, or a molecular orbital diagram (design/mo.ts), which is kept and redrawn the same way. */
@@ -229,7 +230,7 @@ export function newPlate(kind: PlateKind, L: number): PlateData {
  */
 export function drawPlate(doc: Doc, m: Measure, d: PlateData, at: Vec): PlateParts {
   if (d.kind === 'mo') return d.mo ? drawMo(doc, m, d.mo, at, d.w, d.h) : { captions: [], arrows: [], shapes: [] };
-  if (d.kind === 'crystal') return d.crystal ? drawCrystal(doc, m, d.crystal, at, d.w, d.h) : { captions: [], arrows: [], shapes: [] };
+  if (d.kind === 'crystal') return { captions: [], arrows: [], shapes: [] };
   const out: PlateParts = { captions: [], arrows: [], shapes: [] };
   const lw = doc.style.lineWidth, L = doc.style.bondLength;
   const n = Math.max(1, d.lanes.length);
@@ -391,6 +392,7 @@ export function plateFromBox(b: Rect, d: PlateData, L: number): { at: Vec; w: nu
  */
 export function putPlate(doc: Doc, m: Measure, d: PlateData, at: Vec, id?: number): number {
   const old = id !== undefined ? doc.shapes.get(id) : undefined;
+  if (d.kind === 'crystal') return putCrystal(doc, d, at, old);
   const kept: Pick<Frame, 'atoms' | 'shapes'> = { atoms: [], shapes: [] };
   if (old?.frame) {
     const f = old.frame;
@@ -408,9 +410,37 @@ export function putPlate(doc: Doc, m: Measure, d: PlateData, at: Vec, id?: numbe
   const b = frameBox(doc, frame, m) ?? { x1: at.x, y1: at.y, x2: at.x + d.w, y2: at.y + d.h };
   const r = (v: number) => Math.round(v * 100) / 100;
   const plate: PlateData = { ...d, margins: { l: r(at.x - b.x1), t: r(at.y - b.y1), r: r(b.x2 - at.x - d.w), b: r(b.y2 - at.y - d.h) } };
-  const name = d.kind === 'tlc' ? 'TLC plate' : d.kind === 'gel' ? 'Gel' : d.kind === 'crystal' ? 'Crystal structure' : 'MO diagram';
+  const name = d.kind === 'tlc' ? 'TLC plate' : d.kind === 'gel' ? 'Gel' : 'MO diagram';
   if (old) { doc.updateShape(old.id, { ...b, frame, plate }); return old.id; }
   return doc.addShape({ kind: 'geo', geo: 'rect', ...b, filled: false, lineWidth: 0, color: '#000000', frame, plate, name }).id;
+}
+
+/** A crystal structure as an SVG data URL, `w` × `h` points. */
+export function crystalSrc(c: CrystalSpec, w: number, h: number): string {
+  return dataUrl(new TextEncoder().encode(crystalSvg(c, w, h)), 'image/svg+xml');
+}
+
+/**
+ * A crystal structure: one picture that keeps the structure (double-click it to open it again),
+ * not dozens of ovals, lines and labels, so it is quick to draw and goes to ChemDraw and Office
+ * whole. One placed before (a frame round its shapes) becomes a picture in the frame's place;
+ * structures and pictures put on it stay.
+ */
+function putCrystal(doc: Doc, d: PlateData, at: Vec, old: Shape | undefined): number {
+  const plate: PlateData = { ...d, margins: { l: 0, t: 0, r: 0, b: 0 } };
+  const look = { x1: at.x, y1: at.y, x2: at.x + d.w, y2: at.y + d.h, src: d.crystal ? crystalSrc(d.crystal, d.w, d.h) : '', px: { w: Math.round(d.w), h: Math.round(d.h) }, plate };
+  if (old?.kind === 'picture') { doc.updateShape(old.id, look); return old.id; }
+  if (old?.frame) {
+    const f = old.frame;
+    for (const c of f.captions) doc.removeCaption(c);
+    for (const r of f.arrows) doc.removeArrow(r);
+    for (const s of f.shapes) {
+      const sh = doc.shapes.get(s);
+      if (sh && (sh.kind === 'line' || sh.kind === 'rect' || sh.kind === 'oval' || (sh.kind === 'geo' && isInkId(sh.geo)))) doc.removeShape(s);
+    }
+    doc.removeShape(old.id);
+  }
+  return doc.addShape({ kind: 'picture', ...look, name: 'Crystal structure', ...(old?.z !== undefined ? { z: old.z } : {}) }).id;
 }
 
 /** The plate or gel a thing belongs to (its frame's id), if any. */
@@ -433,11 +463,19 @@ export function plateFrameOf(doc: Doc, kind: 'atom' | 'bond' | 'caption' | 'arro
 /** At the end of a change: a plate whose frame was resized by hand is drawn again to fill it. */
 export function refitPlates(doc: Doc, before: ReadonlyMap<string, Entity | null>, m: Measure): void {
   for (const s of [...doc.shapes.values()]) {
-    if (!s.plate || !s.frame) continue;
+    if (!s.plate || !(s.frame || s.kind === 'picture')) continue;
     const old = before.get('s' + s.id) as Shape | null | undefined;
     if (!old) continue;
     const a = shapeBox(old), b = shapeBox(s);
     if (Math.abs(a.x1 - b.x1) + Math.abs(a.y1 - b.y1) + Math.abs(a.x2 - b.x2) + Math.abs(a.y2 - b.y2) < 1e-6) continue;
+    if (!s.frame) {
+      // a crystal structure's picture resized: drawn again at its new size (its labels keep their size in points)
+      const w = b.x2 - b.x1, h = b.y2 - b.y1;
+      if (s.plate.crystal && Math.abs(w - (a.x2 - a.x1)) + Math.abs(h - (a.y2 - a.y1)) > 1e-6 && w > 1 && h > 1) {
+        doc.updateShape(s.id, { src: crystalSrc(s.plate.crystal, w, h), px: { w: Math.round(w), h: Math.round(h) }, plate: { ...s.plate, w, h } });
+      }
+      continue;
+    }
     const f = s.frame;
     const touched = f.captions.some((id) => before.has('c' + id)) || f.arrows.some((id) => before.has('r' + id)) || f.shapes.some((id) => before.has('s' + id));
     if (touched) continue;

@@ -17,7 +17,7 @@ import { CHEM_FITS, FIT_NAMES, FitKind, fitEquation, fitResults, isChemFit, isTe
 import { histogram } from '../sheet/chart-stats';
 import { chartCanvas, chartItems, chartFits } from '../render/chart-draw';
 import { itemsToSvg } from '../render/svg';
-import { copyPictureItems } from '../io/clipboard';
+import { copyPictureItems, copySvg } from '../io/clipboard';
 import { saveFileDialog, writeFile, PICTURE, SVG } from '../io/files';
 import { canvasPng } from '../render/picture';
 
@@ -289,6 +289,13 @@ export class SheetCharts {
     this.host.flash(await copyPictureItems(p.items, { x1: 0, y1: 0, x2: c.w * 0.75, y2: c.h * 0.75 }, p.canvas, 300));
   }
 
+  async copySvg(): Promise<void> {
+    const c = this.chart;
+    if (!c) return;
+    const data = chartData(this.view.wb!, this.sheet, c);
+    this.host.flash(await copySvg(itemsToSvg(chartItems(c, data), { x1: 0, y1: 0, x2: c.w * 0.75, y2: c.h * 0.75 })));
+  }
+
   async savePicture(): Promise<void> {
     const c = this.chart;
     if (!c) return;
@@ -356,6 +363,7 @@ export class SheetCharts {
       [`${c.series.every((s) => s.labels) ? '✓ ' : ''}Data Labels`, () => this.toggleLabels()],
       null,
       ['Copy as Picture', () => void this.copyPicture()],
+      ['Copy as SVG', () => void this.copySvg()],
       ['Save as Picture…', () => void this.savePicture()],
       null,
       ['Bring to Front', () => this.restack(1), !this.target && this.sheet.charts.length > 1],
