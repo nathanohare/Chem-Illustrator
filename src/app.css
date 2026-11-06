@@ -3545,11 +3545,45 @@ dialog.plate-dialog { width: min(96vw, 560px); max-height: 92vh; }
 .plate-table td:last-child, .plate-table th:last-child { width: 2em; }
 .plate-rows { display: flex; align-items: center; gap: 8px; margin: 6px 0; flex-wrap: wrap; }
 .plate-ladder { display: flex; align-items: center; gap: 6px; }
-dialog.mo-dialog { width: min(96vw, 720px); }
-.mo-table td input.mo-num { width: 4.5em; text-align: right; }
-.mo-table td select { font: inherit; }
-.mo-titles { display: flex; gap: 6px; }
-.mo-titles input { width: 7em; min-width: 0; }
+dialog.mo-dialog { width: min(96vw, 1080px); max-width: none; }
+.mo-dialog .plate-preview { height: 240px; }
+.mo-groups { display: grid; gap: 8px; margin: 2px 0 4px; grid-template-columns: minmax(0, 1fr) minmax(0, 1.45fr) minmax(0, 1fr); align-items: start; }
+.mo-group { min-width: 0; border: 1px solid var(--line); border-radius: var(--r-tab); padding: 3px 4px 4px; }
+.mo-group-head { display: flex; align-items: center; gap: 6px; margin-bottom: 2px; }
+.mo-group-name { font-weight: 600; font-size: 0.85em; white-space: nowrap; }
+.mo-group[data-col=middle] .mo-group-name { color: var(--accent); }
+.mo-title { flex: 1; min-width: 0; display: flex; }
+.mo-title .mo-rich { flex: 1; min-width: 3em; }
+.mo-atom { font: inherit; max-width: 8.5em; }
+.mo-table-wrap { max-height: 26vh; overflow-y: auto; }
+.mo-table th { font-size: 0.8em; padding: 1px 2px; }
+.mo-table td { padding: 1px 1px; }
+.mo-table td input.mo-num { width: 3.6em; text-align: right; }
+.mo-table td select { font: inherit; width: 100%; min-width: 5em; }
+.mo-table td .mo-rich { width: 100%; min-width: 3.5em; }
+.mo-table td:first-child { width: 34%; }
+.mo-del { padding: 0 5px; }
+.mo-add { margin-top: 3px; padding: 1px 8px; }
+.mo-rich { min-height: 22px; box-sizing: border-box; padding: 2px 4px; border: 1px solid var(--line); border-radius: var(--r-control); background: var(--panel); color: var(--text); font-family: Arial, Arimo, sans-serif; white-space: pre; overflow: hidden; outline: none; line-height: 1.35; cursor: text; }
+.mo-rich:focus { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.mo-rich.empty::before { content: attr(data-placeholder); color: var(--muted); }
+.mo-rich sub, .mo-rich sup { font-size: 0.72em; line-height: 0; }
+.mo-bar { display: flex; align-items: center; gap: 2px; margin: 4px 0 2px; }
+.mo-bar-gap { width: 1px; height: 16px; background: var(--line); margin: 0 3px; }
+.mo-fmt { min-width: 24px; height: 22px; padding: 0 5px; border: 1px solid var(--line); border-radius: var(--r-control); background: var(--panel); color: var(--text); cursor: pointer; line-height: 1; font-family: Arial, Arimo, sans-serif; }
+.mo-fmt sub, .mo-fmt sup { font-size: 9px; }
+.mo-fmt:disabled { opacity: 0.45; cursor: default; }
+.mo-fmt[aria-pressed='true'] { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+.mo-more-wrap { position: relative; display: inline-flex; }
+.mo-symbols { position: absolute; top: calc(100% + 3px); left: 0; z-index: 5; display: grid; grid-template-columns: repeat(10, 24px); gap: 2px; padding: 4px; background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-control); box-shadow: 0 4px 14px rgba(0, 0, 0, 0.18); }
+.mo-symbols[hidden] { display: none; }
+.mo-symbols .mo-fmt { min-width: 0; padding: 0; }
+.mo-inline { display: flex; align-items: center; flex-wrap: wrap; gap: 4px 14px; }
+.mo-inline label { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.mo-inline input.mo-num { width: 4.6em; text-align: right; }
+.mo-inline input[type=color] { width: 28px; height: 22px; padding: 0 1px; }
+.mo-inline select { font: inherit; }
+.mo-dialog .ask-row { margin: 3px 0; }
 
 /* Insert ▸ Lab Figures ▸ Crystal Structure (CIF)… */
 dialog.crystal-dialog { width: min(96vw, 860px); max-height: 94vh; }

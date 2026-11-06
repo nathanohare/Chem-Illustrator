@@ -1337,7 +1337,7 @@ async function plateFigure(kind: PlateKind | null, id: number | null, file?: { n
   finishTyping();
   const now = id !== null ? doc.shapes.get(id)?.plate ?? null : null;
   const k = now?.kind ?? kind ?? 'tlc';
-  const got = k === 'mo' ? await askMo(now, doc.style.bondLength, paintPlatePreview)
+  const got = k === 'mo' ? await askMo(now, doc.style, paintPlatePreview, (d, w) => editor.moRoom(d, w))
     : k === 'crystal' ? await askCrystal(now, doc.style.bondLength, crystalOptions(file))
     : await askPlate(k, now, doc.style.bondLength, paintPlatePreview);
   if (got) editor.putPlateAt(got, pasteCentre(), now ? id! : undefined, deckNow()?.size);

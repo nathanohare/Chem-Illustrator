@@ -10,6 +10,7 @@ import type { Measure } from '../editor/arrange';
 import { readSmart, slotName, stepHolder, stepPartKind, SMART_LAYOUTS, type SmartData, type SmartLayout, type SmartLink, type StepPart, type TextPart } from '../chem/smart-scheme';
 import type { TextRun } from '../model';
 import { RichField } from './rich-field';
+import { SYMBOLS } from './symbol-list';
 import { dropTarget, type BoxPlace } from './toolboxes';
 import { PIN_ICON, PINNED_ICON } from './float-box';
 import { formatDefaults, type SmartFormat } from '../chem/smart-format';
@@ -66,14 +67,6 @@ let folded = false;
 /** Chemical interpretation of what is typed in the rows (remembered between uses). */
 let chemOn = (() => { try { return localStorage.getItem('smartPaneChem') !== 'off'; } catch { return true; } })();
 
-/** The symbols the Ω button offers, with their names. */
-const SYMBOLS: [string, string][] = [
-  ['α', 'alpha'], ['β', 'beta'], ['γ', 'gamma'], ['δ', 'delta'], ['ε', 'epsilon'], ['η', 'eta'], ['θ', 'theta'], ['κ', 'kappa'],
-  ['λ', 'lambda'], ['μ', 'mu'], ['ν', 'nu'], ['π', 'pi'], ['σ', 'sigma'], ['τ', 'tau'], ['φ', 'phi'], ['χ', 'chi'],
-  ['ψ', 'psi'], ['ω', 'omega'], ['Δ', 'Delta (heat)'], ['Σ', 'Sigma'], ['Ω', 'Omega'], ['→', 'arrow'], ['⇌', 'equilibrium'], ['↑', 'gas given off'],
-  ['↓', 'precipitate'], ['⊕', 'circled plus'], ['⊖', 'circled minus'], ['+', 'plus'], ['−', 'minus'], ['±', 'plus or minus'], ['·', 'middle dot'], ['×', 'times'],
-  ['≡', 'triple bond'], ['≈', 'about'], ['″', 'double prime'], ['‰', 'per mille'], ['℃', 'degrees Celsius'], ['Å', 'ångström'], ['ħ', 'h-bar'], ['ν̃', 'wavenumber'],
-];
 
 /** Caption runs as the pieces a row shows. */
 const runParts = (runs: TextRun[]): TextPart[] => runs.map((r) => ({ text: r.text, ...(r.sub ? { sub: true } : r.sup ? { sup: true } : {}) }));
