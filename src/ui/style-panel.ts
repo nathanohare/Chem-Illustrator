@@ -266,7 +266,6 @@ export class StylePanel {
     this.select('Head shape', HEAD_TYPES, r.headType, (v) => set('Arrowhead shape', () => ({ headType: v })));
     this.select('Line', LINES, r.line, (v) => set('Arrow line', () => ({ line: v })));
     this.select('No-go', NO_GOS, r.noGo ? r.noGoKind ?? 'cross' : 'none', (v) => set('No-go arrow', () => ({ noGo: v !== 'none', noGoKind: v === 'hash' ? 'hash' : undefined })));
-    this.check('Dipole', !!r.dipole, (v) => set('Dipole arrow', () => ({ dipole: v || undefined })));
     if (r.headType === 'solid' && (r.headStyle !== 'none' || r.tailStyle !== 'none')) {
       this.number('Head center (pt)', round(r.headLength * (r.headCenter ?? 0.75), 2), 0.25, 0, 100,
         (v) => set('Arrowhead center', (a) => ({ headCenter: a.headLength > 0 ? Math.max(0, Math.min(1, v / a.headLength)) : undefined })),
