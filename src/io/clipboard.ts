@@ -374,19 +374,18 @@ export async function copyPictureItems(items: Item[], box: EmfBox, canvas: HTMLC
 }
 
 /**
- * Put an SVG picture on the clipboard: as SVG, which Word, PowerPoint, Inkscape and Illustrator
- * paste as a picture they can scale (and ungroup into shapes), and as its text, for code and web
- * pages. Browsers that can't hand other programs SVG get the text only.
+ * Put an SVG picture on the clipboard as SVG, which Word, PowerPoint, Inkscape and Illustrator
+ * paste as a picture they can scale (and ungroup into shapes). Not also as text: ChemDraw, which
+ * reads no SVG, would paste the markup. Browsers that can't hand other programs SVG get the text.
  */
 export async function copySvg(svg: string): Promise<string> {
   forgetCopy();
   const bytes = new TextEncoder().encode(svg);
   if (nativeClipboard) {
-    await invoke('clipboard_write', packFormats([['image/svg+xml', bytes], ['CF_UNICODETEXT', bytes]]));
+    await invoke('clipboard_write', packFormats([['image/svg+xml', bytes]]));
     return 'Copied as SVG.';
   }
-  const formats: Record<string, Blob> = { 'text/plain': new Blob([svg], { type: 'text/plain' }) };
-  if (svgFormatOk()) formats['image/svg+xml'] = new Blob([svg], { type: 'image/svg+xml' });
+  const formats: Record<string, Blob> = svgFormatOk() ? { 'image/svg+xml': new Blob([svg], { type: 'image/svg+xml' }) } : { 'text/plain': new Blob([svg], { type: 'text/plain' }) };
   try {
     await navigator.clipboard.write([new ClipboardItem(formats)]);
   } catch {
