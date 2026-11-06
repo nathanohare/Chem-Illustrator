@@ -25,7 +25,7 @@ const BY_NAME: Record<string, ToolHelp> = {
   select: {
     what: 'Click or drag a box to select. Double-click selects a whole structure; Shift or Ctrl+click adds to the selection. Ctrl+drag copies; hold Shift while dragging to move straight. Delete removes.',
     steps: ['Click or drag a box to select'],
-    keys: [['Double-click', 'Select structure'], ['Shift+click', 'Add to selection'], ['Ctrl+drag', 'Copy']],
+    keys: [['Double-click', 'Select molecule'], ['Shift+click', 'Add to selection'], ['Ctrl+drag', 'Copy']],
     dragKeys: [['Shift', 'Move straight'], ['Alt', 'Toggle snapping']],
   },
   lasso: {
@@ -215,11 +215,11 @@ const dirs = (verb: string, names: string[]) => names.map((n) => `${verb} ${n}`)
  * The keys that act on what is selected (or highlighted), in order of use: those that apply,
  * each under the key it has now (none when it has been unbound).
  */
-function selectionKeys(key: KeyLookup, o: { reaction: boolean; enter: string | null; join: boolean; double: boolean; grow?: boolean; shiftClick: boolean; rotate: boolean }): [string, string][] {
+function selectionKeys(key: KeyLookup, o: { reaction: boolean; enter: string | null; join: boolean; double: boolean; grow?: boolean; next?: boolean; shiftClick: boolean; rotate: boolean }): [string, string][] {
   const out: [string, string][] = [];
   const put = (k: string | undefined, what: string) => { if (k) out.push([k, what]); };
-  if (o.grow) out.push(['Space/Tab', 'Select structure']);
-  else if (o.double) out.push(['Double-click', 'Select structure']);
+  if (o.grow) out.push(['Space', 'Select molecule']);
+  else if (o.double) out.push(['Double-click', 'Select molecule']);
   if (o.join) put(key('command join'), 'Join');
   if (o.reaction) put(arrowFamily(key, dirs('command', ['reaction-left', 'reaction-right', 'reaction-up', 'reaction-down'])), 'Reaction arrow');
   if (o.rotate) put(arrowFamily(key, dirs('command', ['turn-ccw-1', 'turn-cw-1', 'turn-ccw-15', 'turn-cw-15'])), 'Rotate');
@@ -228,6 +228,7 @@ function selectionKeys(key: KeyLookup, o: { reaction: boolean; enter: string | n
   if (near && far === 'Shift+Arrow') out.push([near, 'Nudge (Shift: farther)']);
   else { put(near, 'Nudge'); put(far, 'Nudge farther'); }
   if (o.enter) out.push(['Enter', o.enter]);
+  if (o.next) put(key('command next-structure'), 'Next molecule');
   if (o.shiftClick) out.push(['Shift+click', 'Add to selection']);
   return out;
 }
@@ -275,11 +276,11 @@ export function statusHint(o: {
   }
   // an atom or bond highlighted from the keyboard (or just drawn): its hotkeys, Space or Tab, the arrow keys
   if (st.highlight) {
-    const keys: [string, string][] = [['Space/Tab', 'Select molecule']];
+    const keys: [string, string][] = [['Space', 'Select molecule'], ['Tab', 'Next molecule']];
     const move = arrowFamily(key, dirs('hotspot', ['left', 'right', 'up', 'down']), st.highlight);
     if (move) keys.push([move, 'Move highlight']);
     return plain(st.highlight === 'atom' ? 'Atom highlighted' : 'Bond highlighted', ['Press a hotkey to change it'], keys,
-      `The ${st.highlight} is highlighted: press a hotkey (Edit > Keyboard Shortcuts lists them) to change it. Space or Tab selects its molecule; the arrow keys move the highlight.`);
+      `The ${st.highlight} is highlighted: press a hotkey (Edit > Keyboard Shortcuts lists them) to change it. Space selects its molecule and Tab the next one; the arrow keys move the highlight.`);
   }
   const any = st.atoms + st.bonds + st.others > 0;
   // a selection, with the Select or Lasso tool (or any tool once whole structures are selected:
@@ -289,7 +290,7 @@ export function statusHint(o: {
       return plain(one.name, [...one.handles, 'Ctrl+drag to copy'], selectionKeys(key, { reaction: false, enter: null, join: false, double: false, shiftClick: false, rotate: true }));
     }
     if (st.atoms && st.whole) {
-      return plain('Structure selected', ['Ctrl+drag to copy'], selectionKeys(key, { reaction: true, enter: 'Highlight last atom', join: false, double: false, shiftClick: false, rotate: true }));
+      return plain('Structure selected', ['Ctrl+drag to copy'], selectionKeys(key, { reaction: true, enter: 'Highlight last atom', join: st.joinable, double: false, next: true, shiftClick: false, rotate: true }));
     }
     if (st.atoms || st.bonds) {
       const nm = st.atoms > 1 ? 'Atoms selected' : st.atoms === 1 ? 'Atom selected' : st.bonds > 1 ? 'Bonds selected' : 'Bond selected';
@@ -305,11 +306,11 @@ export function statusHint(o: {
   // nothing selected: the Select and Lasso tools say how to select
   if (selecting) {
     const keys: [string, string][] = [];
-    if (!(t as { lasso?: boolean }).lasso) keys.push(['Double-click', 'Select structure']);
+    if (!(t as { lasso?: boolean }).lasso) keys.push(['Double-click', 'Select molecule']);
     const all = key('command select-all');
     if (all) keys.push([all, 'Select All']);
     const next = key('command next-structure');
-    if (next) keys.push([next, 'Next structure']);
+    if (next) keys.push([next, 'Next molecule']);
     return toolHint(o.step, keys);
   }
   return toolHint(o.step, h.keys);

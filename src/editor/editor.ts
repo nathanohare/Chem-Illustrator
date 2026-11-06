@@ -281,9 +281,9 @@ export interface EditorStatus {
   others: number;
   /** The selected atoms are whole structures (nothing bonded to them is left out). */
   whole: boolean;
-  /** Two atoms or two bonds are selected: Join (Ctrl+J) makes them one. */
+  /** Two atoms or two bonds of two different structures are selected: Join (Ctrl+J) makes them one. */
   joinable: boolean;
-  /** Part of one structure is selected: Space or Tab selects it whole. */
+  /** Part of one structure is selected: Space selects it whole. */
   partOfOne: boolean;
 }
 
@@ -5719,16 +5719,18 @@ export class Editor {
       return;
     }
     const hs = this.hotspot();
-    // Space or Tab: from the keyboard highlight to its whole molecule, selected; Enter: back from
-    // a selected molecule to the highlight on it (the atom last drawn), as on the cheat sheet
+    // Space: from the keyboard highlight, or from part of one structure selected (a clicked atom
+    // or bond), to its whole molecule, selected; Tab always goes on to the next molecule (from the
+    // highlighted one); Enter: back from a selected molecule to the highlight on it (the atom last
+    // drawn), as on the cheat sheet
     if ((chord === 'Space' || chord === 'Tab') && this.keyHot && hs && (hs.kind === 'atom' || hs.kind === 'bond')) {
       e.preventDefault();
       this.keyHot = null;
       this.selectFragment(hs.kind === 'atom' ? hs.id : this.doc.bonds.get(hs.id)!.a1, false);
+      if (chord === 'Tab') this.selectNextStructure(1);
       return;
     }
-    // Space or Tab with part of one structure selected (a clicked atom or bond): the whole structure
-    if ((chord === 'Space' || chord === 'Tab') && !this.keyHot) {
+    if (chord === 'Space' && !this.keyHot) {
       const grow = this.partOfOne();
       if (grow !== null) {
         e.preventDefault();
@@ -7256,7 +7258,10 @@ export class Editor {
     if (whole) {
       outer: for (const id of sel.atoms) for (const n of this.doc.neighbors(id)) if (!sel.atoms.has(n.id)) { whole = false; break outer; }
     }
+    // Join: two atoms, or two bonds (with their atoms), from two different structures
     const loose = sel.bonds.size === 2 && [...sel.atoms].every((id) => [...sel.bonds].some((bid) => { const b = this.doc.bonds.get(bid); return b && (b.a1 === id || b.a2 === id); }));
+    const ends = sel.atoms.size === 2 && !sel.bonds.size ? [...sel.atoms] : loose ? [...sel.bonds].map((bid) => this.doc.bonds.get(bid)?.a1) : null;
+    const apart = !!ends && ends[0] !== undefined && ends[1] !== undefined && !this.doc.fragmentOf(ends[0]).has(ends[1]);
     return {
       drag: s ? s.drag : 'none',
       dragKeys: s ? modifierHints(s, { shift: false, alt: false, ctrl: false }).map((h) => [h.key, h.text[0].toUpperCase() + h.text.slice(1)] as [string, string]) : [],
@@ -7266,14 +7271,14 @@ export class Editor {
       bonds: sel.bonds.size,
       others: sel.captions.size + sel.arrows.size + sel.shapes.size,
       whole,
-      joinable: (sel.atoms.size === 2 && !sel.bonds.size) || loose,
+      joinable: apart,
       partOfOne: this.partOfOne() !== null,
     };
   }
 
   /**
    * An atom of the one structure that is partly selected (its atoms and bonds only, nothing
-   * else), for Space and Tab to select it whole; null otherwise.
+   * else), for Space to select it whole; null otherwise.
    */
   private partOfOne(): number | null {
     const s = this.sel;
@@ -7283,7 +7288,7 @@ export class Editor {
     const frag = this.doc.fragmentOf(first);
     for (const id of s.atoms) if (!frag.has(id)) return null;
     for (const bid of s.bonds) { const b = this.doc.bonds.get(bid); if (!b || !frag.has(b.a1)) return null; }
-    // already whole: Tab goes on to the next structure
+    // already whole: nothing to grow
     let bonds = 0;
     for (const id of frag) bonds += (this.doc.adj.get(id) ?? []).length;
     return s.atoms.size === frag.size && s.bonds.size === bonds / 2 ? null : first;
