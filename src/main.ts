@@ -200,7 +200,7 @@ import type { GuideWindow, GuideHeading } from './ui/guide-window';
 import { SettingsWindow, type SettingsHost, type SettingsPage } from './ui/settings-window';
 import { fileTypesPage, FILE_TYPES } from './ui/file-types-page';
 import { watchRibbons, fitRibbons, setRibbonCollapsed, ribbonCollapsed, addLookToggle, repaintArrows } from './ui/ribbon-fit';
-import { CanvasRibbon, type ContextKind } from './ui/canvas-ribbon';
+import { CanvasRibbon } from './ui/canvas-ribbon';
 import { AnalysisBox, WarningsBox } from './ui/canvas-ribbon-boxes';
 import { placeTitleBar, titleBarPlace } from './ui/title-bar';
 import { canScaleUi, setUiScale, stepUiScale, uiScale, UI_SCALES } from './ui/ui-scale';
@@ -720,21 +720,8 @@ canvasRibbon.bodyEnd.append(analysisBox.el);
 canvasRibbon.tabEnd.append(warningsBox.button);
 canvasRibbon.el.addEventListener('cr-tab', () => fitRibbons());
 
-/** The kind of object being drawn or selected that has a ribbon tab of its own (Arrow, Ring, Bond). */
-function ribbonContext(): ContextKind | null {
-  const t = TOOLS[editor.toolName];
-  const s = editor.sel;
-  if (t?.kind === 'arrow' || (s.arrows.size && !s.atoms.size && !s.captions.size)) return 'arrow';
-  if (t?.kind === 'ring') return 'ring';
-  if (!s.bonds.size || s.arrows.size || s.captions.size || s.shapes.size) return null;
-  // a ring selected (each of its atoms on two of its bonds): its tab; one or two bonds: theirs
-  const ends = new Map<number, number>();
-  for (const id of s.bonds) { const b = doc.bonds.get(id); if (b) for (const a of [b.a1, b.a2]) ends.set(a, (ends.get(a) ?? 0) + 1); }
-  if (s.bonds.size >= 3 && s.bonds.size <= 8 && s.atoms.size === s.bonds.size && [...ends.values()].every((n) => n === 2) && ends.size === s.bonds.size) return 'ring';
-  if (s.bonds.size <= 2 && [...s.atoms].every((a) => ends.has(a))) return 'bond';
-  return null;
-}
-const showRibbonContext = () => { canvasRibbon.setContext(ribbonContext()); contextBoxes.follow(); };
+// (the Canvas ribbon's tabs stay put; what is selected brings out its context toolbox)
+const showRibbonContext = () => { contextBoxes.follow(); };
 
 /**
  * The context toolboxes (Smart Schemes, Diagrams, Tables and Charts, Perspective and 3-D) come out
