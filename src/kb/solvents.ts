@@ -190,6 +190,7 @@ export const SOLVENTS_TABLE: KbTable = {
   id: 'solvents',
   title: 'Solvents',
   about: 'Properties of 64 common organic solvents, from Table 1 of Steven Murov\'s Properties of Solvents Used in Organic Chemistry: boiling and melting points, density, solubility in water, relative polarity, eluant strength, exposure limit, vapor pressure, dipole moment, dielectric constant and viscosity, with each solvent\'s ICH Q3C class. Rest the pointer on a name to see its structure. Click a heading to sort.',
+  noSearch: true,
   columns: [
     { key: 'name', label: 'Solvent' },
     { key: 'bp', label: 'bp (°C)', numeric: true },
@@ -203,7 +204,7 @@ export const SOLVENTS_TABLE: KbTable = {
     { key: 'dipole', label: 'Dipole (D)', numeric: true, info: 'Dipole moment in debye (D). Zero for symmetric molecules (benzene, CCl4, hexane) even when their bonds are polar.' },
     { key: 'dielectric', label: 'ε', numeric: true, info: 'Dielectric constant (relative permittivity, ε): how well the solvent separates charges. Above about 15, ions and charged intermediates are well stabilized (polar solvents); below about 5, hardly at all.' },
     { key: 'viscosity', label: 'η (cP)', numeric: true, info: 'Viscosity (η) in centipoise (cP), the same number as millipascal-seconds (mPa·s). Water is 0.89 at 25 °C. Thicker solvents run slower through a column or a filter. Source: Murov, Table 1, except 1-hexanol: Murov prints 0.59 (the solubility figure repeated); 4.6 is the measured value at 25 °C (Cano-Gómez et al., J. Chem. Eng. Data 2015, 60, 1945, via NIST TRC ThermoML).' },
-    { key: 'ich', label: 'ICH class', filter: true, info: 'ICH Q3C(R8) residual-solvent class: how much of a solvent may be left in a medicine, set by its toxicity. Class 1: avoid (known or suspected carcinogens, environmental hazards). Class 2: limit (a ppm cap for each). Class 3: low toxic potential (up to 5,000 ppm). "No adequate data": listed, but no limit set. A safety limit for drug products, not a green-chemistry ranking. Source: ICH Q3C(R8), 2021.' },
+    { key: 'ich', label: 'ICH class', info: 'ICH Q3C(R8) residual-solvent class: how much of a solvent may be left in a medicine, set by its toxicity. Class 1: avoid (known or suspected carcinogens, environmental hazards). Class 2: limit (a ppm cap for each). Class 3: low toxic potential (up to 5,000 ppm). "No adequate data": listed, but no limit set. A safety limit for drug products, not a green-chemistry ranking. Source: ICH Q3C(R8), 2021.' },
     { key: 'aka', label: 'Also called', hidden: true },
     { key: 'smiles', label: 'SMILES', hidden: true },
   ],
