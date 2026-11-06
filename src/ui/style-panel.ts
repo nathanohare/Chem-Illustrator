@@ -40,7 +40,7 @@ import { colourButton } from './colour-picker';
 import { centreEnd, haptoText, splitHapto } from '../chem/hapto';
 import { straightenAt } from '../chem/chemgeom';
 import type { EnergyData } from '../design/energy';
-import { TLC_LOOKS, GEL_LOOKS, type PlateData } from '../design/plates';
+import { TLC_LOOKS, GEL_LOOKS, LOCK_SPOTS_INFO, type PlateData } from '../design/plates';
 import { DIAGRAM_COLOURS, DIAGRAM_LAYOUTS, type DiagramData } from '../design/diagrams';
 
 /** What the table controls need from the editor. */
@@ -625,6 +625,10 @@ export class StylePanel {
     else this.select('Dye', GEL_LOOKS.map((l) => [l.id, l.name]), d.look, (v) => set({ look: v }));
     if (tlc) this.check('Write the Rf values', d.rf, (v) => set({ rf: v }));
     if (tlc) this.check('Start and solvent-front lines', d.lines, (v) => set({ lines: v }));
+    if (tlc) {
+      this.check('Lock spots', !!d.locked, (v) => set({ locked: v }));
+      addInfo(this.body.lastElementChild?.querySelector('span'), LOCK_SPOTS_INFO);
+    }
     if (!tlc) this.check('Write the marker sizes', d.sizes, (v) => set({ sizes: v }));
     this.check('Lane names', d.labels, (v) => set({ labels: v }));
     this.note(`${d.lanes.length} lane${d.lanes.length === 1 ? '' : 's'}.`);

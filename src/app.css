@@ -3502,12 +3502,41 @@ dialog.calc-dialog { width: min(92vw, 400px); }
 dialog.plate-dialog { width: min(96vw, 560px); max-height: 92vh; }
 .plate-preview { display: block; width: 100%; height: 220px; margin: 6px 0; border: 1px solid var(--line); border-radius: var(--r-tab); background: #fff; }
 .plate-preview[hidden] { display: none; }
-.plate-table-wrap { max-height: 32vh; overflow-y: auto; }
+.plate-table-wrap { max-height: 40vh; overflow-y: auto; }
 .plate-table { border-collapse: collapse; width: 100%; }
 .plate-table th { text-align: left; font-weight: 600; font-size: 0.85em; padding: 2px 3px; white-space: nowrap; }
 .plate-table td { padding: 1px 2px; }
 .plate-table td input:not([type=checkbox]) { width: 100%; font: inherit; padding: 2px 4px; box-sizing: border-box; }
-.plate-table td input.plate-name { width: 6em; }
+.plate-table td input.plate-name { width: 9em; }
+/* a TLC plate: the lane's name beside its spots, a row for each spot (Rf and Description) */
+.plate-spots td { vertical-align: middle; }
+.plate-spots td.plate-lane { vertical-align: top; width: 48%; padding-right: 6px; }
+.plate-spots tr.plate-lane-start > td { border-top: 1px solid var(--line); padding-top: 3px; }
+.plate-spots tbody tr:first-child > td { border-top: 0; }
+.plate-lane-box { display: flex; gap: 2px; }
+.plate-spots td input.plate-name { width: 100%; min-width: 0; }
+.plate-spots th.plate-rf { width: 4.4em; }
+.plate-spots td input.plate-rf-in { width: 4.2em; text-align: right; font-variant-numeric: tabular-nums; }
+.plate-desc { display: flex; width: 100%; justify-content: space-between; align-items: center; gap: 6px; padding: 2px 6px; font: inherit; text-align: left; white-space: nowrap; overflow: hidden; }
+.plate-desc > span:first-child { overflow: hidden; text-overflow: ellipsis; }
+.plate-desc[aria-expanded='true'] { border-color: var(--accent); }
+.plate-caret { font-size: 0.75em; opacity: 0.7; }
+.plate-x { padding: 1px 6px; flex: none; }
+.plate-add-row > td { padding: 0 2px 3px; }
+.plate-add { border: 0; background: none; color: var(--accent); padding: 0 2px; font: inherit; font-size: 0.85em; cursor: pointer; }
+.plate-add:hover { text-decoration: underline; }
+.plate-menu { position: fixed; z-index: 10; display: grid; gap: 3px; padding: 4px 6px; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-radius: 4px; box-shadow: 0 4px 14px rgb(0 0 0 / 0.18); font-size: 0.9em; }
+.plate-menu-row { display: grid; grid-template-columns: 4.6em auto; align-items: center; gap: 4px; }
+.plate-menu-head { color: var(--muted); }
+.plate-seg { display: inline-flex; }
+.plate-seg button { padding: 1px 6px; border-radius: 0; margin-left: -1px; font: inherit; }
+.plate-seg button:first-child { border-radius: 3px 0 0 3px; margin-left: 0; }
+.plate-seg button:last-child { border-radius: 0 3px 3px 0; }
+.plate-seg button[aria-pressed='true'] { background: var(--accent-soft); border-color: var(--accent); position: relative; z-index: 1; }
+.plate-swatches { display: flex; gap: 3px; }
+.plate-swatches button { width: 16px; height: 16px; padding: 0; border: 1px solid var(--line); border-radius: 2px; }
+.plate-swatches button.stain { background: linear-gradient(135deg, #fff 45%, #c33 45%, #c33 55%, #fff 55%); }
+.plate-swatches button[aria-pressed='true'] { outline: 2px solid var(--accent); outline-offset: 1px; }
 .plate-table td:last-child, .plate-table th:last-child { width: 2em; }
 .plate-rows { display: flex; align-items: center; gap: 8px; margin: 6px 0; flex-wrap: wrap; }
 .plate-ladder { display: flex; align-items: center; gap: 6px; }
