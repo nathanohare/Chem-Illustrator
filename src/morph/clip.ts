@@ -427,7 +427,7 @@ export function buildSteps(doc: Doc, plan: Plan, r: Renderer, morphs?: (MorphSte
 }
 
 /** What each step does (for the pairing editor and the tests). */
-export const stepSummary = (s: Step): StepSummary => summary(s.A, s.B, s.map);
+export const stepSummary = (s: Step): StepSummary => summary(s.A, s.B, s.map, s.opt.kekule?.[0]);
 
 export class Clip {
   readonly frames: [number, number][];

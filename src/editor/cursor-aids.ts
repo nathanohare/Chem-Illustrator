@@ -12,11 +12,18 @@ export interface CursorAidPrefs {
   length: boolean;
   /** What the modifier keys do, beside the pointer. */
   hints: boolean;
-  /** The units lengths are written in. */
-  units: 'in' | 'cm';
+  /** The units lengths are written in: pixels (at 100 %, 96 to the inch), millimeters or decimal inches. */
+  units: LengthUnits;
   /** How the readout looks: plain blue words (the default), blue words on a pale box, or white on a blue box. */
   look: 'box' | 'plain' | 'solid';
 }
+
+export type LengthUnits = 'px' | 'mm' | 'in';
+
+/** The units the length beside the pointer can be written in (Settings ▸ Drawing). */
+export const LENGTH_UNITS: { value: LengthUnits; label: string }[] = [
+  { value: 'px', label: 'Pixels' }, { value: 'mm', label: 'Millimeters' }, { value: 'in', label: 'Decimal inches' },
+];
 
 export const DEFAULT_CURSOR_AIDS: CursorAidPrefs = { angle: true, length: false, hints: true, units: 'in', look: 'plain' };
 
@@ -26,7 +33,8 @@ export function parseCursorAids(v: unknown): CursorAidPrefs {
     angle: typeof o.angle === 'boolean' ? o.angle : DEFAULT_CURSOR_AIDS.angle,
     length: typeof o.length === 'boolean' ? o.length : DEFAULT_CURSOR_AIDS.length,
     hints: typeof o.hints === 'boolean' ? o.hints : DEFAULT_CURSOR_AIDS.hints,
-    units: o.units === 'cm' ? 'cm' : 'in',
+    // (centimeters, from before the choice was here, become millimeters)
+    units: o.units === 'px' || o.units === 'mm' ? o.units : (o.units as string) === 'cm' ? 'mm' : 'in',
     look: o.look === 'box' || o.look === 'solid' ? o.look : 'plain',
   };
 }
@@ -57,10 +65,11 @@ export function angleText(a: Vec, b: Vec): string {
   return `${deg}°`;
 }
 
-/** A length in points, in inches or centimetres. */
-export function lengthText(pt: number, units: 'in' | 'cm'): string {
-  const n = units === 'in' ? pt / 72 : (pt / 72) * 2.54;
-  return units === 'in' ? `${n.toFixed(2)} in` : `${n.toFixed(2)} cm`;
+/** A length in points, in whole pixels (96 to the inch, as at 100 %), millimeters or decimal inches. */
+export function lengthText(pt: number, units: LengthUnits): string {
+  if (units === 'px') return `${Math.round((pt * 96) / 72)} px`;
+  if (units === 'mm') return `${((pt / 72) * 25.4).toFixed(1)} mm`;
+  return `${(pt / 72).toFixed(2)} in`;
 }
 
 /** The readout for a line from `a` to `b`: the angle, and the length when asked for. Empty when neither is wanted. */
@@ -93,6 +102,8 @@ export interface HintState {
   snapping: boolean;
   /** The chain tool asks how long a chain to draw. */
   asksChain: boolean;
+  /** The end of a bond is being dragged, keeping the bond's length. */
+  bondEnd?: boolean;
 }
 
 /**
@@ -105,7 +116,8 @@ export function modifierHints(s: HintState, m: Mods): ModHint[] {
   switch (s.drag) {
     case 'move':
       add('Shift', 'straight across or down');
-      if (s.snapping) add('Alt', 'no snapping');
+      if (s.bondEnd) add('Alt', s.snapping ? 'any length, no snapping' : 'any length');
+      else if (s.snapping) add('Alt', 'no snapping');
       return out;
     case 'rotate':
       add('Shift', '15° steps');

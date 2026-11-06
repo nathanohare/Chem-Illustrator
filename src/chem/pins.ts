@@ -62,7 +62,17 @@ export function makePin(doc: Doc, on: Pin['on'], atoms: number[], p: Vec, axis?:
   const f = frameOf(doc, ref);
   if (!f) return null;
   const d = sub(p, f.o);
-  return { on, ref, at: { x: dot(d, f.u) / f.s, y: dot(d, f.v) / f.s }, hand: f.hand, was: { x: p.x, y: p.y }, ...(axis ? { dir: inFrame(f, axis) } : {}) };
+  return { on, ref, at: { x: dot(d, f.u) / f.s, y: dot(d, f.v) / f.s }, hand: f.hand, was: { x: p.x, y: p.y }, ...(on === 'atom' && ref.length > 1 ? { len: f.s } : {}), ...(axis ? { dir: inFrame(f, axis) } : {}) };
+}
+
+/**
+ * Where a pin's point is in its atoms' frame now. A point on an atom keeps its distance from the
+ * atom when the bond that turns the frame is stretched (one end of it dragged); on a bond or gap
+ * it stays the same part of the way along.
+ */
+function placed(f: Frame, pin: Pin): Vec {
+  const s = pin.on === 'atom' && pin.len ? pin.len : f.s;
+  return add(f.o, add(mul(f.u, pin.at.x * s), mul(f.v, pin.at.y * s)));
 }
 
 /** A direction on the page in a frame's terms (along its first atom's bond, and across it). */
@@ -101,7 +111,7 @@ export function pointShape(s: Pick<Shape, 'kind' | 'x1' | 'y1' | 'x2' | 'y2'>, a
 /** Where a pin holds its point now (null when its atoms are gone). */
 export function pinPoint(doc: Doc, pin: Pin): Vec | null {
   const f = frameOf(doc, pin.ref);
-  return f && add(f.o, add(mul(f.u, pin.at.x * f.s), mul(f.v, pin.at.y * f.s)));
+  return f && placed(f, pin);
 }
 
 /** The middle of what a pin is on: its atom, or the middle of its bond or gap. */
@@ -131,7 +141,7 @@ function settle(doc: Doc, pin: Pin, now: Vec, reach = REACH, axis: Vec | null = 
   const f = frameOf(doc, pin.ref);
   // an atom that framed it is gone (but not the ones it is on): framed afresh where it is
   if (!f) return { pin: makePin(doc, pin.on, pinAtoms(pin), now, axis) ?? undefined };
-  const at = add(f.o, add(mul(f.u, pin.at.x * f.s), mul(f.v, pin.at.y * f.s)));
+  const at = placed(f, pin);
   // the way it should point now, its atoms having turned
   const along = pin.dir && axis ? add(mul(f.u, pin.dir.x), mul(f.v, pin.dir.y)) : null;
   if (dist(at, now) <= EPS && f.hand === pin.hand) {

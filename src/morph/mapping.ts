@@ -149,16 +149,33 @@ export interface StepSummary {
   /** Bonds that break and bonds that form, as pairs of atom keys. */
   breaking: [string, string][];
   forming: [string, string][];
+  /**
+   * π bonds lost by bonds that stay (a double bond becoming single: only its π pair moves, its σ
+   * bond is kept), as starting-structure atom keys, once per π bond; and π bonds gained by bonds that
+   * were already there, as product atom keys. Ring bonds that only change Kekulé form are left out.
+   */
+  piLost: [string, string][];
+  piGained: [string, string][];
   unpairedStart: string[];
   unpairedProduct: string[];
   mirroredRings: string[][];
 }
 
 /** What a pairing does: what carries over, what breaks and what forms. */
-export function summary(A: MScene, B: MScene, m: Mapping): StepSummary {
+export function summary(A: MScene, B: MScene, m: Mapping, kekule?: Set<string>): StepSummary {
   const inv = new Set(m.nmap.values());
   const carriedB = new Set([...m.bmap.values(), ...[...m.shifts.values()].map((s) => s.tgt)]);
+  const piLost: [string, string][] = [], piGained: [string, string][] = [];
+  const carried: [string, string][] = [...m.bmap, ...[...m.shifts].map(([k, s]) => [k, s.tgt] as [string, string])];
+  for (const [ka, kb] of carried) {
+    if (kekule?.has(ka)) continue;
+    const a = A.bonds.get(ka), b = B.bonds.get(kb);
+    if (!a || !b || !Number.isInteger(a.order) || !Number.isInteger(b.order)) continue;
+    for (let i = b.order; i < a.order; i++) piLost.push([a.b, a.e]);
+    for (let i = a.order; i < b.order; i++) piGained.push([b.b, b.e]);
+  }
   return {
+    piLost, piGained,
     paired: m.nmap.size, startAtoms: A.nodes.size, productAtoms: B.nodes.size,
     carried: m.bmap.size, startBonds: A.bonds.size, productBonds: B.bonds.size,
     breaking: [...A.bonds].filter(([k]) => !m.bmap.has(k) && !m.shifts.has(k)).map(([, b]) => [b.b, b.e]),

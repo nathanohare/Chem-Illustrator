@@ -12,6 +12,11 @@ import { recordPicture, pictureCanvas } from '../render/picture';
 import { Renderer } from '../render/renderer';
 import { applySchemePlan, planCleanUp, withSchemePrefs, type SchemePrefs } from '../chem/scheme-layout';
 import type { Measure } from '../editor/arrange';
+import { applyCharge } from '../editor/editor';
+import { drawCursorAids, hintLines, type CursorAidPrefs } from '../editor/cursor-aids';
+import { arrowGaps, pushArrow, SMALL_HEAD, symbolSpot } from '../chem/mechanism';
+import { writeTerminalMethyls, type MethylStyle } from '../chem/hydrogens';
+import { plainMeasure } from '../chem/reaction';
 
 const noCanvas = { getContext: () => null } as unknown as HTMLCanvasElement;
 import { darkMatrix, type DarkPalette } from '../dark-page';
@@ -87,7 +92,12 @@ export function sampleDrawing(style: DocStyle, scheme: Partial<SchemePrefs> = {}
     doc.updateAtom(nh, { charge: 1 });
     number(box(first), '2');
   });
-  // laid out as the scheme settings say, by the same Clean Up Reaction the canvas uses
+  laidOut(doc, scheme);
+  return doc;
+}
+
+/** A sample scheme laid out as the scheme settings say, by the same Clean Up Reaction the canvas uses. */
+function laidOut(doc: Doc, scheme: Partial<SchemePrefs>): void {
   try {
     const r = new Renderer(noCanvas, noCanvas);
     r.showWarnings = false;
@@ -97,16 +107,48 @@ export function sampleDrawing(style: DocStyle, scheme: Partial<SchemePrefs> = {}
       if (plan) applySchemePlan(doc, m, plan);
     });
   } catch { /* (no text measuring here: left roughly placed) */ }
-  return doc;
+}
+
+/**
+ * A generic scheme for Settings ▸ Schemes: two starting materials (a + between them), an arrow with
+ * a catalyst above and conditions below, and the product, laid out by Clean Up Reaction in the
+ * scheme settings `scheme`, `w` CSS pixels wide.
+ */
+export function schemePreview(style: DocStyle, scheme: Partial<SchemePrefs>, w = 460): HTMLElement {
+  const doc = new Doc();
+  // (the settings being edited, not a drawing style's own scheme spacing)
+  doc.style = { ...style, scheme: undefined };
+  const L = style.bondLength;
+  /** A benzene ring at x with one group on it, written as `label`. */
+  const aryl = (x: number, label: string) => {
+    const ring = placeRing(doc, freeRing({ x, y: 0 }, 6, L), { aromatic: true });
+    doc.updateAtom(sprout(doc, ring[1]).id, { label });
+  };
+  doc.bulk(() => {
+    aryl(0, 'Br');
+    doc.addCaption({ x: L * 2.2, y: L * 0.2, runs: [{ text: '+', ...newTextLook(doc) }], justify: 'left' });
+    aryl(L * 4, 'B(OH)2');
+    const x0 = L * 7.5, lw = style.arrowWidth ?? style.lineWidth;
+    doc.addArrow({
+      tail: { x: x0, y: 0 }, head: { x: x0 + L * 4, y: 0 }, headStyle: 'full', tailStyle: 'none', headType: 'solid', line: 'solid', noGo: false, equilibrium: false, sweep: 0,
+      headLength: style.arrowHeadLength ?? lw * 10, headWidth: style.arrowHeadWidth ?? lw * 2.5, ...(style.arrowWidth !== undefined ? { lineWidth: style.arrowWidth } : {}),
+    });
+    const look = newTextLook(doc);
+    doc.addCaption({ x: x0 + L * 0.3, y: -L * 0.3, runs: [{ text: 'Pd(PPh' }, { text: '3', sub: true }, { text: ')' }, { text: '4', sub: true }].map((r) => ({ ...r, ...look })), justify: 'left' });
+    doc.addCaption({ x: x0 + L * 0.3, y: L * 0.75, runs: [{ text: 'K' }, { text: '2', sub: true }, { text: 'CO' }, { text: '3', sub: true }, { text: ', 80 °C' }].map((r) => ({ ...r, ...look })), justify: 'left' });
+    aryl(x0 + L * 6, 'Ph');
+  });
+  laidOut(doc, scheme);
+  return drawingCanvas(doc, w, Math.round(w * 0.22), 6);
 }
 
 /** A drawing on a canvas, fitted into `w` × `h` CSS pixels on white (or not at all where the browser can't draw). */
-export function drawingCanvas(doc: Doc, w: number, h: number, pad = 10): HTMLCanvasElement {
+export function drawingCanvas(doc: Doc, w: number, h: number, pad = 10, maxScale = 3): HTMLCanvasElement {
   const pic = recordPicture(doc, 2);
   const out = sized(w, h);
   if (!pic || !out.ctx) return out.canvas;
   const pw = pic.box.x2 - pic.box.x1, ph = pic.box.y2 - pic.box.y1;
-  const fit = Math.min((w - 2 * pad) / pw, (h - 2 * pad) / ph, 3);
+  const fit = Math.min((w - 2 * pad) / pw, (h - 2 * pad) / ph, maxScale);
   const { canvas: src } = pictureCanvas(doc, pic, fit * dpr() * 72);
   const ctx = out.ctx;
   ctx.fillStyle = '#fff';
@@ -291,7 +333,6 @@ export function bondEndSwatch(round: number): HTMLElement {
   return canvas;
 }
 
-/** "N⁺" or "N⊕", as the + key will put a charge. */
 /**
  * Sample labels in an alkyl look (italic t, a dash or none), as atom labels show them, counts
  * lowered: typed as tBu, iPr…, and one typed with a dash.
@@ -313,9 +354,94 @@ export function alkylPreview(look: AlkylLook): HTMLElement {
   return box;
 }
 
-export function chargeSwatch(circled: boolean): HTMLElement {
-  const s = document.createElement('span');
-  s.className = 'ask-swatch';
-  s.textContent = circled ? 'N⊕' : 'N⁺';
-  return s;
+/** How the drawing's labels are measured, as the canvas measures them (or roughly, where text can't be measured here). */
+function measureOf(doc: Doc): Measure {
+  try {
+    const r = new Renderer(noCanvas, noCanvas);
+    r.showWarnings = false;
+    return { atomBoxes: (a) => r.atomInfo(doc, a).boxes, captionBox: (c) => r.captionBox(c) };
+  } catch { return plainMeasure(doc); }
+}
+
+/** A small drawing beside a single choice, drawn as the canvas draws it. */
+function thumb(doc: Doc, w: number, h: number): HTMLElement {
+  // (at one scale, so each choice's picture is drawn the same size)
+  const c = drawingCanvas(doc, w, h, 2, 1.5);
+  c.classList.add('ask-thumb');
+  return c;
+}
+
+/** NH₄⁺ drawn with its charge as the + key puts one: in the label, or in a circle beside it (Settings ▸ Drawing). */
+export function chargeSwatch(circled: boolean, style?: DocStyle): HTMLElement {
+  const doc = new Doc();
+  if (style) doc.style = { ...style };
+  doc.bulk(() => {
+    const n = doc.addAtom(0, 0, 7);
+    applyCharge(doc, n.id, 1, circled, (a, size) => symbolSpot(doc, measureOf(doc), a.id, [], size).at);
+  });
+  return thumb(doc, 64, 26);
+}
+
+/** A short chain whose end is written as the terminal methyls will be (Me or CH₃), as Show Terminal Methyls writes it. */
+export function methylSwatch(how: MethylStyle, style?: DocStyle): HTMLElement {
+  const doc = new Doc();
+  if (style) doc.style = { ...style };
+  const L = doc.style.bondLength;
+  doc.bulk(() => {
+    const a = doc.addAtom(0, 0), b = doc.addAtom(L * 0.866, -L / 2), c = doc.addAtom(L * 1.732, 0);
+    doc.addBond(a.id, b.id);
+    doc.addBond(b.id, c.id);
+    writeTerminalMethyls(doc, [c.id], how);
+  });
+  return thumb(doc, 64, 26);
+}
+
+/** The angle readout and a key's hint beside the pointer, as they look while drawing (Settings ▸ Drawing). */
+export function cursorAidSwatch(look: CursorAidPrefs['look']): HTMLElement {
+  const W = 84, H = 30;
+  const { canvas, ctx } = sized(W, H);
+  if (!ctx) return canvas;
+  canvas.classList.add('ask-thumb');
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, W, H);
+  const px = 0.8;
+  drawCursorAids(ctx, { x: 6 - 18 * px + 5 * px, y: 2 - 24 * px + 3 * px }, px, '30°', hintLines([{ key: 'Alt', text: 'any angle', on: false }]), { dark: false, look });
+  return canvas;
+}
+
+/**
+ * A generic mechanism (hydroxide adding to acetone's carbonyl, the C=O's electrons going to the
+ * oxygen) with its curved arrows drawn with the gaps given, in points, or the usual ones for null
+ * (Settings ▸ Drawing).
+ */
+export function mechanismPreview(gaps: { start: number | null; end: number | null }, style?: DocStyle, w = 232): HTMLElement {
+  const doc = new Doc();
+  if (style) doc.style = { ...style };
+  const L = doc.style.bondLength;
+  const was = { ...arrowGaps };
+  Object.assign(arrowGaps, gaps);
+  try {
+    doc.bulk(() => {
+      const c = doc.addAtom(0, 0), o = doc.addAtom(0, -L, 8);
+      const co = doc.addBond(c.id, o.id, 2);
+      doc.addBond(c.id, doc.addAtom(-L * 0.866, L / 2).id);
+      doc.addBond(c.id, doc.addAtom(L * 0.866, L / 2).id);
+      const oh = doc.addAtom(-L * 3.2, -L * 1.1, 8, { charge: -1 });
+      const m = measureOf(doc);
+      const lw = doc.style.arrowWidth ?? doc.style.lineWidth;
+      for (const [from, to] of [[{ kind: 'atom', id: oh.id }, { kind: 'atom', id: c.id }], [{ kind: 'bond', id: co.id }, { kind: 'atom', id: o.id }]] as const) {
+        const push = pushArrow(doc, m, from, to);
+        if (!push) continue;
+        doc.addArrow({
+          tail: push.tail, head: push.head, headStyle: 'full', tailStyle: 'none', headType: 'solid', line: 'solid', noGo: false, equilibrium: false,
+          sweep: push.bez ? 0 : push.sweep, ...(push.bez ? { bez: push.bez } : {}),
+          headLength: push.small ? lw * SMALL_HEAD.length : doc.style.arrowHeadLength ?? lw * 10, headWidth: push.small ? lw * SMALL_HEAD.width : doc.style.arrowHeadWidth ?? lw * 2.5,
+          ...(doc.style.arrowWidth !== undefined ? { lineWidth: doc.style.arrowWidth } : {}),
+        });
+      }
+    });
+  } finally { Object.assign(arrowGaps, was); }
+  const box = document.createElement('div');
+  box.append(drawingCanvas(doc, w, Math.round(w * 0.5), 6));
+  return box;
 }

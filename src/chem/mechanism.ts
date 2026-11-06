@@ -49,6 +49,16 @@ export interface PushOpts {
   arcOnly?: boolean;
   /** The arrow being redrawn, which keeps clear of every other arrow but not of itself. */
   self?: number;
+  /**
+   * Keep this shape (Bézier controls in the frame of the line from tail to head, as an arrow's
+   * `bez`) instead of finding one: an arrow whose end is moved keeps the curve it was drawn with.
+   */
+  keep?: Vec[];
+}
+
+/** Whether an arrow's Bézier controls make an S (two bends, one to each side), not one curve or a longer path. */
+export function isSBez(bez: readonly Vec[] | undefined): boolean {
+  return !!bez && bez.length === 2 && Math.sign(bez[0].y) !== Math.sign(bez[1].y) && Math.abs(bez[0].y) > 1e-6 && Math.abs(bez[1].y) > 1e-6;
 }
 
 /** How far past an atom's label (or from a bare carbon) an arrow stops, in bond lengths. */
@@ -267,6 +277,8 @@ export function pushArrow(doc: Doc, m: Measure, from: PushEnd, to: PushEnd, opts
 }
 
 function pushArrowAt(doc: Doc, m: Measure, from: PushEnd, to: PushEnd, o: PushOpts): PushArrow | null {
+  // a shape to keep is drawn as given (through the S branch, which takes its controls)
+  if (o.keep?.length) o = { ...o, s: true, arcOnly: false };
   const side = o.side;
   const L = doc.style.bondLength;
   let c0 = centreOf(doc, from);
@@ -426,7 +438,7 @@ function pushArrowAt(doc: Doc, m: Measure, from: PushEnd, to: PushEnd, o: PushOp
     let bestS: PushArrow | null = null, sScore = Infinity, sClash = Infinity;
     for (const sd of sides) {
       const { t0, end } = ends(sd);
-      for (const c of sCandidates(t0, end, sd, from.kind === 'atom' || from.kind === 'pair' ? lean : null)) {
+      for (const c of o.keep?.length ? [o.keep.map((q) => ({ ...q }))] : sCandidates(t0, end, sd, from.kind === 'atom' || from.kind === 'pair' ? lean : null)) {
         const shaped = to.kind === 'atom' ? sToAtom(doc, m, t0, c1, c, to.id) : { head: end, bez: c };
         if (!shaped) continue;
         const pts = bezPoints({ tail: t0, head: shaped.head, bez: shaped.bez })!;
@@ -442,7 +454,7 @@ function pushArrowAt(doc: Doc, m: Measure, from: PushEnd, to: PushEnd, o: PushOp
     if (bestS && (o.s || !best || sClash < bestClash - 0.25)) { best = bestS; bestClash = sClash; }
   }
   // still running into something: a longer way round, through a point or two off to one side
-  if (bestClash > 0.3 && !o.arcOnly) {
+  if (bestClash > 0.3 && !o.arcOnly && !o.keep?.length) {
     let bestD: PushArrow | null = null, dScore = Infinity, dClash = Infinity;
     for (const sd of sides) {
       const { t0, end } = ends(sd);
@@ -774,7 +786,7 @@ export function cleanUpArrow(doc: Doc, m: Measure, r: Pick<Arrow, 'tail' | 'head
   let to = headEnd(doc, pushEndAt(doc, m, r.head), r.head);
   if (sameEnd(from, to)) to = { kind: 'point', p: r.head };
   if (from.kind === 'point' && to.kind === 'point') return freeArc(doc, m, r);
-  return pushArrow(doc, m, from, to, { s: !!r.bez?.length, self: r.id });
+  return pushArrow(doc, m, from, to, { s: isSBez(r.bez), self: r.id });
 }
 
 /** How badly an arrow as drawn now runs into the structure, labels and other arrows (0 when clear). */
@@ -845,12 +857,15 @@ export function symbolPin(doc: Doc, s: Shape): Pin | undefined {
 
 /**
  * Where a lone pair, radical dot or charge goes on an atom: in the widest open space between its
- * bonds and anything already sitting round it (`taken`), just clear of its label. Gives the
- * direction from the atom and the symbol's centre, `size` across.
+ * bonds, the H and charge of its label, and anything already sitting round it (`taken`), just
+ * clear of its label. Gives the direction from the atom and the symbol's centre, `size` across.
  */
 export function symbolSpot(doc: Doc, m: Measure, id: number, taken: Vec[], size: number): { dir: Vec; at: Vec } {
   const a = doc.atoms.get(id)!;
-  const avoid = [...bondDirs(doc, id), ...taken.map((p) => norm(sub(p, a)))];
+  // the parts of a label off the atom itself (an H, a charge) take room as a bond does, so a lone
+  // pair on OH goes on the O, not past the H
+  const parts = m.atomBoxes(a).map((b) => ({ x: (b.x1 + b.x2) / 2, y: (b.y1 + b.y2) / 2 })).filter((c) => dist(c, a) > 0.3 * doc.style.bondLength);
+  const avoid = [...bondDirs(doc, id), ...parts.map((p) => norm(sub(p, a))), ...taken.map((p) => norm(sub(p, a)))];
   // with nothing round it, the first goes above (where people look for a charge or lone pair)
   let best = { x: 0, y: -1 }, bestOpen = -Infinity;
   for (let k = 0; k < 24; k++) {

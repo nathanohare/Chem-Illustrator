@@ -23,7 +23,7 @@ import { editPalettes, getPalettes, onPalettes, setPalettes, useDrawingColours, 
 import { Doc, Atom, Bond, type BondDisplay, type Arrow, PARTIAL, Caption, Shape, type TextRun, outsideValence, Contents, CHIRAL_FLAGS, PICTURE_STYLES, type PictureLook, type Attachment, type HighlightStyle, type ShapeMath, PAPER, keepOnPage, type PageSetup, type PageWalls } from './model';
 import { Renderer, measureText, forgetTextWidths } from './render/renderer';
 import { Editor, TOOLS, ringsWereFilled, setMarkTint, type HighlightToggle, type Selection } from './editor/editor';
-import { setAidTint } from './editor/cursor-aids';
+import { LENGTH_UNITS, setAidTint } from './editor/cursor-aids';
 import { BUILT_IN_LOOKS, type HighlightLookPreset } from './ui/highlight-looks';
 import { selectionBox, atomsBox, POINTS, type Align, units, moveUnit } from './editor/arrange';
 import { defaultColumns } from './editor/grid-arrange';
@@ -181,7 +181,6 @@ import { setStereoShown, shownDescriptor, axialStyle } from './chem/stereo';
 import { keymap, COMMAND_NAMES, registerToolNames, displayChord, actionName, chordOf, parseAction, KeyContext, KeyOverrides } from './editor/keymap';
 import { loadSettings, saveSettings, settingsLocation, exportText, importSettings, Settings, SLIDE_PANE_MIN, SLIDE_PANE_MAX, NOTES_MIN, NOTES_MAX } from './settings';
 import { arrowGaps } from './chem/mechanism';
-import { showDialog } from './ui/dialog-host';
 import { HotkeysDialog } from './ui/hotkeys-dialog';
 import { TypingDialog } from './ui/typing-dialog';
 import { ModeColoursDialog, ModeColours, DEFAULT_MODE_COLOURS, applyModeColours as applyModeColoursOnly, modeColour } from './ui/mode-colours';
@@ -190,7 +189,7 @@ import { NicknameChooser } from './ui/nickname-chooser';
 import { ask, askChoice, type Field } from './ui/ask';
 import { ACTION_LINKS, geoShapeStyle } from './design/geo';
 import { BuildHint } from './ui/build-hint';
-import { alkylPreview, bondEndSwatch, chargeSwatch, navigationPreview, pageGridPreview, readingPreview, stylePreview } from './ui/settings-previews';
+import { alkylPreview, bondEndSwatch, chargeSwatch, cursorAidSwatch, mechanismPreview, methylSwatch, navigationPreview, schemePreview, pageGridPreview, readingPreview, stylePreview } from './ui/settings-previews';
 import { AUTO_STEPS_DEFAULTS, markPieces, stepAnims, stepClicks, stepPieces, type AutoStepsOptions, type StepPiece } from './deck/auto-steps';
 import { UpdateUI } from './ui/update-ui';
 import { canUpdate, appVersion, portableInfo, STAGE, STAGE_NOTE, UPDATE_CHANNELS, type UpdateChannel } from './updates';
@@ -200,7 +199,7 @@ import type { GuideWindow, GuideHeading } from './ui/guide-window';
 import { SettingsWindow, type SettingsHost, type SettingsPage } from './ui/settings-window';
 import { fileTypesPage, FILE_TYPES } from './ui/file-types-page';
 import { watchRibbons, fitRibbons, setRibbonCollapsed, ribbonCollapsed, addLookToggle, repaintArrows } from './ui/ribbon-fit';
-import { CanvasRibbon, type ContextKind } from './ui/canvas-ribbon';
+import { CanvasRibbon } from './ui/canvas-ribbon';
 import { AnalysisBox, WarningsBox } from './ui/canvas-ribbon-boxes';
 import { placeTitleBar, titleBarPlace } from './ui/title-bar';
 import { canScaleUi, setUiScale, stepUiScale, uiScale, UI_SCALES } from './ui/ui-scale';
@@ -297,7 +296,7 @@ import { parseIndex, indexText } from './library/file-index';
 import { libraryHolder } from './ui/library-refs';
 import type { CompoundLibraryWindow, CompoundLibraryHost, StructureIn } from './ui/compound-library';
 import type { KnowledgeBaseHost, KnowledgeBaseWindow } from './ui/knowledge-base';
-import { looksLikeSmiles } from './kb/tables';
+import { joinAttachment, looksLikeSmiles } from './kb/tables';
 import type { FindInFilesWindow, FindInFilesHost, ListedFile } from './ui/find-in-files';
 import { later, madeLater } from './lazy';
 
@@ -360,7 +359,6 @@ function applyModeColours(mode: Parameters<typeof applyModeColoursOnly>[0], c: M
   setCaptionTint(tint);
   editor.requestScene();
 }
-editor.lengthUnits = () => rulerPrefs.units;
 const chem = new ChemClient(document.baseURI);
 const checks = new StructureChecks(doc);
 renderer.checks = checks;
@@ -509,10 +507,15 @@ const OWN_ADD = 'own-template-add';
 const OWN_PALETTE: PaletteDef = {
   palette: 'tpl-own',
   title: 'My templates',
-  items: [{ name: OWN_ADD, title: 'Save the selected structure as a template of your own' }],
+  items: [{ name: OWN_ADD, title: 'Save Selection as Custom Template' }],
   columns: 4,
   large: true,
-  icon: (name, size) => { const t = templateById(name.slice(4)); return t ? templateIcon(t, size) : name; },
+  // (in the open fly-out the save button is a plain teal "+"; on the bar it keeps its own icon)
+  icon: (name, size) => {
+    if (name === OWN_ADD) return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" style="color: var(--accent)" aria-hidden="true"><path d="M12 6v12M6 12h12"/></svg>`;
+    const t = templateById(name.slice(4));
+    return t ? templateIcon(t, size) : ICONS[name] ?? name;
+  },
 };
 
 // Template palettes, one per kind of structure
@@ -720,21 +723,8 @@ canvasRibbon.bodyEnd.append(analysisBox.el);
 canvasRibbon.tabEnd.append(warningsBox.button);
 canvasRibbon.el.addEventListener('cr-tab', () => fitRibbons());
 
-/** The kind of object being drawn or selected that has a ribbon tab of its own (Arrow, Ring, Bond). */
-function ribbonContext(): ContextKind | null {
-  const t = TOOLS[editor.toolName];
-  const s = editor.sel;
-  if (t?.kind === 'arrow' || (s.arrows.size && !s.atoms.size && !s.captions.size)) return 'arrow';
-  if (t?.kind === 'ring') return 'ring';
-  if (!s.bonds.size || s.arrows.size || s.captions.size || s.shapes.size) return null;
-  // a ring selected (each of its atoms on two of its bonds): its tab; one or two bonds: theirs
-  const ends = new Map<number, number>();
-  for (const id of s.bonds) { const b = doc.bonds.get(id); if (b) for (const a of [b.a1, b.a2]) ends.set(a, (ends.get(a) ?? 0) + 1); }
-  if (s.bonds.size >= 3 && s.bonds.size <= 8 && s.atoms.size === s.bonds.size && [...ends.values()].every((n) => n === 2) && ends.size === s.bonds.size) return 'ring';
-  if (s.bonds.size <= 2 && [...s.atoms].every((a) => ends.has(a))) return 'bond';
-  return null;
-}
-const showRibbonContext = () => { canvasRibbon.setContext(ribbonContext()); contextBoxes.follow(); };
+// (the Canvas ribbon's tabs stay put; what is selected brings out its context toolbox)
+const showRibbonContext = () => { contextBoxes.follow(); };
 
 /**
  * The context toolboxes (Smart Schemes, Diagrams, Tables and Charts, Perspective and 3-D) come out
@@ -3023,6 +3013,18 @@ async function cleanUpChoices(): Promise<void> {
  * arrows (size, alignment, gap, the + boxes, fitting the arrow to it). A blank distance follows
  * the drawing's bond length.
  */
+/** Scheme settings as typed in Settings ▸ Schemes. */
+function schemeFrom(got: Record<string, string>): Partial<SchemePrefs> {
+  const len = (v: string | undefined) => { const n = Number(v); return !v || v.trim() === '' || !isFinite(n) || n < 0 ? null : Math.min(500, n); };
+  return {
+    structGap: len(got.structGap), plusGap: len(got.plusGap), textGap: len(got.textGap), lead: len(got.lead), headGap: len(got.headGap),
+    // (its size and font are the drawing style's now: Settings > Drawing Style)
+    textSize: null,
+    textAlign: got.textAlign === 'left' || got.textAlign === 'right' ? got.textAlign : 'center',
+    helpers: got.helpers === 'true', fit: got.fit === 'true', sameLength: got.sameLength === 'true',
+  };
+}
+
 async function schemeSettings(): Promise<void> {
   finishTyping();
   const p = schemePrefs;
@@ -3039,17 +3041,10 @@ async function schemeSettings(): Promise<void> {
     { name: 'sameLength', label: 'Clean Up Reaction makes arrows the same length', value: String(p.sameLength), type: 'checkbox' },
     { name: 'lead', label: 'Arrow before the text starts', value: pt(p.lead), type: 'number', unit: 'pt', placeholder: auto(SPACING.overhang) },
     { name: 'headGap', label: 'Space between text and arrowhead', value: pt(p.headGap), type: 'number', unit: 'pt', placeholder: auto(SPACING.overhang) },
-  ], { ok: 'Save', note: 'Used when you type text beside an arrow, and by Clean Up Reaction and Arrange Scheme. These are the usual values for every file; a drawing style can have its own (Drawing Style ▸ Reaction arrows, with a preview), and those win. The text\'s size and font are in Drawing Style too. Leave a distance blank to scale it with the bond length. Existing schemes change when you next clean them up.' });
+  ], { ok: 'Save', note: 'Used when you type text beside an arrow, and by Clean Up Reaction and Arrange Scheme. These are the usual values for every file; a drawing style can have its own (Drawing Style ▸ Reaction arrows, with a preview), and those win. The text\'s size and font are in Drawing Style too. Leave a distance blank to scale it with the bond length. Existing schemes change when you next clean them up.',
+    preview: { title: 'Preview', below: true, draw: (v) => schemePreview(doc.style, schemeFrom(v)) } });
   if (!got) return;
-  const len = (v: string) => { const n = Number(v); return v.trim() === '' || !isFinite(n) || n < 0 ? null : Math.min(500, n); };
-  const next: Partial<SchemePrefs> = {
-    structGap: len(got.structGap), plusGap: len(got.plusGap), textGap: len(got.textGap), lead: len(got.lead), headGap: len(got.headGap),
-    // (its size and font are the drawing style's now: Settings > Drawing Style)
-    textSize: null,
-    textAlign: got.textAlign === 'left' || got.textAlign === 'right' ? got.textAlign : 'center',
-    helpers: got.helpers === 'true', fit: got.fit === 'true', sameLength: got.sameLength === 'true',
-  };
-  setSchemePrefs(next);
+  setSchemePrefs(schemeFrom(got));
   storeSettings();
   editor.requestOverlay();
 }
@@ -3508,6 +3503,8 @@ const animateDialog = {
 /** The reaction arrow picked (for Animate This Step), if one is. */
 /** Is a curved (mechanism) arrow among the selection? */
 const pickedCurved = (): boolean => [...editor.sel.arrows].some((id) => { const r = doc.arrows.get(id); return !!r && isCurved(r); });
+/** Whether the selection is in a Smart Scheme laid out as a cycle (Clean Up Cycle applies). */
+const smartIsCycle = (): boolean => { const id = editor.selectedSmart(); const d = id === null ? undefined : doc.shapes.get(id)?.smart; return !!d && d.layout === 'cycle' && !d.free; };
 const pickedReactionArrow = (): number | undefined => [...editor.sel.arrows].find((id) => { const r = doc.arrows.get(id); return !!r && isReactionArrow(r); });
 
 const mapChoice: Record<string, string> = { numbers: 'true', colours: 'false', bonds: 'false' };
@@ -5982,11 +5979,29 @@ const knowledgeBaseHost = {
     tool: (t) => { if (typeof t === 'number') editor.pickElement(t); else pickTool(t); overlay.focus(); },
     current: () => (editor.toolName === 'element' ? editor.element : editor.toolName),
     selection: () => selectionContents(),
-    smiles: async (c) => {
+    smiles: async (c, on) => {
       if (!chem.ready) return 'The chemistry engine is still loading; try again in a moment.';
       const d = structureDoc(c, sheetStyle());
+      const points = [...d.atoms.values()].filter((a) => a.attach).length;
+      if (on && points > 1) return `Draw the group out from one attachment point (this drawing has ${points}).`;
       const got = await structuresFor(d, partsOf(d));
-      return got.length ? { smiles: got.map((g) => g.smiles).join('.') } : 'The structure couldn\'t be read (check its valences).';
+      if (!got.length) return 'The structure couldn\'t be read (check its valences).';
+      const smiles = got.map((g) => g.smiles).join('.');
+      if (!on || !points) return { smiles };
+      // a group: its attachment point joined to the structure it sits on (a benzene ring)
+      const joined = joinAttachment(smiles, on);
+      const mb = joined ? await chem.smilesToMol(joined).catch(() => null) : null;
+      const canon = mb ? await chem.molToSmiles(mb).catch(() => null) : null;
+      return canon ? { smiles: canon } : 'The group couldn\'t be read (check its valences).';
+    },
+    group: () => {
+      const d = structureDoc({ atoms: [], bonds: [], captions: [], arrows: [], shapes: [] }, sheetStyle());
+      d.bulk(() => {
+        const point = d.addAtom(0, 0, 0, { attach: 'Wavy' });
+        const first = d.addAtom(d.style.bondLength, 0);
+        d.addBond(point.id, first.id);
+      });
+      return d.contents();
     },
   },
 } satisfies KnowledgeBaseHost;
@@ -9028,6 +9043,7 @@ const COMMANDS: Record<string, () => unknown> = {
   'smart-scheme': () => { finishTyping(); editor.insertSmartScheme(pasteCentre(), deckNow()?.size); },
   'convert-smart-scheme': () => editor.convertToSmart() || flash(editor.selectedSmart() !== null ? 'That is a Smart Scheme already.' : 'Select a reaction scheme (structures and the arrows between them) to make into a Smart Scheme.'),
   'ungroup-smart-scheme': () => editor.ungroupSmart() || flash('Select a Smart Scheme first.'),
+  'clean-up-cycle': () => editor.smartCleanUpCycle() || flash('Select a catalytic cycle drawn as a Smart Scheme, with three or more species in one loop.', 5000),
   'bring-front': () => restack('front'),
   'send-back': () => restack('back'),
   'save-template': () => void saveTemplate(),
@@ -10126,16 +10142,18 @@ async function openOutsideFiles(): Promise<void> {
   }
 }
 
+/** A mechanism arrow gap typed in Settings ▸ Drawing, in points: null (the usual gap) when blank or not a number. */
+const arrowGap = (v: string | undefined): number | null => { const n = Number(v); return !v || v.trim() === '' || !isFinite(n) || n < 0 ? null : Math.min(50, n); };
+
 /** Settings ▸ Drawing: how structures are written and drawn, set once rather than per structure. */
 async function drawingPreferences(): Promise<void> {
   const r = await ask('Drawing', [
-    { name: 'methyl', label: 'Terminal methyls written as', value: editor.options.methylStyle, options: [{ value: 'Me', label: 'Me' }, { value: 'CH3', label: 'CH3' }],
+    { name: 'methyl', label: 'Terminal methyls written as', value: editor.options.methylStyle, options: [{ value: 'Me', label: 'Me' }, { value: 'CH3', label: 'CH₃' }], inline: (v) => methylSwatch(v === 'CH3' ? 'CH3' : 'Me', doc.style),
       help: 'Show Terminal Methyls writes them this way; methyls already written out in the selection (or the whole drawing, with nothing selected) change too.' },
     { name: 'axial', label: 'Axial chirality written as', value: axialStyle.helicity ? 'PM' : 'RaSa', options: [{ value: 'RaSa', label: 'Ra / Sa' }, { value: 'PM', label: 'P / M (helicity)' }],
       help: 'Labels on biaryls and allenes follow the choice at once. Ra is the same as M, and Sa as P.' },
-    { name: 'charges', label: 'Charges from the + and − keys', value: editor.options.circledCharges ? 'circled' : 'plain', options: [{ value: 'plain', label: 'Plain sign (N+)' }, { value: 'circled', label: 'In a circle (⊕, ⊖)' }], inline: (v) => chargeSwatch(v === 'circled'),
+    { name: 'charges', label: 'Charges from the + and − keys', value: editor.options.circledCharges ? 'circled' : 'plain', options: [{ value: 'plain', label: 'In the label' }, { value: 'circled', label: 'In a circle' }], inline: (v) => chargeSwatch(v === 'circled', doc.style),
       help: 'Charges already drawn keep their look; the circle tools on the Object toolbox always draw a circled charge.' },
-    { name: 'textAtom', label: 'An atom or group typed with the Text tool (N, OMe) becomes an atom, or the atom at a bond end it is typed beside', type: 'checkbox', value: String(editor.options.textToAtom) },
     { name: 'ionCharges', label: 'Add charges to common counterions typed as text (BF4 becomes BF4⁻, NBu4 becomes NBu4⁺)', type: 'checkbox', value: String(chemText.ionCharges),
       help: 'Off, a counterion typed without its charge is still read as that ion, and flagged until the charge is added.' },
     { name: 'saltGroups', label: 'Group a counterion typed as text with the structure or ion of opposite charge next to it, as one salt', type: 'checkbox', value: String(chemText.saltGroups),
@@ -10144,7 +10162,7 @@ async function drawingPreferences(): Promise<void> {
       help: 'How round the free ends of bonds are, on screen and in pictures and prints. Anything but Round also gives ring corners and chain bends a sharp, mitred point.' },
     { name: 'supR', label: 'R groups numbered R1, R12… show the number raised (R¹, R¹²)', type: 'checkbox', value: String(labelPrefs.superscriptR),
       help: 'Longer labels (OR1, CO2R1) and labels from files are left as they are.' },
-    { name: 'reroute', label: 'Mechanism arrows find their own way around again when a change leaves them running into a structure, a label or another arrow', type: 'checkbox', value: String(editor.options.rerouteArrows),
+    { name: 'reroute', label: 'Mechanism arrows automatically wrap around structures that block their path', type: 'checkbox', value: String(editor.options.rerouteArrows),
       help: 'Arrows you bent by hand stay as they are.' },
     { name: 'arrowProducts', label: 'Offer Draw Next Intermediate and Check Arrows (Chemistry ▸ Mechanism Arrows): curved arrows read as electrons moving, checked, and the structure they make drawn', type: 'checkbox', value: String(editor.options.arrowProducts),
       help: 'Off takes both commands out of the menus. The arrows themselves are drawn as before.' },
@@ -10154,25 +10172,24 @@ async function drawingPreferences(): Promise<void> {
     { name: 'haptoDeloc', label: 'Draw η³, η⁵ and η⁶ ligands on a metal delocalized (a circle in the ring, an arc over an allyl)', type: 'checkbox', value: String(haptoLook.delocalized),
       help: 'Only the look: the bonds stay as drawn for SMILES and saving. Chemistry ▸ Structure ▸ Kekulé Form for η Ligand switches one back.' },
     { name: 'aidAngle', label: 'Show the angle beside the pointer while drawing bonds, arrows and lines', type: 'checkbox', value: String(editor.aids.angle) },
-    { name: 'aidLength', label: 'Show the length there too', type: 'checkbox', value: String(editor.aids.length),
-      help: 'In the rulers\' units (inches or centimeters).' },
-    { name: 'aidLook', label: 'How the angle and hints look', value: editor.aids.look, options: [{ value: 'plain', label: 'Plain blue words' }, { value: 'box', label: 'Blue words on a pale box' }, { value: 'solid', label: 'White words on a blue box' }] },
+    { name: 'aidLength', label: 'Show the length there too, in', type: 'checkbox', value: String(editor.aids.length),
+      beside: { name: 'aidUnits', label: 'Length units', value: editor.aids.units, options: LENGTH_UNITS },
+      help: 'Pixels are counted at 100 % zoom (96 to the inch); inches are written as decimals.' },
+    { name: 'aidLook', label: 'How the angle and hints look', value: editor.aids.look, options: [{ value: 'plain', label: 'Plain blue words' }, { value: 'box', label: 'Blue words on a pale box' }, { value: 'solid', label: 'White words on a blue box' }], inline: (v) => cursorAidSwatch(v === 'box' || v === 'solid' ? v : 'plain') },
     { name: 'aidHints', label: 'Show what Shift, Alt and Ctrl do beside the pointer', type: 'checkbox', value: String(editor.aids.hints),
       help: 'While dragging, the keys that change what the tool does are listed in blue (the one held in bold). With the button up they show as a key is held.' },
-  ], { ok: 'Save' });
+  ], { ok: 'Save', preview: { title: 'Mechanism arrows', draw: (v) => mechanismPreview({ start: arrowGap(v.startGap), end: arrowGap(v.endGap) }, doc.style) } });
   if (!r) return;
   editor.options.circledCharges = r.charges === 'circled';
-  editor.options.textToAtom = r.textAtom === 'true';
   chemText.ionCharges = r.ionCharges === 'true';
   chemText.saltGroups = r.saltGroups === 'true';
   editor.options.rerouteArrows = r.reroute === 'true';
   editor.options.arrowProducts = r.arrowProducts === 'true';
   showArrowProducts();
-  const gap = (v: string) => { const n = Number(v); return v.trim() === '' || !isFinite(n) || n < 0 ? null : Math.min(50, n); };
-  arrowGaps.start = gap(r.startGap);
-  arrowGaps.end = gap(r.endGap);
+  arrowGaps.start = arrowGap(r.startGap);
+  arrowGaps.end = arrowGap(r.endGap);
   if ((r.haptoDeloc === 'true') !== haptoLook.delocalized) { haptoLook.delocalized = r.haptoDeloc === 'true'; renderer.invalidate(doc); editor.requestScene(); }
-  editor.aids = { ...editor.aids, angle: r.aidAngle === 'true', length: r.aidLength === 'true', hints: r.aidHints === 'true', look: r.aidLook === 'box' || r.aidLook === 'solid' ? r.aidLook : 'plain' };
+  editor.aids = { ...editor.aids, angle: r.aidAngle === 'true', length: r.aidLength === 'true', hints: r.aidHints === 'true', look: r.aidLook === 'box' || r.aidLook === 'solid' ? r.aidLook : 'plain', units: r.aidUnits === 'px' || r.aidUnits === 'mm' ? r.aidUnits : 'in' };
   const ends = Number(r.bondEnds);
   if (isFinite(ends) && ends !== bondEndPrefs.round) {
     bondEndPrefs.round = ends;
@@ -10261,7 +10278,11 @@ async function generalPreferences(): Promise<void> {
     { name: 'pptxStructures', label: 'Save structures in PowerPoint files as', value: officeStructures.pptx, options: STRUCTURES_AS, help: STRUCTURES_AS_HELP },
     { name: 'reviewer', label: 'Your name on tracked changes in documents', value: reviewAuthor() },
     { name: 'startView', label: 'Show the start view (new tabs, recent files) when the program opens', type: 'checkbox', value: String(startView) },
-  ], { ok: 'Save' });
+  ], { ok: 'Save', actions: {
+    label: 'Settings file',
+    help: 'One file holds all settings: shortcuts, toolboxes, preferences, templates, abbreviations, drawing styles, palettes, slide themes and highlight styles. Export to back up or move to another computer; Import to load one. Recent files aren\'t included.',
+    buttons: [{ text: 'Export Settings…', run: (say) => void exportSettings(say) }, { text: 'Import Settings…', run: (say) => void importSettingsFile(say) }],
+  } });
   if (!r) return;
   editor.options.groupClick = r.groupClick === 'item' ? 'item' : 'group';
   editor.options.groupOutline = r.groupOutline === 'true';
@@ -10459,7 +10480,6 @@ function currentSettings(): Settings {
     methylStyle: editor.options.methylStyle,
     axialStyle: axialStyle.helicity ? 'PM' : 'RaSa',
     circledCharges: editor.options.circledCharges,
-    textToAtom: editor.options.textToAtom,
     ionCharges: chemText.ionCharges,
     saltGroups: chemText.saltGroups,
     groupClick: editor.options.groupClick,
@@ -10547,21 +10567,6 @@ async function importSettingsFile(say: (text: string) => void = flash): Promise<
   applySettings(read.settings);
   storeSettings();
   say(read.only === 'hotkeys' ? `Using the keys from ${got.name}.` : `Now using the settings from ${got.name}: shortcuts, toolboxes, preferences, templates, abbreviations, styles and palettes. Recent files are unchanged.`);
-}
-
-/** Settings > Import and Export: both, with a word on what goes in the file. */
-function settingsTransfer(): void {
-  const d = document.createElement('dialog');
-  d.className = 'ask settings-transfer';
-  d.innerHTML = `<h2 data-info="One file holds all settings: shortcuts, toolboxes, preferences, templates, abbreviations, drawing styles, palettes, slide themes and highlight styles. Export to back up or move to another computer; Import to load one. Recent files aren't included.">Import and Export Settings</h2>
-    <div class="ask-buttons"><button type="button" data-act="export">Export Settings…</button><button type="button" data-act="import">Import Settings…</button><button type="button" class="primary" data-act="close">Close</button></div>
-    <p class="muted small" aria-live="polite"></p>`;
-  const say = (t: string) => { d.querySelector('p.small')!.textContent = t; };
-  d.querySelector('[data-act=export]')!.addEventListener('click', () => void exportSettings(say));
-  d.querySelector('[data-act=import]')!.addEventListener('click', () => void importSettingsFile(say));
-  d.querySelector('[data-act=close]')!.addEventListener('click', () => d.close());
-  d.addEventListener('close', () => d.remove());
-  showDialog(d);
 }
 
 /** The key for a menu command as things are now (in Slides mode PowerPoint's keys come first, in sheets Excel's). */
@@ -10710,7 +10715,6 @@ function applySettings(s: Settings): void {
   editor.options.methylStyle = s.methylStyle;
   showHelicity(s.axialStyle === 'PM');
   editor.options.circledCharges = s.circledCharges;
-  editor.options.textToAtom = s.textToAtom;
   chemText.ionCharges = s.ionCharges;
   chemText.saltGroups = s.saltGroups;
   editor.options.groupClick = s.groupClick;
@@ -11794,6 +11798,7 @@ stylePanel.onEquationColour = (ids, color) => {
 };
 stylePanel.applyLabel = (id, text) => editor.applyLabel(id, text);
 stylePanel.tie = (ids) => tieCaptions(ids);
+stylePanel.bracketPartner = { state: () => editor.bracketPartnerState(), toggle: () => editor.toggleBracketPartner() };
 
 /**
  * Tie captions (text boxes) to a structure: `to` (a selected structure's atoms), or else the one
@@ -12153,7 +12158,7 @@ function drawingMenu(): MenuItem[] {
     ] }, ...(editor.options.arrowProducts ? [{ cmd: 'draw-from-arrows' }, { cmd: 'check-arrows' }] : [])] : []),
     ...(pickedReactionArrow() !== undefined ? [{ cmd: 'animate-step' }] : []),
     // (a scheme is about whole structures and arrows, not an atom or a bond picked on its own)
-    ...(s.arrows.size || (atoms && focus === 'structure') ? [...(editor.selectedSmart() !== null ? [{ cmd: 'ungroup-smart-scheme' }, null] : []), { label: 'Scheme', items: [{ cmd: 'clean-up-reaction' }, { cmd: 'clean-up-arrow' }, { cmd: 'arrange-scheme' }, ...(editor.selectedSmart() === null ? [{ cmd: 'convert-smart-scheme' }] : []), { cmd: 'smart-scheme' }, { cmd: 'number-compounds' }, ...(s.arrows.size ? [{ cmd: 'stoichiometry-table' }, { cmd: 'check-balance' }, { cmd: 'map-atoms' }, { cmd: 'copy-reaction-smiles' }] : []), { cmd: 'catalytic-cycle' }, { cmd: 'energy-diagram' }, { cmd: 'ts-brackets' }, null, { cmd: 'animate-reaction' }, ...(pickedReactionArrow() !== undefined ? [{ cmd: 'animate-step' }] : [])] }] : []),
+    ...(s.arrows.size || (atoms && focus === 'structure') ? [...(editor.selectedSmart() !== null ? [{ cmd: 'ungroup-smart-scheme' }, null] : []), { label: 'Scheme', items: [{ cmd: 'clean-up-reaction' }, { cmd: 'clean-up-arrow' }, ...(smartIsCycle() ? [{ cmd: 'clean-up-cycle' }] : []), { cmd: 'arrange-scheme' }, ...(editor.selectedSmart() === null ? [{ cmd: 'convert-smart-scheme' }] : []), { cmd: 'smart-scheme' }, { cmd: 'number-compounds' }, ...(s.arrows.size ? [{ cmd: 'stoichiometry-table' }, { cmd: 'check-balance' }, { cmd: 'map-atoms' }, { cmd: 'copy-reaction-smiles' }] : []), { cmd: 'catalytic-cycle' }, { cmd: 'energy-diagram' }, { cmd: 'ts-brackets' }, null, { cmd: 'animate-reaction' }, ...(pickedReactionArrow() !== undefined ? [{ cmd: 'animate-step' }] : [])] }] : []),
     ...(atoms && focus !== 'bond' ? [{ label: 'Label the Structure', items: [
       { cmd: 'add-id-label' }, { cmd: 'add-caption' }, { cmd: 'attach-descriptors' }, null, { cmd: 'number-compounds' },
       ...(!shapes.length ? [null, { cmd: 'alt-text', label: 'Alt Text…' }] : []),
@@ -12753,7 +12758,7 @@ const BOX_ITEMS: Record<string, readonly string[]> = {
   arrange: cmds(['align-left', 'align-hcenter', 'align-right', 'align-top', 'align-vcenter', 'align-bottom', null, 'distribute-h', 'distribute-v', 'arrange-row', 'arrange-column', 'arrange-grid', null, 'flip-h', 'flip-v', 'rotate-cw', 'rotate-ccw', null, 'shape-front', 'shape-back']),
   highlight: [...cmds(['highlight', 'remove-highlight', null, 'smooth-highlight', 'centre-highlight', 'soft-highlight', 'outline-highlight', 'shadow-highlight', 'glow-highlight', null, 'save-highlight-look']), 'w:looks'],
   custom: defaultToolboxes().custom,
-  schemes: cmds(['smart-scheme', 'catalytic-cycle', 'convert-smart-scheme', 'ungroup-smart-scheme', null, 'arrange-scheme', 'scheme-settings', null, 'stoichiometry-table', 'check-balance', 'map-atoms', 'animate-reaction']),
+  schemes: cmds(['smart-scheme', 'catalytic-cycle', 'convert-smart-scheme', 'ungroup-smart-scheme', null, 'arrange-scheme', 'clean-up-cycle', 'scheme-settings', null, 'stoichiometry-table', 'check-balance', 'map-atoms', 'animate-reaction']),
   diagrams: cmds(['energy-diagram', 'edit-energy', 'mo-diagram', 'orbital', 'p-orbitals', 'ts-brackets', null, 'torsion-chart', 'edit-torsion', 'copy-torsion-data', null, 'newman-projection', 'edit-newman', 'unlink-newman', null, 'insert-diagram', 'edit-diagram', 'diagram-to-shapes']),
   tables: cmds(['insert-table', 'rgroup-table', 'stoichiometry-table', null, 'insert-chart', 'edit-chart', null, 'tlc-plate', 'gel', 'edit-plate']),
   biopolymers: ['cmd:sequence-to-structure', 'sep', 'pal:tpl-amino', 'pal:tpl-sugars', 'pal:tpl-nucleic'],
@@ -13464,9 +13469,9 @@ watchRibbons((on) => { ribbonChosen = on; storeSettings(); });
 // the Canvas ribbon's arrow switches it between Classic and Simplified (Settings ▸ Toolboxes and Ribbon has both too)
 addLookToggle(canvasRibbon.el, { simple: () => ribbonLook === 'simple', toggle: () => { setRibbonLook(ribbonLook === 'simple' ? 'classic' : 'simple'); storeSettings(); } });
 const SETTINGS_PAGES: SettingsPage[] = [
-  { id: 'general', title: 'General', words: 'groups selecting click outline linked text above below ask whole page tracked changes reviewer name start view recent files chemdraw objects ole word powerpoint docx pptx save structures pictures svg png compatibility', open: generalPreferences },
+  { id: 'general', title: 'General', words: 'backup back up copy move settings file new computer install reinstall export import groups selecting click outline linked text above below ask whole page tracked changes reviewer name start view recent files chemdraw objects ole word powerpoint docx pptx save structures pictures svg png compatibility', open: generalPreferences },
   { id: 'preferences', title: 'Preferences', words: 'personal personalize habits enter return key finish text tool box new line alt option escape esc taste alkyl prefix italic dash hyphen tbu t-bu ipr i-pr nbu sbu ibu tert-butyl isopropyl', open: personalPreferences },
-  { id: 'drawing', title: 'Drawing', words: 'bond ends round rounded square caps mitre corners methyl me ch3 axial chirality ra sa helicity charges circled text tool atom r groups superscript mechanism arrows reroute arrow width arrowhead head size length angle readout look box plain solid pointer cursor hints modifier shift alt ctrl keys', open: drawingPreferences },
+  { id: 'drawing', title: 'Drawing', words: 'bond ends round rounded square caps mitre corners methyl me ch3 axial chirality ra sa helicity charges circled ammonium nh4 r groups superscript mechanism arrows reroute wrap around block path gap arrow width arrowhead head size length units pixels px millimeters mm inches angle readout look box plain solid pointer cursor hints modifier shift alt ctrl keys', open: drawingPreferences },
   { id: 'style', perFile: true, title: 'Drawing Style', words: 'bond length line width font journal acs rsc wiley elsevier thieme hash spacing margin arrow text reagents conditions above below size smaller reaction arrows gap fit alignment line up structures plus scheme', open: drawingStyleDialog },
   { id: 'hotkeys', title: 'Keyboard Shortcuts', words: 'keys keyboard shortcuts import export reset', open: () => hotkeysDialog.open() },
   { id: 'typing', title: 'Text and Spelling', words: 'typing spelling dictionary autocorrect replacements chemistry formulas subscripts', open: () => typingDialog.open() },
@@ -13481,7 +13486,6 @@ const SETTINGS_PAGES: SettingsPage[] = [
   { id: 'autosave', title: 'AutoSave and Recovery', words: 'autosave recovery versions backup copies shared folders onedrive', open: () => keeper.optionsCommand() },
   { id: 'ai', title: 'AI Model', words: 'ai artificial intelligence claude anthropic chatgpt gpt openai gemini google ollama openrouter api key llm model link connect', open: () => aiSettings() },
   { id: 'online', title: 'Online', words: 'pubchem internet names lookup updates check version privacy stable latest channel beta', open: onlinePreferences },
-  { id: 'transfer', actions: true, title: 'Import and Export', words: 'backup back up copy move settings file new computer install reinstall export import toolboxes hotkeys', open: settingsTransfer },
   { id: 'files', actions: true, title: 'File Types', words: 'open with default app explorer finder associations cdxml cdx mol sdf docx pptx xlsx double-click', open: () => fileTypesPage(fileTypesHost) },
 ];
 // Apply on a Settings page uses its settings and keeps them. Pages about the open file (Drawing
@@ -13817,6 +13821,11 @@ let welcomeWatch: (() => void) | null = null;
 function showStartView(): void {
   if (!startView || doc.atoms.size || doc.captions.size || doc.shapes.size || doc.arrows.size || deckNow() || ws.active.mode !== 'drawing' || ws.tabs.length > 1) return;
   const card = $('#start-view');
+  // the New buttons carry the tabs' mode icons
+  for (const b of card.querySelectorAll<HTMLElement>('.sv-new [data-mode]')) {
+    const icon = b.querySelector('.sv-icon')!;
+    if (!icon.firstChild) icon.innerHTML = TAB_ICONS[b.dataset.mode as Tab['mode']][0];
+  }
   const files = recentFiles.slice(0, 6).map((p) => {
     const b = document.createElement('button');
     b.type = 'button';
@@ -14130,6 +14139,7 @@ const smartPane = new SmartPane({
     const got = await askCycle(0, { spec: { loops: [st.loop] }, look: st.look, drawn: st.drawn });
     if (got?.rows) editor.smartRebuildCycle(id, got.spec, got.look, got.rows);
   },
+  cleanUpCycle: (id) => { if (!editor.smartCleanUpCycle(id)) flash('Clean Up Cycle needs three or more species in one loop.', 4000); },
   ungroup: (id) => editor.ungroupSmart(id),
   dock: (where) => {
     if (where === null) { smartDockBody = null; toolboxes.toggle('smart', false); smartPane.float(); return; }

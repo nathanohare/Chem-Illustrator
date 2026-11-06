@@ -15,8 +15,9 @@ import type { Measure } from '../editor/arrange';
 import { arrowPoints, isCurved } from '../objects';
 import { hasImplicitH, implicitHydrogens, SYMBOLS, valenceOfBonds } from './elements';
 import { groupNumber } from './electrons';
-import { headEnd, isAtomSymbol, pairOwner, pushEndAt, symbolSpot, tailEnd, type PushEnd } from './mechanism';
+import { headEnd, isAtomSymbol, pairOwner, pushEndAt, symbolPin, symbolSpot, tailEnd, type PushEnd } from './mechanism';
 import { sproutDir } from './chemgeom';
+import { plainMeasure } from './reaction';
 import { atomWarnings } from './warnings';
 
 /** Something wrong (or worth a second look) with the arrows: what, and the arrows, atoms and bonds it is about. */
@@ -274,7 +275,7 @@ const turn = (p: Vec, ang: number): Vec => ({ x: p.x * Math.cos(ang) - p.y * Mat
  * radical dots and circled charges are drawn as the starting drawing had them. The atoms keep
  * their ids (new bonds and symbols get new ones). Null when there is nothing to draw.
  */
-export function productDrawing(doc: Doc, m: Measure, reading: PushReading): Drawing | null {
+export function productDrawing(doc: Doc, reading: PushReading): Drawing | null {
   const touched = pushedAtoms(reading);
   if (!touched.size) return null;
   const atoms = new Set<number>();
@@ -358,7 +359,10 @@ export function productDrawing(doc: Doc, m: Measure, reading: PushReading): Draw
     }
 
     // lone pairs, radical dots and circled charges, as the starting drawing showed them
-    const pm = { atomBoxes: (a: Atom) => m.atomBoxes(a) } as Measure;
+    // measured on the product itself, not the starting drawing: an atom's label can have moved (a
+    // measure that remembers labels by atom gives the old place, and a dot would land on the label)
+    // or changed (a charge sign, an H more or fewer), and a symbol goes just clear of the label it now has
+    const pm = plainMeasure(out);
     for (const id of atoms) {
       const list = symbols.get(id) ?? [];
       const was = doc.atoms.get(id)!, now = out.atoms.get(id)!;
@@ -377,8 +381,12 @@ export function productDrawing(doc: Doc, m: Measure, reading: PushReading): Draw
         continue;
       }
       const dnA = reading.dn.get(id) ?? 0;
-      const nPairs = pairs.length || (showsPairs && dnA > 0) ? Math.max(0, pairs.length + Math.trunc(dnA / 2)) : 0;
+      // count electrons, not pairs: the drawn pairs and dot, plus what the arrows brought or took,
+      // less the dot it has after. A fishhook from a lone pair leaves one pair fewer and a dot;
+      // one electron onto a radical makes its dot a pair.
       const nDots = x.radical === 'doublet' ? 1 : 0;
+      const drawn = 2 * pairs.length + (was.radical === 'doublet' ? 1 : 0) + dnA - nDots;
+      const nPairs = pairs.length || (showsPairs && dnA > 0) ? Math.max(0, Math.floor(drawn / 2)) : 0;
       const circle = now.hideCharge && Math.abs(now.charge) === 1 ? (now.charge > 0 ? 'CirclePlus' : 'CircleMinus') : null;
       const taken: Vec[] = [];
       const put = (kind: 'LonePair' | 'Electron' | 'CirclePlus' | 'CircleMinus', size: number) => {
@@ -389,7 +397,10 @@ export function productDrawing(doc: Doc, m: Measure, reading: PushReading): Draw
         const box = kind === 'LonePair'
           ? { x1: at.x - n.x * half, y1: at.y - n.y * half, x2: at.x + n.x * half, y2: at.y + n.y * half }
           : { x1: at.x - half, y1: at.y - half, x2: at.x + half, y2: at.y + half };
-        out.addShape({ kind: 'symbol', symbol: kind, ...box });
+        // stuck to its atom, so it can be picked and moves with it
+        const sh = out.addShape({ kind: 'symbol', symbol: kind, ...box });
+        const pin = symbolPin(out, sh);
+        if (pin) out.updateShape(sh.id, { pin });
       };
       if (circle) put(circle, 4.5);
       for (let i = 0; i < nPairs; i++) put('LonePair', 2.6);
