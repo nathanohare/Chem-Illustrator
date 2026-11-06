@@ -136,7 +136,7 @@ describe('a template\'s artwork and theme', () => {
     const rel = /<a:blip r:embed="([^"]+)"/.exec(master)![1];
     const rels = part(back, 'ppt/slideMasters/_rels/slideMaster1.xml.rels');
     const target = new RegExp(`Id="${rel}"[^>]*Target="([^"]+)"`).exec(rels)![1];
-    expect(files(back)[`ppt/${target.replace('../', '')}`]).toEqual(PNG);
+    expect(files(back)[`ppt/${target.replace(/^(\.\.\/)+/, '')}`]).toEqual(PNG);
   });
 
   it('leaves the master off a layout that hides it, and keeps that', async () => {

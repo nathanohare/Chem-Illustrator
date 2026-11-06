@@ -265,7 +265,6 @@ export function partText(b: Uint8Array): string {
  * such as percentages ("50%" for 50000) in DrawingML, are not changed here.
  */
 export function fromStrict(text: string): string {
-  if (!text.includes('http://purl.oclc.org/ooxml/')) return text;
   return text.replace(/http:\/\/purl\.oclc\.org\/ooxml\/(?:officeDocument\/(\w+)(\/\w+)?|(drawingml|wordprocessingml|presentationml|spreadsheetml|schemaLibrary)\/(\w+))/g,
     (_all, doc?: string, rel?: string, family?: string, name?: string) => {
       const rename = (n: string) => (n === 'extendedProperties' ? 'extended-properties' : n === 'customProperties' ? 'custom-properties' : n);

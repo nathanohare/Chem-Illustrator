@@ -253,7 +253,7 @@ describe('pictures placed in cells (X13)', () => {
     expect(part(saved, 'xl/richData/rdrichvalue.xml')).toContain('<rv s="0"><v>0</v><v>5</v></rv>');
     const relTarget = /Target="([^"]+)"/.exec(part(saved, 'xl/richData/_rels/richValueRel.xml.rels'))![1];
     expect(relTarget).not.toBe('../media/image1.png');
-    expect(files[`xl/${relTarget.replace('../', '')}`]).toEqual(PICTURE);
+    expect(files[`xl/${relTarget.replace(/^(\.\.\/)+/, '')}`]).toEqual(PICTURE);
     expect(files['xl/media/image1.png']).toEqual(PNG);
     const wbRels = part(saved, 'xl/_rels/workbook.xml.rels');
     expect(wbRels).toContain('relationships/rdRichValue" Target="richData/rdrichvalue.xml"');
