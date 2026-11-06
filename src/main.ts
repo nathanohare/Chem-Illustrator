@@ -217,7 +217,7 @@ import type { ConformerTools, Viewer3d } from './ui/viewer3d';
 import { DEFAULT_XTB, KCAL_PER_HARTREE, refineWithXtb, type XtbOptions } from './chem/xtb';
 import type { Model3d } from './chem/model3d-build';
 import { mergeConformers } from './chem/conformer-rank';
-import { groupLabel, neighbours, newmanConformers, newmanView, norm360, torsion, type NewmanConformer, type NewmanGroup } from './chem/newman';
+import { groupLabel, neighbours, newmanConformers, newmanView, norm360, sameAtomOrder, torsion, type NewmanConformer, type NewmanGroup } from './chem/newman';
 import { extrema, fitProfile, type Extremum, type Profile } from './chem/torsion-profile';
 import { torsionCsv, type TorsionData } from './design/torsion';
 import type { ChartChoice } from './ui/newman-chart-tab';
@@ -2041,13 +2041,19 @@ function newmanWork(frontId: number, backId: number) {
     const a = id !== undefined && id >= 0 ? doc.atoms.get(id) : undefined;
     return a?.label && (doc.adj.get(a.id) ?? []).length === 1 ? a.label : null;
   };
+  // the groups are labelled through the model's atom numbers, so it must number them as the molfile does
+  const mismatch = 'The 3-D model numbered this structure\'s atoms differently from the drawing, so its groups can\'t be labeled correctly. Please report this structure (Help ▸ Send Feedback).';
+  const checked = <T extends { atoms: { z: number; charge: number }[] }>(m: T): T => {
+    if (!sameAtomOrder({ atoms: m.atoms, bonds: [] }, ex.molblock)) throw new Error(mismatch);
+    return m;
+  };
   const models = new Map<string, Promise<Model3d>>();
   const modelFor = (method: 'mmff' | 'xtb', progress: (t: string) => void): Promise<Model3d> => {
     let p = models.get(method);
     if (!p) {
       const opts = { starts: 120, window: 6, rmsd: 0.3 };
       p = method === 'mmff'
-        ? model3d.search(ex.molblock, opts, (done, total) => progress(`Searching conformers… ${done} of ${total}`)).then((m) => withBondRotamers(m, ex.molblock, fi, bi, progress))
+        ? model3d.search(ex.molblock, opts, (done, total) => progress(`Searching conformers… ${done} of ${total}`)).then(checked).then((m) => withBondRotamers(m, ex.molblock, fi, bi, progress))
         : modelFor('mmff', progress).then((m) => {
           const t = conformerTools(ex.molblock);
           if (!t.xtb) throw new Error('xTB runs in the desktop app, with the xtb program installed.');
@@ -2131,6 +2137,7 @@ function newmanWork(frontId: number, backId: number) {
       if ('problem' in r) return r.message;
       const p = r.pose;
       const mol = { atoms: p.z.map((z) => ({ z, charge: 0 })), bonds: p.bonds.map(([a, b]) => ({ a, b, order: 1 })) };
+      if (!sameAtomOrder(mol, ex.molblock)) return mismatch;
       // bond orders from the molfile (the pose keeps the molfile's atoms first, in order)
       const m = await modelFor('mmff', () => {}).catch(() => null);
       const withOrders = m && m.atoms.length === p.z.length ? m : mol;
