@@ -5,11 +5,12 @@
 import { attachCode } from './attach-codes';
 import { Doc, Atom, isMetalAtom, outsideValence, radicalElectrons } from '../model';
 import { metalCarbonyl } from './hapto';
-import { SYMBOLS, elementNumber, hasImplicitH, implicitHydrogens, valenceOfBonds } from './elements';
+import { SYMBOLS, elementNumber, hasImplicitH, implicitHydrogens, isMetal, valenceOfBonds } from './elements';
 import { CARBONYL_LIGAND, isCarbonylLabel, kekulize, labelDonates, labelGraph, MiniGraph } from './labels';
 import { stereoAnchor, stereoSense } from './stereo';
 import { kekuleDoubles } from './aromatic';
 import { flatStandIn } from './ring-views';
+import { readSpecies } from './species';
 
 export interface MolExport {
   molblock: string;
@@ -56,7 +57,15 @@ export interface MolfileOptions {
 const GENERIC_STAND_IN = 'Og';
 
 /** A molfile atom: an element symbol (or R#, *, or a label kept as an alias), position in bond lengths. */
-export interface MAtom { sym: string; x: number; y: number; charge: number; iso: number; rad?: number; map?: number; alias?: string }
+export interface MAtom {
+  sym: string; x: number; y: number; charge: number; iso: number; rad?: number; map?: number; alias?: string;
+  /**
+   * The atom's whole valence, its bonds and hydrogens together, when its hydrogens are fixed as
+   * written rather than worked out (N on its own is N, not NH3): V2000's vvv, V3000's VAL. 0 is
+   * no valence at all (no bonds, no hydrogens).
+   */
+  val?: number;
+}
 /** A molfile bond between atoms counted from 0, with V2000's bond type and stereo numbers (1 up, 6 down, 4 either, 3 cis or trans). */
 export interface MBond { a: number; b: number; order: number; stereo: number }
 
@@ -71,7 +80,7 @@ export function v3000Ctab(atoms: MAtom[], bonds: MBond[]): string[] {
   const type = (a: MAtom) => { const t = a.alias ?? a.sym; return /[\s"]/.test(t) ? `"${t.replace(/"/g, '""')}"` : t; };
   const out = ['BEGIN CTAB', `COUNTS ${atoms.length} ${bonds.length} 0 0 0`, 'BEGIN ATOM'];
   atoms.forEach((a, i) => out.push([i + 1, type(a), n(a.x), n(a.y), n(0), a.map ?? 0,
-    ...(a.charge ? [`CHG=${a.charge}`] : []), ...(a.rad ? [`RAD=${a.rad}`] : []), ...(a.iso ? [`MASS=${a.iso}`] : [])].join(' ')));
+    ...(a.charge ? [`CHG=${a.charge}`] : []), ...(a.rad ? [`RAD=${a.rad}`] : []), ...(a.val !== undefined ? [`VAL=${a.val || -1}`] : []), ...(a.iso ? [`MASS=${a.iso}`] : [])].join(' ')));
   out.push('END ATOM');
   if (bonds.length) {
     out.push('BEGIN BOND');
@@ -238,11 +247,45 @@ export function toMolfile(doc: Doc, atomIds: Iterable<number>, name = '', opts: 
     charged.set(donor, (charged.get(donor) ?? 0) + 1);
     charged.set(acceptor, (charged.get(acceptor) ?? 0) - 1);
   }
+  /**
+   * Atoms and bonds with their hydrogens as written (a text box read as chemistry, or a label on
+   * its own): written out as single and double bonds, and an atom shown without hydrogens it
+   * would otherwise take is a radical or carbene (TEMPO's O, NO, a free NHC's carbon), its
+   * valence fixed so the engine adds none (N on its own is N, not NH3). The first atom stands for
+   * `owner` (-1: none, every atom is one the drawing doesn't have).
+   */
+  const pushWritten = (g: MiniGraph, x0: number, y0: number, owner: number, map0?: number): void => {
+    const kb = kekulize(g);
+    const base = atoms.length;
+    const used = g.atoms.map(() => 0);
+    for (const b of kb) { used[b.a] += b.order === 1.5 ? 1.5 : b.order; used[b.b] += b.order === 1.5 ? 1.5 : b.order; }
+    g.atoms.forEach((ga, k) => {
+      const missing = ga.hCount !== undefined && hasImplicitH(ga.z) ? implicitHydrogens(ga.z, used[k], ga.charge) - ga.hCount : 0;
+      const ang = k * 2.4, r = k === 0 ? 0 : 0.35 + 0.05 * k;
+      const sym = ga.dummy ? generic : SYMBOLS[ga.z] || generic;
+      atoms.push({
+        sym, x: x0 + r * Math.cos(ang), y: y0 + r * Math.sin(ang), charge: ga.charge, iso: ga.iso ?? 0, rad: missing === 1 ? 2 : missing === 2 ? 1 : 0,
+        ...(missing > 0 ? { val: Math.round(used[k]) + ga.hCount! } : {}), ...(k === 0 && map0 ? { map: map0 } : {}),
+      });
+      map.push(k === 0 ? owner : -1);
+      if (owner < 0 || g.atoms.length > 1) inLabel.push(base + k);
+    });
+    // (positions are made up, so double bonds are written as either cis or trans)
+    for (const b of kb) bonds.push({ a: base + b.a, b: base + b.b, order: b.order === 1.5 ? 4 : b.order, stereo: b.order === 2 ? 3 : 0 });
+  };
   for (const id of ids) {
     const a = doc.atoms.get(id)!;
     const at = stand?.moves.get(id) ?? a;
     const x = (at.x - first.x) / L, y = -(at.y - first.y) / L;
     let g: MiniGraph | null = null;
+    // a label on its own, with no bonds (N, OMe, NH3 typed with the Text tool): what is written,
+    // as a text box set to Chemical reads it, with no hydrogens the label doesn't show
+    const lone = a.label && !a.charge && !a.isotope && !a.radical && !doc.adj.get(id)?.length ? readSpecies(a.label, { fragments: true }) : null;
+    if (lone && !lone.expected && !lone.graph.atoms.some((ga) => ga.dummy)) {
+      attach.set(id, atoms.length);
+      pushWritten(lone.graph, x, y, id, opts.maps ? a.mapNo : undefined);
+      continue;
+    }
     if (a.label) {
       const own = valenceOfBonds((doc.adj.get(id) ?? []).map((bid) => doc.bonds.get(bid)!).filter((b) => !outsideValence(b) && !dative.has(b.id)).map((b) => b.order));
       g = !own && isCarbonylLabel(a.label) && toMetal(id) ? CARBONYL_LIGAND : labelGraph(a.label, own);
@@ -272,24 +315,7 @@ export function toMolfile(doc: Doc, atomIds: Iterable<number>, name = '', opts: 
     });
     for (const gb of g.bonds) bonds.push({ a: base + gb.a, b: base + gb.b, order: gb.order === 1.5 ? 4 : gb.order, stereo: 0 });
   }
-  for (const sp of opts.species ?? []) {
-    // written out as single and double bonds, and an atom shown without hydrogens it would
-    // otherwise take is a radical or carbene (TEMPO's O, NO, a free NHC's carbon)
-    const kb = kekulize(sp.graph);
-    const base = atoms.length;
-    const used = sp.graph.atoms.map(() => 0);
-    for (const b of kb) { used[b.a] += b.order === 1.5 ? 1.5 : b.order; used[b.b] += b.order === 1.5 ? 1.5 : b.order; }
-    const x0 = (sp.x - first.x) / L, y0 = -(sp.y - first.y) / L;
-    sp.graph.atoms.forEach((ga, k) => {
-      const missing = ga.hCount !== undefined && hasImplicitH(ga.z) ? implicitHydrogens(ga.z, used[k], ga.charge) - ga.hCount : 0;
-      const ang = k * 2.4, r = k === 0 ? 0 : 0.35 + 0.05 * k;
-      atoms.push({ sym: ga.dummy ? generic : SYMBOLS[ga.z] || generic, x: x0 + r * Math.cos(ang), y: y0 + r * Math.sin(ang), charge: ga.charge, iso: ga.iso ?? 0, rad: missing === 1 ? 2 : missing === 2 ? 1 : 0 });
-      map.push(-1);
-      inLabel.push(base + k);
-    });
-    // (positions are made up, so double bonds are written as either cis or trans)
-    for (const b of kb) bonds.push({ a: base + b.a, b: base + b.b, order: b.order === 1.5 ? 4 : b.order, stereo: b.order === 2 ? 3 : 0 });
-  }
+  for (const sp of opts.species ?? []) pushWritten(sp.graph, (sp.x - first.x) / L, -(sp.y - first.y) / L, -1);
   const seen = new Set<number>();
   for (const id of ids) {
     for (const bid of doc.adj.get(id) ?? []) {
@@ -317,6 +343,7 @@ export function toMolfile(doc: Doc, atomIds: Iterable<number>, name = '', opts: 
     }
   }
 
+  hydrogensLast(atoms, bonds, map, inLabel, genericAt);
   const head = [name.slice(0, 80), '  ChemIllus         2D', ''];
   if (opts.v3000) {
     return { molblock: v3000Molfile(head, atoms, bonds), map, unknownLabels: unknown, inLabel, generic: genericAt };
@@ -324,8 +351,9 @@ export function toMolfile(doc: Doc, atomIds: Iterable<number>, name = '', opts: 
   const lines: string[] = [...head];
   lines.push(`${i3(atoms.length)}${i3(bonds.length)}  0  0  0  0  0  0  0  0999 V2000`);
   for (const a of atoms) {
-    // (the ninth number after the charge is the atom-atom map number)
-    lines.push(`${f(a.x, 10)}${f(a.y, 10)}${f(0, 10)} ${a.sym.padEnd(3)} 0  0  0  0  0  0  0  0  0${i3(a.map ?? 0)}  0  0`);
+    // (after the symbol, the sixth number is the valence, 15 for none, and the tenth the atom-atom map number)
+    const val = a.val === undefined ? 0 : a.val || 15;
+    lines.push(`${f(a.x, 10)}${f(a.y, 10)}${f(0, 10)} ${a.sym.padEnd(3)} 0  0  0  0  0${i3(val)}  0  0  0${i3(a.map ?? 0)}  0  0`);
   }
   for (const b of bonds) lines.push(`${i3(b.a + 1)}${i3(b.b + 1)}${i3(b.order)}${i3(b.stereo)}`);
   atoms.forEach((a, i) => { if (a.alias) lines.push(`A  ${i3(i + 1)}`, a.alias); });
@@ -346,6 +374,40 @@ export function toMolfile(doc: Doc, atomIds: Iterable<number>, name = '', opts: 
   }
   lines.push('M  END');
   return { molblock: lines.join('\n') + '\n', map, unknownLabels: unknown, inLabel, generic: genericAt };
+}
+
+/**
+ * Drawn hydrogen atoms (an H on a wedge) moved after every other atom, in place. OpenChemLib
+ * moves such "simple" hydrogens to the end of its atom list as it reads a molfile (swapping each
+ * with the last heavy atom), so the 3-D models it builds would number their atoms differently
+ * from the molfile, and a Newman projection or 3-D pose read back through `map` would put one
+ * atom's label on another (an H written as CH3). With them already last, its numbering is the
+ * molfile's. A simple hydrogen is OpenChemLib's: plain H (no charge or isotope) with at most one
+ * single bond, not to a metal other than aluminium; any other H keeps its place.
+ */
+function hydrogensLast(atoms: MAtom[], bonds: MBond[], map: number[], inLabel: number[], generic: [number, string][]): void {
+  const n = atoms.length;
+  const simple = atoms.map((a) => a.sym === 'H' && !a.charge && !a.iso && !a.alias);
+  const degree = atoms.map(() => 0);
+  for (const b of bonds) {
+    degree[b.a]++; degree[b.b]++;
+    for (const [x, y] of [[b.a, b.b], [b.b, b.a]]) {
+      const z = elementNumber(atoms[y].sym);
+      if (b.order !== 1 || (z !== undefined && isMetal(z) && z !== 13)) simple[x] = false;
+    }
+  }
+  for (let i = 0; i < n; i++) if (degree[i] > 1) simple[i] = false;
+  const order = [...atoms.keys()].filter((i) => !simple[i]);
+  const firstH = order.length;
+  order.push(...[...atoms.keys()].filter((i) => simple[i]));
+  if (order.every((old, i) => old === i) || firstH === n) return;
+  const to = new Array<number>(n);
+  order.forEach((old, i) => { to[old] = i; });
+  const was = [...atoms], wasMap = [...map];
+  order.forEach((old, i) => { atoms[i] = was[old]; map[i] = wasMap[old]; });
+  for (const b of bonds) { b.a = to[b.a]; b.b = to[b.b]; }
+  for (let k = 0; k < inLabel.length; k++) inLabel[k] = to[inLabel[k]];
+  for (const g of generic) g[0] = to[g[0]];
 }
 
 /** Add the atoms and bonds of a molfile to the document, centred at (cx, cy). Returns new atom ids. */

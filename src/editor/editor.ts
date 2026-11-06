@@ -7,7 +7,7 @@ import { DEFAULT_CURSOR_AIDS, drawCursorAids, hintLines, modifierHints, readoutT
 import { Sketcher } from './sketch';
 import { installPenAndTouch } from './touch';
 import { labelAtoms, labelLookOf, setLabelFont, setLabelSize, toggleLabelBold } from './label-font';
-import { Doc, Atom, Bond, BondDisplay, PARTIAL, Arrow, Shape, Caption, isMetalAtom, isWedge, applyBase, captionBase, stripBase, type StepRoles, type Justify, type HighlightStyle, type Entity } from '../model';
+import { Doc, Atom, Bond, BondDisplay, PARTIAL, ELEMENT_WITH_H, Arrow, Shape, Caption, isMetalAtom, isWedge, applyBase, captionBase, stripBase, type StepRoles, type Justify, type HighlightStyle, type Entity } from '../model';
 import { doubleBondGap, scaleOwnWidths } from '../style';
 import { CaptionEditor } from '../ui/caption-editor';
 import { followLink, linkTip } from '../ui/links-ui';
@@ -30,6 +30,7 @@ import * as rt from '../richtext';
 import { applyFormat, formatWhole, type TextFormat } from '../text/format';
 import { cleanUpOptions, type CleanUpOption } from '../chem/cleanup';
 import { Renderer, measureText } from '../render/renderer';
+import { captionReading, readSpecies } from '../chem/species';
 import { tidyStyle } from '../render/highlight';
 import { ASCENT, blankRoomAt } from '../text/layout';
 import { cellAlign, insertRow, nextCell, partAt, partRuns, setColumnWidth, setPart, spanOf, NOTE_SCALE, type TablePart } from '../table';
@@ -82,7 +83,7 @@ import { attachWhereItIs, defaultGap, placeAttached, refitAttached } from './att
 import { frameAround, frameBox, frameMembers, refitFrames, defaultPad, thingsInside } from './frames';
 import { atomsBox, Align, Measure, POINTS, Snapshot, type TurnText, units, joinGroups, clearOffset, alignOffsets, distributeOffsets, moveUnit, selectionBox, snapshot, transform, withFrameContents, rotation, mirrorX, mirrorY } from './arrange';
 import { elementNumber, hasImplicitH, implicitHydrogens, SYMBOLS } from '../chem/elements';
-import { tokenize, addNicknames, isBuiltInNickname, labelGraph, labelPieces, labelLook, styleLabel, CAP, SUB_SCALE } from '../chem/labels';
+import { tokenize, addNicknames, isBuiltInNickname, labelGraph, labelOverValent, labelPieces, labelLook, styleLabel, CAP, SUB_SCALE } from '../chem/labels';
 import {
   Handle, type HandleId, arrowEllipseFrame, arrowHit, shapeHit, arrowHandles, shapeHandles, dragArrowHandle, dragShapeHandle, dragCropHandle, shapeBox, shapeMid, shapeTurn,
   arrowPoints, bracketHalves, type BracketForm, bracketLip, unionRect,
@@ -431,8 +432,6 @@ export class Editor {
     methylStyle: 'Me' as MethylStyle,
     /** + and − on an atom give a charge in a circle (⊕, ⊖) rather than a plain sign in the label (Edit > Settings). */
     circledCharges: false,
-    /** An atom or group typed with the Text tool beside a bond end (Br, OMe) becomes that atom (Edit > Settings). */
-    textToAtom: true,
     /** A click on something in a group selects the whole group, or just that thing (Edit > Settings). */
     groupClick: 'group' as 'group' | 'item',
     /** Selecting part of a group outlines the whole group (Edit > Settings). */
@@ -457,8 +456,6 @@ export class Editor {
   say: (msg: string) => void = () => {};
   /** The angle and length beside the pointer while drawing, and the modifier keys' hints (Settings ▸ Drawing). */
   aids: CursorAidPrefs = { ...DEFAULT_CURSOR_AIDS };
-  /** The units lengths beside the pointer are written in (the rulers'). */
-  lengthUnits: () => 'in' | 'cm' = () => this.aids.units;
   /** The modifier keys held now (for the hints beside the pointer). */
   private mods: Mods = { shift: false, alt: false, ctrl: false };
   /** Run a menu command by name; false when it doesn't apply, so the key does nothing. */
@@ -5120,8 +5117,9 @@ export class Editor {
   }
 
   /**
-   * Move what was just put down (the selection) off whatever else is on the page: to the right
-   * of it, or below it when that would run off the page. Call inside an edit.
+   * Move what was just put down (the selection) off whatever else is on the page, the least it
+   * takes (beside the nearest free gap, not past the whole drawing), then bring it into view.
+   * Call inside an edit.
    */
   private moveClear(page?: { w: number; h: number }): void {
     const doc = this.doc, m = this.measure();
@@ -5131,19 +5129,38 @@ export class Editor {
     for (const id of doc.captions.keys()) if (!mine.captions.has(id)) others.captions.add(id);
     for (const id of doc.arrows.keys()) if (!mine.arrows.has(id)) others.arrows.add(id);
     for (const id of doc.shapes.keys()) if (!mine.shapes.has(id)) others.shapes.add(id);
-    const b = selectionBox(doc, mine, m), o = selectionBox(doc, others, m);
-    if (!b || !o || b.x2 <= o.x1 || o.x2 <= b.x1 || b.y2 <= o.y1 || o.y2 <= b.y1) return;
+    const b = selectionBox(doc, mine, m);
+    if (!b) return;
     const gap = doc.style.bondLength;
-    // how far past the page's edges it would go (none without a page)
-    const over = (t: Vec) => !page ? 0 : Math.max(0, -(b.x1 + t.x)) + Math.max(0, b.x2 + t.x - page.w) + Math.max(0, -(b.y1 + t.y)) + Math.max(0, b.y2 + t.y - page.h);
-    const tries = [{ x: o.x2 + gap - b.x1, y: 0 }, { x: 0, y: o.y2 + gap - b.y1 }, { x: o.x1 - gap - b.x2, y: 0 }, { x: 0, y: o.y1 - gap - b.y2 }];
-    const go = tries.reduce((best, t) => (over(t) < over(best) ? t : best));
-    // on a page too full for it, as near that side as the page allows (it may overlap a little)
-    if (page) {
-      go.x = Math.min(Math.max(go.x, -b.x1), page.w - b.x2);
-      go.y = Math.min(Math.max(go.y, -b.y1), page.h - b.y2);
+    const boxes = units(doc, others, m).map((u) => u.box);
+    const hit = (o: Rect) => b.x1 < o.x2 && o.x1 < b.x2 && b.y1 < o.y2 && o.y1 < b.y2;
+    let go = clearOffset(b, boxes, gap, page);
+    if (!go.x && !go.y && boxes.some(hit)) {
+      // no free gap near: past everything else (to the right, or below when that runs off the page)
+      const o = selectionBox(doc, others, m)!;
+      const over = (t: Vec) => !page ? 0 : Math.max(0, -(b.x1 + t.x)) + Math.max(0, b.x2 + t.x - page.w) + Math.max(0, -(b.y1 + t.y)) + Math.max(0, b.y2 + t.y - page.h);
+      const tries = [{ x: o.x2 + gap - b.x1, y: 0 }, { x: 0, y: o.y2 + gap - b.y1 }, { x: o.x1 - gap - b.x2, y: 0 }, { x: 0, y: o.y1 - gap - b.y2 }];
+      go = tries.reduce((best, t) => (over(t) < over(best) ? t : best));
+      // on a page too full for it, as near that side as the page allows (it may overlap a little)
+      if (page) {
+        go.x = Math.min(Math.max(go.x, -b.x1), page.w - b.x2);
+        go.y = Math.min(Math.max(go.y, -b.y1), page.h - b.y2);
+      }
     }
-    this.moveSelection(go.x, go.y);
+    if (go.x || go.y) this.moveSelection(go.x, go.y);
+    this.showBox({ x1: b.x1 + go.x, y1: b.y1 + go.y, x2: b.x2 + go.x, y2: b.y2 + go.y });
+  }
+
+  /** Scroll (not zoom) so a box of the drawing is on screen: centred on it when any of it is out of view. */
+  private showBox(box: Rect): void {
+    const r = this.r;
+    if (!r.width || !r.height) return;
+    const v = r.visibleRect(-12);
+    if (box.x1 >= v.x1 && box.x2 <= v.x2 && box.y1 >= v.y1 && box.y2 <= v.y2) return;
+    const s = r.view.scale;
+    r.view.ox = r.width / 2 - ((box.x1 + box.x2) / 2) * s;
+    r.view.oy = r.height / 2 - ((box.y1 + box.y2) / 2) * s;
+    this.requestScene();
   }
 
   /**
@@ -6455,7 +6472,7 @@ export class Editor {
    * next to the end of a bond, becomes that atom's label, as if typed on the atom. True when it did.
    */
   private labelFromText(caption: number, text: string, at: Vec): boolean {
-    if (!this.options.textToAtom || this.textFirst || !isAtomText(text)) return false;
+    if (this.textFirst || !isAtomText(text)) return false;
     const doc = this.doc;
     let best: Atom | null = null, bestD = Infinity;
     for (const a of doc.atomsNear(at, doc.style.bondLength * 0.6 * 1.5)) {
@@ -6463,7 +6480,7 @@ export class Editor {
       const d = dist(a, at);
       if (d <= doc.style.bondLength * 0.6 * (a.s ?? 1) && d < bestD) { best = a; bestD = d; }
     }
-    if (!best) return false;
+    if (!best) return this.atomFromText(caption, text);
     const id = best.id;
     const styled = styleLabel(text.trim());
     doc.edit('Text to Atom', () => {
@@ -6472,7 +6489,51 @@ export class Editor {
       if (styled.marks && doc.atoms.get(id)?.label) doc.updateAtom(id, { labelMarks: styled.marks });
     });
     this.lastEdited = id;
-    this.say(`${text} is now an atom on the bond. Undo (Ctrl+Z) to keep it as text, or turn this off in Edit > Settings.`);
+    this.say(`${text} is now an atom on the bond. Undo (Ctrl+Z) to keep it as text.`);
+    return true;
+  }
+
+  /**
+   * Text typed with the Text tool away from any bond that is only an atom, a formula of one atom
+   * (N, NH2, H2O) or a group (OMe, CO2Me) becomes an atom with that label, as a drawn atom is: a
+   * ring or bond drawn on it takes it in (benzene on N makes pyridine). It reads as written, with
+   * no hydrogens it doesn't show (N is N, not NH3; molfile.ts). A compound of more than one atom
+   * (CH2Cl2, DMAP, MeOH), an ion and text over or under a reaction arrow stay text, read as
+   * chemistry as before (chem/species.ts). True when it did.
+   */
+  private atomFromText(caption: number, text: string): boolean {
+    const doc = this.doc;
+    const c = doc.captions.get(caption);
+    // (II, IV: numbers, not atoms)
+    if (!c || /[+\-−–]$/.test(text) || /^[IVXL]{2,}$/.test(text)) return false;
+    const sp = readSpecies(text);
+    if (sp ? sp.charge || sp.graph.atoms.filter((a) => a.z !== 1).length > 1 : labelOverValent(text, 1).length) return false;
+    const read = captionReading(doc, c, this.measure());
+    if (!read.species && read.why === 'arrow') return false;
+    // the label's first letter where the text's was
+    const run = c.runs[0];
+    const size = run?.size ?? doc.style.captionSize;
+    const box = this.r.captionBox(c);
+    const first = measureText([...text][0], size, run?.font ?? doc.style.captionFont, '');
+    const p = { x: box.x1 + first / 2, y: c.y - size * 0.36 };
+    const styled = styleLabel(text);
+    // one element with or without hydrogens (N, NH2, H2O) is shown and read just as written
+    // until it is bonded (Doc.addBond), not with the hydrogens worked out (NH3, OH2)
+    const el = ELEMENT_WITH_H.exec(text)?.[1];
+    const z = el && el !== 'D' && el !== 'T' ? elementNumber(el) : undefined;
+    let id = 0;
+    doc.edit('Text to Atom', () => {
+      doc.removeCaption(caption);
+      id = doc.addAtom(p.x, p.y, 6, { asTyped: true }).id;
+      if (z !== undefined) {
+        doc.updateAtom(id, { z, label: text });
+      } else {
+        this.applyLabel(id, styled.label);
+        if (styled.marks && doc.atoms.get(id)?.label) doc.updateAtom(id, { labelMarks: styled.marks });
+      }
+    });
+    this.lastEdited = id;
+    this.say(`${text} is now an atom. Undo (Ctrl+Z) to keep it as text.`);
     return true;
   }
 
@@ -7073,7 +7134,7 @@ export class Editor {
     const a = this.aids;
     if ((!a.angle && !a.length && !a.hints) || !this.pointerInside || this.captionEd || this.paused) return;
     const seg = a.angle || a.length ? this.drawnSegment() : null;
-    const readout = seg ? readoutText(seg.a, seg.b, { ...a, units: this.lengthUnits() }) : '';
+    const readout = seg ? readoutText(seg.a, seg.b, a) : '';
     const d = this.drag;
     // while the button is up the hints show only as a key is held, saying what it will do
     const held = this.mods.shift || this.mods.alt || this.mods.ctrl;
