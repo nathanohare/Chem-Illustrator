@@ -113,11 +113,13 @@ describe('an atom typed with the Text tool on its own', () => {
     }
   });
 
-  it('keeps the bond-end rule and the setting that turns it off', () => {
+  it('is always on, and Undo keeps the text as text', () => {
     const { doc, ed } = setup();
-    ed.options.textToAtom = false;
-    expect(typeText(doc, ed, 'N')).toBe(false);
+    expect(typeText(doc, ed, 'N')).toBe(true);
+    expect(doc.captions.size).toBe(0);
+    doc.undo();
     expect(doc.captions.size).toBe(1);
+    expect(doc.atoms.size).toBe(0);
   });
 
   it('leaves labels made any other way as they are when bonded', () => {

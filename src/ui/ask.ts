@@ -21,6 +21,8 @@ export interface Field {
   help?: string;
   /** A small picture of the choice beside the box, drawn again as it changes. */
   inline?: (value: string) => Node;
+  /** A drop-down list of its own on the same row, after the label (a checkbox's units, say); its value comes back under its own name. */
+  beside?: { name: string; value: string; options: { value: string; label: string }[]; label: string };
 }
 
 /** A bigger picture of what the settings will look like, beside them (the Settings window's right-hand pane), drawn again as anything changes. */
@@ -107,6 +109,15 @@ export function ask(title: string, fields: Field[], opts: { ok?: string; note?: 
         u.className = 'muted';
         u.textContent = f.unit;
         row.append(u);
+      }
+      if (f.beside) {
+        const sel = document.createElement('select');
+        sel.className = 'ask-beside';
+        sel.setAttribute('aria-label', f.beside.label);
+        for (const o of f.beside.options) sel.add(new Option(o.label, o.value, false, o.value === f.beside.value));
+        row.classList.add('ask-has-beside');
+        row.append(sel);
+        inputs.set(f.beside.name, sel);
       }
       if (f.inline) {
         const slot = document.createElement('span');

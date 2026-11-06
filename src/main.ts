@@ -23,7 +23,7 @@ import { editPalettes, getPalettes, onPalettes, setPalettes, useDrawingColours, 
 import { Doc, Atom, Bond, type BondDisplay, type Arrow, PARTIAL, Caption, Shape, type TextRun, outsideValence, Contents, CHIRAL_FLAGS, PICTURE_STYLES, type PictureLook, type Attachment, type HighlightStyle, type ShapeMath, PAPER, keepOnPage, type PageSetup, type PageWalls } from './model';
 import { Renderer, measureText, forgetTextWidths } from './render/renderer';
 import { Editor, TOOLS, ringsWereFilled, setMarkTint, type HighlightToggle, type Selection } from './editor/editor';
-import { setAidTint } from './editor/cursor-aids';
+import { LENGTH_UNITS, setAidTint } from './editor/cursor-aids';
 import { BUILT_IN_LOOKS, type HighlightLookPreset } from './ui/highlight-looks';
 import { selectionBox, atomsBox, POINTS, type Align, units, moveUnit } from './editor/arrange';
 import { defaultColumns } from './editor/grid-arrange';
@@ -190,7 +190,7 @@ import { NicknameChooser } from './ui/nickname-chooser';
 import { ask, askChoice, type Field } from './ui/ask';
 import { ACTION_LINKS, geoShapeStyle } from './design/geo';
 import { BuildHint } from './ui/build-hint';
-import { alkylPreview, bondEndSwatch, chargeSwatch, navigationPreview, pageGridPreview, readingPreview, stylePreview } from './ui/settings-previews';
+import { alkylPreview, bondEndSwatch, chargeSwatch, cursorAidSwatch, mechanismPreview, methylSwatch, navigationPreview, pageGridPreview, readingPreview, stylePreview } from './ui/settings-previews';
 import { AUTO_STEPS_DEFAULTS, markPieces, stepAnims, stepClicks, stepPieces, type AutoStepsOptions, type StepPiece } from './deck/auto-steps';
 import { UpdateUI } from './ui/update-ui';
 import { canUpdate, appVersion, portableInfo, STAGE, STAGE_NOTE, UPDATE_CHANNELS, type UpdateChannel } from './updates';
@@ -360,7 +360,6 @@ function applyModeColours(mode: Parameters<typeof applyModeColoursOnly>[0], c: M
   setCaptionTint(tint);
   editor.requestScene();
 }
-editor.lengthUnits = () => rulerPrefs.units;
 const chem = new ChemClient(document.baseURI);
 const checks = new StructureChecks(doc);
 renderer.checks = checks;
@@ -509,10 +508,15 @@ const OWN_ADD = 'own-template-add';
 const OWN_PALETTE: PaletteDef = {
   palette: 'tpl-own',
   title: 'My templates',
-  items: [{ name: OWN_ADD, title: 'Save the selected structure as a template of your own' }],
+  items: [{ name: OWN_ADD, title: 'Save Selection as Custom Template' }],
   columns: 4,
   large: true,
-  icon: (name, size) => { const t = templateById(name.slice(4)); return t ? templateIcon(t, size) : name; },
+  // (in the open fly-out the save button is a plain teal "+"; on the bar it keeps its own icon)
+  icon: (name, size) => {
+    if (name === OWN_ADD) return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" style="color: var(--accent)" aria-hidden="true"><path d="M12 6v12M6 12h12"/></svg>`;
+    const t = templateById(name.slice(4));
+    return t ? templateIcon(t, size) : ICONS[name] ?? name;
+  },
 };
 
 // Template palettes, one per kind of structure
@@ -10126,16 +10130,18 @@ async function openOutsideFiles(): Promise<void> {
   }
 }
 
+/** A mechanism arrow gap typed in Settings ▸ Drawing, in points: null (the usual gap) when blank or not a number. */
+const arrowGap = (v: string | undefined): number | null => { const n = Number(v); return !v || v.trim() === '' || !isFinite(n) || n < 0 ? null : Math.min(50, n); };
+
 /** Settings ▸ Drawing: how structures are written and drawn, set once rather than per structure. */
 async function drawingPreferences(): Promise<void> {
   const r = await ask('Drawing', [
-    { name: 'methyl', label: 'Terminal methyls written as', value: editor.options.methylStyle, options: [{ value: 'Me', label: 'Me' }, { value: 'CH3', label: 'CH3' }],
+    { name: 'methyl', label: 'Terminal methyls written as', value: editor.options.methylStyle, options: [{ value: 'Me', label: 'Me' }, { value: 'CH3', label: 'CH₃' }], inline: (v) => methylSwatch(v === 'CH3' ? 'CH3' : 'Me', doc.style),
       help: 'Show Terminal Methyls writes them this way; methyls already written out in the selection (or the whole drawing, with nothing selected) change too.' },
     { name: 'axial', label: 'Axial chirality written as', value: axialStyle.helicity ? 'PM' : 'RaSa', options: [{ value: 'RaSa', label: 'Ra / Sa' }, { value: 'PM', label: 'P / M (helicity)' }],
       help: 'Labels on biaryls and allenes follow the choice at once. Ra is the same as M, and Sa as P.' },
-    { name: 'charges', label: 'Charges from the + and − keys', value: editor.options.circledCharges ? 'circled' : 'plain', options: [{ value: 'plain', label: 'Plain sign (N+)' }, { value: 'circled', label: 'In a circle (⊕, ⊖)' }], inline: (v) => chargeSwatch(v === 'circled'),
+    { name: 'charges', label: 'Charges from the + and − keys', value: editor.options.circledCharges ? 'circled' : 'plain', options: [{ value: 'plain', label: 'In the label' }, { value: 'circled', label: 'In a circle' }], inline: (v) => chargeSwatch(v === 'circled', doc.style),
       help: 'Charges already drawn keep their look; the circle tools on the Object toolbox always draw a circled charge.' },
-    { name: 'textAtom', label: 'An atom or group typed with the Text tool (N, OMe) becomes an atom, or the atom at a bond end it is typed beside', type: 'checkbox', value: String(editor.options.textToAtom) },
     { name: 'ionCharges', label: 'Add charges to common counterions typed as text (BF4 becomes BF4⁻, NBu4 becomes NBu4⁺)', type: 'checkbox', value: String(chemText.ionCharges),
       help: 'Off, a counterion typed without its charge is still read as that ion, and flagged until the charge is added.' },
     { name: 'saltGroups', label: 'Group a counterion typed as text with the structure or ion of opposite charge next to it, as one salt', type: 'checkbox', value: String(chemText.saltGroups),
@@ -10144,7 +10150,7 @@ async function drawingPreferences(): Promise<void> {
       help: 'How round the free ends of bonds are, on screen and in pictures and prints. Anything but Round also gives ring corners and chain bends a sharp, mitred point.' },
     { name: 'supR', label: 'R groups numbered R1, R12… show the number raised (R¹, R¹²)', type: 'checkbox', value: String(labelPrefs.superscriptR),
       help: 'Longer labels (OR1, CO2R1) and labels from files are left as they are.' },
-    { name: 'reroute', label: 'Mechanism arrows find their own way around again when a change leaves them running into a structure, a label or another arrow', type: 'checkbox', value: String(editor.options.rerouteArrows),
+    { name: 'reroute', label: 'Mechanism arrows automatically wrap around structures that block their path', type: 'checkbox', value: String(editor.options.rerouteArrows),
       help: 'Arrows you bent by hand stay as they are.' },
     { name: 'arrowProducts', label: 'Offer Draw Next Intermediate and Check Arrows (Chemistry ▸ Mechanism Arrows): curved arrows read as electrons moving, checked, and the structure they make drawn', type: 'checkbox', value: String(editor.options.arrowProducts),
       help: 'Off takes both commands out of the menus. The arrows themselves are drawn as before.' },
@@ -10154,25 +10160,24 @@ async function drawingPreferences(): Promise<void> {
     { name: 'haptoDeloc', label: 'Draw η³, η⁵ and η⁶ ligands on a metal delocalized (a circle in the ring, an arc over an allyl)', type: 'checkbox', value: String(haptoLook.delocalized),
       help: 'Only the look: the bonds stay as drawn for SMILES and saving. Chemistry ▸ Structure ▸ Kekulé Form for η Ligand switches one back.' },
     { name: 'aidAngle', label: 'Show the angle beside the pointer while drawing bonds, arrows and lines', type: 'checkbox', value: String(editor.aids.angle) },
-    { name: 'aidLength', label: 'Show the length there too', type: 'checkbox', value: String(editor.aids.length),
-      help: 'In the rulers\' units (inches or centimeters).' },
-    { name: 'aidLook', label: 'How the angle and hints look', value: editor.aids.look, options: [{ value: 'plain', label: 'Plain blue words' }, { value: 'box', label: 'Blue words on a pale box' }, { value: 'solid', label: 'White words on a blue box' }] },
+    { name: 'aidLength', label: 'Show the length there too, in', type: 'checkbox', value: String(editor.aids.length),
+      beside: { name: 'aidUnits', label: 'Length units', value: editor.aids.units, options: LENGTH_UNITS },
+      help: 'Pixels are counted at 100 % zoom (96 to the inch); inches are written as decimals.' },
+    { name: 'aidLook', label: 'How the angle and hints look', value: editor.aids.look, options: [{ value: 'plain', label: 'Plain blue words' }, { value: 'box', label: 'Blue words on a pale box' }, { value: 'solid', label: 'White words on a blue box' }], inline: (v) => cursorAidSwatch(v === 'box' || v === 'solid' ? v : 'plain') },
     { name: 'aidHints', label: 'Show what Shift, Alt and Ctrl do beside the pointer', type: 'checkbox', value: String(editor.aids.hints),
       help: 'While dragging, the keys that change what the tool does are listed in blue (the one held in bold). With the button up they show as a key is held.' },
-  ], { ok: 'Save' });
+  ], { ok: 'Save', preview: { title: 'Mechanism arrows', draw: (v) => mechanismPreview({ start: arrowGap(v.startGap), end: arrowGap(v.endGap) }, doc.style) } });
   if (!r) return;
   editor.options.circledCharges = r.charges === 'circled';
-  editor.options.textToAtom = r.textAtom === 'true';
   chemText.ionCharges = r.ionCharges === 'true';
   chemText.saltGroups = r.saltGroups === 'true';
   editor.options.rerouteArrows = r.reroute === 'true';
   editor.options.arrowProducts = r.arrowProducts === 'true';
   showArrowProducts();
-  const gap = (v: string) => { const n = Number(v); return v.trim() === '' || !isFinite(n) || n < 0 ? null : Math.min(50, n); };
-  arrowGaps.start = gap(r.startGap);
-  arrowGaps.end = gap(r.endGap);
+  arrowGaps.start = arrowGap(r.startGap);
+  arrowGaps.end = arrowGap(r.endGap);
   if ((r.haptoDeloc === 'true') !== haptoLook.delocalized) { haptoLook.delocalized = r.haptoDeloc === 'true'; renderer.invalidate(doc); editor.requestScene(); }
-  editor.aids = { ...editor.aids, angle: r.aidAngle === 'true', length: r.aidLength === 'true', hints: r.aidHints === 'true', look: r.aidLook === 'box' || r.aidLook === 'solid' ? r.aidLook : 'plain' };
+  editor.aids = { ...editor.aids, angle: r.aidAngle === 'true', length: r.aidLength === 'true', hints: r.aidHints === 'true', look: r.aidLook === 'box' || r.aidLook === 'solid' ? r.aidLook : 'plain', units: r.aidUnits === 'px' || r.aidUnits === 'mm' ? r.aidUnits : 'in' };
   const ends = Number(r.bondEnds);
   if (isFinite(ends) && ends !== bondEndPrefs.round) {
     bondEndPrefs.round = ends;
@@ -10459,7 +10464,6 @@ function currentSettings(): Settings {
     methylStyle: editor.options.methylStyle,
     axialStyle: axialStyle.helicity ? 'PM' : 'RaSa',
     circledCharges: editor.options.circledCharges,
-    textToAtom: editor.options.textToAtom,
     ionCharges: chemText.ionCharges,
     saltGroups: chemText.saltGroups,
     groupClick: editor.options.groupClick,
@@ -10710,7 +10714,6 @@ function applySettings(s: Settings): void {
   editor.options.methylStyle = s.methylStyle;
   showHelicity(s.axialStyle === 'PM');
   editor.options.circledCharges = s.circledCharges;
-  editor.options.textToAtom = s.textToAtom;
   chemText.ionCharges = s.ionCharges;
   chemText.saltGroups = s.saltGroups;
   editor.options.groupClick = s.groupClick;
@@ -13466,7 +13469,7 @@ addLookToggle(canvasRibbon.el, { simple: () => ribbonLook === 'simple', toggle: 
 const SETTINGS_PAGES: SettingsPage[] = [
   { id: 'general', title: 'General', words: 'groups selecting click outline linked text above below ask whole page tracked changes reviewer name start view recent files chemdraw objects ole word powerpoint docx pptx save structures pictures svg png compatibility', open: generalPreferences },
   { id: 'preferences', title: 'Preferences', words: 'personal personalize habits enter return key finish text tool box new line alt option escape esc taste alkyl prefix italic dash hyphen tbu t-bu ipr i-pr nbu sbu ibu tert-butyl isopropyl', open: personalPreferences },
-  { id: 'drawing', title: 'Drawing', words: 'bond ends round rounded square caps mitre corners methyl me ch3 axial chirality ra sa helicity charges circled text tool atom r groups superscript mechanism arrows reroute arrow width arrowhead head size length angle readout look box plain solid pointer cursor hints modifier shift alt ctrl keys', open: drawingPreferences },
+  { id: 'drawing', title: 'Drawing', words: 'bond ends round rounded square caps mitre corners methyl me ch3 axial chirality ra sa helicity charges circled ammonium nh4 r groups superscript mechanism arrows reroute wrap around block path gap arrow width arrowhead head size length units pixels px millimeters mm inches angle readout look box plain solid pointer cursor hints modifier shift alt ctrl keys', open: drawingPreferences },
   { id: 'style', perFile: true, title: 'Drawing Style', words: 'bond length line width font journal acs rsc wiley elsevier thieme hash spacing margin arrow text reagents conditions above below size smaller reaction arrows gap fit alignment line up structures plus scheme', open: drawingStyleDialog },
   { id: 'hotkeys', title: 'Keyboard Shortcuts', words: 'keys keyboard shortcuts import export reset', open: () => hotkeysDialog.open() },
   { id: 'typing', title: 'Text and Spelling', words: 'typing spelling dictionary autocorrect replacements chemistry formulas subscripts', open: () => typingDialog.open() },

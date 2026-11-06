@@ -804,6 +804,9 @@ dialog.ask { min-width: min(92vw, 340px); }
 .ask-row input, .ask-row select, .ask-row textarea { min-width: 0; font: inherit; padding: 3px 6px; }
 .ask-row.ask-check { grid-template-columns: auto 1fr; max-width: 30em; }
 .ask-row.ask-check input { padding: 0; }
+.ask-row.ask-check.ask-has-beside { grid-template-columns: auto auto auto 1fr; }
+.ask-row .ask-beside { padding: 1px 4px; }
+.ask-thumb { border: 1px solid var(--line); border-radius: var(--r-control); }
 .ask-row.ask-wide { grid-template-columns: 1fr; align-items: start; }
 .ask-row textarea { width: 32em; max-width: 70vw; resize: vertical; font-family: ui-monospace, Consolas, monospace; }
 .ask-buttons { display: flex; justify-content: flex-end; gap: 6px; margin: 10px 0 0; }

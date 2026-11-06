@@ -13,9 +13,12 @@ describe('angle and length beside the pointer', () => {
     expect(angleText({ x: 0, y: 0 }, { x: 0, y: 10 })).toBe('270°');
     expect(angleText({ x: 0, y: 0 }, { x: 10, y: -5.7735 })).toBe('30°');
   });
-  it('writes lengths in the rulers\' units', () => {
+  it('writes lengths in pixels, millimeters or decimal inches, as picked', () => {
     expect(lengthText(72, 'in')).toBe('1.00 in');
-    expect(lengthText(72, 'cm')).toBe('2.54 cm');
+    expect(lengthText(72, 'mm')).toBe('25.4 mm');
+    expect(lengthText(72, 'px')).toBe('96 px');
+    expect(parseCursorAids({ units: 'cm' }).units).toBe('mm');
+    expect(parseCursorAids({ units: 'px' }).units).toBe('px');
     expect(readoutText({ x: 0, y: 0 }, { x: 36, y: 0 }, { angle: true, length: true, units: 'in' })).toBe('0°  0.50 in');
     expect(readoutText({ x: 0, y: 0 }, { x: 36, y: 0 }, { angle: false, length: false, units: 'in' })).toBe('');
   });
