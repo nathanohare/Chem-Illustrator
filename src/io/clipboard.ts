@@ -41,6 +41,9 @@ export const CDX_FORMAT = 'ChemDraw Interchange Format';
 /** Our drawing on a web page's clipboard, where the browser takes formats of the page's own (Chrome, Edge). */
 export const WEB_FORMAT = 'web application/x-chem-illustrator-cdxml';
 
+/** Dots per inch of the picture a browser copy puts on the clipboard (see copyDrawing). */
+const WEB_COPY_DPI = 150;
+
 /** True in the Windows desktop app, where the app's own clipboard commands are used. */
 export const nativeClipboard = isTauri() && /Windows/i.test(navigator.userAgent);
 
@@ -337,7 +340,10 @@ export async function copyDrawing(doc: Doc, sel: Selection | null): Promise<stri
   }
   // The PNG goes in as a promise so the clipboard is asked straight away, while the key press
   // still counts (Safari insists on this).
-  const { canvas } = pictureCanvas(part, pic);
+  // A browser's clipboard picture carries no size, so ChemDraw and Office size it from its pixels:
+  // at 300 dpi a drawing pasted two to three times too big (and a big crystal structure slowed
+  // ChemDraw to a crawl). At 150 dpi it pastes near its own size and stays sharp enough.
+  const { canvas } = pictureCanvas(part, pic, WEB_COPY_DPI);
   lastPictureSize = { w: canvas.width, h: canvas.height };
   // (on white, as the desktop app's bitmap is: ChemDraw shows a PNG's see-through parts as black)
   const png = canvasPng(canvas, '#ffffff');
