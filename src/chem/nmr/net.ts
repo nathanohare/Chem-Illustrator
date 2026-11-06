@@ -36,12 +36,28 @@ function half(u: Uint16Array): Float32Array {
 
 function dense(x: Float32Array, n: number, d: Dense): Float32Array {
   const y = new Float32Array(n * d.out);
-  for (let a = 0; a < n; a++) {
-    const xo = a * d.inp, yo = a * d.out;
-    for (let o = 0; o < d.out; o++) {
-      let s = d.b ? d.b[o] : 0;
-      const wo = o * d.inp;
-      for (let i = 0; i < d.inp; i++) s += d.w[wo + i] * x[xo + i];
+  const { w, b, inp, out } = d;
+  // four atoms at a time, so each weight row is read once for all four (about 2x faster for wide nets)
+  let a = 0;
+  for (; a + 4 <= n; a += 4) {
+    const x0 = a * inp, x1 = x0 + inp, x2 = x1 + inp, x3 = x2 + inp;
+    for (let o = 0; o < out; o++) {
+      const b0 = b ? b[o] : 0;
+      let s0 = b0, s1 = b0, s2 = b0, s3 = b0;
+      const wo = o * inp;
+      for (let i = 0; i < inp; i++) {
+        const wi = w[wo + i];
+        s0 += wi * x[x0 + i]; s1 += wi * x[x1 + i]; s2 += wi * x[x2 + i]; s3 += wi * x[x3 + i];
+      }
+      y[a * out + o] = s0; y[(a + 1) * out + o] = s1; y[(a + 2) * out + o] = s2; y[(a + 3) * out + o] = s3;
+    }
+  }
+  for (; a < n; a++) {
+    const xo = a * inp, yo = a * out;
+    for (let o = 0; o < out; o++) {
+      let s = b ? b[o] : 0;
+      const wo = o * inp;
+      for (let i = 0; i < inp; i++) s += w[wo + i] * x[xo + i];
       y[yo + o] = s;
     }
   }
