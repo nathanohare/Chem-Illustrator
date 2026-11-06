@@ -79,6 +79,86 @@ export function ch2Flags(mol: Molecule): { stereo: number[]; diaCH2: number[] } 
 }
 
 
+/**
+ * Lone ions with no bonds and no hydrogens (Cl⁻, Br⁻, K⁺ ...) are left out of the conformer
+ * search: OpenChemLib's conformer generator throws on a molecule that has one next to a fragment
+ * with rotatable bonds (OpenChemLib 9.25.1). Returns the molecule to search and the ions' indices.
+ */
+export function withoutLoneIons(mol: Molecule): { core: Molecule; ions: number[] } {
+  mol.ensureHelperArrays(Molecule.cHelperNeighbours);
+  const ions: number[] = [];
+  for (let i = 0; i < mol.getAllAtoms(); i++) {
+    if (mol.getAtomicNo(i) > 1 && mol.getAllConnAtoms(i) === 0 && mol.getImplicitHydrogens(i) === 0) ions.push(i);
+  }
+  if (!ions.length || ions.length === mol.getAllAtoms()) return { core: mol, ions: [] };
+  const core = mol.getCompactCopy();
+  core.deleteAtoms(ions);
+  return { core, ions };
+}
+
+/**
+ * A conformer of the search molecule with the lone ions put back in their places in the atom
+ * order (so atom numbers still match the molfile): each sits 3 Å from the oppositely charged atom
+ * nearest the molecule's middle (or the outermost atom when there is none), on the side clear of
+ * the other atoms.
+ */
+export function putBackIons(c: Molecule, mol: Molecule, ions: number[]): Molecule {
+  if (!ions.length) return c;
+  const heavyIn = mol.getAllAtoms(), n = c.getAllAtoms();
+  const coreIndex: number[] = [];
+  for (let i = 0, k = 0; i < heavyIn; i++) coreIndex.push(ions.includes(i) ? -1 : k++);
+  const out = new Molecule(n + ions.length, c.getAllBonds());
+  const at: number[] = new Array(n);
+  const copyAtom = (k: number) => {
+    const a = out.addAtom(c.getAtomicNo(k));
+    out.setAtomCharge(a, c.getAtomCharge(k));
+    out.setAtomX(a, c.getAtomX(k)); out.setAtomY(a, c.getAtomY(k)); out.setAtomZ(a, c.getAtomZ(k));
+    at[k] = a;
+  };
+  const coreHeavy = heavyIn - ions.length;
+  const mid = [0, 0, 0];
+  for (let k = 0; k < n; k++) { mid[0] += c.getAtomX(k) / n; mid[1] += c.getAtomY(k) / n; mid[2] += c.getAtomZ(k) / n; }
+  const used = new Set<number>();
+  const placed: number[][] = [];
+  for (let k = 0; k < n; k++) placed.push([c.getAtomX(k), c.getAtomY(k), c.getAtomZ(k)]);
+  for (let i = 0; i < heavyIn; i++) {
+    if (coreIndex[i] >= 0) { copyAtom(coreIndex[i]); continue; }
+    const q = mol.getAtomCharge(i);
+    let best = -1, bestD = Infinity;
+    for (let k = 0; k < coreHeavy; k++) {
+      if (used.has(k) || !q || Math.sign(c.getAtomCharge(k)) !== -Math.sign(q)) continue;
+      const d = Math.hypot(c.getAtomX(k) - mid[0], c.getAtomY(k) - mid[1], c.getAtomZ(k) - mid[2]);
+      if (d < bestD) { bestD = d; best = k; }
+    }
+    if (best < 0) {
+      for (let k = 0; k < n; k++) {
+        const d = -Math.hypot(c.getAtomX(k) - mid[0], c.getAtomY(k) - mid[1], c.getAtomZ(k) - mid[2]);
+        if (!used.has(k) && d < bestD) { bestD = d; best = k; }
+      }
+    }
+    used.add(best);
+    // the spot 3 Å from that atom that is farthest from every other atom (a few dozen directions)
+    const p = [c.getAtomX(best), c.getAtomY(best), c.getAtomZ(best)];
+    let spot = p, spotD = -1;
+    for (let t = 0; t < 64; t++) {
+      const y = 1 - (2 * t + 1) / 64, r = Math.sqrt(1 - y * y), phi = t * 2.399963;
+      const x = [p[0] + 3 * r * Math.cos(phi), p[1] + 3 * y, p[2] + 3 * r * Math.sin(phi)];
+      let dmin = Infinity;
+      for (const o of placed) dmin = Math.min(dmin, Math.hypot(x[0] - o[0], x[1] - o[1], x[2] - o[2]));
+      if (dmin > spotD) { spotD = dmin; spot = x; }
+    }
+    placed.push(spot);
+    const a = out.addAtom(mol.getAtomicNo(i));
+    out.setAtomCharge(a, q);
+    out.setAtomX(a, spot[0]); out.setAtomY(a, spot[1]); out.setAtomZ(a, spot[2]);
+  }
+  for (let k = coreHeavy; k < n; k++) copyAtom(k);
+  for (let b = 0; b < c.getAllBonds(); b++) {
+    const nb = out.addBond(at[c.getBondAtom(0, b)], at[c.getBondAtom(1, b)]);
+    out.setBondType(nb, c.getBondType(b));
+  }
+  return out;
+}
 
 /**
  * A conformer search: up to `opts.starts` starting conformers (OpenChemLib's adaptive random
@@ -89,22 +169,24 @@ export function ch2Flags(mol: Molecule): { stereo: number[]; diaCH2: number[] } 
 export function searchModel(molblock: string, opts: SearchOptions, seed = 1): Model3d | null {
   const mol = Molecule.fromMolfile(absoluteMolfile(molblock));
   if (!mol.getAllAtoms()) return null;
+  const { core, ions } = withoutLoneIons(mol);
   const gen = new ConformerGenerator(seed);
-  if (!gen.initializeConformers(mol, { strategy: ConformerGenerator.STRATEGY_ADAPTIVE_RANDOM, maxTorsionSets: Math.max(1000, opts.starts * 10) })) return null;
+  if (!gen.initializeConformers(core, { strategy: ConformerGenerator.STRATEGY_ADAPTIVE_RANDOM, maxTorsionSets: Math.max(1000, opts.starts * 10) })) return null;
   const found: Conformer[] = [];
   let shape: Molecule | null = null, tried = 0;
   for (; tried < opts.starts; tried++) {
-    const c = gen.getNextConformerAsMolecule();
-    if (!c) break;
-    shape ??= c.getCompactCopy();
+    const g = gen.getNextConformerAsMolecule();
+    if (!g) break;
     let energy: number | null = null;
     try {
-      const ff = new ForceFieldMMFF94(c, ForceFieldMMFF94.MMFF94SPLUS);
+      const ff = new ForceFieldMMFF94(g, ForceFieldMMFF94.MMFF94SPLUS);
       ff.minimise({ maxIts: 6000 });
       energy = ff.getTotalEnergy();
     } catch {
       energy = null;
     }
+    const c = putBackIons(g, mol, ions);
+    shape ??= c.getCompactCopy();
     const xyz: number[] = [];
     for (let i = 0; i < c.getAllAtoms(); i++) xyz.push(c.getAtomX(i), c.getAtomY(i), c.getAtomZ(i));
     found.push({ xyz, energy });
@@ -194,22 +276,24 @@ function describe(shape: Molecule): Omit<Model3d, 'conformers'> {
 export function buildModel(molblock: string, count: number, seed: number): Model3d | null {
   const mol = Molecule.fromMolfile(absoluteMolfile(molblock));
   if (!mol.getAllAtoms()) return null;
+  const { core, ions } = withoutLoneIons(mol);
   const gen = new ConformerGenerator(seed);
-  if (!gen.initializeConformers(mol)) return null;
+  if (!gen.initializeConformers(core)) return null;
   const conformers: Conformer[] = [];
   let shape: Molecule | null = null;
   for (let k = 0; k < count; k++) {
-    const c = gen.getNextConformerAsMolecule();
-    if (!c) break;
-    shape ??= c;
+    const g = gen.getNextConformerAsMolecule();
+    if (!g) break;
     let energy: number | null = null;
     try {
-      const ff = new ForceFieldMMFF94(c, ForceFieldMMFF94.MMFF94SPLUS);
+      const ff = new ForceFieldMMFF94(g, ForceFieldMMFF94.MMFF94SPLUS);
       ff.minimise();
       energy = ff.getTotalEnergy();
     } catch {
       energy = null; // no MMFF parameters (most metals): keep the generator's geometry
     }
+    const c = putBackIons(g, mol, ions);
+    shape ??= c;
     const xyz: number[] = [];
     for (let i = 0; i < c.getAllAtoms(); i++) xyz.push(c.getAtomX(i), c.getAtomY(i), c.getAtomZ(i));
     conformers.push({ xyz, energy });
