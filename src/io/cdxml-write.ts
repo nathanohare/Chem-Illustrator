@@ -22,7 +22,7 @@ import { ATTACH_TAG, CHEM_TAG, IGNORE_TAG, attachTag } from '../editor/attached'
 import { captionSpecies } from '../chem/species';
 import { atomStereoText, bondStereoText, StereoPlacer, PlacedLabel } from '../chem/stereo';
 import { fromDataUrl, rasterPng } from '../render/images';
-import { BOND_LOOK_TAG, RING_TAG, PAGE_TAG, GUIDES_TAG, ARROW_TEXT_TAG, MAP_LOOK_TAG, KEKULE_TAG, ALT_TAG, CHART_TAG, MATH_TAG, PICTURE_FX_TAG, OWN_PICTURE, OWN_CROP, CIRCLE_TAG, FILL_TAG, FRAME_TAG, ORBITAL_TAG, INSIDE_TAG, GROUP_TAG, GEO_TAG, MORPH_TAG, MAP_TAG, PIECE_TAG, PIN_TAG, CURVE_ARROW_TAG, TURN_TAG, GEO_BOX_ATTR, DOTTED_ATTR, DOTTED_TAG, HIGHLIGHT_TAG, HIGHLIGHT_LOOK_TAG, SPOKES_TAG, STACK_TAG, decodeTags, encodeTags, hoistOwnTags, lowerOwnTags } from './cdxml';
+import { BOND_LOOK_TAG, RING_TAG, PAGE_TAG, GUIDES_TAG, ARROW_TEXT_TAG, MAP_LOOK_TAG, KEKULE_TAG, ALT_TAG, CHART_TAG, MATH_TAG, PICTURE_FX_TAG, OWN_PICTURE, OWN_CROP, CIRCLE_TAG, FILL_TAG, FRAME_TAG, ORBITAL_TAG, INSIDE_TAG, GROUP_TAG, GEO_TAG, MORPH_TAG, MAP_TAG, PIECE_TAG, BRACKET_PAIR_TAG, PIN_TAG, CURVE_ARROW_TAG, TURN_TAG, GEO_BOX_ATTR, DOTTED_ATTR, DOTTED_TAG, HIGHLIGHT_TAG, HIGHLIGHT_LOOK_TAG, SPOKES_TAG, STACK_TAG, decodeTags, encodeTags, hoistOwnTags, lowerOwnTags } from './cdxml';
 import { stackItems, usesStacking } from '../editor/stacking';
 import { frameTag } from '../editor/frames';
 import { tableContents } from '../editor/table-figs';
@@ -2739,22 +2739,24 @@ class CdxmlWriter {
   private writePieces(): void {
     const doc = this.doc;
     const ided = this.idedFinder();
-    const put = (kind: Kind, id: number, names: string[], piece: number | undefined) => {
-      const was = this.orig<{ piece?: number } & Entity>(kind, id)?.piece;
+    const put = (kind: Kind, id: number, names: string[], piece: number | undefined, tag = PIECE_TAG, key: 'piece' | 'bracketPair' = 'piece') => {
+      const was = this.orig<{ piece?: number; bracketPair?: number } & Entity>(kind, id)?.[key];
       if (piece === undefined && was === undefined) return;
       const e = this.source(kind, id, names) ?? (kind === 'r' ? this.findArrow(id) : null) ?? ided(id, names);
       if (!e || !names.includes(e.nodeName)) return;
-      const old = kids(e).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === PIECE_TAG);
+      const old = kids(e).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === tag);
       const want = piece !== undefined ? String(piece) : null;
       if ((old?.getAttribute('Value') ?? null) === want) return;
       if (old) e.removeChild(old);
-      if (want !== null) e.appendChild(this.el('objecttag', { TagType: 'String', Name: PIECE_TAG, Value: want, Visible: 'no' }));
+      if (want !== null) e.appendChild(this.el('objecttag', { TagType: 'String', Name: tag, Value: want, Visible: 'no' }));
       this.changed = true;
     };
     for (const a of doc.atoms.values()) put('a', a.id, ['n'], a.piece);
     for (const c of doc.captions.values()) put('c', c.id, ['t'], c.piece);
     for (const r of doc.arrows.values()) put('r', r.id, ['arrow', 'graphic'], r.piece);
     for (const s of doc.shapes.values()) put('s', s.id, ['graphic', 'embeddedobject', 'table', 'group', 'curve'], s.piece);
+    // the two halves of a bracket pair drawn with the bracket tool (a click on one selects both)
+    for (const s of doc.shapes.values()) if (s.kind === 'bracket') put('s', s.id, ['graphic'], s.bracketPair, BRACKET_PAIR_TAG, 'bracketPair');
   }
 
   private cleanUp(): void {

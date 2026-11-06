@@ -3789,6 +3789,11 @@ html[data-density='large'] .rb-group { padding: 0 12px; }
 .alkyl-preview sub { font-size: 75%; line-height: 0; }
 .ask-preview { margin: 6px 0 10px; }
 .ask-preview canvas { border: 1px solid var(--line); border-radius: var(--r-control); }
+.ask-preview-title { margin: 10px 0 4px; font-size: var(--fs-sm, 0.85em); font-weight: 600; color: var(--muted, inherit); text-transform: uppercase; letter-spacing: 0.04em; }
+.ask-preview-below { margin: 0 0 6px; }
+.ask-form > .ask-row.ask-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; margin: 8px 0 0; grid-column: 1 / -1; }
+.ask-action-buttons { display: inline-flex; gap: 6px; }
+.ask-preview-below canvas { display: block; max-width: 100%; height: auto; background: #fff; }
 .sw-cap { margin: 6px 0 0; font-size: var(--fs-sm, 0.85em); }
 .sw-zoom { display: block; margin-top: 6px; }
 /* the Hotkeys page's keyboard */

@@ -91,6 +91,33 @@ export function ungroupSelection(doc: Doc, sel: Selection): boolean {
   return true;
 }
 
+/** The other half of a bracket drawn as a pair with the bracket tool, if it is still there. */
+export function bracketPartner(doc: Doc, id: number): number | undefined {
+  const k = doc.shapes.get(id)?.bracketPair;
+  if (k === undefined) return undefined;
+  for (const s of doc.shapes.values()) if (s.id !== id && s.kind === 'bracket' && s.bracketPair === k) return s.id;
+  return undefined;
+}
+
+/** A number for a new pair of brackets, not used by any other pair. */
+export function newBracketPair(doc: Doc): number {
+  let top = 0;
+  for (const s of doc.shapes.values()) if (s.bracketPair !== undefined && s.bracketPair > top) top = s.bracketPair;
+  return top + 1;
+}
+
+/** The selection with the other half of every selected bracket pair added. */
+export function withBracketPartners(doc: Doc, sel: Selection): Selection {
+  let out: Selection | null = null;
+  for (const id of sel.shapes) {
+    const p = bracketPartner(doc, id);
+    if (p === undefined || sel.shapes.has(p)) continue;
+    out ??= { atoms: new Set(sel.atoms), bonds: new Set(sel.bonds), captions: new Set(sel.captions), arrows: new Set(sel.arrows), shapes: new Set(sel.shapes) };
+    out.shapes.add(p);
+  }
+  return out ?? sel;
+}
+
 /** Give the groups among things just added new numbers of their own (inside an edit). */
 export function freshGroups(doc: Doc, added: Selection): void {
   const mine = new Set<string>();
@@ -107,4 +134,15 @@ export function freshGroups(doc: Doc, added: Selection): void {
   for (const id of added.captions) { const g = doc.captions.get(id)?.grp; if (g !== undefined) doc.updateCaption(id, { grp: next(g) }); }
   for (const id of added.arrows) { const g = doc.arrows.get(id)?.grp; if (g !== undefined) doc.updateArrow(id, { grp: next(g) }); }
   for (const id of added.shapes) { const g = doc.shapes.get(id)?.grp; if (g !== undefined) doc.updateShape(id, { grp: next(g) }); }
+  // pasted bracket pairs too, so a copy's halves pair with each other and not with the original's
+  let top2 = 0;
+  for (const s of doc.shapes.values()) if (!added.shapes.has(s.id) && s.bracketPair !== undefined && s.bracketPair > top2) top2 = s.bracketPair;
+  const pairs = new Map<number, number>();
+  for (const id of added.shapes) {
+    const k = doc.shapes.get(id)?.bracketPair;
+    if (k === undefined) continue;
+    let n = pairs.get(k);
+    if (n === undefined) pairs.set(k, (n = top2 + pairs.size + 1));
+    doc.updateShape(id, { bracketPair: n });
+  }
 }
