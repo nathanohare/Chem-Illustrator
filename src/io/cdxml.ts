@@ -1464,14 +1464,14 @@ function readPinTags(tags: [number, string][], refOf: Map<Element, string>, doc:
     const r = doc.arrows.get(id);
     if (!r) continue;
     try {
-      const v = JSON.parse(json) as Record<'tail' | 'head', { on: Pin['on']; ref: string[]; at: [number, number]; hand: number } | undefined>;
+      const v = JSON.parse(json) as Record<'tail' | 'head', { on: Pin['on']; ref: string[]; at: [number, number]; hand: number; len?: number } | undefined>;
       const pin: Arrow['pin'] = {};
       for (const end of ['tail', 'head'] as const) {
         const p = v[end];
         if (!p || !Array.isArray(p.ref) || !Array.isArray(p.at) || !p.at.slice(0, 2).every((n) => typeof n === 'number' && Number.isFinite(n))) continue;
         const ref = p.ref.map((k) => atomOf.get(String(k)));
         if (ref.some((x) => x === undefined) || !['atom', 'bond', 'gap'].includes(p.on)) continue;
-        pin[end] = { on: p.on, ref: ref as number[], at: { x: p.at[0], y: p.at[1] }, hand: p.hand < 0 ? -1 : 1, was: { ...r[end] } };
+        pin[end] = { on: p.on, ref: ref as number[], at: { x: p.at[0], y: p.at[1] }, hand: p.hand < 0 ? -1 : 1, was: { ...r[end] }, ...(p.on === 'atom' && typeof p.len === 'number' && p.len > 0 ? { len: p.len } : {}) };
       }
       if (pin.tail || pin.head) r.pin = pin;
     } catch { /* not a pin */ }

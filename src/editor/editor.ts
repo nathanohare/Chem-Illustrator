@@ -8,7 +8,7 @@ import { Sketcher } from './sketch';
 import { installPenAndTouch } from './touch';
 import { labelAtoms, labelLookOf, setLabelFont, setLabelSize, toggleLabelBold } from './label-font';
 import { Doc, Atom, Bond, BondDisplay, PARTIAL, Arrow, Shape, Caption, isMetalAtom, isWedge, applyBase, captionBase, stripBase, type StepRoles, type Justify, type HighlightStyle, type Entity } from '../model';
-import { scaleOwnWidths } from '../style';
+import { doubleBondGap, scaleOwnWidths } from '../style';
 import { CaptionEditor } from '../ui/caption-editor';
 import { followLink, linkTip } from '../ui/links-ui';
 import { stopAtEdge } from '../ui/scrollbars';
@@ -44,7 +44,7 @@ export type TextBoxChange =
   | { kind: 'fit'; fit: 'grow' | 'shrink' | 'fixed' };
 import {
   sproutDir, sprout, bondTo, bondLength, straightenAt, linearDir, atomAt, freeRing, fusedRing, fuseSide, ringOnAtom, ringDir,
-  placeRing, chainPoints, chainFrom, MERGE_FRACTION,
+  placeRing, ringAtomsAt, ringDoubles, chainPoints, chainFrom, MERGE_FRACTION,
 } from '../chem/chemgeom';
 import { keymap, chordOf, parseAction, KeyContext } from './keymap';
 import { sproutGroup, fuseChair, SPROUT_KINDS, SproutKind, nextNumber } from '../chem/sprouts';
@@ -65,7 +65,7 @@ import { circleRing, circleRings, kekulize } from '../chem/aromatic';
 import { bondLayer, crossingBonds, layerByDepth } from '../chem/crossing';
 import { RING_VIEW_NAMES, stepRing, viewNow, viewRingOf, type RingStep } from '../chem/ring-views';
 import { nextNumber as nextCompound, planNumbers, type NumberOptions } from '../chem/compound-numbers';
-import { arrowClash, bendSide, cleanUpArrow, endCentre, endPointToward, headEnd, isAtomSymbol, pushArrow, pushEndAt, pushPins, sameEnd, symbolAt, symbolPin, symbolSpot, tailEnd, SMALL_HEAD, type PushArrow, type PushEnd } from '../chem/mechanism';
+import { arrowClash, bendSide, isSBez, cleanUpArrow, endCentre, endPointToward, headEnd, isAtomSymbol, pushArrow, pushEndAt, pushPins, sameEnd, symbolAt, symbolPin, symbolSpot, tailEnd, SMALL_HEAD, type PushArrow, type PushEnd } from '../chem/mechanism';
 import { followPins, hasPins, makePin, mirrorBend } from '../chem/pins';
 import { applyArrange, planArrange, readingOrder, type ArrangeOptions } from '../chem/scheme-arrange';
 import { buildCycle, type CycleLook, type CycleSpec } from '../chem/cycles';
@@ -302,6 +302,8 @@ interface Drag {
   charge?: number;
   /** Moving an atom: the atom it has been dropped on, which it becomes one with at the lift (closing a ring). */
   joinTo?: number;
+  /** Moving the end atom of a bond on its own: it swings round the atom at the other end, keeping the bond's length (Alt: any length). */
+  pivot?: { id: number; about: Vec; r: number } | null;
   /** Turning structures in perspective (the Perspective tools). */
   persp?: PerspDrag;
   /** A guide being dragged: which, and by its middle or one of its lines. */
@@ -1298,12 +1300,21 @@ export class Editor {
     }
     if (d.mode === 'move') {
       // Shift keeps the move straight across or straight up and down from where it started
-      const want = e.shiftKey ? lockAxis(sub(p, d.start)) : sub(p, d.start);
+      const free = sub(p, d.start);
+      let want = e.shiftKey ? lockAxis(free) : free;
       const done = d.applied ?? { x: 0, y: 0 };
+      // the end of a bond dragged on its own keeps the bond's length, swinging round the other end (Alt: any length; Shift: straight across or down)
+      if (d.pivot === undefined) d.pivot = this.bondEndPivot(d);
+      const pv = !e.shiftKey && !e.altKey ? d.pivot : null;
+      if (pv) {
+        const from = sub(this.doc.atoms.get(pv.id)!, done);
+        const aim = sub(add(from, free), pv.about);
+        if (len(aim) > 1e-6) want = sub(add(pv.about, mul(norm(aim), pv.r)), from);
+      }
       let to = want;
       this.guideLines = [];
       // smart guides: edges and middles snap into line with other shapes and the page (Alt: off)
-      if (this.smartGuides && !e.altKey) {
+      if (this.smartGuides && !e.altKey && !pv) {
         if (!d.guide) {
           // (measured where the drag started: Alt may have moved the selection already)
           const box = this.selBox();
@@ -1320,7 +1331,7 @@ export class Editor {
       }
       // the drawing's guides: the atom or bond end grabbed goes onto a guide and its ticks (Alt: off)
       this.guideSnapped = [];
-      if (this.guidesSnap() && !e.altKey) {
+      if (this.guidesSnap() && !e.altKey && !pv) {
         if (!d.grabbed) { const g0 = this.grabbedPoint(d); if (g0) d.grabbed = sub(g0, done); }
         if (d.grabbed) {
           const target = add(d.grabbed, to);
@@ -1331,7 +1342,7 @@ export class Editor {
         }
       }
       // the grid and drawing guides (Slides; Alt: off)
-      if (this.moveSnap && !e.altKey) {
+      if (this.moveSnap && !e.altKey && !pv) {
         if (!d.snapBox) { const b = this.selBox(); if (b) d.snapBox = { x1: b.x1 - done.x, y1: b.y1 - done.y, x2: b.x2 - done.x, y2: b.y2 - done.y }; }
         if (d.snapBox) {
           const snapped = this.moveSnap(d.snapBox, to, this.tol(6));
@@ -1341,7 +1352,8 @@ export class Editor {
       // an atom dragged onto another atom sticks to it, and the two become one at the lift (Alt: off)
       d.joinTo = undefined;
       if (d.hit?.kind === 'atom' && d.charge === undefined && !d.ctrl && !e.altKey) {
-        const t = this.joinTarget(d.hit.id, add(this.doc.atoms.get(d.hit.id)!, sub(to, done)));
+        // (a bond end keeping its length still joins an atom the pointer is on)
+        const t = this.joinTarget(d.hit.id, add(this.doc.atoms.get(d.hit.id)!, sub(pv ? free : to, done)));
         if (t) { d.joinTo = t.id; to = add(done, sub(t, this.doc.atoms.get(d.hit.id)!)); this.guideLines = []; }
       }
       // nothing goes past a fixed edge of the page grid
@@ -2530,6 +2542,22 @@ export class Editor {
    * The atom that an atom being moved to `at` would land on: one that is not moving with it and
    * not already bonded to it, close enough to grab it. Null when there is none.
    */
+  /**
+   * The bond end a move drags, when it keeps its bond's length: one atom moved on its own (nothing
+   * else picked) with one bond, to an atom that stays where it is. Null otherwise.
+   */
+  private bondEndPivot(d: Drag): { id: number; about: Vec; r: number } | null {
+    const doc = this.doc, s = this.sel;
+    if (d.hit?.kind !== 'atom' || d.charge !== undefined || d.ctrl) return null;
+    const id = d.hit.id;
+    if (s.atoms.size !== 1 || !s.atoms.has(id) || s.bonds.size || s.captions.size || s.arrows.size || s.shapes.size) return null;
+    const nbrs = doc.neighbors(id);
+    if (nbrs.length !== 1) return null;
+    const a = doc.atoms.get(id)!, about = { x: nbrs[0].x, y: nbrs[0].y };
+    const r = dist(a, about);
+    return r > 1e-6 ? { id, about, r } : null;
+  }
+
   private joinTarget(id: number, at: Vec): Atom | null {
     const doc = this.doc;
     const r = Math.max(this.tol(10), doc.style.bondLength * 0.2);
@@ -2726,8 +2754,8 @@ export class Editor {
     const from = which === 'tail' ? here : tailEnd(doc, other, r.tail);
     const to = which === 'head' ? here : headEnd(doc, other, r.head);
     if (sameEnd(from, to)) return null;
-    // keep the side it bends to, and its S shape
-    const push = pushArrow(doc, m, from, to, { side: bendSide(r), s: !!r.bez?.length, arcOnly: !r.bez?.length, self: r.id });
+    // keep the side it bends to, and its shape: an arc stays an arc, a drawn curve or S keeps its curve
+    const push = pushArrow(doc, m, from, to, { side: bendSide(r), ...(r.bez?.length ? { keep: r.bez } : { arcOnly: true }), self: r.id });
     if (!push) return null;
     return { ...this.pushPatch(r, push), pin: pushPins(doc, push) };
   }
@@ -2801,7 +2829,7 @@ export class Editor {
   setArrowS(s: boolean): number {
     const doc = this.doc;
     const m = this.measure();
-    const arrows = [...this.sel.arrows].map((id) => doc.arrows.get(id)).filter((r): r is Arrow => !!r && isCurved(r) && !r.equilibrium && !r.elbow && !!r.bez?.length !== s);
+    const arrows = [...this.sel.arrows].map((id) => doc.arrows.get(id)).filter((r): r is Arrow => !!r && isCurved(r) && !r.equilibrium && !r.elbow && (s ? !isSBez(r.bez) : !!r.bez?.length));
     if (!arrows.length) return 0;
     doc.edit(s ? 'S-shaped arrow' : 'Single-curve arrow', () => {
       for (const r of arrows) {
@@ -6969,6 +6997,9 @@ export class Editor {
     const m = { shift: e.shiftKey, alt: e.altKey, ctrl: e.ctrlKey || e.metaKey };
     if (m.shift === this.mods.shift && m.alt === this.mods.alt && m.ctrl === this.mods.ctrl) return;
     this.mods = m;
+    // a ring being dragged out: Shift moves its double bonds round and Ctrl puts in the circle, as the keys go down and up
+    const d = this.drag;
+    if (d && d.mode === 'draw' && this.tool.kind === 'ring') { d.shift = m.shift; d.ctrl = m.ctrl; this.requestOverlay(); }
     if (redraw && this.aids.hints && this.pointerInside) this.requestOverlay();
   }
 
@@ -7033,6 +7064,7 @@ export class Editor {
       fixedLength: this.options.fixedLength,
       snapping: this.smartGuides || !!this.moveSnap || this.guidesSnap(),
       asksChain: !!this.askChainLength,
+      bondEnd: d?.mode === 'move' && !!d.pivot,
     };
   }
 
@@ -7543,6 +7575,26 @@ export class Editor {
       if (close) ctx.closePath();
       ctx.stroke();
     };
+    // bonds as they will be drawn: a double bond's second line on the side its neighbors are (inside a ring), else either side of the middle
+    const bonds = (list: { a: Vec; b: Vec; order: number; side?: Vec | null }[]) => {
+      const gap = doubleBondGap(doc.style) * (L / doc.style.bondLength);
+      ctx.beginPath();
+      for (const { a, b, order, side } of list) {
+        const u = norm(sub(b, a)), n = perp(u), l = dist(a, b);
+        const line = (off: number, trim: number) => {
+          const p = add(add(a, mul(n, off)), mul(u, trim)), q = add(add(b, mul(n, off)), mul(u, -trim));
+          ctx.moveTo(p.x, p.y); ctx.lineTo(q.x, q.y);
+        };
+        const k = Math.round(order);
+        if (k === 2 && side) {
+          line(0, 0);
+          line(dot(sub(side, a), n) >= 0 ? gap : -gap, Math.min(gap, l * 0.2));
+        } else if (k === 2) { line(gap / 2, 0); line(-gap / 2, 0); }
+        else if (k >= 3) { line(0, 0); line(gap, 0); line(-gap, 0); }
+        else line(0, 0);
+      }
+      ctx.stroke();
+    };
     if (t.kind === 'symbol') {
       // the symbol where it will go, turned toward the pointer
       const aim = startAtom && this.symbolAim(d, d.last);
@@ -7575,7 +7627,7 @@ export class Editor {
       ctx.restore();
     } else if (t.kind === 'bond') {
       const end = this.snapEnd(start, d.last, L, startAtom?.id, d.alt, t.order);
-      poly([start, end.pt], false);
+      bonds([{ a: start, b: end.pt, order: t.display === 'solid' || t.display === 'bold' ? t.order : 1 }]);
     } else if (t.kind === 'chain') {
       const pts = chainPoints(start, d.last, L, doc.style.chainAngle, this.chainFirstUp(start, d.last));
       poly(pts, false);
@@ -7591,7 +7643,17 @@ export class Editor {
       } else if (startAtom) {
         pts = ringOnAtom(startAtom, norm(fromAngle(snapAngle(angleOf(sub(d.last, startAtom))))), t.size, L);
       } else pts = freeRing(d.start, t.size, L, d.last);
-      poly(pts, true);
+      // the whole ring as it will be drawn: its double bonds where they will go (Shift moves them round), and the circle with Ctrl
+      const ids = ringAtomsAt(doc, pts, h && h.kind === 'bond' ? [doc.bonds.get(h.id)!.a1, doc.bonds.get(h.id)!.a2] : startAtom ? [startAtom.id] : undefined);
+      const dbl = ringDoubles(doc, ids, { aromatic: t.aromatic, shiftPhase: d.shift });
+      const c = pts.reduce((s, q) => add(s, mul(q, 1 / pts.length)), { x: 0, y: 0 });
+      const circled = t.aromatic && d.ctrl;
+      bonds(pts.map((a, i) => {
+        const b = pts[(i + 1) % pts.length];
+        const ex = ids[i] !== undefined && ids[(i + 1) % pts.length] !== undefined ? doc.bondBetween(ids[i]!, ids[(i + 1) % pts.length]!) : undefined;
+        return { a, b, order: circled ? 1 : Math.max(ex?.order ?? 1, dbl[i] ? 2 : 1), side: c };
+      }));
+      if (circled) { ctx.beginPath(); ctx.arc(c.x, c.y, dist(c, pts[0]) * 0.62, 0, Math.PI * 2); ctx.stroke(); }
     } else if (t.kind === 'arrow') {
       if (this.freehand(d)) { poly(d.path ?? [d.start, d.last], false); return; }
       const push = this.pushFor(d, d.last);
@@ -7628,7 +7690,14 @@ export class Editor {
       if (tp && place) {
         const pts = templatePoints(tp, place.pl);
         ctx.beginPath();
-        for (const [a, b] of tp.bonds) { ctx.moveTo(pts[a].x, pts[a].y); ctx.lineTo(pts[b].x, pts[b].y); }
+        // (its double and triple bonds too, each second line on the side of the bond's neighbors)
+        const nbrs = (i: number, skip: number) => tp.bonds.flatMap(([p, q]) => (p === i && q !== skip ? [pts[q]] : q === i && p !== skip ? [pts[p]] : []));
+        bonds(tp.bonds.map(([a, b, order, display]) => {
+          const around = [...nbrs(a, b), ...nbrs(b, a)];
+          const side = around.length ? around.reduce((s, q) => add(s, mul(q, 1 / around.length)), { x: 0, y: 0 }) : null;
+          return { a: pts[a], b: pts[b], order: !display || display === 'solid' || display === 'bold' ? order : 1, side };
+        }));
+        ctx.beginPath();
         if (place.bondFrom !== undefined) { const f = doc.atoms.get(place.bondFrom)!; ctx.moveTo(f.x, f.y); ctx.lineTo(pts[tp.attach].x, pts[tp.attach].y); }
         for (const [kind, x1, y1, x2, y2] of tp.shapes ?? []) {
           const a = placePoint(place.pl, x1, y1), b = placePoint(place.pl, x2, y2);

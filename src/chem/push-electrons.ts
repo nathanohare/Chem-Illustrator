@@ -15,7 +15,7 @@ import type { Measure } from '../editor/arrange';
 import { arrowPoints, isCurved } from '../objects';
 import { hasImplicitH, implicitHydrogens, SYMBOLS, valenceOfBonds } from './elements';
 import { groupNumber } from './electrons';
-import { headEnd, isAtomSymbol, pairOwner, pushEndAt, symbolSpot, tailEnd, type PushEnd } from './mechanism';
+import { headEnd, isAtomSymbol, pairOwner, pushEndAt, symbolPin, symbolSpot, tailEnd, type PushEnd } from './mechanism';
 import { sproutDir } from './chemgeom';
 import { atomWarnings } from './warnings';
 
@@ -358,7 +358,16 @@ export function productDrawing(doc: Doc, m: Measure, reading: PushReading): Draw
     }
 
     // lone pairs, radical dots and circled charges, as the starting drawing showed them
-    const pm = { atomBoxes: (a: Atom) => m.atomBoxes(a) } as Measure;
+    // (each label measured as drawn and moved to where its atom now is: a measure that remembers
+    // labels by atom would otherwise give the old place, and a dot would land on a label that moved)
+    const pm = {
+      atomBoxes: (a: Atom) => {
+        const was = doc.atoms.get(a.id);
+        if (!was) return m.atomBoxes(a);
+        const dx = a.x - was.x, dy = a.y - was.y;
+        return m.atomBoxes(was).map((b) => ({ x1: b.x1 + dx, y1: b.y1 + dy, x2: b.x2 + dx, y2: b.y2 + dy }));
+      },
+    } as Measure;
     for (const id of atoms) {
       const list = symbols.get(id) ?? [];
       const was = doc.atoms.get(id)!, now = out.atoms.get(id)!;
@@ -389,7 +398,10 @@ export function productDrawing(doc: Doc, m: Measure, reading: PushReading): Draw
         const box = kind === 'LonePair'
           ? { x1: at.x - n.x * half, y1: at.y - n.y * half, x2: at.x + n.x * half, y2: at.y + n.y * half }
           : { x1: at.x - half, y1: at.y - half, x2: at.x + half, y2: at.y + half };
-        out.addShape({ kind: 'symbol', symbol: kind, ...box });
+        // stuck to its atom, so it can be picked and moves with it
+        const sh = out.addShape({ kind: 'symbol', symbol: kind, ...box });
+        const pin = symbolPin(out, sh);
+        if (pin) out.updateShape(sh.id, { pin });
       };
       if (circle) put(circle, 4.5);
       for (let i = 0; i < nPairs; i++) put('LonePair', 2.6);

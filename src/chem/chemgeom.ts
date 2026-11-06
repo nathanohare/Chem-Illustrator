@@ -311,6 +311,61 @@ export interface PlaceOptions {
 }
 
 /**
+ * Which edges of a ring get double bonds (edge i runs from atom i to atom i + 1): none unless
+ * aromatic, else alternating, avoiding atoms that already carry one. `ids` may leave out atoms
+ * still to be made (the preview of a ring not yet drawn); nothing is changed.
+ */
+export function ringDoubles(doc: Doc, ids: (number | undefined)[], opts: Pick<PlaceOptions, 'aromatic' | 'shiftPhase'> = {}): boolean[] {
+  const n = ids.length;
+  const dbl = new Array<boolean>(n).fill(false);
+  if (!opts.aromatic) return dbl;
+  const between = (a1: number | undefined, a2: number | undefined) => (a1 === undefined || a2 === undefined ? undefined : doc.bondBetween(a1, a2));
+  const hasDouble = (id: number | undefined, skip: Bond | undefined) =>
+    id !== undefined && (doc.adj.get(id) ?? []).some((bid) => { const bb = doc.bonds.get(bid)!; return bb !== skip && bb.order >= 2; });
+  const tryPhase = (ph: number) => {
+    let bad = 0;
+    const d = new Array<boolean>(n).fill(false);
+    for (let i = 0; i < n; i++) {
+      const want = i % 2 === ph && !(n % 2 === 1 && i === n - 1);
+      d[i] = want;
+      if (!want) continue;
+      const a1 = ids[i], a2 = ids[(i + 1) % n];
+      const ex = between(a1, a2);
+      if (ex && ex.order >= 2) continue;
+      if (hasDouble(a1, ex) || hasDouble(a2, ex)) bad++;
+    }
+    return { bad, d };
+  };
+  const first = opts.shiftPhase ? 1 : 0;
+  const p0 = tryPhase(first), p1 = tryPhase(1 - first);
+  const pick = p1.bad < p0.bad ? p1 : p0;
+  // Drop doubles that would still give an atom two double bonds.
+  for (let i = 0; i < n; i++) {
+    if (!pick.d[i]) continue;
+    const a1 = ids[i], a2 = ids[(i + 1) % n];
+    const ex = between(a1, a2);
+    if (ex && ex.order >= 2) continue;
+    if (hasDouble(a1, ex) || hasDouble(a2, ex)) pick.d[i] = false;
+  }
+  for (let i = 0; i < n; i++) dbl[i] = pick.d[i];
+  return dbl;
+}
+
+/**
+ * The atoms a ring at these points would reuse (as placeRing finds them), without changing anything:
+ * the existing atom at each point, or undefined where a new one would be made.
+ */
+export function ringAtomsAt(doc: Doc, pts: Vec[], existing?: (number | undefined)[]): (number | undefined)[] {
+  const tol = dist(pts[0], pts[1]) * MERGE_FRACTION;
+  const used = new Set<number>();
+  return pts.map((p, i) => {
+    const id = existing?.[i] ?? atomAt(doc, p, tol, used)?.id;
+    if (id !== undefined) used.add(id);
+    return id;
+  });
+}
+
+/**
  * Add a ring at the given points, reusing atoms already there, and return its atom ids.
  * For benzene-type rings, double bonds alternate and avoid atoms that already carry one.
  */
@@ -332,37 +387,7 @@ export function placeRing(doc: Doc, pts: Vec[], opts: PlaceOptions = {}): number
     ids.push(id);
   }
   // Which edges get double bonds.
-  const dbl = new Array(n).fill(false);
-  if (opts.aromatic) {
-    const hasDouble = (id: number, skip: Bond | undefined) =>
-      (doc.adj.get(id) ?? []).some((bid) => { const bb = doc.bonds.get(bid)!; return bb !== skip && bb.order >= 2; });
-    const tryPhase = (ph: number) => {
-      let bad = 0;
-      const d = new Array(n).fill(false);
-      for (let i = 0; i < n; i++) {
-        const want = i % 2 === ph && !(n % 2 === 1 && i === n - 1);
-        d[i] = want;
-        if (!want) continue;
-        const a1 = ids[i], a2 = ids[(i + 1) % n];
-        const ex = doc.bondBetween(a1, a2);
-        if (ex && ex.order >= 2) continue;
-        if (hasDouble(a1, ex) || hasDouble(a2, ex)) bad++;
-      }
-      return { bad, d };
-    };
-    const first = opts.shiftPhase ? 1 : 0;
-    const p0 = tryPhase(first), p1 = tryPhase(1 - first);
-    const pick = p1.bad < p0.bad ? p1 : p0;
-    // Drop doubles that would still give an atom two double bonds.
-    for (let i = 0; i < n; i++) {
-      if (!pick.d[i]) continue;
-      const a1 = ids[i], a2 = ids[(i + 1) % n];
-      const ex = doc.bondBetween(a1, a2);
-      if (ex && ex.order >= 2) continue;
-      if (hasDouble(a1, ex) || hasDouble(a2, ex)) pick.d[i] = false;
-    }
-    for (let i = 0; i < n; i++) dbl[i] = pick.d[i];
-  }
+  const dbl = ringDoubles(doc, ids, opts);
   for (let i = 0; i < n; i++) {
     const a1 = ids[i], a2 = ids[(i + 1) % n];
     const ex = doc.bondBetween(a1, a2);

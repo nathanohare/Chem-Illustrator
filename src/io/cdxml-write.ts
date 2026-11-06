@@ -1699,7 +1699,7 @@ class CdxmlWriter {
     const v: Record<string, unknown> = {};
     for (const end of ['tail', 'head'] as const) {
       const p = r.pin[end];
-      if (p) v[end] = { on: p.on, ref: p.ref.map((id) => this.nodeId(id)), at: [Math.round(p.at.x * 1e4) / 1e4, Math.round(p.at.y * 1e4) / 1e4], hand: p.hand };
+      if (p) v[end] = { on: p.on, ref: p.ref.map((id) => this.nodeId(id)), at: [Math.round(p.at.x * 1e4) / 1e4, Math.round(p.at.y * 1e4) / 1e4], hand: p.hand, ...(p.len ? { len: Math.round(p.len * 1e4) / 1e4 } : {}) };
     }
     return JSON.stringify(v);
   }
