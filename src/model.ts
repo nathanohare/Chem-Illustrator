@@ -7,6 +7,7 @@ import { Vec, Rect } from './geom';
 import { DocStyle, ACS_1996 } from './style';
 import { arrowPoints, gluePoint } from './objects';
 import { followPins } from './chem/pins';
+import { SYMBOLS } from './chem/elements';
 import type { EnergyData } from './design/energy';
 import type { NewmanData } from './design/newman';
 import type { TorsionData } from './design/torsion';
@@ -51,6 +52,9 @@ export type DoublePos = 'auto' | 'left' | 'right' | 'center';
  * kept it (ChemDraw_x64.Document.6.0 for 64-bit ChemDraw).
  */
 export interface OleMark { id: number; prog: string }
+
+/** A label that is one element with or without its hydrogens (N, NH2, H2N, OH); the match is the element. */
+export const ELEMENT_WITH_H = /^(?:H\d*)?([A-Z][a-z]?)(?:H\d*)?$/;
 
 export interface Atom {
   /** Auto-Animate Steps: things with the same piece number move as one piece in the slide show (and are one picture in PowerPoint). */
@@ -113,6 +117,12 @@ export interface Atom {
   alt?: string;
   /** A carbon shown with its letter and hydrogens (CH3 at a chain end; ChemDraw's ShowTerminalCarbonLabels). */
   showCarbon?: boolean;
+  /**
+   * Typed on its own with the Text tool (N, NH2, OMe): shown and read just as written, with no
+   * hydrogens it doesn't show and no "too few bonds" warning, until it is bonded; then a label
+   * of one element (N, NH2) becomes automatic, its hydrogens worked out (Doc.addBond).
+   */
+  asTyped?: boolean;
   /** A carbon with no bonds and no label, from a ChemDraw file: drawn as nothing, as ChemDraw draws it (not CH4). */
   bare?: boolean;
   /** The charge is drawn by a separate circled-charge symbol, so the label leaves it out. */
@@ -2087,6 +2097,12 @@ export class Doc {
   }
 
   addBond(a1: number, a2: number, order = 1, display: BondDisplay = 'solid', extra: Partial<Bond> = {}): Bond {
+    // an atom typed on its own with the Text tool (N or NH2: just what is written) is an atom
+    // like any other once it is bonded, its hydrogens worked out and shown (benzene on N is pyridine)
+    for (const at of [a1, a2]) {
+      const a = this.atoms.get(at);
+      if (a?.asTyped) this.updateAtom(at, { asTyped: undefined, ...(a.label && ELEMENT_WITH_H.exec(a.label)?.[1] === SYMBOLS[a.z] ? { label: null } : {}) });
+    }
     const id = extra.id ?? this.newId();
     this.touch('b', id);
     const b: Bond = { id, a1, a2, order, display, dpos: 'auto', ...extra };

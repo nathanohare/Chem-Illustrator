@@ -151,7 +151,7 @@ A key that grows something moves the highlight to the new atom, so you can keep 
 Pick the text tool (`t` over empty space) and:
 
 - **click an atom** to type a label such as OMe, CO2Et or NHBoc;
-- **click empty space** for a one-line caption;
+- **click empty space** for a one-line caption. If all you type is an atom, a formula of one atom or a group (N, NH2, H2O, Cl, OMe), it becomes an atom with that label when you finish, as if you had drawn it: a ring or bond drawn on it takes it in (the benzene ring tool on N makes pyridine). On its own it means just what you typed, with no hydrogens left unshown (N is a nitrogen atom, not NH3); once bonded, its hydrogens are worked out like any atom's (a bond from N makes NH2). Typed beside the end of a bond, it becomes the atom at that end instead. Press Ctrl+Z straight away to keep it as text, or turn this off in **Edit ▸ Settings ▸ Drawing**. A compound of more than one atom (CH2Cl2, DMAP), an ion and text over or under a reaction arrow stay text;
 - **drag across empty space** to make a text box that wraps its lines. Drag the small handle on its right side to make it wider or narrower.
 
 Double-click a caption to edit it again. Press Esc to finish. If you'd rather finish with Enter, set **Edit ▸ Settings ▸ Preferences ▸ Finish typing text from the Text tool with** to **Enter**: Enter then finishes the text, and Alt+Enter (Option+Enter on a Mac) starts a new line. This works wherever you draw: Canvas, structures in documents and spreadsheets, and text boxes on slides.
@@ -190,7 +190,7 @@ A caption or text box whose whole text is a formula (CH2Cl2, Cs2CO3, NaBF4), an 
 
 - A counterion typed without its charge (BF4) is still read as that ion, and is flagged in Warnings until the charge is added. Turn on **Settings ▸ Drawing ▸ Add charges to common counterions** to have the charge added as you finish typing.
 - Turn on **Settings ▸ Drawing ▸ Group a counterion … as one salt** to have an ion typed next to a structure or ion of opposite charge grouped with it. Grouped, the two count as one salt: one formula and mass, and SMILES with both parts. You can also group them yourself with **Format ▸ Group**.
-- Right-click ▸ **Read Text As** (or **Read as** in the Style panel) sets a text box to **Chemical** or **Plain text** by hand, or back to **Automatically**. The Style panel says what the text is read as. A group or atom on its own (OH, CH3, NO2, CO2H, Cl) is left as text when read automatically, since it is usually a label; set to **Chemical**, it is read as the radical or atom it stands for (OH is the hydroxyl radical, HO•, 17.01 g/mol).
+- Right-click ▸ **Read Text As** (or **Read as** in the Style panel) sets a text box to **Chemical** or **Plain text** by hand, or back to **Automatically**. The Style panel says what the text is read as. A group or atom on its own in a text box (OH, CH3, NO2, CO2H, Cl; on a slide, or typed before this changed) is left as text when read automatically, since it is usually a label; set to **Chemical**, it is read as the radical or atom it stands for (OH is the hydroxyl radical, HO•, 17.01 g/mol).
 - Formulas that spell out their hydrogens atom by atom get their double and triple bonds worked out (CH2CH2 is ethylene, HCCH acetylene), and a nitro group inside a formula (CH3NO2, PhNO2) is read as one.
 - Saved as CDXML, text read as chemistry is marked for ChemDraw to interpret chemically.
 
