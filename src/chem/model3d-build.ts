@@ -7,7 +7,7 @@
 // in xtb.ts and qm-input.ts.
 
 import { Molecule, ConformerGenerator, ForceFieldMMFF94 } from 'openchemlib';
-import { DEFAULT_SEARCH, fittedRmsd, withPopulations, type SearchOptions } from './conformer-rank';
+import { DEFAULT_SEARCH, finiteEnergies, fittedRmsd, withPopulations, type SearchOptions } from './conformer-rank';
 
 export { DEFAULT_SEARCH, fittedRmsd, withPopulations, type SearchOptions } from './conformer-rank';
 
@@ -126,6 +126,7 @@ function distinct(found: Conformer[], model: Omit<Model3d, 'conformers'>, shape:
   const heavy = model.atoms.map((a, i) => (a.z === 1 ? -1 : i)).filter((i) => i >= 0);
   shape.ensureHelperArrays(Molecule.cHelperSymmetrySimple);
   const classes = heavy.map((i) => shape.getSymmetryRank(i));
+  found = finiteEnergies(found);
   found.sort((p, q) => (p.energy ?? 0) - (q.energy ?? 0));
   const e0 = found[0].energy;
   const kept: (Conformer & { profile: number[][]; forms: number[][] })[] = [];
