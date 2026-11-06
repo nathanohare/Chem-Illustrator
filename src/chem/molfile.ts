@@ -5,7 +5,7 @@
 import { attachCode } from './attach-codes';
 import { Doc, Atom, isMetalAtom, outsideValence, radicalElectrons } from '../model';
 import { metalCarbonyl } from './hapto';
-import { SYMBOLS, elementNumber, hasImplicitH, implicitHydrogens, valenceOfBonds } from './elements';
+import { SYMBOLS, elementNumber, hasImplicitH, implicitHydrogens, isMetal, valenceOfBonds } from './elements';
 import { CARBONYL_LIGAND, isCarbonylLabel, kekulize, labelDonates, labelGraph, MiniGraph } from './labels';
 import { stereoAnchor, stereoSense } from './stereo';
 import { kekuleDoubles } from './aromatic';
@@ -317,6 +317,7 @@ export function toMolfile(doc: Doc, atomIds: Iterable<number>, name = '', opts: 
     }
   }
 
+  hydrogensLast(atoms, bonds, map, inLabel, genericAt);
   const head = [name.slice(0, 80), '  ChemIllus         2D', ''];
   if (opts.v3000) {
     return { molblock: v3000Molfile(head, atoms, bonds), map, unknownLabels: unknown, inLabel, generic: genericAt };
@@ -346,6 +347,40 @@ export function toMolfile(doc: Doc, atomIds: Iterable<number>, name = '', opts: 
   }
   lines.push('M  END');
   return { molblock: lines.join('\n') + '\n', map, unknownLabels: unknown, inLabel, generic: genericAt };
+}
+
+/**
+ * Drawn hydrogen atoms (an H on a wedge) moved after every other atom, in place. OpenChemLib
+ * moves such "simple" hydrogens to the end of its atom list as it reads a molfile (swapping each
+ * with the last heavy atom), so the 3-D models it builds would number their atoms differently
+ * from the molfile, and a Newman projection or 3-D pose read back through `map` would put one
+ * atom's label on another (an H written as CH3). With them already last, its numbering is the
+ * molfile's. A simple hydrogen is OpenChemLib's: plain H (no charge or isotope) with at most one
+ * single bond, not to a metal other than aluminium; any other H keeps its place.
+ */
+function hydrogensLast(atoms: MAtom[], bonds: MBond[], map: number[], inLabel: number[], generic: [number, string][]): void {
+  const n = atoms.length;
+  const simple = atoms.map((a) => a.sym === 'H' && !a.charge && !a.iso && !a.alias);
+  const degree = atoms.map(() => 0);
+  for (const b of bonds) {
+    degree[b.a]++; degree[b.b]++;
+    for (const [x, y] of [[b.a, b.b], [b.b, b.a]]) {
+      const z = elementNumber(atoms[y].sym);
+      if (b.order !== 1 || (z !== undefined && isMetal(z) && z !== 13)) simple[x] = false;
+    }
+  }
+  for (let i = 0; i < n; i++) if (degree[i] > 1) simple[i] = false;
+  const order = [...atoms.keys()].filter((i) => !simple[i]);
+  const firstH = order.length;
+  order.push(...[...atoms.keys()].filter((i) => simple[i]));
+  if (order.every((old, i) => old === i) || firstH === n) return;
+  const to = new Array<number>(n);
+  order.forEach((old, i) => { to[old] = i; });
+  const was = [...atoms], wasMap = [...map];
+  order.forEach((old, i) => { atoms[i] = was[old]; map[i] = wasMap[old]; });
+  for (const b of bonds) { b.a = to[b.a]; b.b = to[b.b]; }
+  for (let k = 0; k < inLabel.length; k++) inLabel[k] = to[inLabel[k]];
+  for (const g of generic) g[0] = to[g[0]];
 }
 
 /** Add the atoms and bonds of a molfile to the document, centred at (cx, cy). Returns new atom ids. */

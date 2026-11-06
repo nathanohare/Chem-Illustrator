@@ -5092,8 +5092,9 @@ export class Editor {
   }
 
   /**
-   * Move what was just put down (the selection) off whatever else is on the page: to the right
-   * of it, or below it when that would run off the page. Call inside an edit.
+   * Move what was just put down (the selection) off whatever else is on the page, the least it
+   * takes (beside the nearest free gap, not past the whole drawing), then bring it into view.
+   * Call inside an edit.
    */
   private moveClear(page?: { w: number; h: number }): void {
     const doc = this.doc, m = this.measure();
@@ -5103,19 +5104,38 @@ export class Editor {
     for (const id of doc.captions.keys()) if (!mine.captions.has(id)) others.captions.add(id);
     for (const id of doc.arrows.keys()) if (!mine.arrows.has(id)) others.arrows.add(id);
     for (const id of doc.shapes.keys()) if (!mine.shapes.has(id)) others.shapes.add(id);
-    const b = selectionBox(doc, mine, m), o = selectionBox(doc, others, m);
-    if (!b || !o || b.x2 <= o.x1 || o.x2 <= b.x1 || b.y2 <= o.y1 || o.y2 <= b.y1) return;
+    const b = selectionBox(doc, mine, m);
+    if (!b) return;
     const gap = doc.style.bondLength;
-    // how far past the page's edges it would go (none without a page)
-    const over = (t: Vec) => !page ? 0 : Math.max(0, -(b.x1 + t.x)) + Math.max(0, b.x2 + t.x - page.w) + Math.max(0, -(b.y1 + t.y)) + Math.max(0, b.y2 + t.y - page.h);
-    const tries = [{ x: o.x2 + gap - b.x1, y: 0 }, { x: 0, y: o.y2 + gap - b.y1 }, { x: o.x1 - gap - b.x2, y: 0 }, { x: 0, y: o.y1 - gap - b.y2 }];
-    const go = tries.reduce((best, t) => (over(t) < over(best) ? t : best));
-    // on a page too full for it, as near that side as the page allows (it may overlap a little)
-    if (page) {
-      go.x = Math.min(Math.max(go.x, -b.x1), page.w - b.x2);
-      go.y = Math.min(Math.max(go.y, -b.y1), page.h - b.y2);
+    const boxes = units(doc, others, m).map((u) => u.box);
+    const hit = (o: Rect) => b.x1 < o.x2 && o.x1 < b.x2 && b.y1 < o.y2 && o.y1 < b.y2;
+    let go = clearOffset(b, boxes, gap, page);
+    if (!go.x && !go.y && boxes.some(hit)) {
+      // no free gap near: past everything else (to the right, or below when that runs off the page)
+      const o = selectionBox(doc, others, m)!;
+      const over = (t: Vec) => !page ? 0 : Math.max(0, -(b.x1 + t.x)) + Math.max(0, b.x2 + t.x - page.w) + Math.max(0, -(b.y1 + t.y)) + Math.max(0, b.y2 + t.y - page.h);
+      const tries = [{ x: o.x2 + gap - b.x1, y: 0 }, { x: 0, y: o.y2 + gap - b.y1 }, { x: o.x1 - gap - b.x2, y: 0 }, { x: 0, y: o.y1 - gap - b.y2 }];
+      go = tries.reduce((best, t) => (over(t) < over(best) ? t : best));
+      // on a page too full for it, as near that side as the page allows (it may overlap a little)
+      if (page) {
+        go.x = Math.min(Math.max(go.x, -b.x1), page.w - b.x2);
+        go.y = Math.min(Math.max(go.y, -b.y1), page.h - b.y2);
+      }
     }
-    this.moveSelection(go.x, go.y);
+    if (go.x || go.y) this.moveSelection(go.x, go.y);
+    this.showBox({ x1: b.x1 + go.x, y1: b.y1 + go.y, x2: b.x2 + go.x, y2: b.y2 + go.y });
+  }
+
+  /** Scroll (not zoom) so a box of the drawing is on screen: centred on it when any of it is out of view. */
+  private showBox(box: Rect): void {
+    const r = this.r;
+    if (!r.width || !r.height) return;
+    const v = r.visibleRect(-12);
+    if (box.x1 >= v.x1 && box.x2 <= v.x2 && box.y1 >= v.y1 && box.y2 <= v.y2) return;
+    const s = r.view.scale;
+    r.view.ox = r.width / 2 - ((box.x1 + box.x2) / 2) * s;
+    r.view.oy = r.height / 2 - ((box.y1 + box.y2) / 2) * s;
+    this.requestScene();
   }
 
   /**
