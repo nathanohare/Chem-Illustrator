@@ -41,7 +41,8 @@ export function immiscible(a: string, b: string): boolean {
 export const MISCIBILITY_TABLE: KbTable = {
   id: 'miscibility',
   title: 'Miscibility',
-  about: 'Which common solvents mix. A shaded square means the two form two layers in some proportions (immiscible); a clear one means they mix in all proportions. Type a solvent to pick out its row and column; rest the pointer on a square to name the pair.',
+  about: 'Which common solvents mix. A shaded square means the two form two layers in some proportions (immiscible); a clear one means they mix in all proportions. Rest the pointer on a square to name the pair and light up its row and column.',
+  noSearch: true,
   columns: [
     { key: 'name', label: 'Solvent' },
     { key: 'immiscible', label: 'Forms two layers with', prose: true },

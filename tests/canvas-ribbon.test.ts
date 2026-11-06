@@ -9,16 +9,19 @@ describe('Canvas ribbon', () => {
     expect(bare).toEqual([]);
   });
 
-  it('has Home first, opening with Clipboard, Font and Paragraph (as the Spreadsheet does), then Format Favorites, and the object tabs last', () => {
+  it('has Home first, opening with Clipboard, Font and Paragraph (as the Spreadsheet does), then Format Favorites', () => {
     expect(CANVAS_TABS[0].id).toBe('home');
     const [clip, font, para, favs] = CANVAS_TABS[0].groups;
     expect([clip.name, clip.special]).toEqual(['Clipboard', 'clipboard']);
     expect([font.name, font.special]).toEqual(['Font', 'font']);
     expect([para.name, para.special]).toEqual(['Paragraph', 'paragraph']);
     expect(favs.gallery).toBe('favorites');
-    const ctx = CANVAS_TABS.filter((t) => t.context).map((t) => t.id);
-    expect(ctx).toEqual(['arrow', 'ring', 'bond']);
-    expect(CANVAS_TABS.slice(-3).every((t) => t.context)).toBe(true);
+  });
+
+  it('has no tabs that come and go with the selection, and keeps the arrow commands those tabs had', () => {
+    expect(CANVAS_TABS.map((t) => t.id)).toEqual(['home', 'insert', 'chemistry', 'arrange', 'view']);
+    const cmds = new Set(CANVAS_TABS.flatMap((t) => t.groups.flatMap((g) => g.items)).flatMap((it) => ('cmd' in it ? [it.cmd] : [])));
+    for (const c of ['clean-up-arrow', 'arrow-reverse', 'flip-arrow-bend', 'arrow-single-curve', 'arrow-s-shape', 'arrow-shape-u', 'arrow-shape-loop', 'arrow-add-bend', 'arrow-remove-bend', 'arrow-smooth-path', 'arrow-simplify-path', 'attach-arrow', 'detach-arrow', 'check-arrows', 'aromatic-circles', 'fill-rings', 'hapto-bond']) expect(cmds).toContain(c);
   });
 });
 

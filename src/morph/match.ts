@@ -203,7 +203,11 @@ export function matchFragments(A: MScene, B: MScene, forced: NodeMap = new Map()
     const sub = A.fragment(f);
     if (sub.nodes.size < 2) continue;
     const keep: NodeMap = new Map([...forced].filter(([k]) => sub.nodes.has(k)));
-    for (const [k, v] of matcher(sub, B, keep)) {
+    // later fragments are fitted to what is left of B, so a second reactant is not drawn onto
+    // the atoms the first already took (an enol and the ketone it attacks, both fitting the aldol)
+    const mine = new Set(keep.values());
+    const rest = [...taken].some((v) => !mine.has(v)) ? B.without(new Set([...taken].filter((v) => !mine.has(v)))) : B;
+    for (const [k, v] of matcher(sub, rest, keep)) {
       if (out.has(k) || taken.has(v)) continue;
       out.set(k, v);
       taken.add(v);

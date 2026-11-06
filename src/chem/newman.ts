@@ -5,6 +5,8 @@
 // difference), which ranks the groups on each atom largest, middle and smallest.
 // No OpenChemLib here, so the drawing code and the window can use it cheaply.
 
+import { elementNumber } from './elements';
+
 export type V3 = [number, number, number];
 
 /** A molecule as the 3-D builder gives it (Model3d without its conformers). */
@@ -93,6 +95,25 @@ export function ringThrough(mol: NewmanMol, a: number, b: number, nb = neighbour
     }
   }
   return null;
+}
+
+/**
+ * Whether a 3-D model numbers its atoms as the molfile it was built from does (the molfile's atoms
+ * first, in order, then added hydrogens): each of the molfile's atoms has the same element in the
+ * model. A projection labels its groups through that numbering, so when it doesn't hold the labels
+ * would land on the wrong groups (an H written CH3): better no projection than a wrong one.
+ */
+export function sameAtomOrder(mol: NewmanMol, molblock: string): boolean {
+  const lines = molblock.split(/\r?\n/);
+  const n = parseInt((lines[3] ?? '').slice(0, 3), 10);
+  if (!Number.isFinite(n) || (lines[3] ?? '').includes('V3000')) return true;
+  if (mol.atoms.length < n) return false;
+  for (let i = 0; i < n; i++) {
+    const z = elementNumber((lines[4 + i] ?? '').slice(31, 34).trim());
+    // (an R group or unknown label is a dummy atom, which the model doesn't have)
+    if (z !== undefined && mol.atoms[i].z !== z) return false;
+  }
+  return true;
 }
 
 /**

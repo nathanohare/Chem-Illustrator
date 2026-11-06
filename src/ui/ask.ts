@@ -21,16 +21,27 @@ export interface Field {
   help?: string;
   /** A small picture of the choice beside the box, drawn again as it changes. */
   inline?: (value: string) => Node;
+  /** A drop-down list of its own on the same row, after the label (a checkbox's units, say); its value comes back under its own name. */
+  beside?: { name: string; value: string; options: { value: string; label: string }[]; label: string };
 }
 
 /** A bigger picture of what the settings will look like, beside them (the Settings window's right-hand pane), drawn again as anything changes. */
 export interface AskPreview {
   title: string;
+  /** Under the fields, rather than in the Settings window's right-hand pane. */
+  below?: boolean;
   draw: (values: Record<string, string>) => Node;
 }
 
+/** Buttons in an ask window that act at once rather than when it is saved. */
+export interface AskActions {
+  label: string;
+  help?: string;
+  buttons: { text: string; run: (say: (text: string) => void) => void }[];
+}
+
 /** Show the fields; resolves with what was entered, or null if the window was cancelled. */
-export function ask(title: string, fields: Field[], opts: { ok?: string; note?: string; /** Only an OK button, for a message. */ noCancel?: boolean; /** A short list under the note (two columns: what, and its value). */ lines?: [string, string][]; preview?: AskPreview; /** Called with the values as they are typed or picked (a live preview). */ onInput?: (values: Record<string, string>) => void } = {}): Promise<Record<string, string> | null> {
+export function ask(title: string, fields: Field[], opts: { ok?: string; note?: string; /** Only an OK button, for a message. */ noCancel?: boolean; /** A short list under the note (two columns: what, and its value). */ lines?: [string, string][]; preview?: AskPreview; /** Called with the values as they are typed or picked (a live preview). */ onInput?: (values: Record<string, string>) => void; /** A row of buttons under the fields that act at once (Export Settings…), with a name, its help behind an "i", and a line they can write to. */ actions?: AskActions } = {}): Promise<Record<string, string> | null> {
   return new Promise((resolve) => {
     const d = document.createElement('dialog');
     d.className = 'ask';
@@ -108,6 +119,15 @@ export function ask(title: string, fields: Field[], opts: { ok?: string; note?: 
         u.textContent = f.unit;
         row.append(u);
       }
+      if (f.beside) {
+        const sel = document.createElement('select');
+        sel.className = 'ask-beside';
+        sel.setAttribute('aria-label', f.beside.label);
+        for (const o of f.beside.options) sel.add(new Option(o.label, o.value, false, o.value === f.beside.value));
+        row.classList.add('ask-has-beside');
+        row.append(sel);
+        inputs.set(f.beside.name, sel);
+      }
       if (f.inline) {
         const slot = document.createElement('span');
         slot.className = 'ask-inline';
@@ -117,6 +137,29 @@ export function ask(title: string, fields: Field[], opts: { ok?: string; note?: 
         inlines.push(() => slot.replaceChildren(f.inline!(el instanceof HTMLInputElement && el.type === 'checkbox' ? String(el.checked) : el.value)));
       }
       if (f.help) addInfo(name, f.help);
+      form.append(row);
+    }
+    if (opts.actions) {
+      const row = document.createElement('div');
+      row.className = 'ask-row ask-actions';
+      const name = document.createElement('span');
+      name.className = 'ask-name';
+      name.textContent = opts.actions.label;
+      const out = document.createElement('span');
+      out.className = 'muted small';
+      out.setAttribute('aria-live', 'polite');
+      const say = (t: string) => { out.textContent = t; };
+      const btns = document.createElement('span');
+      btns.className = 'ask-action-buttons';
+      for (const a of opts.actions.buttons) {
+        const b = document.createElement('button');
+        b.type = 'button';
+        b.textContent = a.text;
+        b.addEventListener('click', () => a.run(say));
+        btns.append(b);
+      }
+      row.append(name, btns, out);
+      if (opts.actions.help) addInfo(name, opts.actions.help);
       form.append(row);
     }
     const buttons = document.createElement('p');
@@ -162,8 +205,17 @@ export function ask(title: string, fields: Field[], opts: { ok?: string; note?: 
     // the pictures of the choices, drawn now and again as anything changes
     let big: HTMLElement | null = null;
     if (opts.preview) {
-      big = previewSlot(opts.preview.title);
-      if (!big) {
+      big = opts.preview.below ? null : previewSlot(opts.preview.title);
+      if (!big && opts.preview.below) {
+        // a heading and the picture after the last field
+        const h = document.createElement('h3');
+        h.className = 'ask-preview-title';
+        h.textContent = opts.preview.title;
+        big = document.createElement('div');
+        big.className = 'ask-preview ask-preview-below';
+        form.insertBefore(h, buttons);
+        form.insertBefore(big, buttons);
+      } else if (!big) {
         big = document.createElement('div');
         big.className = 'ask-preview';
         form.insertBefore(big, form.querySelector('.ask-row'));

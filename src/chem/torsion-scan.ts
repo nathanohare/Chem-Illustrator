@@ -9,7 +9,7 @@
 
 import { Molecule, ConformerGenerator, ForceFieldMMFF94 } from 'openchemlib';
 import { sideOf, torsion, type NewmanMol } from './newman';
-import { absoluteMolfile } from './model3d-build';
+import { absoluteMolfile, putBackIons, withoutLoneIons } from './model3d-build';
 
 export interface ScanPoint {
   /** The torsion a–b–c–d, degrees (0 to 360). */
@@ -58,9 +58,11 @@ function positionsKey(ff: ForceFieldMMFF94, m: Molecule): string | null {
 export function moleculeAt(molblock: string, xyz: number[]): Molecule | null {
   const mol = Molecule.fromMolfile(absoluteMolfile(molblock));
   if (!mol.getAllAtoms()) return null;
+  const { core, ions } = withoutLoneIons(mol);
   const gen = new ConformerGenerator(1);
-  if (!gen.initializeConformers(mol)) return null;
-  const c = gen.getNextConformerAsMolecule();
+  if (!gen.initializeConformers(core)) return null;
+  const g = gen.getNextConformerAsMolecule();
+  const c = g && putBackIons(g, mol, ions);
   if (!c || c.getAllAtoms() * 3 !== xyz.length) return null;
   for (let i = 0; i < c.getAllAtoms(); i++) { c.setAtomX(i, xyz[3 * i]); c.setAtomY(i, xyz[3 * i + 1]); c.setAtomZ(i, xyz[3 * i + 2]); }
   c.ensureHelperArrays(Molecule.cHelperNeighbours);

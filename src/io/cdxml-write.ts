@@ -21,8 +21,10 @@ import { runsForChemDraw, TEXT_TAG } from '../text/chemdraw-text';
 import { ATTACH_TAG, CHEM_TAG, IGNORE_TAG, attachTag } from '../editor/attached';
 import { captionSpecies } from '../chem/species';
 import { atomStereoText, bondStereoText, StereoPlacer, PlacedLabel } from '../chem/stereo';
-import { fromDataUrl, rasterPng } from '../render/images';
-import { BOND_LOOK_TAG, RING_TAG, PAGE_TAG, GUIDES_TAG, ARROW_TEXT_TAG, MAP_LOOK_TAG, KEKULE_TAG, ALT_TAG, CHART_TAG, MATH_TAG, PICTURE_FX_TAG, OWN_PICTURE, OWN_CROP, CIRCLE_TAG, FILL_TAG, FRAME_TAG, ORBITAL_TAG, INSIDE_TAG, GROUP_TAG, GEO_TAG, MORPH_TAG, MAP_TAG, PIECE_TAG, PIN_TAG, CURVE_ARROW_TAG, TURN_TAG, GEO_BOX_ATTR, DOTTED_ATTR, DOTTED_TAG, HIGHLIGHT_TAG, HIGHLIGHT_LOOK_TAG, SPOKES_TAG, STACK_TAG, decodeTags, encodeTags, hoistOwnTags, lowerOwnTags } from './cdxml';
+import { dataUrl, fromDataUrl, rasterPng } from '../render/images';
+import { itemsToEmf } from '../render/emf';
+import { crystalItems } from '../design/xray';
+import { BOND_LOOK_TAG, RING_TAG, PAGE_TAG, GUIDES_TAG, ARROW_TEXT_TAG, MAP_LOOK_TAG, KEKULE_TAG, ALT_TAG, CHART_TAG, MATH_TAG, PLATE_TAG, PICTURE_FX_TAG, OWN_PICTURE, OWN_CROP, CIRCLE_TAG, FILL_TAG, FRAME_TAG, ORBITAL_TAG, INSIDE_TAG, GROUP_TAG, GEO_TAG, MORPH_TAG, MAP_TAG, PIECE_TAG, BRACKET_PAIR_TAG, PIN_TAG, CURVE_ARROW_TAG, TURN_TAG, GEO_BOX_ATTR, DOTTED_ATTR, DOTTED_TAG, HIGHLIGHT_TAG, HIGHLIGHT_LOOK_TAG, SPOKES_TAG, STACK_TAG, decodeTags, encodeTags, hoistOwnTags, lowerOwnTags } from './cdxml';
 import { stackItems, usesStacking } from '../editor/stacking';
 import { frameTag } from '../editor/frames';
 import { tableContents } from '../editor/table-figs';
@@ -1702,7 +1704,7 @@ class CdxmlWriter {
     const v: Record<string, unknown> = {};
     for (const end of ['tail', 'head'] as const) {
       const p = r.pin[end];
-      if (p) v[end] = { on: p.on, ref: p.ref.map((id) => this.nodeId(id)), at: [Math.round(p.at.x * 1e4) / 1e4, Math.round(p.at.y * 1e4) / 1e4], hand: p.hand };
+      if (p) v[end] = { on: p.on, ref: p.ref.map((id) => this.nodeId(id)), at: [Math.round(p.at.x * 1e4) / 1e4, Math.round(p.at.y * 1e4) / 1e4], hand: p.hand, ...(p.len ? { len: Math.round(p.len * 1e4) / 1e4 } : {}) };
     }
     return JSON.stringify(v);
   }
@@ -2131,7 +2133,7 @@ class CdxmlWriter {
     this.set(e, 'BoundingBox', box({ x1: Math.min(s.x1, s.x2), y1: Math.min(s.y1, s.y2), x2: Math.max(s.x1, s.x2), y2: Math.max(s.y1, s.y2) }));
     const turn = (((s.rot ?? 0) % 360) + 360) % 360;
     this.set(e, 'RotationAngle', turn > 1e-6 && turn < 360 - 1e-6 ? String(Math.round(turn * 65536)) : null);
-    let png = false, exact = false;
+    let png = false, exact = false, emf = false;
     if (replace && s.src) {
       for (const k of ['WindowsMetafile', 'EnhancedMetafile', 'PNG', 'GIF', 'JPEG', 'TIFF', 'BMP', 'OLEObject', 'MacPICT', 'CompressedWindowsMetafile', 'CompressedEnhancedMetafile', 'CompressedOLEObject', 'UncompressedWindowsMetafileSize', 'UncompressedEnhancedMetafileSize', 'UncompressedOLEObjectSize', OWN_PICTURE]) e.removeAttribute(k);
       const types: Record<string, string> = { 'image/png': 'PNG', 'image/jpeg': 'JPEG', 'image/gif': 'GIF', 'image/bmp': 'BMP', 'image/x-emf': 'EnhancedMetafile' };
@@ -2150,15 +2152,24 @@ class CdxmlWriter {
         }
       };
       exact = png = put(s.src);
+      // a crystal structure: a vector picture too (ChemDraw and Office keep it sharp at any size)
+      // beside its PNG, which ChemDraw shows where it doesn't read metafiles
+      if (s.plate?.crystal) {
+        const w = Math.abs(s.x2 - s.x1), h = Math.abs(s.y2 - s.y1);
+        try { if (put(dataUrl(itemsToEmf(crystalItems(s.plate.crystal, w, h), { x1: 0, y1: 0, x2: w, y2: h }), 'image/x-emf'))) emf = true; } catch { /* the PNG alone */ }
+      }
       // an equation or SVG or WebP picture: ChemDraw gets a PNG of it, at about 300 dpi (the
       // equation itself rides along in its tag, and our own clipboard keeps the original)
       if (!png && /^data:image\//.test(s.src)) {
         const w = Math.abs(s.x2 - s.x1), h = Math.abs(s.y2 - s.y1), k = Math.min(300 / 72, 4000 / Math.max(w, h, 1));
-        const made = (this.opts.raster ?? rasterPng)(s.src, Math.max(1, w * k), Math.max(1, h * k));
+        // (on white: ChemDraw shows a PNG's see-through parts as black)
+        const made = (this.opts.raster ?? ((src, pw, ph) => rasterPng(src, pw, ph, '#ffffff')))(s.src, Math.max(1, w * k), Math.max(1, h * k));
         png = !!made && put(made);
       }
+      png ||= emf;
     } else png = exact = ['PNG', 'JPEG', 'GIF', 'BMP', 'EnhancedMetafile', 'WindowsMetafile', 'CompressedEnhancedMetafile', 'CompressedWindowsMetafile'].some((k) => e.hasAttribute(k));
-    for (const c of kids(e)) if (c.nodeName === 'objecttag' && [CHART_TAG, MATH_TAG, PICTURE_FX_TAG, ALT_TAG].includes(c.getAttribute('Name') ?? '')) e.removeChild(c);
+    for (const c of kids(e)) if (c.nodeName === 'objecttag' && [CHART_TAG, MATH_TAG, PICTURE_FX_TAG, ALT_TAG, PLATE_TAG].includes(c.getAttribute('Name') ?? '')) e.removeChild(c);
+    if (s.plate) e.appendChild(this.el('objecttag', { TagType: 'String', Name: PLATE_TAG, Value: JSON.stringify(s.plate), Visible: 'no' }));
     if (s.alt) e.appendChild(this.el('objecttag', { TagType: 'String', Name: ALT_TAG, Value: s.alt, Visible: 'no' }));
     if (s.fx) e.appendChild(this.el('objecttag', { TagType: 'String', Name: PICTURE_FX_TAG, Value: JSON.stringify(s.fx), Visible: 'no' }));
     if (s.chart) e.appendChild(this.el('objecttag', { TagType: 'String', Name: CHART_TAG, Value: JSON.stringify(s.chart), Visible: 'no' }));
@@ -2742,22 +2753,24 @@ class CdxmlWriter {
   private writePieces(): void {
     const doc = this.doc;
     const ided = this.idedFinder();
-    const put = (kind: Kind, id: number, names: string[], piece: number | undefined) => {
-      const was = this.orig<{ piece?: number } & Entity>(kind, id)?.piece;
+    const put = (kind: Kind, id: number, names: string[], piece: number | undefined, tag = PIECE_TAG, key: 'piece' | 'bracketPair' = 'piece') => {
+      const was = this.orig<{ piece?: number; bracketPair?: number } & Entity>(kind, id)?.[key];
       if (piece === undefined && was === undefined) return;
       const e = this.source(kind, id, names) ?? (kind === 'r' ? this.findArrow(id) : null) ?? ided(id, names);
       if (!e || !names.includes(e.nodeName)) return;
-      const old = kids(e).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === PIECE_TAG);
+      const old = kids(e).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === tag);
       const want = piece !== undefined ? String(piece) : null;
       if ((old?.getAttribute('Value') ?? null) === want) return;
       if (old) e.removeChild(old);
-      if (want !== null) e.appendChild(this.el('objecttag', { TagType: 'String', Name: PIECE_TAG, Value: want, Visible: 'no' }));
+      if (want !== null) e.appendChild(this.el('objecttag', { TagType: 'String', Name: tag, Value: want, Visible: 'no' }));
       this.changed = true;
     };
     for (const a of doc.atoms.values()) put('a', a.id, ['n'], a.piece);
     for (const c of doc.captions.values()) put('c', c.id, ['t'], c.piece);
     for (const r of doc.arrows.values()) put('r', r.id, ['arrow', 'graphic'], r.piece);
     for (const s of doc.shapes.values()) put('s', s.id, ['graphic', 'embeddedobject', 'table', 'group', 'curve'], s.piece);
+    // the two halves of a bracket pair drawn with the bracket tool (a click on one selects both)
+    for (const s of doc.shapes.values()) if (s.kind === 'bracket') put('s', s.id, ['graphic'], s.bracketPair, BRACKET_PAIR_TAG, 'bracketPair');
   }
 
   private cleanUp(): void {

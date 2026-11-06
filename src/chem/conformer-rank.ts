@@ -21,8 +21,21 @@ export const DEFAULT_SEARCH: SearchOptions = { starts: 200, window: 10, rmsd: 0.
 /** kcal/mol per kelvin (the gas constant), for Boltzmann populations. */
 const R_KCAL = 0.0019872043;
 
+/**
+ * The conformers whose energies can be used. The force field sometimes gives NaN or Infinity
+ * (OpenChemLib's MMFF94s+ does for some nitriles, alkynes, azides, allenes and isocyanides); such a
+ * conformer is dropped when any other has a real energy, or else every energy is treated as missing.
+ */
+export function finiteEnergies(cs: Conformer[]): Conformer[] {
+  const ok = (c: Conformer) => c.energy !== null && Number.isFinite(c.energy);
+  if (cs.every(ok)) return cs;
+  if (cs.some(ok)) return cs.filter(ok);
+  return cs.map((c) => (c.energy === null ? c : { ...c, energy: null }));
+}
+
 /** Each conformer's Boltzmann population at `T` kelvin, from its energy (none when energies are missing). */
 export function withPopulations(cs: Conformer[], T = 298.15): Conformer[] {
+  cs = finiteEnergies(cs);
   if (!cs.length || cs.some((c) => c.energy === null)) return cs;
   const e0 = Math.min(...cs.map((c) => c.energy!));
   // a conformer found more than once in equivalent forms (degeneracy) counts that many times
@@ -79,8 +92,9 @@ export function fittedRmsd(p: number[], q: number[], idx: number[]): number {
  */
 export function mergeConformers(atoms: { z: number }[], found: Conformer[], extra: { xyz: number[]; energy: number }[], window = 8): Conformer[] {
   const heavy = atoms.map((x, i) => (x.z === 1 ? -1 : i)).filter((i) => i >= 0);
-  const all: Conformer[] = found.map((c) => ({ xyz: c.xyz, energy: c.energy }));
+  const all: Conformer[] = finiteEnergies(found.map((c) => ({ xyz: c.xyz, energy: c.energy })));
   for (const r of extra) {
+    if (!Number.isFinite(r.energy)) continue;
     if (all.some((k) => k.energy !== null && Math.abs(k.energy - r.energy) < 0.1 && fittedRmsd(k.xyz, r.xyz, heavy) < 0.3)) continue;
     all.push(r);
   }

@@ -35,6 +35,7 @@ import { arialWidth } from '../text-metrics';
 import { cleanScheme } from '../drawing-styles';
 import { freshBox, type ChartBox } from '../sheet/chart-box';
 import { relinkNewman } from '../design/newman';
+import { crystalSrc, type PlateData } from '../design/plates';
 
 export interface ReadStats {
   atoms: number;
@@ -87,6 +88,8 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
   const pinTags: [number, string][] = [];
   /** Auto-Animate Steps' pieces, from each thing's hidden tag (set on the things once the file is read). */
   const pieces: [Kind, number, number][] = [];
+  /** Bracket pairs' shared numbers, by shape id. */
+  const bracketPairs: [number, number][] = [];
   /** Atoms by their ids in the file, and what the file says about each tied caption (fillAttachments). */
   const atomOfNode = new Map<string, number>();
   const attachNodes = new Map<number, { node?: string; box?: { x1: number; y1: number; x2: number; y2: number } }>();
@@ -96,6 +99,10 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
     if (o !== undefined) ord.set(kind + id, o);
     const piece = Number(kids(el).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === PIECE_TAG)?.getAttribute('Value'));
     if (Number.isInteger(piece) && piece > 0) pieces.push([kind, id, piece]);
+    if (kind === 's') {
+      const pair = Number(kids(el).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === BRACKET_PAIR_TAG)?.getAttribute('Value'));
+      if (Number.isInteger(pair) && pair > 0) bracketPairs.push([id, pair]);
+    }
   };
   const stats: ReadStats = { atoms: 0, bonds: 0, captions: 0, arrows: 0, shapes: 0, skipped: {}, parseMs: t1 - t0, buildMs: 0 };
   const skip = (what: string) => { stats.skipped[what] = (stats.skipped[what] ?? 0) + 1; };
@@ -1297,12 +1304,20 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
               fx = tag ? tidyFx(JSON.parse(tag) as PictureFx) : undefined;
             } catch { fx = undefined; }
             const alt = kids(ch).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === ALT_TAG)?.getAttribute('Value') || undefined;
+            let plate: PlateData | undefined;
+            try {
+              const tag = kids(ch).find((k) => k.nodeName === 'objecttag' && k.getAttribute('Name') === PLATE_TAG)?.getAttribute('Value');
+              const got = tag ? JSON.parse(tag) as PlateData : undefined;
+              if (got?.kind === 'crystal' && got.crystal && Array.isArray(got.crystal.atoms)) plate = got;
+            } catch { plate = undefined; }
+            // a crystal structure is drawn again from its data (sharper than ChemDraw's copy of the picture)
+            if (plate?.crystal && pic) { pic.src = crystalSrc(plate.crystal, bb[2] - bb[0], bb[3] - bb[1]); pic.px = { w: Math.round(bb[2] - bb[0]), h: Math.round(bb[3] - bb[1]) }; pic.crop = null; }
             // where ChemDraw draws it among the other objects, and turned as ChemDraw turns it (BoundingBox is the unturned frame)
             const z = num(ch, 'Z', 0);
             const ang = (Number(ch.getAttribute('RotationAngle') ?? NaN) / 65536) % 360;
             const rot = Number.isFinite(ang) && Math.abs(ang) > 1e-3 ? +(ang > 180 ? ang - 360 : ang < -180 ? ang + 360 : ang).toFixed(3) : 0;
             const sh = pic
-              ? doc.addShape({ id: idFor(ch), kind: 'picture', z, ...(rot ? { rot } : {}), x1: bb[0], y1: bb[1], x2: bb[2], y2: bb[3], src: pic.src, px: pic.px, ...(pic.crop ? { crop: pic.crop } : {}), ...(chart ? { chart } : {}), ...(math ? { math } : {}), ...(fx ? { fx } : {}), ...(alt ? { alt } : {}) })
+              ? doc.addShape({ id: idFor(ch), kind: 'picture', z, ...(rot ? { rot } : {}), x1: bb[0], y1: bb[1], x2: bb[2], y2: bb[3], src: pic.src, px: pic.px, ...(pic.crop ? { crop: pic.crop } : {}), ...(chart ? { chart } : {}), ...(math ? { math } : {}), ...(fx ? { fx } : {}), ...(alt ? { alt } : {}), ...(plate ? { plate: { ...plate, w: bb[2] - bb[0], h: bb[3] - bb[1] } } : {}) })
               // only pictures this program can't show: mark where they sit, and keep them as they are
               : doc.addShape({ id: idFor(ch), kind: 'rect', x1: bb[0], y1: bb[1], x2: bb[2], y2: bb[3], dashed: true, color: '#9aa4b2', picture: true });
             from('s', sh.id, ch);
@@ -1408,6 +1423,7 @@ export function readCdxml(text: string): { doc: Doc; stats: ReadStats } {
   doc.reserveIds(maxId);
   const things: Partial<Record<Kind, Map<number, { piece?: number }>>> = { a: doc.atoms, c: doc.captions, r: doc.arrows, s: doc.shapes };
   for (const [kind, id, piece] of pieces) { const e = things[kind]?.get(id); if (e) e.piece = piece; }
+  for (const [id, pair] of bracketPairs) { const s = doc.shapes.get(id); if (s?.kind === 'bracket') s.bracketPair = pair; }
   const orig = new Map<string, Entity>();
   // (a shallow copy, as an undo step keeps: edits replace an entity's parts rather than change them)
   const loaded = new WeakSet<Entity>();
@@ -1473,14 +1489,14 @@ function readPinTags(tags: [number, string][], refOf: Map<Element, string>, doc:
     const r = doc.arrows.get(id);
     if (!r) continue;
     try {
-      const v = JSON.parse(json) as Record<'tail' | 'head', { on: Pin['on']; ref: string[]; at: [number, number]; hand: number } | undefined>;
+      const v = JSON.parse(json) as Record<'tail' | 'head', { on: Pin['on']; ref: string[]; at: [number, number]; hand: number; len?: number } | undefined>;
       const pin: Arrow['pin'] = {};
       for (const end of ['tail', 'head'] as const) {
         const p = v[end];
         if (!p || !Array.isArray(p.ref) || !Array.isArray(p.at) || !p.at.slice(0, 2).every((n) => typeof n === 'number' && Number.isFinite(n))) continue;
         const ref = p.ref.map((k) => atomOf.get(String(k)));
         if (ref.some((x) => x === undefined) || !['atom', 'bond', 'gap'].includes(p.on)) continue;
-        pin[end] = { on: p.on, ref: ref as number[], at: { x: p.at[0], y: p.at[1] }, hand: p.hand < 0 ? -1 : 1, was: { ...r[end] } };
+        pin[end] = { on: p.on, ref: ref as number[], at: { x: p.at[0], y: p.at[1] }, hand: p.hand < 0 ? -1 : 1, was: { ...r[end] }, ...(p.on === 'atom' && typeof p.len === 'number' && p.len > 0 ? { len: p.len } : {}) };
       }
       if (pin.tail || pin.head) r.pin = pin;
     } catch { /* not a pin */ }
@@ -1705,6 +1721,8 @@ export const MORPH_TAG = 'Chem Illustrator animation';
 export const MAP_TAG = 'Chem Illustrator map';
 /** Auto-Animate Steps: the piece a thing moves with in the slide show (Atom.piece, Caption.piece and so on). */
 export const PIECE_TAG = 'Chem Illustrator piece';
+/** Brackets drawn as a pair with the bracket tool: the number both halves share (Shape.bracketPair). */
+export const BRACKET_PAIR_TAG = 'Chem Illustrator bracket pair';
 /** An electron-pushing arrow's pins (what its ends are stuck to: Pin as JSON without `was`, atoms by node id). */
 export const PIN_TAG = 'Chem Illustrator pin';
 /** An S-shaped arrow saved as a ChemDraw curve: its heads as they are here (JSON). */
@@ -1864,6 +1882,8 @@ export const MATH_TAG = 'Chem Illustrator equation';
 export const PICTURE_FX_TAG = 'Chem Illustrator picture format';
 /** Alt text written for a structure (on one of its atoms) or a picture, which ChemDraw doesn't have. */
 export const ALT_TAG = 'Chem Illustrator alt text';
+/** A picture that is a lab figure (a crystal structure): its data, so it opens in its window again. */
+export const PLATE_TAG = 'Chem Illustrator lab figure';
 export const OWN_PICTURE = 'ChemIllustratorPicture';
 export const OWN_CROP = 'ChemIllustratorCrop';
 

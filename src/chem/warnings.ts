@@ -109,7 +109,8 @@ export function atomWarnings(doc: Doc, a: Atom): string[] {
         const sym = SYMBOLS[o.z] ?? '?';
         const charge = maxValence(o.z, a.charge) === o.max ? a.charge : 0;
         out.push(`Too many bonds: the ${sym} in “${a.label}” has ${o.used}${o.h ? `, counting its ${o.h} H` : ''}, but ${valenceAdvice(o.z, charge, o.used)}`);
-      } else {
+      } else if (!a.asTyped) {
+        // (typed on its own, N or NH2 is that atom or radical as written)
         const few = tooFewBonds(a, orders);
         if (few) out.push(few);
       }

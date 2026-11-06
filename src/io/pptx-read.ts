@@ -46,6 +46,7 @@ import { ommlToTex, toOmml } from '../document/math';
 import { shapeMathPicture, shapeMathSize } from '../deck/equation';
 import { GEOS } from '../design/geo';
 import { cleanDiagram, textFromShapes } from '../design/diagrams';
+import { crystalSrc, type PlateData } from '../design/plates';
 import { gluePoint, arrowPoints, boxOf as pointsBox } from '../objects';
 import { stackAsRead, type StackItem } from '../editor/stacking';
 import { roughBox } from '../deck/split-slide';
@@ -1434,7 +1435,15 @@ class Reader {
     } else if (this.zoomBack !== null && click) zoom = { ...(this.zoomBack ? { back: true } : {}), ...(this.zoomSummary ? { summary: true } : {}) };
     const alt = kid(el, 'nvPicPr', 'cNvPr')?.getAttribute('descr')?.trim();
     const at = inBox(box, img.inset);
+    // a crystal structure: drawn again from its data, at the size it has on the slide
+    let plate: PlateData | undefined;
+    try {
+      const got = tags[TAG.plate] ? JSON.parse(tags[TAG.plate]) as PlateData : undefined;
+      if (got?.kind === 'crystal' && got.crystal && Array.isArray(got.crystal.atoms)) plate = { ...got, w: at.x2 - at.x1, h: at.y2 - at.y1 };
+    } catch { plate = undefined; }
+    if (plate) { img.src = crystalSrc(plate.crystal!, plate.w, plate.h); img.px = { w: Math.round(plate.w), h: Math.round(plate.h) }; img.crop = undefined; }
     doc.addShape({
+      ...(plate ? { plate } : {}),
       kind: 'picture', x1: at.x1, y1: at.y1, x2: at.x2, y2: at.y2, src: img.src, px: img.px, ...(img.crop ? { crop: img.crop } : {}), ...(look && Object.keys(look).length ? { look } : {}), ...(fx ? { fx } : {}), ...(video ? { video } : {}), ...(alt ? { alt } : {}),
       ...(click ? { link: click } : {}), ...(zoom && click ? { zoom } : {}), ...turn(box),
     });

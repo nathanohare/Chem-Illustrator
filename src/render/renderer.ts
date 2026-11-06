@@ -206,6 +206,12 @@ export class Renderer {
   hiddenCaption: number | null = null;
   /** An atom whose label is being typed (the typing box shows it instead). */
   hiddenLabel: number | null = null;
+  /**
+   * Lines of multiple bonds coloured on their own (Animate Reaction's Whole Scheme): for each bond,
+   * how many of its extra lines (its π bonds, counted from the outermost) and their colour. The
+   * bond's first line (its σ bond) keeps the bond's own colour.
+   */
+  piColors: Map<number, { n: number; color: string }> | null = null;
   /** A table being typed into: drawn as this draft (so rows grow as the text does), without the part the text editor shows. */
   tableEdit: { id: number; table: TableData; part: TablePart } | null = null;
   private tableLayouts = new WeakMap<TableData, TableLayout>();
@@ -969,7 +975,7 @@ export class Renderer {
       if (!p || !q) continue;
       if ((p.x < vis.x1 && q.x < vis.x1) || (p.x > vis.x2 && q.x > vis.x2) || (p.y < vis.y1 && q.y < vis.y1) || (p.y > vis.y2 && q.y > vis.y2)) continue;
       // (a bond with its own bold width is stroked on its own, as coloured ones are)
-      if (b.color || b.boldWidth !== undefined) { colored.push(b); continue; }
+      if (b.color || b.boldWidth !== undefined || this.piColors?.has(b.id)) { colored.push(b); continue; }
       const bp = back?.get(p.id), bq = back?.get(q.id);
       if (bp !== undefined && bq !== undefined) {
         const k = b.s ?? 1, step = shadeStep((bp + bq) / 2), key = `${step}/${k}`;
@@ -992,9 +998,12 @@ export class Renderer {
     for (const b of colored) {
       const p = doc.atoms.get(b.a1)!, q = doc.atoms.get(b.a2)!;
       const bb = newBatch(this.makePath);
-      this.bondOrSpokes(doc, b, p, q, bb);
+      const pc = this.piColors?.get(b.id);
+      const pb = pc && b.order >= 2 && b.order <= 3 ? newBatch(this.makePath) : undefined;
+      this.bondOrSpokes(doc, b, p, q, bb, pb && { bb: pb, n: pc!.n });
       const k = b.s ?? 1;
       this.strokeBatch(ctx, bb, k, st.lineWidth, b.boldWidth !== undefined ? b.boldWidth / k : st.boldWidth, b.color ?? '#000');
+      if (pb) this.strokeBatch(ctx, pb, k, st.lineWidth, b.boldWidth !== undefined ? b.boldWidth / k : st.boldWidth, pc!.color);
     }
     ctx.strokeStyle = ctx.fillStyle = '#000';
 
@@ -1191,9 +1200,9 @@ export class Renderer {
   }
 
   /** A bond, or a hapto bond drawn as a line from the metal to each of its point's atoms. */
-  private bondOrSpokes(doc: Doc, b: Bond, p: Atom, q: Atom, bb: BondBatch): void {
+  private bondOrSpokes(doc: Doc, b: Bond, p: Atom, q: Atom, bb: BondBatch, pi?: PiLines): void {
     const c = b.spokes ? (q.multi ? q : p.multi ? p : null) : null;
-    if (!c) { this.bondPaths(doc, b, p, q, bb); return; }
+    if (!c) { this.bondPaths(doc, b, p, q, bb, pi); return; }
     const metal = c === q ? p : q;
     c.multi!.forEach((id, k) => {
       const m = doc.atoms.get(id);
@@ -1301,7 +1310,8 @@ export class Renderer {
     return true;
   }
 
-  private bondPaths(doc: Doc, b: Bond, p: Atom, q: Atom, bb: BondBatch): void {
+  /** `pi`: the extra lines of a double or triple bond (its π bonds) go to a batch of their own (see piColors). */
+  private bondPaths(doc: Doc, b: Bond, p: Atom, q: Atom, bb: BondBatch, piLines?: PiLines): void {
     const { thin, bold, dashed, fills, tips } = bb;
     const k = b.s ?? 1;
     const ds = doc.style;
@@ -1324,12 +1334,14 @@ export class Renderer {
     const tipR = Math.max(0, bondEndPrefs.round) * st.lineWidth / 2;
     const seg = (path: Path2D, u: Vec, v: Vec, capU = true, capV = true) => {
       path.moveTo(u.x, u.y); path.lineTo(v.x, v.y);
-      if (round || path !== thin) return;
+      const own = !!piLines && path === piLines.bb.thin;
+      if (round || (path !== thin && !own)) return;
       const dv = sub(v, u), l2 = len(dv);
       if (l2 < 1e-9) return;
       const o = mul(dv, 1 / l2);
-      if (capU) endTip(tips, u, mul(o, -1), st.lineWidth / 2, tipR);
-      if (capV) endTip(tips, v, o, st.lineWidth / 2, tipR);
+      const tp = own ? piLines!.bb.tips : tips;
+      if (capU) endTip(tp, u, mul(o, -1), st.lineWidth / 2, tipR);
+      if (capV) endTip(tp, v, o, st.lineWidth / 2, tipR);
     };
     // (an end exactly on an atom where other lines meet it is joined, not capped)
     const joinP = !round && this.joinsAt(doc, p).length > 1, joinQ = !round && this.joinsAt(doc, q).length > 1;
@@ -1549,15 +1561,17 @@ export class Renderer {
 
     if (b.order === 3) {
       line(thin, s, e);
-      offLine(thin, add(s, mul(nrm, gap)), add(e, mul(nrm, gap)));
-      offLine(thin, sub(s, mul(nrm, gap)), sub(e, mul(nrm, gap)));
+      offLine(piLines && piLines.n >= 2 ? piLines.bb.thin : thin, add(s, mul(nrm, gap)), add(e, mul(nrm, gap)));
+      offLine(piLines && piLines.n >= 1 ? piLines.bb.thin : thin, sub(s, mul(nrm, gap)), sub(e, mul(nrm, gap)));
       return;
     }
 
     // double or aromatic
     const info = this.bondInfo(doc, b);
     const two = b.order === 2 ? b.line2 : undefined;
-    const second = b.order === 1.5 || two === 'dash' ? dashed : two === 'bold' ? bold : thin;
+    // (a π line coloured on its own is drawn into its own batch)
+    const sb = piLines && piLines.n >= 1 && b.order === 2 ? piLines.bb : bb;
+    const second = b.order === 1.5 || two === 'dash' ? sb.dashed : two === 'bold' ? sb.bold : sb.thin;
     const main = b.display === 'bold' ? bold : b.display === 'dash' ? dashed : thin;
     // the second line, or a hashed second line (ChemDraw's Display2 Hash): short strokes across it
     const secondLine = (a: Vec, c: Vec, capA = true, capC = true) => {
@@ -1568,7 +1582,7 @@ export class Renderer {
       const n = Math.min(MAX_HASHES, Math.max(2, Math.floor(run / st.hashSpacing) + 1));
       for (let i = 0; i < n; i++) {
         const m = add(u, mul(sub(v, u), (st.lineWidth / 2 + (run - st.lineWidth) * i / (n - 1)) / run));
-        line(thin, add(m, mul(nrm, w)), sub(m, mul(nrm, w)), true, true);
+        line(sb.thin, add(m, mul(nrm, w)), sub(m, mul(nrm, w)), true, true);
       }
     };
     if (b.order === 2 && b.display === 'wavy') {
@@ -2989,6 +3003,8 @@ function shadowBand(ctx: CanvasRenderingContext2D, x: number, y: number, w: numb
 
 /** `tips`: the part-round tips of square-ended thin lines (see endTip). */
 interface BondBatch { thin: Path2D; bold: Path2D; dashed: Path2D; fills: Path2D; tips: Path2D }
+/** A multiple bond's π lines drawn into a batch of their own: how many (from the outermost). */
+interface PiLines { bb: BondBatch; n: number }
 
 function newBatch(mk: () => Path2D): BondBatch {
   return { thin: mk(), bold: mk(), dashed: mk(), fills: mk(), tips: mk() };
