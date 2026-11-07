@@ -385,85 +385,88 @@ export function sliceDef(id: string): GeoDef {
   };
 }
 
-// ---------------------------------------------------------------- ring pieces and honeycomb cells (diagrams)
+// ---------------------------------------------------------------- ring segments and hexagon cells (diagrams)
 
-const SECTOR = 'sector:';
+// A ring segment's id carries its shape: "sector:<from>:<to>:<hole>", angles in degrees measured
+// clockwise on screen from three o'clock, and the hole's radius as a part of the outer radius
+// (0 makes a pie slice). Saved files keep the id, so the format stays as it is.
+const SECTOR_PREFIX = 'sector:';
+const DEG = Math.PI / 180;
 
-/**
- * A piece of a ring (a segmented ring's segment, a bending band's half turn): from angle `a0` to
- * `a1` (degrees, clockwise on the screen from three o'clock), its inner radius `k` of its outer
- * (0 for a slice of a pie). It is drawn to fill its box, which is the piece's own bounding box.
- */
-export function sectorId(a0: number, a1: number, k: number): string {
-  const q = (v: number) => Math.round(v * 100) / 100;
-  return `${SECTOR}${q(a0)}:${q(a1)}:${Math.round(Math.max(0, Math.min(0.95, k)) * 1000) / 1000}`;
+/** The id of a ring segment from angle `from` to `to` (degrees), its hole `hole` of the outer radius. */
+export function sectorId(from: number, to: number, hole: number): string {
+  const hundredths = (v: number) => Math.round(v * 100) / 100;
+  const holeAt = Math.round(Math.max(0, Math.min(0.95, hole)) * 1000) / 1000;
+  return SECTOR_PREFIX + [hundredths(from), hundredths(to), holeAt].join(':');
 }
 
-export const isSectorId = (id: string | undefined): id is string => !!id && id.startsWith(SECTOR);
-
-/** A sector's angles (radians) and inner radius from its id. */
-function sectorParts(id: string): { a0: number; a1: number; k: number } {
-  const [a, b, c] = id.slice(SECTOR.length).split(':').map(Number);
-  const a0 = isFinite(a) ? a : 0;
-  const a1 = isFinite(b) && b > a0 ? Math.min(b, a0 + 359.9) : a0 + 90;
-  return { a0: (a0 * Math.PI) / 180, a1: (a1 * Math.PI) / 180, k: isFinite(c) ? Math.max(0, Math.min(0.95, c)) : 0.5 };
+export function isSectorId(id: string | undefined): id is string {
+  return id?.startsWith(SECTOR_PREFIX) ?? false;
 }
 
-/** The bounding box of a ring piece round (0, 0) with outer radius 1. */
-export function sectorBox(a0: number, a1: number, k: number): Rect {
-  const pts: Vec[] = [];
-  const at = (r: number, a: number) => pts.push({ x: r * Math.cos(a), y: r * Math.sin(a) });
-  at(1, a0); at(1, a1);
-  if (k > 0) { at(k, a0); at(k, a1); } else pts.push({ x: 0, y: 0 });
-  // the outer arc's furthest points left, right, up and down, where it passes them
-  for (let q = Math.ceil(a0 / (Math.PI / 2) - 1e-9); q * (Math.PI / 2) <= a1 + 1e-9; q++) at(1, q * (Math.PI / 2));
-  return {
-    x1: Math.min(...pts.map((p) => p.x)), y1: Math.min(...pts.map((p) => p.y)),
-    x2: Math.max(...pts.map((p) => p.x)), y2: Math.max(...pts.map((p) => p.y)),
+/** A segment's angles in radians and its hole, read back from its id (with safe values for a damaged one). */
+function readSector(id: string): { a0: number; a1: number; k: number } {
+  const [from, to, hole] = id.slice(SECTOR_PREFIX.length).split(':').map(Number);
+  const start = Number.isFinite(from) ? from : 0;
+  const end = Number.isFinite(to) && to > start ? Math.min(to, start + 359.9) : start + 90;
+  return { a0: start * DEG, a1: end * DEG, k: Number.isFinite(hole) ? Math.min(0.95, Math.max(0, hole)) : 0.5 };
+}
+
+/** The box round a ring segment (angles in radians) centered on (0, 0) with an outer radius of 1. */
+export function sectorBox(from: number, to: number, hole: number): Rect {
+  const xs: number[] = [], ys: number[] = [];
+  const add = (r: number, a: number) => { xs.push(r * Math.cos(a)); ys.push(r * Math.sin(a)); };
+  for (const a of [from, to]) { add(1, a); add(hole, a); }
+  // the outer edge bulges furthest wherever it crosses a quarter turn (right, down, left, up)
+  const quarter = Math.PI / 2;
+  for (let a = Math.ceil(from / quarter - 1e-9) * quarter; a <= to + 1e-9; a += quarter) add(1, a);
+  return { x1: Math.min(...xs), y1: Math.min(...ys), x2: Math.max(...xs), y2: Math.max(...ys) };
+}
+
+/** The library shape for a ring segment, drawn to fill its own box. */
+export function sectorDef(shapeId: string): GeoDef {
+  const { a0, a1, k } = readSector(shapeId);
+  const box = sectorBox(a0, a1, k);
+  const wide = Math.max(1e-6, box.x2 - box.x1), tall = Math.max(1e-6, box.y2 - box.y1);
+  // the words go in a rectangle at the middle of the segment, as long as the segment runs along
+  // the ring and as deep as the ring is thick, turned the way the segment lies; it shrinks until
+  // its corners are all inside (a segment lying slantwise holds less)
+  const mid = (a0 + a1) / 2, rMid = (1 + k) / 2;
+  const along = Math.min(rMid * (a1 - a0), 2 * rMid), deep = 1 - k || 1;
+  const sin = Math.abs(Math.sin(mid)), cos = Math.abs(Math.cos(mid));
+  const cx = rMid * Math.cos(mid), cy = rMid * Math.sin(mid);
+  let half = { x: (0.45 * (sin * along + cos * deep)) / (sin + cos), y: (0.45 * (cos * along + sin * deep)) / (sin + cos) };
+  /** Is a point inside the segment, with a little margin from its curved edges? */
+  const inside = (x: number, y: number): boolean => {
+    const dist = Math.hypot(x, y);
+    if (dist > 0.98 || dist < k + 0.02) return false;
+    const turn = 2 * Math.PI;
+    return (((Math.atan2(y, x) - a0) % turn) + turn) % turn <= a1 - a0;
   };
+  const cornersIn = () => [-1, 1].every((sx) => [-1, 1].every((sy) => inside(cx + sx * half.x, cy + sy * half.y)));
+  for (let tries = 0; tries < 20 && !cornersIn(); tries++) half = { x: 0.9 * half.x, y: 0.9 * half.y };
+  const u = (x: number) => Math.min(1, Math.max(0, (x - box.x1) / wide));
+  const v = (y: number) => Math.min(1, Math.max(0, (y - box.y1) / tall));
+  const hx = Math.max(0.03, half.x), hy = Math.max(0.03, half.y);
+  const draw = (w: number, h: number) => {
+    const sx = w / wide, sy = h / tall, ox = -box.x1 * sx, oy = -box.y1 * sy;
+    const inner: GeoStep[] = k > 0 ? arc(ox, oy, k * sx, k * sy, a1, a0) : [['L', ox, oy]];
+    return { body: [...arc(ox, oy, sx, sy, a0, a1, true), ...inner, ['Z'] as GeoStep] };
+  };
+  return { id: shapeId, name: 'Ring segment', group: 'Basic shapes', size: [100, 100], draw, text: [u(cx - hx), v(cy - hy), u(cx + hx), v(cy + hy)] };
 }
 
-/** The library shape for a ring piece. */
-export function sectorDef(id: string): GeoDef {
-  const { a0, a1, k } = sectorParts(id);
-  const b = sectorBox(a0, a1, k);
-  const bw = Math.max(1e-6, b.x2 - b.x1), bh = Math.max(1e-6, b.y2 - b.y1);
-  // the words (or a structure) round the middle of the piece: along the ring as far as it is long,
-  // across it as far as it is thick, turned to whichever way the piece runs
-  const am = (a0 + a1) / 2, rm = (1 + k) / 2;
-  const along = Math.min(rm * (a1 - a0), 2 * rm), across = (1 - k) || 1;
-  const s = Math.abs(Math.sin(am)), c = Math.abs(Math.cos(am));
-  let hx = 0.45 * (s * along + c * across) / (s + c), hy = 0.45 * (c * along + s * across) / (s + c);
-  const cx = rm * Math.cos(am), cy = rm * Math.sin(am);
-  // made smaller until its corners are all inside the piece (a piece running slantwise holds less)
-  const inside = (x: number, y: number) => {
-    const r = Math.hypot(x, y);
-    let a = Math.atan2(y, x);
-    while (a < a0) a += 2 * Math.PI;
-    return r <= 0.98 && r >= k + 0.02 && a <= a1;
-  };
-  for (let i = 0; i < 20 && ![[-1, -1], [1, -1], [1, 1], [-1, 1]].every(([u, v]) => inside(cx + u * hx, cy + v * hy)); i++) { hx *= 0.9; hy *= 0.9; }
-  hx = Math.max(0.03, hx); hy = Math.max(0.03, hy);
-  const fx = (x: number) => Math.max(0, Math.min(1, (x - b.x1) / bw)), fy = (y: number) => Math.max(0, Math.min(1, (y - b.y1) / bh));
-  return {
-    id, name: 'Ring segment', group: 'Basic shapes', size: [100, 100],
-    draw: (w, h) => {
-      const sx = w / bw, sy = h / bh;
-      const outer = arc(-b.x1 * sx, -b.y1 * sy, sx, sy, a0, a1, true);
-      const inner: GeoStep[] = k > 0 ? arc(-b.x1 * sx, -b.y1 * sy, k * sx, k * sy, a1, a0) : [['L', -b.x1 * sx, -b.y1 * sy]];
-      return { body: [...outer, ...inner, ['Z']] };
-    },
-    text: [fx(cx - hx), fy(cy - hy), fx(cx + hx), fy(cy + hy)],
-  };
-}
-
-/** A honeycomb cell: a regular hexagon with flat top and bottom when its box is 2 wide to √3 high. */
+/** A honeycomb's cell: a hexagon with flat top and bottom, regular when its box is 2 wide by √3 tall. */
 export const HEX_CELL = 'cell:hex';
 
-const hexCellDef: GeoDef = {
-  id: HEX_CELL, name: 'Honeycomb cell', group: 'Basic shapes', size: [80, 69],
-  draw: (w, h) => ({ body: poly([[0.25 * w, 0], [0.75 * w, 0], [w, h / 2], [0.75 * w, h], [0.25 * w, h], [0, h / 2]]) }),
-  text: [0.17, 0.08, 0.83, 0.92],
+const honeycombCellDef: GeoDef = {
+  id: HEX_CELL,
+  name: 'Honeycomb cell',
+  group: 'Basic shapes',
+  size: [80, 69],
+  // the corners from the left one, clockwise; the words keep clear of the slanted sides
+  draw: (w, h) => ({ body: poly([0, 0.25, 0.75, 1, 0.75, 0.25].map((fx, i) => [fx * w, [0.5, 0, 0, 0.5, 1, 1][i] * h])) }),
+  text: [1 / 6, 0.08, 5 / 6, 0.92],
 };
 
 /**
@@ -661,7 +664,7 @@ function penDef(id: string): GeoDef {
 }
 
 /** The shape with this id (an icon for "icon:…"), or the rectangle for one not known (from a newer version). */
-export const geoDef = (id: string | undefined): GeoDef => (isIconId(id) ? iconDef(id) : isSliceId(id) ? sliceDef(id) : isSectorId(id) ? sectorDef(id) : id === HEX_CELL ? hexCellDef : isInkId(id) ? inkDef(id) : isPathId(id) ? pathDef(id) : isPenId(id) ? penDef(id) : GEO_BY_ID.get(id ?? '')) ?? GEO_BY_ID.get('rect')!;
+export const geoDef = (id: string | undefined): GeoDef => (isIconId(id) ? iconDef(id) : isSliceId(id) ? sliceDef(id) : isSectorId(id) ? sectorDef(id) : id === HEX_CELL ? honeycombCellDef : isInkId(id) ? inkDef(id) : isPathId(id) ? pathDef(id) : isPenId(id) ? penDef(id) : GEO_BY_ID.get(id ?? '')) ?? GEO_BY_ID.get('rect')!;
 
 /** The box of an outline's points (control points included: a little generous on curves). */
 export function stepsBox(steps: GeoStep[]): Rect {

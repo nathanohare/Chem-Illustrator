@@ -11,7 +11,7 @@ import { formatValue } from '../sheet/numfmt';
 import { isError } from '../sheet/values';
 import { Chart, Series, SeriesData, chartData, refText } from '../sheet/chart';
 import {
-  Dashboard, Tile, AGGREGATE_NAMES, groupSeries, filterMask, kpiValue, resolveSource, shownRows, columnOf, sourceName,
+  Dashboard, Tile, AGGREGATE_NAMES, groupSeries, tileMask, kpiValue, resolveSource, shownRows, columnOf, sourceName,
 } from '../sheet/dashboard';
 
 /** How wide the dashboard is laid out for Excel, in pixels (about a laptop screen). */
@@ -36,8 +36,8 @@ export function dashboardStandIn(book: Workbook, s: Sheet): { sheet: Sheet; data
   const d = s.dashboard!;
   const tmp = new Workbook([s.name]);
   const out = tmp.sheet;
-  // what shows now: the slicers and the charts' picks applied
-  const mask = filterMask(book, d);
+  // the rows showing now, with the slicers and every chart's pick applied
+  const mask = tileMask(book, d);
   const charts: Chart[] = [];
   /** What each chart shows, as worked out here (the stand-in's cells aren't in the workbook). */
   const data = new Map<number, SeriesData[]>();
