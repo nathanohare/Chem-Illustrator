@@ -46,3 +46,26 @@ describe('coupling constants and first-order multiplets', () => {
     expect(J(ring(1), 1, 2)).toBeCloseTo(6.3, 1);
   });
 });
+
+describe('alkene couplings', () => {
+  const O = { el: 'O', arom: false, h: 0 }, Cl = { el: 'Cl', arom: false, h: 0 };
+  const cisJ = (g: JGraph) => predictCouplings(g).find((c) => c.kind === 'cis')!.j;
+  /** X-CH=CH-Y with the double bond drawn Z (atoms 0 and 1). */
+  const z = (x: { el: string; arom: boolean; h: number }[], y: { el: string; arom: boolean; h: number }[], extra: JGraph['bonds'] = []): JGraph => ({
+    atoms: [C(1), C(1), ...x, ...y],
+    bonds: [{ u: 0, v: 1, o: 2, ez: 'Z' }, { u: 0, v: 2, o: 1 }, { u: 1, v: 2 + x.length, o: 1 }, ...extra],
+  });
+
+  it('keeps cis near 10.8 Hz with alkyl groups and raises it with conjugation', () => {
+    expect(cisJ(z([C(3)], [C(3)]))).toBeCloseTo(10.8, 1); // cis-2-butene
+    // Z-methyl crotonate: CH3-CH=CH-C(=O)OCH3
+    expect(cisJ(z([C(3)], [C(0), O, O, C(3)], [{ u: 3, v: 4, o: 2 }, { u: 3, v: 5, o: 1 }, { u: 5, v: 6, o: 1 }]))).toBeCloseTo(11.5, 1);
+  });
+
+  it('lowers cis with a heteroatom on the double bond', () => {
+    expect(cisJ(z([Cl], [C(3)]))).toBeGreaterThan(6.5); // Z-1-chloropropene, about 7.0
+    expect(cisJ(z([Cl], [C(3)]))).toBeLessThan(7.5);
+    expect(cisJ(z([O, C(3)], [C(3)], [{ u: 2, v: 3, o: 1 }]))).toBeCloseTo(6.2, 1); // Z-1-methoxypropene
+  });
+});
+

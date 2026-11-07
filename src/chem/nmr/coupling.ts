@@ -74,10 +74,13 @@ export function predictCouplings(g: JGraph): Coupling[] {
       return;
     }
     if (b.o === 2) {
-      // alkene: cis ~10.5 (smaller in small rings), trans ~16.5; electronegative substituents lower both
+      // alkene: cis ~10.8 (smaller in small rings), trans ~16.5; electronegative substituents lower
+      // both. Carbon substituents leave cis alone (cis-2-butene 10.8, styrene 10.9, methyl acrylate
+      // 10.4) while heteroatoms lower it (vinyl acetate 6.3, Z-1-chloropropene 7.0).
       const r = ring.bond[bi];
       const e = subst(u, [v]) + subst(v, [u]);
-      let cis = r === 3 ? 1.5 : r === 4 ? 2.8 : r === 5 ? 5.5 : r === 6 ? 10.0 : 10.8 - 3.0 * e;
+      const heteroSubst = (i: number) => nbs[i].filter((x) => x.n !== (i === u ? v : u) && !isC(x.n)).reduce((t, x) => t + Math.max(0, (ELNEG[at[x.n].el] ?? 2.5) - 2.2), 0);
+      let cis = r === 3 ? 1.5 : r === 4 ? 2.8 : r === 5 ? 5.5 : r === 6 ? 10.0 : 10.8 - 3.7 * (heteroSubst(u) + heteroSubst(v));
       let trans = 17.2 - 2.5 * e;
       if (at[u].h === 2 || at[v].h === 2) {
         // terminal vinyl: both couplings, the =CH2 protons are inequivalent
@@ -85,6 +88,10 @@ export function predictCouplings(g: JGraph): Coupling[] {
         out.push({ a: Math.min(u, v), b: Math.max(u, v), j: cis, kind: 'cis' });
         return;
       }
+      // a 1,2-disubstituted cis alkene conjugated to an aryl or C=O is larger (cis-stilbene 12.2,
+      // Z-methyl cinnamate 12.7, Z-methyl crotonate 11.5)
+      const conj = (i: number) => (nbs[i].some((x) => x.n !== (i === u ? v : u) && isC(x.n) && hyb(x.n) !== 3) ? 1 : 0);
+      if (!r) cis += 0.7 * (conj(u) + conj(v));
       cis = Math.max(cis, 1.5); trans = Math.max(trans, 10);
       add(u, v, r ? cis : b.ez === 'E' ? trans : b.ez === 'Z' ? cis : (cis + trans) / 2, r ? 'cis' : b.ez === 'E' ? 'trans' : 'cis');
       return;
