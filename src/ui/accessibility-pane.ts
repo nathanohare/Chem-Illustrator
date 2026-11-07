@@ -21,7 +21,7 @@ const LEVEL_NAMES = { error: 'Errors', warning: 'Warnings', tip: 'Tips' } as con
 /** Ask for alt text (what it shows, in a sentence or two). Null when cancelled; '' takes it off. */
 export async function askAltText(what: string, now: string | undefined, note?: string): Promise<string | null> {
   const got = await ask(`Alt Text: ${what}`, [
-    { name: 'alt', label: 'Description', value: now ?? '', type: 'textarea', placeholder: 'What it shows, in a sentence or two, for people who can\'t see it' },
+    { name: 'alt', label: 'Description', value: now ?? '', type: 'textarea', placeholder: 'Describe it in a sentence or two for people who can\'t see it' },
   ], { ok: 'Save', note: note ?? 'Screen readers read this out in place of it, and Word, PowerPoint and Excel keep it as its alt text. Leave it empty to take the alt text off.' });
   return got ? got.alt.trim() : null;
 }

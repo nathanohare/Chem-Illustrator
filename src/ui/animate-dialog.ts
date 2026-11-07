@@ -7,7 +7,6 @@
 
 import type { Doc, MorphStep } from '../model';
 import type { Rect, Vec } from '../geom';
-import type { Renderer } from '../render/renderer';
 import { planOf, buildSteps, stepSummary, Clip, DEFAULT_TIMING, gifDelayMs, type Plan, type Step, type Timing } from '../morph/clip';
 import { frame } from '../morph/frame';
 import { paintFrame, framesBox } from '../morph/paint';
@@ -15,6 +14,9 @@ import { atomNumbers, readMapping, writeMapping, MappingFileError } from '../mor
 import { resolve, MappingError } from '../morph/mapping';
 import { configOf } from '../morph/clip';
 import { encodeGif } from '../morph/gif';
+import { SchemeClip, DEFAULT_CHANGE_COLORS } from '../morph/scheme-clip';
+import { Renderer } from '../render/renderer';
+import { addInfo, infoIcon } from './info-tip';
 import { encodeMp4, mp4Codec } from '../morph/mp4';
 import { saveFileDialog, openFileDialog, writeFile, showError, withExtension, type FileType } from '../io/files';
 import { zipSync } from 'fflate';
@@ -41,12 +43,22 @@ const ZIP: FileType = { description: 'PNG frames (zip)', extension: 'zip', mime:
 const MAPPING: FileType = { description: 'cdxmorph pairing', extension: 'json', mime: 'application/json' };
 const TIMING_KEY = 'ci-animate-timing';
 
-function savedTiming(): Timing & { width: number } {
+/** Morph Structures moves each structure into the next; Whole Scheme keeps the scheme on screen and shows the bond changes. */
+export type AnimationStyle = 'morph' | 'scheme';
+type Settings = Timing & { width: number; style: AnimationStyle; breakColor: string; formColor: string };
+
+function savedTiming(): Settings {
+  const base: Settings = { ...DEFAULT_TIMING, width: 720, style: 'morph', breakColor: DEFAULT_CHANGE_COLORS.breaking, formColor: DEFAULT_CHANGE_COLORS.forming };
   try {
     const v = JSON.parse(localStorage.getItem(TIMING_KEY) ?? '{}');
-    return { ...DEFAULT_TIMING, width: 720, ...v };
-  } catch { return { ...DEFAULT_TIMING, width: 720 }; }
+    const out = { ...base, ...v };
+    if (out.style !== 'scheme') out.style = 'morph';
+    for (const k of ['breakColor', 'formColor'] as const) if (!/^#[0-9a-f]{6}$/i.test(String(out[k]))) out[k] = base[k];
+    return out;
+  } catch { return base; }
 }
+
+const STYLE_TIP = 'Morph Structures moves each structure into the next. Whole Scheme keeps every structure, arrow and condition on screen, and animates only the bonds that break (red) and form (green), step by step.';
 
 const el = <K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, text?: string): HTMLElementTagNameMap[K] => {
   const e = document.createElement(tag);
@@ -62,13 +74,22 @@ const button = (text: string, title?: string): HTMLButtonElement => {
 };
 const tick = () => new Promise((r) => setTimeout(r, 0));
 
+/** " π bonds lost: 1=2. Gained: 4=5." for bonds that only change order (their σ bond stays); empty when none. */
+function piText(sm: { piLost: [string, string][]; piGained: [string, string][] }, n: (k: string) => string): string {
+  const list = (l: [string, string][]) => l.map(([a, b]) => `${n(a)}=${n(b)}`).join(', ');
+  if (!sm.piLost.length && !sm.piGained.length) return '';
+  return ` π bonds lost: ${sm.piLost.length ? list(sm.piLost) : 'none'}. Gained: ${sm.piGained.length ? list(sm.piGained) : 'none'}.`;
+}
+
 export class AnimateDialog {
   private d: HTMLDialogElement | null = null;
   private plan: Plan = { groups: [], arrows: [], kinds: [], poses: [] };
   /** Each step's settings, as saved on its arrow or changed here. */
   private morphs: (MorphStep | undefined)[] = [];
   private steps: Step[] = [];
-  private clip: Clip | null = null;
+  private clip: Clip | SchemeClip | null = null;
+  /** Draws the scheme for Whole Scheme (its own, so the drawing's caches are left alone). */
+  private schemeRenderer: Renderer | null = null;
   private timing = savedTiming();
   private frameNo = 0;
   private playing = false;
@@ -139,6 +160,43 @@ export class AnimateDialog {
 
     // settings
     const side = (this.side = el('div', 'animate-side'));
+    const look = el('fieldset', 'animate-timing animate-style');
+    const lookLegend = el('legend', undefined, 'Animation ');
+    lookLegend.append(infoIcon(STYLE_TIP));
+    look.append(lookLegend);
+    const style = el('select');
+    style.id = 'animate-style';
+    for (const [v, t] of [['morph', 'Morph Structures'], ['scheme', 'Whole Scheme']] as const) {
+      const o = el('option', undefined, t);
+      o.value = v;
+      style.append(o);
+    }
+    style.value = this.timing.style;
+    const styleRow = el('label', 'ask-row');
+    styleRow.append(el('span', undefined, 'Style'), style);
+    // Whole Scheme's colours for bonds breaking and forming, on one row
+    const colorRow = el('div', 'ask-row animate-colors');
+    const swatch = (id: string, label: string, key: 'breakColor' | 'formColor') => {
+      const lab = el('label', 'animate-swatch');
+      const input = el('input');
+      input.type = 'color';
+      input.id = id;
+      input.value = this.timing[key];
+      input.addEventListener('input', () => { this.timing[key] = input.value; this.remember(); this.remake(); });
+      lab.append(input, el('span', undefined, label));
+      return lab;
+    };
+    const swatches = el('span', 'animate-swatches');
+    swatches.append(swatch('animate-break-color', 'Breaking', 'breakColor'), swatch('animate-form-color', 'Forming', 'formColor'));
+    colorRow.append(el('span', undefined, 'Colors'), swatches);
+    colorRow.hidden = this.timing.style !== 'scheme';
+    style.addEventListener('change', () => {
+      this.timing.style = style.value as AnimationStyle;
+      colorRow.hidden = this.timing.style !== 'scheme';
+      this.remember();
+      this.remake();
+    });
+    look.append(styleRow, colorRow);
     const timing = el('fieldset', 'animate-timing');
     timing.append(el('legend', undefined, 'Timing'));
     const num = (label: string, key: 'duration' | 'fps' | 'hold' | 'pause' | 'width', step: number, min: number, max: number, title: string) => {
@@ -190,7 +248,7 @@ export class AnimateDialog {
     stepsBox.append(el('legend', undefined, 'Steps'));
     this.stepsList = el('div');
     stepsBox.append(this.stepsList);
-    side.append(timing, stepsBox);
+    side.append(look, timing, stepsBox);
 
     this.status = el('p', 'animate-status');
     this.status.setAttribute('role', 'status');
@@ -255,11 +313,22 @@ export class AnimateDialog {
 
   /** Make the clip again (the timing changed). */
   private remake(): void {
-    this.clip = new Clip(this.steps, this.timing);
+    this.clip = this.makeClip();
     this.scrub.max = String(Math.max(0, this.clip.length - 1));
     this.frameNo = Math.min(this.frameNo, this.clip.length - 1);
     this.sizeCanvas();
     this.show(this.frameNo);
+  }
+
+  /** The clip in the chosen style (`gif`: frames counted at the rate a GIF really plays at). */
+  private makeClip(gif = false): Clip | SchemeClip {
+    if (this.timing.style !== 'scheme') return new Clip(this.steps, this.timing, gif);
+    this.schemeRenderer ??= (() => {
+      const r = new Renderer(el('canvas'), el('canvas'));
+      r.showWarnings = false;
+      return r;
+    })();
+    return new SchemeClip(this.hooks.doc(), this.plan, this.steps, this.timing, this.schemeRenderer, gif, { breaking: this.timing.breakColor, forming: this.timing.formColor });
   }
 
   private sizeCanvas(): void {
@@ -330,7 +399,7 @@ export class AnimateDialog {
       edit.addEventListener('click', () => this.editPairing(i));
       head.append(title, how, edit);
       const facts = el('div', 'animate-step-facts');
-      facts.textContent = `${sm.paired} of ${sm.startAtoms} atoms paired. Breaking: ${bondText(sm.breaking)}. Forming: ${bondText(sm.forming)}.`;
+      facts.textContent = `${sm.paired} of ${sm.startAtoms} atoms paired. Breaking: ${bondText(sm.breaking)}. Forming: ${bondText(sm.forming)}.${piText(sm, n)}`;
       if (s.kind === 'turn') {
         const t = s.turn;
         facts.textContent = (t
@@ -356,7 +425,7 @@ export class AnimateDialog {
     let hover: { side: 'A' | 'B'; key: string } | null = null;
     const pane = this.pairPane;
     pane.replaceChildren();
-    const intro = el('p', 'muted', 'Click an atom on the left, then the atom it becomes on the right. Click a paired atom on the left again to unpair it. Your pairs are kept; the rest is matched automatically unless you check the box. Red bonds break and green bonds form. Numbers are blue for pairs you chose, gray for pairs matched automatically and orange for atoms with no partner.');
+    const intro = el('p', 'muted', 'Click an atom on the left, then its match on the right; click a paired atom again to unpair it. Unpaired atoms are matched automatically unless you check the box. Red bonds break, green bonds form. Blue: your pairs; gray: automatic; orange: unmatched.');
     const row = el('div', 'animate-pair-canvases');
     const cA = el('canvas', 'animate-pair-canvas');
     const cB = el('canvas', 'animate-pair-canvas');
@@ -371,16 +440,20 @@ export class AnimateDialog {
     const nn = (id: number) => this.nums.get(id) ?? String(id);
     const shiftIn = el('input');
     shiftIn.placeholder = 'e.g. 14-17>21';
-    shiftIn.title = '1,2-shifts, in the starting structure\'s numbers: bond 14–17 keeps its 14 end and walks its 17 end onto atom 21. Separate several with commas.';
+    shiftIn.setAttribute('aria-label', 'Group shifts');
     shiftIn.value = (m.shifts ?? []).map(([u, v, d]) => `${nn(u)}-${nn(v)}>${nn(d)}`).join(', ');
     const shiftRow = el('label', 'ask-row');
-    shiftRow.append(el('span', undefined, '1,2-shifts'), shiftIn);
+    const shiftName = el('span', undefined, 'Group shifts');
+    shiftRow.append(shiftName, shiftIn);
+    addInfo(shiftName, 'A group that moves to the next atom during the step, such as the methyl that shifts in a pinacol or Wagner–Meerwein rearrangement. Type its bond in the starting structure\'s numbers, then the atom it moves to: 14-17>21 keeps the 14 end and moves the 17 end onto atom 21. Separate several with commas.');
     const slideIn = el('input');
     slideIn.placeholder = 'e.g. 7-8>4-7';
-    slideIn.title = 'A double bond\'s second line that moves to another bond, in the starting structure\'s numbers. Separate several with commas.';
+    slideIn.setAttribute('aria-label', 'Moving double bonds');
     slideIn.value = (m.slides ?? []).map(([[a, b], [c, e]]) => `${nn(a)}-${nn(b)}>${nn(c)}-${nn(e)}`).join(', ');
     const slideRow = el('label', 'ask-row');
-    slideRow.append(el('span', undefined, 'Moving lines'), slideIn);
+    const slideName = el('span', undefined, 'Moving double bonds');
+    slideRow.append(slideName, slideIn);
+    addInfo(slideName, 'A double bond that moves to a neighboring bond during the step, such as C=C becoming C=O when an enol turns into a ketone. Type the bond it leaves, then the bond it moves to, in the starting structure\'s numbers: 7-8>4-7. Separate several with commas.');
     const facts = el('p', 'animate-step-facts');
     const err = el('p', 'animate-error');
     const actions = el('div', 'ask-buttons');
@@ -433,7 +506,7 @@ export class AnimateDialog {
       const sm = stepSummary({ ...base, map });
       const n = (k: string) => nn(Number(k));
       const bt = (l: [string, string][]) => (l.length ? l.map(([a, b]) => `${n(a)}–${n(b)}`).join(', ') : 'none');
-      facts.textContent = `${sm.paired} of ${sm.startAtoms} atoms paired (${m.pairs?.length ?? 0} by you). Breaking: ${bt(sm.breaking)}. Forming: ${bt(sm.forming)}.`;
+      facts.textContent = `${sm.paired} of ${sm.startAtoms} atoms paired (${m.pairs?.length ?? 0} by you). Breaking: ${bt(sm.breaking)}. Forming: ${bt(sm.forming)}.${piText(sm, n)}`;
       draw();
     };
 
@@ -619,8 +692,7 @@ export class AnimateDialog {
     const target = await saveFileDialog(withExtension(this.hooks.name(), 'gif'), GIF).catch(async (e) => { await showError(String(e)); return null; });
     if (!target) return;
     // GIFs keep delays in hundredths of a second: count frames at the rate they will really play at
-    const steps = this.steps;
-    const clip = new Clip(steps, this.timing, true);
+    const clip = this.makeClip(true);
     const keep = this.clip;
     this.clip = clip;
     const f = this.frames();
@@ -689,17 +761,17 @@ export class AnimateDialog {
       if (v) {
         this.hooks.putOnSlide(v);
         this.close();
-        this.hooks.flash('The clip is on the slide. It plays by itself in the slide show, and in PowerPoint once saved as .pptx.');
+        this.hooks.flash('The clip is on the slide. It plays automatically in the slide show, and in PowerPoint once saved as .pptx.');
         return;
       }
       // no video encoder here: an animated GIF plays in PowerPoint too
-      const clip = new Clip(this.steps, this.timing, true);
+      const clip = this.makeClip(true);
       const keep = this.clip;
       this.clip = clip;
       const f = this.frames();
       this.clip = keep;
       if (!f) return;
-      this.say('This computer can\'t make videos, so the clip goes on the slide as an animated GIF…');
+      this.say('This computer can\'t create videos, so the clip was added as an animated GIF…');
       const gif = await encodeGif(f.n, async (i) => { if (i % 8 === 0) await tick(); return f.at(i); }, gifDelayMs(this.timing.fps));
       const first = f.at(0).canvas;
       const still = await new Promise<Blob | null>((r) => first.toBlob(r, 'image/png'));

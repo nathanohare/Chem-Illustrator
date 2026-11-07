@@ -81,9 +81,12 @@ export function mixTheme(base: WorkbookTheme, colours: WorkbookTheme | null, fon
   return { name, colors: c.colors.slice(), major: f.major, minor: f.minor };
 }
 
-/** Do two themes look the same? */
-export const sameTheme = (a: WorkbookTheme | null, b: WorkbookTheme | null): boolean =>
-  JSON.stringify(themeOf(a)) === JSON.stringify(themeOf(b));
+/** Do two themes look the same (same name, fonts and colors, however each was made)? */
+export function sameTheme(a: WorkbookTheme | null, b: WorkbookTheme | null): boolean {
+  const x = themeOf(a), y = themeOf(b);
+  return x.name === y.name && x.major === y.major && x.minor === y.minor &&
+    x.colors.length === y.colors.length && x.colors.every((c, i) => c === y.colors[i]);
+}
 
 /** A theme read from a file (unreadable parts from the default). */
 export function readThemeParts(colors: (string | undefined)[], major: string | undefined, minor: string | undefined, name: string | undefined): WorkbookTheme {

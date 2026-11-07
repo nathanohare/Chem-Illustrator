@@ -193,7 +193,7 @@ export class DocComments {
     if (!reviewAuthor() && !(await this.h.askName())) return;
     const ed = f.ed;
     const span = commentSpan(plainText(ed.t.runs), ed.start, ed.end);
-    if (!span) { this.h.flash('Type or select some text first: a comment goes on the words it is about.'); return; }
+    if (!span) { this.h.flash('Select some text first: a comment is attached to the words it\'s about.'); return; }
     const id = nextCommentId(f.t.comments);
     const c: CommentThread = { author: reviewAuthor() || 'Author', date: revisionDate(), text: '' };
     const t = this.withComments({ ...f.t, runs: markComment(f.t.runs, span[0], span[1], id) }, { ...f.t.comments, [id]: c });

@@ -74,7 +74,7 @@ export function pickReuseSlides(name: string, from: Deck, keep: boolean, wording
     keepBox.checked = keep;
     const opt = document.createElement('label');
     opt.className = 'st-option';
-    opt.title = 'Off: the slides take this deck\'s fonts, colors and background, as PowerPoint\'s Use Destination Theme. On: each keeps the look it has in the other file';
+    opt.title = 'Off: slides take this presentation\'s theme (like PowerPoint\'s Use Destination Theme). On: slides keep their original formatting';
     opt.append(keepBox, document.createTextNode(' Keep source formatting (the slides keep their own background, fonts and colors)'));
     const buttons = document.createElement('p');
     buttons.className = 'ask-buttons';

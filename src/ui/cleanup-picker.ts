@@ -29,7 +29,7 @@ export function askCleanUpOption(labels: string[], preview: (k: number, turn: nu
         <button type="button" data-turn="90" title="Rotate 90° counterclockwise">⟲ 90°</button>
         <button type="button" data-flip="h" title="Flip horizontal (left-right)">Flip ↔</button>
         <button type="button" data-flip="v" title="Flip vertical (top-bottom)">Flip ↕</button>
-        <button type="button" data-reset title="Back to how Clean Up turned them">Reset</button>
+        <button type="button" data-reset title="Reset to Clean Up's result">Reset</button>
       </div>
       <p class="ask-buttons"><button type="button" data-act="cancel">Cancel</button> <button type="submit" class="primary">Use This Layout</button></p>`;
     const picks = form.querySelector<HTMLDivElement>('.cleanup-picks')!;

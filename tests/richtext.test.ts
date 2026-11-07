@@ -84,11 +84,67 @@ describe('formula style', () => {
     // a charge's number has to be put up by hand
     expect(show('Fe3+')).toBe('Fe_3^+');
   });
-  it('leaves a - as a hyphen, as ChemDraw does', () => {
-    expect(show('Cl-')).toBe('Cl-');
-    expect(show('PhSO3-')).toBe('PhSO_3-');
-    expect(show('B(OR)3-')).toBe('B(OR)_3-');
-    expect(show('[Fe(CN)6]3-')).toBe('[Fe(CN)_6]_3-');
+  it('puts a - charge up too, as ChemDraw does', () => {
+    expect(show('Cl-')).toBe('Cl^-');
+    expect(show('TfO-')).toBe('TfO^-');
+    expect(show('ClO4-')).toBe('ClO_4^-');
+    expect(show('PhSO3-')).toBe('PhSO_3^-');
+    expect(show('B(OR)3-')).toBe('B(OR)_3^-');
+    expect(show('[Fe(CN)6]3-')).toBe('[Fe(CN)_6]_3^-');
+    expect(show('H+ and Cl- here')).toBe('H^+ and Cl^- here');
+  });
+  // from ChemDraw's own drawing of 4,682 test strings
+  it('follows what ChemDraw measured for signs', () => {
+    expect(show('Red-Al')).toBe('Red-Al');
+    expect(show('(Chloramine-T)')).toBe('(Chloramine-T)');
+    expect(show('1,4-dioxane, 80 °C, 5 h')).toBe('1,4-dioxane, 80 °C, 5 h');
+    expect(show('-Pr')).toBe('-Pr');
+    expect(show('(+)-Pr')).toBe('(+)-Pr');
+    expect(show('a+b')).toBe('a+b');
+    expect(show('a - b')).toBe('a - b');
+    // a sign takes the numbers after it up
+    expect(show('a-1')).toBe('a^-1');
+    expect(show('80-90')).toBe('80^-90');
+    expect(show('a+2')).toBe('a^+2');
+    expect(show('a-1b')).toBe('a^-1b');
+    // before a letter a - goes up only with a + later on
+    expect(show('CH3CO2-Na')).toBe('CH_3CO_2-Na');
+    expect(show('CH3CO2-Na+')).toBe('CH_3CO_2^-Na^+');
+    expect(show('a-b +')).toBe('a^-b +');
+    expect(show('a+b-')).toBe('a+b^-');
+    // two hyphens: names
+    expect(show('Me-Al-')).toBe('Me-Al-');
+    expect(show('a--')).toBe('a--');
+    expect(show('a-1-2')).toBe('a-1-2');
+    // not after a space, an opening bracket or , . : ;
+    expect(show('(-)')).toBe('(-)');
+    expect(show('a, -')).toBe('a, -');
+    expect(show('a.-')).toBe('a.-');
+  });
+  it('lowers numbers after anything but a space, an opening bracket or , . : ;', () => {
+    expect(show('a/2')).toBe('a/_2');
+    expect(show('a)2')).toBe('a)_2');
+    expect(show('a,2')).toBe('a,2');
+    expect(show('a(2)')).toBe('a(2)');
+    expect(show('a.2')).toBe('a.2');
+    expect(show('12')).toBe('12');
+    expect(show('-2')).toBe('-2');
+  });
+  it('lowers a range of counts whole, unless it reads as a charge', () => {
+    expect(show('C8-12')).toBe('C_8-12');
+    expect(show('C12-18H')).toBe('C_12-18H');
+    expect(show('C1-12-')).toBe('C_1-12^-');
+    expect(show('C12-8')).toBe('C_12-8');
+    expect(show('C2-1')).toBe('C_2^-1');
+    expect(show('C1-1')).toBe('C_1^-1');
+    expect(show('C12-1')).toBe('C_12^-1');
+  });
+  it('reads across runs, as ChemDraw does', () => {
+    const parts = (runs: { text: string }[], k: number) => rt.formulaRunParts(runs, k).map((p) => p.pos + ':' + p.text);
+    expect(parts([{ text: 'OTf' }, { text: '-' }], 1)).toEqual(['sup:-']);
+    expect(parts([{ text: '(' }, { text: '-' }], 1)).toEqual(['base:-']);
+    expect(parts([{ text: 'OTf-' }, { text: 'a' }], 0)).toEqual(['base:OTf-']);
+    expect(parts([{ text: 'a' }, { text: '2' }], 1)).toEqual(['sub:2']);
   });
   it('keeps hyphens inside names', () => {
     expect(show('n-BuLi')).toBe('n-BuLi');

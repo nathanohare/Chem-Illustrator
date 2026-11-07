@@ -7,7 +7,8 @@
 // one undo history across its sheets. After each change every formula is worked out again in
 // the order they depend on each other; a formula that depends on itself shows #CIRC!.
 
-import type { KeptParts } from '../io/kept-parts';
+import type { KeptParts, KeptTree } from '../io/kept-parts';
+import type { ExcelSheetKept, ExcelBookKept } from '../io/xlsx-view';
 import type { Contents } from '../model';
 import type { DocStyle } from '../style';
 import { ACS_1996 } from '../style';
@@ -70,6 +71,56 @@ export interface CellStyle {
   rotate?: number;
   /** The cell style from the Cell Styles gallery (Good, Heading 1, Total…) the formatting came from. */
   cellStyle?: string;
+  /** Format Cells > Protection: the cell can be changed in Excel when its sheet is protected (kept for Excel; not enforced here). */
+  unlocked?: boolean;
+  /** Format Cells > Protection > Hidden: Excel hides the cell's formula when its sheet is protected (kept for Excel). */
+  formulaHidden?: boolean;
+  /** Formatting from an Excel file that shows here as the nearest thing, or not at all, kept to write back. */
+  excel?: ExcelLook;
+}
+
+/** Excel formatting this program shows another way (see CellStyle.excel). */
+export interface ExcelLook {
+  /** A patterned fill (darkGrid, lightUp…) and its colors: shown as its pattern color. */
+  pattern?: { type: string; fg?: string; bg?: string };
+  /** Border styles shown as others (hair as thin, dashDot as dashed…), by side. */
+  borders?: Partial<Record<Side, string>>;
+  /** Horizontal alignment shown as another (centerContinuous and distributed as center; justify and fill as general). */
+  horizontal?: string;
+  /** Vertical alignment shown as the middle (justify, distributed). */
+  vertical?: string;
+  shrinkToFit?: true;
+  /** Right to left (2) or left to right (1) whatever the text. */
+  readingOrder?: number;
+  /** The cell's font raised or lowered (superscript, subscript), or struck through. */
+  vertAlign?: string;
+  strike?: true;
+}
+
+/** Parts of an Excel file's styles kept to save back with it (see xlsx.ts). */
+export interface ExcelStyles {
+  /** The Normal style's font (font 0) as the file had it. */
+  normalFont?: string;
+  /** The Normal style's name when the file had another (Excel writes it in its own language: Standard, Normale…). */
+  normalName?: string;
+  /** Number formats of the file's own whose code is also a built-in format's (kept as its own, not the built-in). */
+  numFmts?: string[];
+  /** Named cell styles (Home > Cell Styles: built-in ones and the file's own), in the file's order. */
+  named?: NamedCellStyle[];
+}
+
+/** A named cell style as an Excel file had it (cellStyles and cellStyleXfs). */
+export interface NamedCellStyle {
+  /** Its name as the file had it. */
+  name: string;
+  /** Excel's number for a built-in style; none for a style of the file's own. */
+  builtinId?: number;
+  /** Other attributes of its cellStyle (customBuiltin, hidden, iLevel), as written. */
+  attrs: string;
+  /** Its look (its cellStyleXfs format). */
+  look: CellStyle;
+  /** Which parts of the look cells take from it (the apply attributes of its format), as written. */
+  apply: string;
 }
 
 /** The macros of an .xlsm workbook, as its file held them. */
@@ -100,6 +151,13 @@ export interface Cell {
   compound?: CompoundCard;
   /** Formatting on part of typed text (a bold word), over the text without its leading apostrophe; see rich-text.ts. */
   runs?: TextRun[];
+  /**
+   * A legacy array formula (entered with Ctrl+Shift+Enter in Excel before arrays spilled): the
+   * block it fills from its own cell, `rows` × `cols`, whatever size its answer is. A smaller
+   * answer is repeated (one row or column) or padded with #N/A, as Excel does. Typing a new
+   * formula in the cell makes it an ordinary one.
+   */
+  array?: { rows: number; cols: number };
 }
 
 /** A property column: every row from `firstRow` down to the end of the table works out this formula. */
@@ -169,6 +227,26 @@ export interface CellBlock {
   notes?: (CellNote | undefined)[][];
 }
 
+/**
+ * An answer fitted to the block a legacy array formula fills, as Excel does: a single value fills
+ * every cell, one row is repeated down and one column across, and cells past the answer's edge
+ * show #N/A.
+ */
+function fillBlock(a: Arg, rows: number, cols: number): Arg {
+  const src = rowsOf(a);
+  const h = src.length, w = src[0]?.length ?? 0;
+  const block: Value[][] = [];
+  for (let i = 0; i < rows; i++) {
+    const row: Value[] = [];
+    for (let j = 0; j < cols; j++) {
+      const si = h === 1 ? 0 : i, sj = w === 1 ? 0 : j;
+      row.push(si < h && sj < w ? src[si][sj] : ERR.na('The array formula\'s answer is smaller than its block'));
+    }
+    block.push(row);
+  }
+  return { block, h: rows, w: cols, array: true };
+}
+
 /** A worked-out value as text that types back in as the same value. */
 export function valueInput(v: Value | CellError): string {
   if (v instanceof CellError) return v.code;
@@ -197,7 +275,8 @@ const sameStyle = (a: CellStyle | undefined, b: CellStyle | undefined): boolean 
 function sameCell(a: Cell | undefined, b: Cell | undefined): boolean {
   if (a === b) return true;
   if (!a || !b) return false;
-  return (a.input || undefined) === (b.input || undefined) && a.structure === b.structure && a.link === b.link && a.compound === b.compound && sameStyle(a.style, b.style) && sameRuns(a.runs, b.runs);
+  return (a.input || undefined) === (b.input || undefined) && a.structure === b.structure && a.link === b.link && a.compound === b.compound && sameStyle(a.style, b.style) && sameRuns(a.runs, b.runs)
+    && a.array?.rows === b.array?.rows && a.array?.cols === b.array?.cols;
 }
 
 /** Two styles merged, the second's settings winning. */
@@ -227,7 +306,7 @@ function patchStyleWith(s: CellStyle | undefined, patch: Partial<CellStyle>): Ce
 
 // ---------------------------------------------------------------- history
 
-type MapField = 'cells' | 'colWidths' | 'rowHeights' | 'colDefs' | 'colStyles' | 'hiddenRows' | 'hiddenCols' | 'notes' | 'rowLevels' | 'colLevels';
+type MapField = 'cells' | 'colWidths' | 'rowHeights' | 'fittedRows' | 'colDefs' | 'colStyles' | 'hiddenRows' | 'hiddenCols' | 'notes' | 'rowLevels' | 'colLevels';
 type ValueField = 'merges' | 'filter' | 'frozen' | 'split' | 'name' | 'condFormats' | 'tables' | 'charts' | 'dashboard' | 'validations' | 'objects' | 'pageSetup' | 'dataTables' | 'pivots'
   | 'sparklines' | 'viewOpts' | 'outline';
 const VALUE_FIELDS = new Set<string>(['merges', 'filter', 'frozen', 'split', 'name', 'condFormats', 'tables', 'charts', 'dashboard', 'validations', 'objects', 'pageSetup', 'dataTables', 'pivots', 'sparklines', 'viewOpts', 'outline']);
@@ -259,10 +338,23 @@ export class Sheet {
   readonly uid = nextSheetUid++;
   /** The name a macro-enabled workbook's code knows the sheet by (Excel's codeName), kept for its macros. */
   codeName?: string;
+  /** What an Excel file said about the sheet that only Excel uses (protection, its tab's colour…), kept to save back. */
+  excel?: ExcelSheetKept;
+  /**
+   * The height in points an Excel file gave rows with none of their own (set by hand when `custom`),
+   * saved back with it; `zero`: rows the file doesn't list are hidden (Excel's zeroHeight, for a sheet
+   * with everything below its table hidden).
+   */
+  fileRowHeight?: { pt: number; custom?: true; zero?: true };
   cells = new Map<number, Cell>();
   /** Column widths and row heights set by hand, in pixels at 100% zoom. */
   colWidths = new Map<number, number>();
   rowHeights = new Map<number, number>();
+  /**
+   * Heights Excel fitted rows to itself (a height without customHeight: wrapped text, a bigger font),
+   * in pixels, shown and saved back while nothing in the row changes and nothing here fits it.
+   */
+  fittedRows = new Map<number, number>();
   /** Formatting for whole columns (new cells in them start with it). */
   colStyles = new Map<number, CellStyle>();
   /** Property columns. */
@@ -361,11 +453,19 @@ export class Sheet {
     return normalizeFormula(c.input) !== normalizeFormula(shiftFormula(def.formula, row - def.firstRow, 0));
   }
 
-  /** The formatting that applies to a cell: its column's, then its property column's, then its own. */
+  /**
+   * The formatting that applies to a cell: its own when it has any (all of it, as a cell's format
+   * is in Excel), else its column's, else the workbook's Normal style; a property column's under it.
+   */
   styleAt(row: number, col: number): CellStyle | undefined {
     const def = this.colDefs.get(col);
     const defStyle = def && row >= def.firstRow ? def.style : undefined;
-    return mergeStyle(mergeStyle(this.colStyles.get(col), defStyle), this.cell(row, col)?.style);
+    return mergeStyle(defStyle, this.baseStyle(row, col));
+  }
+
+  /** A cell's own formatting, or what it takes when it has none (its column's, or the Normal style). */
+  private baseStyle(row: number, col: number): CellStyle | undefined {
+    return this.cell(row, col)?.style ?? this.colStyles.get(col) ?? this.wb.normalStyle;
   }
 
   /** What conditional formatting does to a cell (worked out once per change of values or rules). */
@@ -501,9 +601,13 @@ export class Sheet {
 
   /** Replace a cell (undefined or an empty cell removes it). */
   setCell(row: number, col: number, cell: Cell | undefined): void {
-    const next = isBlankCell(cell) ? undefined : cell;
+    // an empty cell set to the plain look stays where it would otherwise take its column's or the Normal style
+    const plain = !!cell?.style && (this.colStyles.has(col) || !!this.wb.normalStyle);
+    const next = isBlankCell(cell) && !plain ? undefined : cell;
     if (sameCell(this.cell(row, col), next)) return;
     this.put('cells', this.cells, keyOf(row, col), next);
+    // Excel's fit was for what the row held: from now on the row fits what it holds here
+    if (this.fittedRows.has(row)) this.put('fittedRows', this.fittedRows, row, undefined);
     // the used area grows straight away (recalc works it out exactly), so later steps of the same edit reach this cell
     if (next) { this.lastRow = Math.max(this.lastRow, row); this.lastCol = Math.max(this.lastCol, col); }
   }
@@ -514,7 +618,7 @@ export class Sheet {
     let style = old ? old.style : this.colStyles.get(col);
     const text = input.startsWith('=') ? normalizeFormula(input, this.wb.nameCase()) : input;
     const typed = readTyped(text);
-    if (typed.format && !this.styleAt(row, col)?.numFmt) style = patchStyleWith(style, { numFmt: typed.format });
+    if (typed.format && !this.styleAt(row, col)?.numFmt) style = patchStyleWith(style ?? this.baseStyle(row, col), { numFmt: typed.format });
     this.setCell(row, col, { input: text || undefined, style, link: old?.link });
   }
 
@@ -560,7 +664,7 @@ export class Sheet {
       for (let col = used.c1; col <= used.c2; col++) {
         const c = this.cell(row, col);
         if (!c && !small && !('fill' in patch || 'borders' in patch) && !this.defAt(row, col)) continue;
-        this.setCell(row, col, { ...c, style: patchStyleWith(c?.style, patch) });
+        this.setCell(row, col, { ...c, style: patchStyleWith(this.baseStyle(row, col), patch) });
       }
     }
   }
@@ -582,8 +686,8 @@ export class Sheet {
         }
         if (!Object.keys(sides).length) continue;
         const c = this.cell(row, col);
-        const borders = { ...c?.style?.borders, ...sides } as Partial<Record<Side, Border>>;
-        this.setCell(row, col, { ...c, style: patchStyleWith({ ...c?.style, borders: undefined }, { borders }) });
+        const borders = { ...this.baseStyle(row, col)?.borders, ...sides } as Partial<Record<Side, Border>>;
+        this.setCell(row, col, { ...c, style: patchStyleWith({ ...this.baseStyle(row, col), borders: undefined }, { borders }) });
       }
     }
   }
@@ -594,6 +698,13 @@ export class Sheet {
 
   setRowHeight(row: number, px: number | undefined): void {
     this.put('rowHeights', this.rowHeights, row, px === undefined ? undefined : Math.max(0, Math.round(px)));
+    // a height set here (or AutoFit) takes the place of the one Excel fitted
+    if (this.fittedRows.has(row)) this.put('fittedRows', this.fittedRows, row, undefined);
+  }
+
+  /** A height Excel fitted the row to (pixels), from a file; undefined takes it off. */
+  setFittedRow(row: number, px: number | undefined): void {
+    this.put('fittedRows', this.fittedRows, row, px === undefined ? undefined : Math.max(0, Math.round(px)));
   }
 
   setColDef(col: number, def: ColumnDef | undefined): void {
@@ -903,6 +1014,7 @@ export class Sheet {
       }
     };
     shiftMap('rowHeights', this.rowHeights, axis === 'row');
+    shiftMap('fittedRows', this.fittedRows, axis === 'row');
     shiftMap('hiddenRows', this.hiddenRows, axis === 'row');
     shiftMap('colWidths', this.colWidths, axis === 'col');
     shiftMap('hiddenCols', this.hiddenCols, axis === 'col');
@@ -1166,7 +1278,7 @@ const READER_COLS = 1 << 15;
 const RUNNING_MAX = 4_000_000;
 
 /** Changes that leave every value as it was. */
-const NO_VALUES = new Set<string>(['colWidths', 'rowHeights', 'colStyles', 'hiddenRows', 'hiddenCols', 'merges', 'filter', 'frozen', 'split', 'condFormats', 'tables', 'charts', 'dashboard', 'notes', 'validations', 'objects', 'pageSetup', 'pivots',
+const NO_VALUES = new Set<string>(['colWidths', 'rowHeights', 'fittedRows', 'colStyles', 'hiddenRows', 'hiddenCols', 'merges', 'filter', 'frozen', 'split', 'condFormats', 'tables', 'charts', 'dashboard', 'notes', 'validations', 'objects', 'pageSetup', 'pivots',
   'rowLevels', 'colLevels', 'sparklines', 'viewOpts', 'outline', 'theme', 'customViews', 'queries', 'drawingStyle']);
 
 const isFormulaText = (t: string | undefined): boolean => !!t && t.startsWith('=') && t.length > 1;
@@ -1228,6 +1340,27 @@ export class Workbook {
   drawingStyle: DocStyle = { ...ACS_1996 };
   /** Other programs' data in the file read (custom XML, custom properties, add-ins' settings), saved back with it. */
   kept: KeptParts | undefined = undefined;
+  /**
+   * Links to other workbooks (Excel's externalLink parts, with the file each points at and the
+   * values last read from it), in the order formulas number them: [1]Sheet1!A1 reads from the
+   * first. Kept as they were and saved back in the same order, so Excel can still update them.
+   */
+  externalLinks: KeptTree[] = [];
+  /**
+   * Functions an Excel file wrote with a prefix (_xlfn., or _xlfn._xlws.) that this program
+   * doesn't add by itself (newer Excel functions it can't work out), by upper-case name, so a
+   * save writes them the way Excel needs them.
+   */
+  excelPrefixes = new Map<string, string>();
+  /** What an Excel file said about the workbook that only Excel uses (its protection, calculation settings), kept to save back. */
+  excel?: ExcelBookKept;
+  /**
+   * The look of cells with no formatting of their own, in a column with none: an Excel file's
+   * Normal style (Arial 10…), when it isn't this program's plain look (the theme's body font at 11 pt).
+   */
+  normalStyle: CellStyle | undefined = undefined;
+  /** What an Excel file's styles held that cells here don't (its Normal font as written, its named cell styles), saved back with it. */
+  excelStyles: ExcelStyles | undefined = undefined;
   chem: ChemHost | null = null;
   /**
    * Text typed into cells with a formula in it (CH2Cl2, Pd(PPh3)4) is shown as chemistry without
@@ -1235,6 +1368,12 @@ export class Workbook {
    * it was written; turned on or off from the cell menu (Formula Style).
    */
   autoChem = true;
+  /**
+   * The workbook came from a file that counts its days from 1904 (Excel's date1904, the old Mac
+   * default). Its dates are held here counting from 1900, as everywhere else in this program,
+   * and saved back counting from 1904, so Excel shows them as before.
+   */
+  date1904 = false;
   /** Names defined for cells, values and formulas (Formulas > Name Manager). */
   names: DefinedName[] = [];
   /**
@@ -2083,7 +2222,9 @@ export class Workbook {
       else if (n.def) v = evaluate(tree, host);
       else {
         const a = evaluateArg(tree, host);
-        v = isMulti(a) ? this.spill(s, n.key, a) : tidyValue(isBlock(a) ? rowsOf(a)[0][0] : a);
+        const block = s.cells.get(n.key)?.array;
+        if (block && block.rows * block.cols > 1) v = this.spill(s, n.key, fillBlock(a, block.rows, block.cols));
+        else v = isMulti(a) && !block ? this.spill(s, n.key, a) : tidyValue(isBlock(a) ? rowsOf(a)[0][0] : a);
       }
     } catch (e) {
       // one formula that fails outright shows an error in its cell rather than stopping every other

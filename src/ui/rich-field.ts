@@ -289,6 +289,15 @@ export class RichField {
   /** Typed and not finished yet (it goes to the drawing on Enter or when the caret leaves). */
   unfinished(): boolean { return this.key() !== this.was; }
 
+  /** Show other text (a preset chosen in a window): it counts as finished. */
+  setParts(parts: TextPart[]): void {
+    this.load(parts);
+    this.render(null);
+    this.undo = [];
+    this.was = this.key();
+    this.wasParts = this.parts();
+  }
+
   /** Hand what is typed on to another field: this one then has nothing of its own to finish. */
   handOver(to: RichField): void {
     if (this.unfinished()) { to.load(this.parts()); to.render(null); }

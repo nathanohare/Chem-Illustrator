@@ -3,7 +3,7 @@
 // Bonds that cross: the one behind gets a gap, and which is in front is saved for ChemDraw.
 
 import { describe, expect, it } from 'vitest';
-import { Doc } from '../src/model';
+import { Doc, type Bond } from '../src/model';
 import { writeCdxml } from '../src/io/cdxml-write';
 import { readCdxml } from '../src/io/cdxml';
 import { bondLayer, crossingBonds, crossingGaps } from '../src/chem/crossing';
@@ -109,5 +109,76 @@ describe('crossings in drawings seen in perspective', () => {
       doc.edit('f', () => placeTemplate(doc, templateById('chair')!, { origin: { x: 0, y: 0 }, scale: f.len, angle: 0, mirror: false, pts: f.pts }, { existing: f.existing, move: f.move, depth: f.depth, atomDepth: f.atomDepth, noMerge: true }));
       checkAll(doc);
     }
+  });
+});
+
+// measured from ChemDraw 25's drawings of real files
+describe('the gap ChemDraw leaves', () => {
+  const reach = 3.6; // margin width 2.88, line width 1.44
+  const twoBonds = (a: [number, number, number, number], c: [number, number, number, number]) => {
+    const doc = new Doc();
+    let back!: Bond, front!: Bond;
+    doc.edit('Draw', () => {
+      const p = doc.addAtom(a[0], a[1]), q = doc.addAtom(a[2], a[3]);
+      back = doc.addBond(p.id, q.id, 1);
+      const r = doc.addAtom(c[0], c[1]), s = doc.addAtom(c[2], c[3]);
+      front = doc.addBond(r.id, s.id, 1);
+      doc.updateBond(back.id, { crossing: [front.id] });
+    });
+    return { doc, back: doc.bonds.get(back.id)!, front: doc.bonds.get(front.id)! };
+  };
+
+  it('reaches the margin and half a line either side of a square crossing', () => {
+    const { doc, back } = twoBonds([0, 0, 40, 0], [20, -20, 20, 20]);
+    const [g] = crossingGaps(doc, back, reach);
+    expect(g[0] * 40).toBeCloseTo(20 - 3.6, 5);
+    expect(g[1] * 40).toBeCloseTo(20 + 3.6, 5);
+  });
+
+  it('is longer at a slant, as far as the line is within reach', () => {
+    const { doc, back } = twoBonds([0, 0, 40, 0], [10, -10, 30, 10]);
+    const [g] = crossingGaps(doc, back, reach);
+    expect(((g[1] - g[0]) * 40) / 2).toBeCloseTo(3.6 / Math.SQRT1_2, 5);
+  });
+
+  it('leaves none for a listed bond that only ends some way off', () => {
+    // the hashed bond to H in Nate's scheme: 7 pt away, and ChemDraw draws every hash
+    const { doc, back } = twoBonds([0, 0, 21.6, 0], [18.4, 7, 40, 20]);
+    expect(crossingGaps(doc, back, reach)).toEqual([]);
+  });
+
+  it('cuts one that ends within reach', () => {
+    const { doc, back } = twoBonds([0, 0, 40, 0], [20, 2, 20, 30]);
+    const gaps = crossingGaps(doc, back, reach);
+    expect(gaps).toHaveLength(1);
+    const half = Math.sqrt(3.6 * 3.6 - 4);
+    expect(gaps[0][0] * 40).toBeCloseTo(20 - half, 5);
+    expect(gaps[0][1] * 40).toBeCloseTo(20 + half, 5);
+  });
+
+  it('shortens a bond that ends by the bond in front (a cut past its end)', () => {
+    const { doc, back } = twoBonds([0, 1, 30, 1], [0, -20, 0, 20]);
+    const gaps = crossingGaps(doc, back, reach);
+    expect(gaps).toHaveLength(1);
+    expect(gaps[0][0]).toBeLessThan(0);
+    expect(gaps[0][1] * 30).toBeCloseTo(3.6, 5);
+  });
+
+  it('counts each line the bond in front draws', () => {
+    const { doc, back, front } = twoBonds([0, 0, 40, 0], [20, -20, 20, 20]);
+    const lines = () => [
+      { a: { x: 20, y: -20 }, b: { x: 20, y: 20 }, extra: 0 },
+      { a: { x: 23, y: -20 }, b: { x: 23, y: 20 }, extra: 0 },
+    ];
+    const gaps = crossingGaps(doc, back, reach, [front], lines);
+    expect(gaps).toHaveLength(2);
+    expect(Math.max(...gaps.map((g) => g[1])) * 40).toBeCloseTo(26.6, 5);
+    expect(Math.min(...gaps.map((g) => g[0])) * 40).toBeCloseTo(16.4, 5);
+  });
+
+  it("is wider by how far a bold line's edge is", () => {
+    const { doc, back, front } = twoBonds([0, 0, 40, 0], [20, -20, 20, 20]);
+    const [g] = crossingGaps(doc, back, reach, [front], () => [{ a: { x: 20, y: -20 }, b: { x: 20, y: 20 }, extra: 1 }]);
+    expect(g[1] * 40).toBeCloseTo(24.6, 5);
   });
 });

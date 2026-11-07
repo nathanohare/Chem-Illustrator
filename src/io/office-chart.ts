@@ -8,6 +8,7 @@ import { chartXml, readChartXml, CT_CHART, REL_CHART, CT_CHARTEX, REL_CHARTEX, C
 import { writeXlsx, type XlsxPictures } from './xlsx';
 import { ChartBox, boxBook, boxData, boxFromCaches, PX_PER_PT } from '../sheet/chart-box';
 import { newChartId, isChartEx } from '../sheet/chart';
+import { chartPrint, chartPrintXml } from './native-print';
 
 export { CT_CHART, REL_CHART, CX_NS };
 export const C_NS = 'http://schemas.openxmlformats.org/drawingml/2006/chart';
@@ -27,11 +28,11 @@ function relative(from: string, to: string): string {
 
 /**
  * Add a chart to a package being written: its part (in `dir`/charts) and its data as a workbook
- * (in `dir`/embeddings). Returns the relationship id from `from` to the chart. Histograms and box
- * charts go in the newer chart part of Office 2016 (chartEx), which the caller wraps for older
- * programs.
+ * (in `dir`/embeddings). Returns the relationship id from `from` to the chart, and the chart's
+ * print (native-print.ts) to keep with our copy of it. Histograms and box charts go in the newer
+ * chart part of Office 2016 (chartEx), which the caller wraps for older programs.
  */
-export async function addChart(pkg: Package, from: string, dir: string, n: number, box: ChartBox, w: number, h: number): Promise<string> {
+export async function addChart(pkg: Package, from: string, dir: string, n: number, box: ChartBox, w: number, h: number): Promise<{ rid: string; print: string }> {
   const ex = isChartEx(box.chart.kind);
   const path = `${dir}/charts/${ex ? 'chartEx' : 'chart'}${n}.xml`;
   const book = `${dir}/embeddings/Microsoft_Excel_Worksheet${n}.xlsx`;
@@ -44,7 +45,7 @@ export async function addChart(pkg: Package, from: string, dir: string, n: numbe
     : chartXml(sized, boxData(box)).replace(/<\/c:chartSpace>$/, `<c:externalData r:id="${rid}"><c:autoUpdate val="0"/></c:externalData></c:chartSpace>`);
   pkg.add(path, `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n${body}`, ex ? CT_CHARTEX : CT_CHART);
   if (ex) addChartExStyle(pkg, path, n);
-  return pkg.relate(from, ex ? REL_CHARTEX : REL_CHART, relative(from, path));
+  return { rid: pkg.relate(from, ex ? REL_CHARTEX : REL_CHART, relative(from, path)), print: chartPrintXml(body, sized.w, sized.h) };
 }
 
 /** The numbers and labels a chart part cached beside each of its references. */
@@ -89,8 +90,11 @@ function cachesOf(doc: Document): { ref: string; values: string[] }[] {
   return out;
 }
 
-/** A chart from a Word or PowerPoint file (shown `w` × `h` points), with its data; null when it has nothing this can show. */
-export function readChart(pkg: PackageReader, path: string, w: number, h: number): { box: ChartBox; partial: boolean } | null {
+/**
+ * A chart from a Word or PowerPoint file (shown `w` × `h` points), with its data and its print (to
+ * tell whether it is still the chart saved here); null when it has nothing this can show.
+ */
+export function readChart(pkg: PackageReader, path: string, w: number, h: number): { box: ChartBox; partial: boolean; print: string } | null {
   let doc: Document | null;
   try {
     doc = pkg.xml(path);
@@ -100,5 +104,5 @@ export function readChart(pkg: PackageReader, path: string, w: number, h: number
   if (!doc) return null;
   const got = readChartXml(doc, { row: 0, col: 0, dx: 0, dy: 0 }, w * PX_PER_PT, h * PX_PER_PT, newChartId());
   if (!got) return null;
-  return { box: boxFromCaches(got.chart, cachesOf(doc)), partial: got.partial };
+  return { box: boxFromCaches(got.chart, cachesOf(doc)), partial: got.partial, print: chartPrint(got.chart) };
 }

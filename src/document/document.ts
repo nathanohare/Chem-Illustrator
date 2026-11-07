@@ -53,6 +53,9 @@ export interface NamedStyle {
   firstLine: number;
   /** Kept on the page with the next paragraph (headings). */
   keepNext: boolean;
+  /** Its paragraphs' lines kept together on one page, and widow and orphan lines allowed (Word's settings, kept from its files). */
+  keepLines?: boolean;
+  noWidow?: boolean;
   /** The style a new paragraph gets after Enter at the end of one of these (Normal after a heading). */
   next?: string;
   /** A heading's level (1 to 9). */
@@ -236,6 +239,28 @@ export interface SectionBreak {
 }
 
 /** A figure's or picture's frame and shadow (Word's Picture Format). */
+/**
+ * Cropping (fractions of the picture cut from each side) and color changes (Recolor, brightness,
+ * contrast, transparency) Word made to a structure's picture, with a print of the structure and
+ * the picture's size as they were (when either changes here, the picture is drawn afresh and
+ * they no longer fit it).
+ */
+export interface WordLook {
+  crop?: { l: number; t: number; r: number; b: number };
+  fx?: PictureFx;
+  print: string;
+  w: number;
+  h: number;
+}
+
+/** A print of a structure's drawing, to tell whether it changed since Word cropped or recolored its picture. */
+export const contentsPrint = (c: Contents): string => {
+  const text = JSON.stringify(c, (_k, v: unknown) => (typeof v === 'number' ? +v.toFixed(3) : v));
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) h = Math.imul(h ^ text.charCodeAt(i), 0x01000193) >>> 0;
+  return `${text.length}|${h.toString(36)}`;
+};
+
 export interface FigureLook {
   /** A line round it, this many points wide, in `frameColor` (black when not set). */
   frame?: number;
@@ -278,6 +303,13 @@ export interface Float {
   yFrom?: 'para' | 'margin' | 'page';
   /** Room kept between the figure and the text round it, in points (Word's is 0.13 in). */
   gap?: number;
+  /**
+   * The room above, below and at the right instead, where it isn't `gap` (Word keeps each side's
+   * distance from text; its own figures keep none above and below).
+   */
+  gapTop?: number;
+  gapBottom?: number;
+  gapRight?: number;
   /** Which is drawn over which (Bring Forward, Send Backward): higher on top; unset, in the order of the text. */
   z?: number;
   /** Figures grouped together (Arrange > Group) share a number, and move together. */
@@ -290,6 +322,12 @@ export interface Float {
 
 /** The room text keeps from a floating figure unless set (Word's 0.13 inch). */
 export const FLOAT_GAP = 9;
+
+/** The room a floating figure keeps from the text round it on each side, in points. */
+export function floatGaps(fl: Float): { t: number; b: number; l: number; r: number } {
+  const g = fl.gap ?? FLOAT_GAP;
+  return { t: fl.gapTop ?? g, b: fl.gapBottom ?? g, l: g, r: fl.gapRight ?? g };
+}
 
 /** A text box's inner margins, in points (Word's: 0.1 in at the sides, 0.05 in above and below). */
 export const BOX_PAD = { x: 7.2, y: 3.6 };
@@ -342,7 +380,7 @@ export interface Embedded {
 
 export type DocObject =
   /** A structure, scheme or table: a drawing, edited with the drawing tools. `scale` 1 is the drawing's own size. */
-  | { kind: 'drawing'; contents: Contents; scale?: number; look?: FigureLook; float?: Float; alt?: string; /** A figure: a set area of the page (in the drawing's points) its structures are drawn in, sized by it rather than by them, so drawing inside it never moves the text round it. Never drawn when printed. */ frame?: FigureFrame; /** Turned and flipped, as a picture (Arrange > Rotate). */ rot?: number; flipH?: boolean; flipV?: boolean; /** A Chem4Word structure: its id in the file's CML part, and a fingerprint of the drawing as read (changed = the CML is written afresh). */ c4w?: { guid: string; sig: string } }
+  | { kind: 'drawing'; contents: Contents; scale?: number; look?: FigureLook; float?: Float; alt?: string; /** A figure: a set area of the page (in the drawing's points) its structures are drawn in, sized by it rather than by them, so drawing inside it never moves the text round it. Never drawn when printed. */ frame?: FigureFrame; /** Turned and flipped, as a picture (Arrange > Rotate). */ rot?: number; flipH?: boolean; flipV?: boolean; /** A Chem4Word structure: its id in the file's CML part, and a fingerprint of the drawing as read (changed = the CML is written afresh). */ c4w?: { guid: string; sig: string }; /** Saved as a ChemDraw object, by this program name (ChemDraw.Document.6.0): one that came from a ChemDraw object stays one, to open in ChemDraw from Word. */ ole?: string; /** Cropping and color changes Word made to its picture: not shown here, saved back to Word while the structure is as read. */ wordLook?: WordLook }
   /**
    * A picture: its own size is w × h points (`px` its pixels); `scale` 1 is that size. A chart
    * (Insert > Chart) is a picture with its chart and data: drawn from them, saved as Word's chart.
@@ -382,7 +420,7 @@ export type DocObject =
    * A footnote (or, with `end`, an endnote): its number in the text, and its own text, typed into
    * in place at the bottom of the page (or at the end of the document), as in Word.
    */
-  | { kind: 'note'; end?: boolean; runs: TextRun[]; paras?: ParaStyle[] }
+  | { kind: 'note'; end?: boolean; runs: TextRun[]; paras?: ParaStyle[]; /** From a Word file: what came between its number and its text, when not the one space Word puts there ('' for nothing, a tab). */ lead?: string }
   /** An equation, typed as LaTeX and shown laid out as maths (see math.ts); a Word equation in .docx files. */
   | { kind: 'math'; tex: string }
   /** A field: the date, a document property, the file's name, a page number, a bookmark's text or page (see fields.ts). */
@@ -412,6 +450,8 @@ export type FormType = 'text' | 'check' | 'drop';
 
 export interface DocText extends RichText {
   styles: Record<string, NamedStyle>;
+  /** The language the text is spell-checked in (Word's default w:lang), when not US English. */
+  lang?: string;
   page: PageSetup;
   hf: HeaderFooter;
   objects: Record<number, DocObject>;
@@ -584,28 +624,28 @@ export function paraFromStyle(s: NamedStyle, keep: ParaStyle): ParaStyle {
     align: s.align === 'left' ? undefined : s.align,
     spaceBefore: s.spaceBefore, spaceAfter: s.spaceAfter,
     line: s.line === 1 ? undefined : s.line,
-    indent: s.indent, firstLine: s.firstLine, keepNext: s.keepNext,
+    indent: s.indent, firstLine: s.firstLine, keepNext: s.keepNext, keepLines: s.keepLines, noWidow: s.noWidow,
   });
 }
 
 /** A paragraph's own value of a style setting (as stored: missing means 0, left, single, off). */
-function paraValue(p: ParaStyle, k: 'align' | 'spaceBefore' | 'spaceAfter' | 'line' | 'indent' | 'firstLine' | 'keepNext'): unknown {
+function paraValue(p: ParaStyle, k: (typeof PARA_KEYS)[number]): unknown {
   switch (k) {
     case 'align': return p.align ?? 'left';
     case 'line': return p.line ?? 1;
-    case 'keepNext': return !!p.keepNext;
+    case 'keepNext': case 'keepLines': case 'noWidow': return !!p[k];
     default: return p[k] ?? 0;
   }
 }
 
-const PARA_KEYS = ['align', 'spaceBefore', 'spaceAfter', 'line', 'indent', 'firstLine', 'keepNext'] as const;
+const PARA_KEYS = ['align', 'spaceBefore', 'spaceAfter', 'line', 'indent', 'firstLine', 'keepNext', 'keepLines', 'noWidow'] as const;
 
 /** A paragraph after its style changed from `from` to `to`: what looked like `from` now looks like `to`. */
 export function restylePara(p: ParaStyle, from: NamedStyle, to: NamedStyle): ParaStyle {
   const want = paraFromStyle(to, p);
   const out: ParaStyle = { ...p, style: want.style };
   for (const k of PARA_KEYS) {
-    const fromV = k === 'align' ? from.align : k === 'keepNext' ? from.keepNext : from[k];
+    const fromV = k === 'keepLines' || k === 'noWidow' ? !!from[k] : from[k];
     if (paraValue(p, k) === fromV) (out as Record<string, unknown>)[k] = (want as Record<string, unknown>)[k];
   }
   return cleanPara(out);

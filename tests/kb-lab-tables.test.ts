@@ -95,12 +95,51 @@ describe('Acids and Bases', () => {
 });
 
 describe('Hammett original sources', () => {
-  it('names the paper behind each row, as Table I cites it', async () => {
-    const { HAMMETT, HAMMETT_TABLE, originalSources } = await import('../src/kb/hammett');
+  it('names the paper behind each value, as Tables I and V cite them', async () => {
+    const { HAMMETT, originalSources } = await import('../src/kb/hammett');
+    const { HAMMETT_TABLE } = await import('../src/kb/hammett-table');
     const row = (g: string) => HAMMETT_TABLE.rows.find((r) => r.group === g)!;
-    expect(row('NO2').refs).toBe('McDaniel and Brown, J. Org. Chem. 1958, 23, 420');
+    expect(row('CH3').refs).toBe('σm, σp: McDaniel and Brown, J. Org. Chem. 1958, 23, 420. σp⁺: Brown and Okamoto, J. Am. Chem. Soc. 1958, 80, 4979. σp⁻: Shabarov et al., Zh. Org. Khim. 1968, 4, 1131');
     expect(row('H').refs).toBe('Definition');
-    for (const x of HAMMETT) expect(originalSources(x.row), x.group).not.toMatch(/undefined/);
-    expect(HAMMETT.filter((x) => originalSources(x.row) === 'Definition').map((x) => x.group)).toEqual(['H']);
+    expect(row('BF2').refs).toBe('Sheppard and Sharts, Organic Fluorine Chemistry (Benjamin, 1969), p 348');
+    for (const x of HAMMETT) expect(originalSources(x), x.group).not.toMatch(/undefined|ref\. \d/);
+    expect(HAMMETT.filter((x) => originalSources(x) === 'Definition').map((x) => x.group)).toEqual(['H']);
+  });
+});
+
+describe('Hammett Tables I and V', () => {
+  it('holds all 530 groups of Table I and the σp⁺ and σp⁻ of Table V', async () => {
+    const { HAMMETT } = await import('../src/kb/hammett');
+    expect(HAMMETT.filter((x) => x.row !== null)).toHaveLength(530);
+    expect(new Set(HAMMETT.map((x) => x.row).filter((r) => r !== null)).size).toBe(530);
+    expect(HAMMETT.filter((x) => x.vrow !== undefined)).toHaveLength(222);
+    const g = (s: string) => HAMMETT.find((x) => x.group === s)!;
+    expect([g('NO2').spPlus, g('NO2').spMinus]).toEqual([0.79, 1.27]);
+    expect([g('OCH3').spPlus, g('OCH3').spMinus]).toEqual([-0.78, -0.26]);
+    // a group Table V has and Table I doesn't
+    expect(g('SeC6H5')).toMatchObject({ sm: null, sp: null, spPlus: -0.47, spMinus: 0.13, row: null });
+  });
+
+  it('agrees with the paper\'s own equations: F from eq 8, R = σp − F', async () => {
+    const { HAMMETT } = await import('../src/kb/hammett');
+    for (const x of HAMMETT) {
+      if (x.sm === null || x.sp === null || x.uncertain || x.group === 'H') continue;
+      expect(Math.abs(1.297 * x.sm - 0.385 * x.sp + 0.033 - x.F!), `${x.group} F`).toBeLessThan(0.015);
+      expect(Math.abs(x.sp - x.F! - x.R!), `${x.group} R`).toBeLessThan(0.025);
+    }
+  });
+
+  it('keeps the brackets on the values the paper marks, one by one', async () => {
+    const { HAMMETT_TABLE } = await import('../src/kb/hammett-table');
+    const row = (g: string) => HAMMETT_TABLE.rows.find((r) => r.group === g)!;
+    expect(row('SO2Cl')).toMatchObject({ sm: '1.20', sp: '1.11', F: '1.16', R: '(-0.05)' });
+    expect(row('Sn(C6H5)3')).toMatchObject({ sm: '(0.53)', sp: '(0.27)', F: '(0.62)', R: '(-0.35)' });
+    expect(String(row('P(CH3)(C6H4-4-Me)2⁺').refs)).toContain('R corrected');
+  });
+
+  it('can be filtered by the atom that joins the ring', async () => {
+    const { HAMMETT_TABLE } = await import('../src/kb/hammett-table');
+    const joins = (g: string) => HAMMETT_TABLE.rows.find((r) => r.group === g)!.joins;
+    expect([joins('NO2'), joins('OCH3'), joins('CF3'), joins('SF5'), joins('Cl'), joins('OCH2O'), joins('Si(CH3)3')]).toEqual(['Nitrogen', 'Oxygen', 'Carbon', 'Sulfur', 'Halogen', 'Fused ring (3,4-)', 'Silicon']);
   });
 });

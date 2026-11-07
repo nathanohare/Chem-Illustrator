@@ -99,7 +99,7 @@ export function atomWarnings(doc: Doc, a: Atom): string[] {
   const ext = a.label && toMetal && labelDonates(a.label, Math.max(0, bonds - toMetal)) ? Math.max(0, bonds - toMetal) : bonds;
   if (a.label) {
     if (bracketsUnbalanced(a.label)) out.push(`The brackets in “${a.label}” don't pair up.`);
-    else if (!labelGraph(a.label, ext)) out.push(`“${a.label}” can't be read as chemistry, so it's left out of the formula and mass.`);
+    else if (!labelGraph(a.label, ext)) out.push(`“${a.label}” can't be read as chemistry, so it's excluded from the formula and mass.`);
     else {
       // (the label's first atom may give the metal a lone pair: THF's O, DMSO's S)
       // (a bridging OMe or Cl may go past its valence by its bonds to metals)
@@ -109,7 +109,8 @@ export function atomWarnings(doc: Doc, a: Atom): string[] {
         const sym = SYMBOLS[o.z] ?? '?';
         const charge = maxValence(o.z, a.charge) === o.max ? a.charge : 0;
         out.push(`Too many bonds: the ${sym} in “${a.label}” has ${o.used}${o.h ? `, counting its ${o.h} H` : ''}, but ${valenceAdvice(o.z, charge, o.used)}`);
-      } else {
+      } else if (!a.asTyped) {
+        // (typed on its own, N or NH2 is that atom or radical as written)
         const few = tooFewBonds(a, orders);
         if (few) out.push(few);
       }

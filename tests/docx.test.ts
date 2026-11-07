@@ -15,6 +15,7 @@ import { cdxmlToCdx, cdxToCdxml } from '../src/io/cdx';
 import { readCdxml } from '../src/io/cdxml';
 import { chemdrawCdx, isChemDraw } from '../src/io/ole-object';
 import { fromDataUrl } from '../src/render/images';
+import { laidParas } from '../src/text/paragraphs';
 import {
   COMPOUND, newDocument, runStyleOf, paraFromStyle, captionRuns, objectRun, documentPlainText, fieldTexts, type DocText,
 } from '../src/document/document';
@@ -143,7 +144,10 @@ describe('saving Word files', () => {
   it('writes tables as Word tables with ACS rules, and structures as pictures with their SVG', async () => {
     const p = parts(await writeDocx(sample(), deps));
     const body = p['word/document.xml'];
-    expect(body).toContain('<w:tblCaption w:val="Chem Illustrator table 4"/>');
+    // which of ours it is goes in a hidden bookmark; its alt-text title is its own title
+    expect(body).toContain('w:name="_ChemTable_4"/>');
+    expect(body).toContain('<w:tblCaption w:val="Table 1. Optimization"/>');
+    expect(body).not.toContain('Chem Illustrator table');
     expect(body).toContain('<w:tblHeader/>');
     expect(body).toContain('<w:gridCol w:w="1200"/><w:gridCol w:w="800"/>');
     expect(body).toContain('name="Chem Illustrator drawing 1"');
@@ -367,8 +371,11 @@ describe('opening files made by Word', () => {
       '<w:p><w:r><w:br w:type="page"/></w:r><w:r><w:t xml:space="preserve">next page </w:t></w:r><w:r><w:rPr><w:rFonts w:ascii="Symbol" w:hAnsi="Symbol"/></w:rPr><w:t>a</w:t></w:r><w:r><w:sym w:font="Symbol" w:char="F062"/></w:r></w:p>',
     ));
     expect(documentPlainText(doc)).toBe('one\ntwo\tthree\nnext page αβ');
-    expect(doc.paras[0].spaceAfter ?? 0).toBe(0);
-    expect(doc.paras[1].spaceBefore ?? 0).toBe(0);
+    // the line after the line break carries on the paragraph: no space between them as laid out
+    expect(doc.paras[1].soft).toBe(true);
+    const laid = laidParas(doc.paras);
+    expect(laid[0].spaceAfter ?? 0).toBe(0);
+    expect(laid[1].spaceBefore ?? 0).toBe(0);
     expect(doc.paras[2].pageBreak).toBe(true);
     expect(doc.runs.find((r) => r.text.includes('αβ'))?.font).toBe('Calibri');
   });

@@ -23,7 +23,7 @@ export interface KbColumn {
   prose?: boolean;
   /** Searched but not shown or copied (SMILES, a CAS number kept for searching). */
   hidden?: boolean;
-  /** What the column's scale or class means and where it comes from, behind an "i" by its heading. */
+  /** What the column's scale or class means and where it comes from, behind an "i" by its heading (by its filter list, for a hidden column). */
   info?: string;
   /** A picture of the row's structure (the table's `picture`), not text. */
   picture?: boolean;
@@ -50,6 +50,18 @@ export interface KbTable {
   canonicalSmiles?: boolean;
   /** The drawing shown in a `picture` column (a Hammett group with its attachment point). */
   picture?: (row: Record<string, Cell>) => Template | null;
+  /** How big those drawings are, in pixels (48 when not given): whole molecules need more room than groups. */
+  pictureSize?: number;
+  /** Fit the window's width, wrapping its sentences, instead of scrolling sideways (tall rows with notes and sources). */
+  fit?: boolean;
+  /** Read whole, not searched: the search box and Draw… are hidden on it, and a search typed elsewhere leaves it as it is. */
+  noSearch?: boolean;
+  /**
+   * A table of groups (substituents): Draw… starts from an attachment point (a wavy line, as its
+   * `picture` column draws them) to build the group out from, and in the search the attachment
+   * point is joined to this structure, by its first atom (the benzene ring the groups sit on).
+   */
+  drawOn?: string;
   /** The structure shown when the pointer rests on a row's name (a solvent's), when it has one. */
   structure?: (row: Record<string, Cell>) => Template | null;
   /**
@@ -134,6 +146,8 @@ export interface RowMatch {
   off?: number;
   /** For a shift search: which nucleus's peak matched. */
   nucleus?: '1H' | '13C';
+  /** For a structure search: the same compound (true) or one containing it (false). */
+  same?: boolean;
 }
 
 /**
@@ -264,4 +278,18 @@ export function parseUserTable(text: string, title: string, id: string): KbTable
   });
   for (const c of columns) if (!c.shift && rows.every((r) => r[c.key] === null || typeof r[c.key] === 'number')) c.numeric = true;
   return { id, title, about: 'Your own table, kept on this computer.', columns, rows, sources: [{ label: 'Imported by you' }], personal: true };
+}
+
+/**
+ * A group's SMILES with its one attachment point (* or [*]) joined to `on` (by `on`'s first atom,
+ * or its last when the point comes first): "*C(F)(F)F" on benzene is trifluoromethylbenzene.
+ * Null when the SMILES has no attachment point or more than one.
+ */
+export function joinAttachment(smiles: string, on: string): string | null {
+  const star = /\[\d*\*(?:[@H\d+-]*)(?::\d+)?\]|\*/g;
+  const found = smiles.match(star) ?? [];
+  if (found.length !== 1) return null;
+  // `on`'s ring closures numbered out of the way of the group's own (%91 for 1)
+  const ring = on.replace(/\[[^\]]*\]|%\d\d|\d/g, (t) => (/^\d$/.test(t) ? `%9${t}` : t));
+  return smiles.replace(star, ring);
 }

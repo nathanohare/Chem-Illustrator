@@ -3,24 +3,44 @@
 // ChemDraw find them there too.
 
 import { COMMAND_NAMES } from '../editor/keymap';
+import { commandIcon } from './command-icons';
 
-/** A command (named as in the top menus unless `label` says otherwise), a group, or a line. */
+/** One of the buttons in a row of them (Cut, Copy, Paste, Delete at the top of the Canvas menu). */
+export interface MenuRowButton { cmd: string; label?: string }
+
+/**
+ * A command (named as in the top menus unless `label` says otherwise; `key` shows a key the
+ * command list doesn't know, such as an atom hotkey), an action of the menu's own (`run`; with
+ * `opens`, it opens a menu of its own beside its row, so the row has a group's arrow), a group,
+ * a row of buttons, or a line.
+ */
 export type MenuItem =
-  | { cmd: string; label?: string; checked?: boolean }
+  | { cmd: string; label?: string; checked?: boolean; key?: string; title?: string; disabled?: boolean }
+  | { label: string; run: (row: DOMRect) => void; cmd?: string; checked?: boolean; key?: string; title?: string; disabled?: boolean; opens?: boolean }
   | { label: string; items: MenuItem[] }
+  | { row: MenuRowButton[] }
   | null;
 
 export interface MenuHooks {
   run(cmd: string): void;
-  /** The key that runs a command, to show beside it. */
-  key(cmd: string): string | undefined;
+  /** The key that runs a command, to show beside it (else the program's own key for it). */
+  key?(cmd: string): string | undefined;
+  /** Escape shut the menu: put the keys back where they were (a document's caret, a sheet's cell). */
+  escaped?(): void;
 }
+
+/** The program's key for a command, for menus that don't say (set once by the program). */
+let defaultKey: (cmd: string) => string | undefined = () => undefined;
+export function setMenuKeys(f: (cmd: string) => string | undefined): void { defaultKey = f; }
+/** What to do when Escape shuts the menu now open. */
+let onEscape: (() => void) | undefined;
 
 let open: HTMLDivElement[] = [];
 
 export function closeContextMenu(): void {
   for (const m of open) m.remove();
   open = [];
+  onEscape = undefined;
   document.removeEventListener('pointerdown', outside, true);
   document.removeEventListener('keydown', escape, true);
   window.removeEventListener('blur', closeContextMenu);
@@ -33,8 +53,11 @@ const escape = (e: KeyboardEvent) => {
   e.stopPropagation();
   // Esc closes the innermost group first
   open.pop()?.remove();
-  if (!open.length) closeContextMenu();
-  else backToGroupRow();
+  if (!open.length) {
+    const back = onEscape;
+    closeContextMenu();
+    back?.();
+  } else backToGroupRow();
 };
 
 /** Close every group deeper than `depth` and take the highlight off the rows that opened them. */
@@ -79,8 +102,9 @@ export function showContextMenu(x: number, y: number, items: MenuItem[], hooks: 
   closeContextMenu();
   const m = build(tidyItems(items), hooks, 0);
   if (!m) return;
+  onEscape = hooks.escaped;
   place(m, x, y, null);
-  m.querySelector<HTMLButtonElement>('button')?.focus();
+  m.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus();
   setTimeout(() => {
     document.addEventListener('pointerdown', outside, true);
     document.addEventListener('keydown', escape, true);
@@ -93,8 +117,10 @@ function build(items: MenuItem[], hooks: MenuHooks, depth: number): HTMLDivEleme
   const m = document.createElement('div');
   m.className = 'menu context-menu';
   m.setAttribute('role', 'menu');
+  const keyOf = (cmd: string) => (hooks.key ?? defaultKey)(cmd);
   for (const it of items) {
     if (!it) { m.append(document.createElement('hr')); continue; }
+    if ('row' in it) { m.append(buttonRow(it.row, hooks, depth, keyOf)); continue; }
     const b = document.createElement('button');
     b.type = 'button';
     const name = document.createElement('span');
@@ -113,34 +139,46 @@ function build(items: MenuItem[], hooks: MenuHooks, depth: number): HTMLDivEleme
         b.setAttribute('aria-expanded', 'true');
         const r = b.getBoundingClientRect();
         place(sub, r.right - 2, r.top - 5, r);
-        if (focus) sub.querySelector<HTMLButtonElement>('button')?.focus();
+        if (focus) sub.querySelector<HTMLButtonElement>('button:not(:disabled)')?.focus();
       };
       b.addEventListener('pointerenter', () => { follow(b); if (b.getAttribute('aria-expanded') !== 'true') openSub(false); });
       b.addEventListener('click', () => openSub(true));
       b.addEventListener('keydown', (e) => { if (e.key === 'ArrowRight' || e.key === 'Enter') { e.preventDefault(); openSub(true); } });
     } else {
-      const top = topMenuEntry(it.cmd);
+      const own = 'run' in it;
+      const top = own ? null : topMenuEntry(it.cmd);
       // (a command no top menu has goes by its name in Keyboard Shortcuts, never its id)
-      name.textContent = it.label ?? top?.label ?? COMMAND_NAMES[it.cmd] ?? it.cmd;
+      name.textContent = it.label ?? top?.label ?? (it.cmd ? COMMAND_NAMES[it.cmd] ?? it.cmd : '');
       const checked = it.checked ?? top?.checked;
       if (checked != null) {
         b.setAttribute('role', 'menuitemcheckbox');
         b.setAttribute('aria-checked', String(checked));
       } else b.setAttribute('role', 'menuitem');
-      const k = hooks.key(it.cmd);
+      if (it.title) b.title = it.title;
+      b.disabled = !!it.disabled;
+      const opens = own && it.opens;
+      if (opens) { b.classList.add('has-sub'); b.setAttribute('aria-haspopup', 'menu'); }
+      const k = it.key ?? (it.cmd && !opens ? keyOf(it.cmd) : undefined);
       if (k) {
         const kbd = document.createElement('kbd');
         kbd.textContent = k;
         b.append(kbd);
       }
+      const go = () => {
+        const r = b.getBoundingClientRect();
+        closeContextMenu();
+        if (own) it.run(r);
+        else hooks.run(it.cmd);
+      };
       // moving onto a command shuts any open group beside this menu, and its row's highlight with it
       b.addEventListener('pointerenter', () => { follow(b); closeBelow(depth); });
-      b.addEventListener('click', () => { closeContextMenu(); hooks.run(it.cmd); });
+      b.addEventListener('click', go);
+      if (opens) b.addEventListener('keydown', (e) => { if (e.key === 'ArrowRight') { e.preventDefault(); go(); } });
     }
     m.append(b);
   }
   m.addEventListener('keydown', (e) => {
-    const list = [...m.querySelectorAll<HTMLButtonElement>(':scope > button')];
+    const list = [...m.querySelectorAll<HTMLButtonElement>(':scope > button:not(:disabled), :scope > .cm-row > button')];
     const i = list.indexOf(document.activeElement as HTMLButtonElement);
     if (e.key === 'ArrowDown') { e.preventDefault(); list[(i + 1) % list.length]?.focus(); }
     if (e.key === 'ArrowUp') { e.preventDefault(); list[(i - 1 + list.length) % list.length]?.focus(); }
@@ -152,6 +190,50 @@ function build(items: MenuItem[], hooks: MenuHooks, depth: number): HTMLDivEleme
   });
   open.push(m);
   return m;
+}
+
+/** Simple shapes for the row's commands that have no picture of their own. */
+const ROW_ICONS: Record<string, string> = {
+  delete: '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 6.5h16M9.5 6.5V4h5v2.5M6.5 6.5l1 14h9l1-14M10.5 10.5v6M13.5 10.5v6"/></svg>',
+};
+
+/** A row of small buttons, each a picture and its name (the key is in its tool tip), as Office's right-click menus start. */
+function buttonRow(row: MenuRowButton[], hooks: MenuHooks, depth: number, keyOf: (cmd: string) => string | undefined): HTMLDivElement {
+  const div = document.createElement('div');
+  div.className = 'cm-row';
+  div.setAttribute('role', 'group');
+  for (const it of row) {
+    const b = document.createElement('button');
+    b.type = 'button';
+    b.setAttribute('role', 'menuitem');
+    const label = it.label ?? topMenuEntry(it.cmd)?.label ?? COMMAND_NAMES[it.cmd] ?? it.cmd;
+    const icon = commandIcon(it.cmd) ?? ROW_ICONS[it.cmd];
+    if (icon) {
+      const ic = document.createElement('span');
+      ic.className = 'cm-ic';
+      ic.innerHTML = icon;
+      b.append(ic);
+    }
+    const name = document.createElement('span');
+    name.textContent = label;
+    b.append(name);
+    const k = keyOf(it.cmd);
+    b.title = k ? `${label} (${k})` : label;
+    b.addEventListener('pointerenter', () => { follow(b); closeBelow(depth); });
+    b.addEventListener('click', () => { closeContextMenu(); hooks.run(it.cmd); });
+    // left and right go along the row
+    b.addEventListener('keydown', (e) => {
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+      const sibs = [...div.querySelectorAll<HTMLButtonElement>('button')];
+      const i = sibs.indexOf(b) + (e.key === 'ArrowRight' ? 1 : -1);
+      if (i < 0 || i >= sibs.length) return;
+      e.preventDefault();
+      e.stopPropagation();
+      sibs[i].focus();
+    });
+    div.append(b);
+  }
+  return div;
 }
 
 /** Keyboard focus follows the mouse, as in a system menu, so a focus ring left by the

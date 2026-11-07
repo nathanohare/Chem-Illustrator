@@ -64,7 +64,7 @@ export async function fileTypesPage(host: FileTypesHost): Promise<void> {
     form.append(buttons);
     form.addEventListener('submit', (e) => { e.preventDefault(); done(); });
   } else {
-    addInfo(h, 'Checked kinds of file show Chem Illustrator under "Open with" when you right-click them in Explorer. This never changes the program that opens them now: ChemDraw, Word, PowerPoint and Excel stay the default unless you change it.');
+    addInfo(h, 'Checked file types list Chem Illustrator under Open With in Explorer. Your default programs (ChemDraw, Word, PowerPoint, Excel) don\'t change.');
     const now = new Set(await host.get().catch(() => [] as string[]));
     const boxes = new Map<string, HTMLInputElement>();
     for (const t of FILE_TYPES) {
@@ -99,7 +99,7 @@ export async function fileTypesPage(host: FileTypesHost): Promise<void> {
     objRow.append(objBox, objName);
     const objHelp = document.createElement('p');
     objHelp.className = 'ask-help muted';
-    objHelp.textContent = 'Copied drawings paste as Chem Illustrator objects: double-click one in Word to edit it here, and Save puts it back. Without this they paste as pictures (they still hold the drawing, so copying one back here keeps it editable). Also in Word under Insert ▸ Document ▸ Object.';
+    objHelp.textContent = 'Pasted drawings become Chem Illustrator objects: double-click one in Word to edit it here, and Save updates it. Otherwise they paste as pictures (still editable when copied back here). Also in Word under Insert ▸ Object.';
     foldIntoInfo(objHelp, objName);
     form.append(objRow, objHelp);
     const cancel = document.createElement('button');

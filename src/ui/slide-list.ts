@@ -97,7 +97,7 @@ export class SlideList {
       const add = document.createElement('button');
       add.className = 'sl-add';
       add.type = 'button';
-      add.textContent = '+ New slide';
+      add.textContent = '+ New Slide';
       add.addEventListener('click', () => hooks.add());
       el.replaceChildren(this.list, add);
     }
@@ -230,7 +230,7 @@ export class SlideList {
       fold.type = 'button';
       fold.className = 'sl-keys-fold';
       fold.textContent = open ? '▾' : '▸';
-      fold.title = open ? 'Fold away this canvas slide\'s keyframes' : 'Show this canvas slide\'s keyframes';
+      fold.title = open ? 'Collapse this canvas slide\'s keyframes' : 'Show this canvas slide\'s keyframes';
       fold.setAttribute('aria-expanded', String(open));
       fold.addEventListener('click', (e) => {
         e.stopPropagation();

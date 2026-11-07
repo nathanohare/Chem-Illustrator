@@ -18,6 +18,7 @@ import { setStereoShown, setStereoText } from '../chem/stereo';
 import { arialWidth } from '../text-metrics';
 import { Selection } from '../editor/editor';
 import { freeformPoints } from '../design/geo';
+import { electronLook, setElectrons } from '../design/mo';
 import { ORBITAL_KIND_NAMES, ORBITAL_LOOK_NAMES, orbitalsAmong, readOrbital, type OrbitalKind, type OrbitalLook, type OrbitalSpec } from '../chem/orbitals';
 import { isSmoothPath, reshapeFreeform } from '../design/freeform';
 import { DEG, normDegrees, mul, type Vec } from '../geom';
@@ -31,6 +32,7 @@ import { frameMembers } from '../editor/frames';
 import { methylState, writeTerminalMethyls, type MethylStyle } from '../chem/hydrogens';
 import type { TableData } from '../model';
 import { labelAlignment, labelAlignPatch, type LabelAlign } from '../chem/label-align';
+import { labelAtoms, labelLookOf, setLabelFont, setLabelSize } from '../editor/label-font';
 import { ringsThroughBond } from '../chem/aromatic';
 import { canMerge, deleteColumn, deleteRow, fitColumns, insertColumn, insertRow, mergeDown, mergeRight, rowSpanOf, setColumnAlign, setColumnWidth, setRowSpan, setSpan, spanOf, splitCell, type TablePart } from '../table';
 import { SLIDE_TABLE_STYLES, lookOf, slideCellLook, slideTableStyle } from '../deck/table-styles';
@@ -39,7 +41,7 @@ import { colourButton } from './colour-picker';
 import { centreEnd, haptoText, splitHapto } from '../chem/hapto';
 import { straightenAt } from '../chem/chemgeom';
 import type { EnergyData } from '../design/energy';
-import { TLC_LOOKS, GEL_LOOKS, type PlateData } from '../design/plates';
+import { TLC_LOOKS, GEL_LOOKS, LOCK_SPOTS_INFO, type PlateData } from '../design/plates';
 import { DIAGRAM_COLOURS, DIAGRAM_LAYOUTS, type DiagramData } from '../design/diagrams';
 
 /** What the table controls need from the editor. */
@@ -147,6 +149,8 @@ export class StylePanel {
   orbital: { edit(): void; restyle(shapeIds: number[], patch: Partial<OrbitalSpec>): void } | null = null;
   /** Tie captions to the structure nearest each (Tie to Structure). */
   tie: ((captionIds: number[]) => void) | null = null;
+  /** Brackets drawn as a pair: whether the other halves can be selected or deselected now, and doing it. */
+  bracketPartner: { state(): 'select' | 'deselect' | null; toggle(): void } | null = null;
 
   /** Open a chart's data and settings (Edit chart…). */
   onEditChart: (id: number) => void = () => {};
@@ -265,7 +269,6 @@ export class StylePanel {
     this.select('Head shape', HEAD_TYPES, r.headType, (v) => set('Arrowhead shape', () => ({ headType: v })));
     this.select('Line', LINES, r.line, (v) => set('Arrow line', () => ({ line: v })));
     this.select('No-go', NO_GOS, r.noGo ? r.noGoKind ?? 'cross' : 'none', (v) => set('No-go arrow', () => ({ noGo: v !== 'none', noGoKind: v === 'hash' ? 'hash' : undefined })));
-    this.check('Dipole', !!r.dipole, (v) => set('Dipole arrow', () => ({ dipole: v || undefined })));
     if (r.headType === 'solid' && (r.headStyle !== 'none' || r.tailStyle !== 'none')) {
       this.number('Head center (pt)', round(r.headLength * (r.headCenter ?? 0.75), 2), 0.25, 0, 100,
         (v) => set('Arrowhead center', (a) => ({ headCenter: a.headLength > 0 ? Math.max(0, Math.min(1, v / a.headLength)) : undefined })),
@@ -371,7 +374,7 @@ export class StylePanel {
       list.append(b);
     }
     this.body.appendChild(list);
-    this.note(r.step?.manual ? 'Chosen by hand.' : r.step ? 'Kept with the arrow (from the file, or when it was last tidied).' : 'Worked out from where things sit.');
+    this.note(r.step?.manual ? 'Chosen by hand.' : r.step ? 'Kept with the arrow (from the file, or when it was last tidied).' : 'Determined from object positions.');
     if (hooks.others()) {
       const opts: Opt<string>[] = [['', 'Choose…'], ['reactants', 'Starting materials'], ['products', 'Products'], ['above', 'Above the arrow'], ['below', 'Below the arrow'], ['none', 'Not part of this step']];
       this.select('Set Selection As', opts, '', (v) => { if (v) hooks.setRole(r.id, v as Role | 'none'); },);
@@ -502,6 +505,18 @@ export class StylePanel {
     }
     const br = any((x) => x.kind === 'bracket');
     if (br) this.select('Bracket', BRACKETS, br.bracket ?? 'square', (v) => set('Bracket shape', (x) => x.kind === 'bracket', () => ({ bracket: v })));
+    const mate = br && this.bracketPartner?.state();
+    if (mate) {
+      const row = document.createElement('div');
+      row.className = 'style-buttons';
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.textContent = mate === 'select' ? 'Select Partner' : 'Deselect Partner';
+      btn.title = mate === 'select' ? 'Select the other bracket of the pair too' : 'Leave only this bracket selected, to change or move it on its own';
+      btn.addEventListener('click', () => this.bracketPartner?.toggle());
+      row.append(btn);
+      this.body.append(row);
+    }
     // the border together: its colour, weight, dashes, corners and shadow
     // (ring fills have no line, so no line colour: it only stood in for a fill colour that wasn't set)
     const box = any((x) => x.kind === 'rect');
@@ -569,7 +584,17 @@ export class StylePanel {
     const d = sh.plate!;
     if (d.kind === 'mo') {
       this.heading('MO diagram');
-      if (d.mo) this.check('Energy arrow', d.mo.axis, (v) => this.plate?.restyle(sh.id, { mo: { ...d.mo!, axis: v } }));
+      if (d.mo) {
+        const mo = d.mo;
+        this.check('Energy arrow', mo.axis, (v) => this.plate?.restyle(sh.id, { mo: { ...mo, axis: v } }));
+        const now = electronLook(mo, this.doc.style, d.w, d.h);
+        this.number('Electron arrow height (pt)', Math.round(now.tall * 10) / 10, 0.5, 2, 48, (v) => this.plate?.restyle(sh.id, { mo: setElectrons(mo, { ...now, tall: v }, d.w, d.h) }));
+        this.check('Orbital mixing pictures', !!mo.pictures, (v) => this.plate?.restyle(sh.id, { mo: { ...mo, pictures: v || undefined } }));
+        this.check('White background behind names', !!mo.labelBack, (v) => this.plate?.restyle(sh.id, { mo: { ...mo, labelBack: v ? 'white' : undefined } }));
+        this.check('Move names clear of the dashed lines', !!mo.labelClear, (v) => this.plate?.restyle(sh.id, { mo: { ...mo, labelClear: v || undefined } }));
+        if (mo.pictures) this.number('Picture size (%)', Math.round((mo.pictureSize ?? 1) * 100), 10, 20, 400, (v) => this.plate?.restyle(sh.id, { mo: { ...mo, pictureSize: v / 100 } }));
+        if (mo.pictures) this.select('Phases', ORBITAL_LOOK_NAMES.map((k): Opt<OrbitalLook> => [k.value, k.label]), mo.pictureLook ?? 'shaded', (v) => this.plate?.restyle(sh.id, { mo: { ...mo, pictureLook: v } }));
+      }
       this.help('Change the orbitals, energies and electrons in the window; drag a corner to resize it.');
       const row = document.createElement('div');
       row.className = 'style-buttons';
@@ -592,13 +617,13 @@ export class StylePanel {
         this.check('Color', c.view.colour, (v) => view({ colour: v }));
         this.check('Atom labels', c.view.labels, (v) => view({ labels: v }));
       }
-      this.help('Turn it, change the ellipsoids or see the crystal data in the window; drag a corner to resize it.');
+      this.help('Rotate it, change the ellipsoids or view the crystal data in the window; drag a corner to resize.');
       const row = document.createElement('div');
       row.className = 'style-buttons';
       const b = document.createElement('button');
       b.type = 'button';
       b.textContent = 'Edit Crystal Structure…';
-      b.title = 'Turn it, change how it is drawn, see the crystal data (or double-click it)';
+      b.title = 'Rotate, change the display style, or view crystal data (or double-click it)';
       b.addEventListener('click', () => this.plate?.edit(sh.id));
       row.append(b);
       this.body.append(row);
@@ -611,6 +636,10 @@ export class StylePanel {
     else this.select('Dye', GEL_LOOKS.map((l) => [l.id, l.name]), d.look, (v) => set({ look: v }));
     if (tlc) this.check('Write the Rf values', d.rf, (v) => set({ rf: v }));
     if (tlc) this.check('Start and solvent-front lines', d.lines, (v) => set({ lines: v }));
+    if (tlc) {
+      this.check('Lock spots', !!d.locked, (v) => set({ locked: v }));
+      addInfo(this.body.lastElementChild?.querySelector('span'), LOCK_SPOTS_INFO);
+    }
     if (!tlc) this.check('Write the marker sizes', d.sizes, (v) => set({ sizes: v }));
     this.check('Lane names', d.labels, (v) => set({ labels: v }));
     this.note(`${d.lanes.length} lane${d.lanes.length === 1 ? '' : 's'}.`);
@@ -846,7 +875,7 @@ export class StylePanel {
     const part = cur?.id === s.id ? cur.part : null;
     const cell = part && typeof part !== 'string' && t.rows[part.r] && part.c < t.cols.length ? part : null;
     this.heading('Table');
-    this.note(cell ? `Row ${cell.r + 1}, column ${cell.c + 1}${cell.r < t.head ? ' (a heading)' : ''}. Double-click a cell to type; Tab goes on to the next one.`
+    this.note(cell ? `Row ${cell.r + 1}, column ${cell.c + 1}${cell.r < t.head ? ' (a heading)' : ''}. Double-click a cell to edit; Tab moves to the next.`
       : 'Click a cell to choose its row and column; double-click it to type.');
     const buttons = (list: [string, string, (() => void) | null][]) => {
       const box = document.createElement('div');
@@ -959,7 +988,7 @@ export class StylePanel {
     if (r.species) this.note(`Chemistry: ${speciesSummary(r.species)}. It counts in the formula, mass and SMILES of what it is selected with.`);
     else if (r.why === 'arrow') this.help('Text above or below a reaction arrow stays text. Choose Chemical to count it.');
     else if (r.why === 'unread' && r.forced) this.note('Set to Chemical, but this text can\'t be read as chemistry.');
-    else if (r.why === 'tied') this.help('Text tied to a structure stays text.');
+    else if (r.why === 'tied') this.help('Text attached to a structure stays text.');
   }
 
   /** Where a caption tied to a structure sits, what descriptors it shows; tie or untie it. */
@@ -1050,6 +1079,7 @@ export class StylePanel {
     this.color('Color', a.color, (v) => set('Atom color', { color: v }));
     this.color('Highlight', a.highlight, (v) => { set(v ? 'Highlight' : 'Remove highlight', { highlight: v }); if (v) this.highlightUsed(v); }, 'None');
     this.highlightControls([a], []);
+    if (a.label || a.z !== 6 || a.showCarbon) this.labelFontControls([a]);
     if (a.label || a.z !== 6 || a.showCarbon) {
       this.select('Label alignment', LABEL_ALIGNS, labelAlignment(a), (v) => this.edit('Label alignment', () => this.doc.updateAtom(a.id, labelAlignPatch(this.doc, a, v))));
     } else if (a.z === 6 && this.doc.degree(a.id) === 3 && (this.doc.adj.get(a.id) ?? []).every((bid) => ringsThroughBond(this.doc, bid).length > 0)) {
@@ -1270,6 +1300,7 @@ export class StylePanel {
       if (v) this.highlightUsed(v);
     }, 'None');
     this.highlightControls(atoms, bonds);
+    if (atoms.length) this.labelFontControls(atoms);
     if (bonds.length >= 3 && this.ringFill) {
       const row = document.createElement('div');
       row.className = 'style-buttons';
@@ -1282,6 +1313,43 @@ export class StylePanel {
       this.body.append(row);
     }
     this.methylControls(atoms.map((a) => a.id));
+  }
+
+  /**
+   * The labels' own font and size (as Home ▸ Font sets them with atoms picked): an empty font box
+   * shows the drawing's font, greyed, and goes back to it.
+   */
+  private labelFontControls(list: Atom[]): void {
+    const atoms = labelAtoms(this.doc, list.map((a) => a.id));
+    if (!atoms.length) return;
+    const look = labelLookOf(this.doc, atoms);
+    const font = document.createElement('input');
+    font.type = 'text';
+    font.className = 'style-font';
+    font.spellcheck = false;
+    font.value = look.font ?? '';
+    font.placeholder = look.mixedFont ? 'Mixed' : this.doc.style.labelFont || 'Arial';
+    font.setAttribute('aria-label', 'Label font');
+    font.setAttribute('list', 'ci-fonts');
+    font.addEventListener('change', () => this.edit('Label font', () => setLabelFont(this.doc, atoms, font.value)));
+    font.addEventListener('keydown', (e) => { if (e.key === 'Enter') font.blur(); e.stopPropagation(); });
+    const row = document.createElement('label');
+    row.className = 'style-row';
+    const name = document.createElement('span');
+    name.textContent = 'Label font';
+    addInfo(name, 'The font and size of the picked atoms\' labels (Home ▸ Font sets them too). Leave the font empty for the drawing\'s (Drawing Style). A structure from ChemDraw keeps its labels\' own font.');
+    row.append(name, font);
+    this.body.appendChild(row);
+    const size = document.createElement('input');
+    size.type = 'number';
+    size.step = '0.5';
+    size.min = '1';
+    size.max = '400';
+    size.value = look.size !== undefined ? String(look.size) : '';
+    size.placeholder = look.size === undefined ? 'Mixed' : '';
+    size.addEventListener('change', () => { const v = Number(size.value); if (size.value.trim() && v > 0) this.edit('Label size', () => setLabelSize(this.doc, atoms, Math.min(400, v))); });
+    size.addEventListener('keydown', (e) => { if (e.key === 'Enter') size.blur(); e.stopPropagation(); });
+    this.row('Label size (pt)', size);
   }
 
   /** Terminal methyls among these atoms: not written out, CH3 or Me (Chemistry > Show Terminal Methyls). */
@@ -1303,7 +1371,7 @@ export class StylePanel {
     const n = centres.length + dbls.length;
     this.heading(n > 1 ? 'Stereo labels' : centres.length ? 'Stereocenter' : 'Double bond');
     const found = [...centres.map((a) => info?.atom(a.id)), ...dbls.map((b) => info?.bond(b.id))].filter(Boolean);
-    if (found.length) this.note(`Worked out: ${found.join(', ')}`);
+    if (found.length) this.note(`Calculated: ${found.join(', ')}`);
     if (centres.some((a) => info?.undecided?.('a', a.id)) || dbls.some((b) => info?.undecided?.('b', b.id))) {
       this.note('An R, Ar or unreadable group decides the order here, so the CIP rules can’t give a label. Type one below if you want it.');
     }

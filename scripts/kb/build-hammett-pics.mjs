@@ -1,12 +1,13 @@
 // Works out a 2-D drawing of each Hammett group (src/kb/hammett.ts) with RDKit, for the pictures in
 // the Knowledge Base's Hammett table, and writes src/kb/hammett-pics.json: atoms (x, y in bond
 // lengths, y down, element, charge), bonds (Kekulé orders) and the stub atoms ([*], where the group
-// joins the ring), turned so the group's bond to the ring points left.
+// joins the ring), turned so the group's bond to the ring points left. Keyed by hammettId (the
+// group's Table I number, or V and its Table V number).
 // Run: node scripts/kb/build-hammett-pics.mjs
 
 import { writeFileSync } from 'node:fs';
 import initRDKit from '@rdkit/rdkit';
-import { HAMMETT } from '../../src/kb/hammett.ts';
+import { HAMMETT, hammettId } from '../../src/kb/hammett.ts';
 
 const RD = await initRDKit();
 const r3 = (v) => Math.round(v * 1000) / 1000;
@@ -60,9 +61,9 @@ function drawing(smiles) {
 
 const pics = {};
 for (const g of HAMMETT) {
-  if (g.smiles.includes('.')) continue; // ferrocenyl: a picture of its own some day
+  if (!g.smiles || g.smiles.includes('.')) continue; // carboranes, metal complexes, salts: no plain drawing
   const d = drawing(g.smiles);
-  if (d) pics[g.group] = d;
+  if (d) pics[hammettId(g)] = d;
   else console.warn('no drawing for', g.group);
 }
 writeFileSync(new URL('../../src/kb/hammett-pics.json', import.meta.url), JSON.stringify(pics) + '\n');

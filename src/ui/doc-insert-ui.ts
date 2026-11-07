@@ -83,7 +83,7 @@ export class DocInsertUI {
       { name: 'code', label: 'Field', value: 'date', options: FIELD_LIST.map((x) => ({ value: x.code, label: `${x.name}: ${x.help}` })) },
       { name: 'format', label: 'Date format (date fields)', value: 'M/d/yyyy', suggestions: DATE_FORMATS },
       { name: 'target', label: 'Bookmark (bookmark fields)', value: marks[0] ?? '', suggestions: marks },
-    ], { ok: 'Insert', note: 'A field shows something the document works out: it changes by itself and is saved as the Word field it is, so Word keeps it up to date too.' });
+    ], { ok: 'Insert', note: 'A field shows calculated content that updates automatically. It\'s saved as a Word field, so Word updates it too.' });
     this.host.focus();
     if (!got || this.f !== f) return;
     const code = got.code as FieldCode;
@@ -165,7 +165,7 @@ export class DocInsertUI {
     const ed = this.host.ed();
     const text = ed.text.slice(ed.start, ed.end).replace(/\s+/g, ' ').trim();
     const got = await ask('Create New Building Block', [{ name: 'name', label: 'Name', value: text.slice(0, 30) }], {
-      ok: 'Save', note: 'The selected text is kept with your settings and offered under Insert > Quick Parts in every document (structures and fields in it are left out).',
+      ok: 'Save', note: 'Saves the selected text to your settings so it\'s available under Insert > Quick Parts in every document (structures and fields aren\'t included).',
     });
     this.host.focus();
     if (!got || this.f !== f) return;
@@ -281,7 +281,7 @@ export class DocInsertUI {
         { value: 'page', label: 'Page number' },
         { value: 'above', label: 'Above or below' },
       ] },
-    ], { ok: 'Insert', note: 'The reference changes by itself when what it refers to changes or moves. It is saved as Word\'s own cross-reference.' });
+    ], { ok: 'Insert', note: 'The cross-reference updates automatically when its target changes or moves. Saved as a Word cross-reference.' });
     this.host.focus();
     if (!got || this.f !== f) return;
     const [kind, key] = [got.target.slice(0, 1), got.target.slice(2)];

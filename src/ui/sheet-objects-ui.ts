@@ -5,6 +5,7 @@ import { popupMenu } from './sheet-view';
 import type { SheetView } from './sheet-view';
 import { askAltText } from './accessibility-pane';
 import { ask } from './ask';
+import { addInfo } from './info-tip';
 import type { Sheet } from '../sheet/workbook';
 import { SheetObject, ShapeKind, SHAPE_NAMES, newObjectId, objectLook, isLine } from '../sheet/sheet-objects';
 import { dataUrl, imageSize, webpToPng } from '../render/images';
@@ -278,14 +279,16 @@ export class SheetObjects {
       return b;
     };
     const what = o.kind === 'picture' ? 'A picture' : o.kind === 'text' ? 'A text box' : `A ${SHAPE_NAMES[o.shape ?? 'rect'].toLowerCase()}`;
-    const out: HTMLElement[] = [para(`${what}, ${Math.round(o.w)} × ${Math.round(o.h)} pixels, floating over the cells. Drag it to move it, its handles to size it; arrow keys nudge it.`)];
+    // the how-to sits in an "i" beside the size line, not lines of its own (UI rule 2)
+    const head = para(`${what}, ${Math.round(o.w)} × ${Math.round(o.h)} pixels`);
+    addInfo(head, 'Floats over the cells. Drag it to move it, its handles to size it; arrow keys nudge it. Saved in .xlsx files as Excel\'s own pictures and shapes.');
+    const out: HTMLElement[] = [head];
     if (o.descr) out.push(para(`Alt text: ${o.descr}`, 'muted'));
     const row = document.createElement('div');
     row.className = 'cp-buttons';
     if (o.kind !== 'picture' && !isLine(o)) row.append(button('Edit Text', () => this.editText(o.id)));
     row.append(button(o.kind === 'picture' ? 'Format Picture…' : 'Format Shape…', () => void this.format(o)), button('Alt Text…', () => void this.altText(o)), button('Delete', () => this.view.deleteObject(o.id)));
     out.push(row);
-    out.push(para('Saved in .xlsx files as Excel\'s own pictures and shapes.', 'muted'));
     return out;
   }
 }

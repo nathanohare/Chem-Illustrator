@@ -1402,10 +1402,6 @@ def stereocenters():
     centre('stereo-4b', 'Stereocenter (mirror image)', [(150, None), (30, None), (-60, 'hashWedge'), (-120, 'wedge')], smi='CC(C)(C)C')
     centre('stereo-4c', 'Stereocenter: three plain bonds and a wedge', [(90, None), (210, None), (330, None), (270 + 25, 'wedge')], smi='CC(C)(C)C')
     centre('stereo-4d', 'Stereocenter: three plain bonds and a hash', [(90, None), (210, None), (330, None), (270 + 25, 'hashWedge')], smi='CC(C)(C)C')
-    centre('stereo-tbp', 'Trigonal bipyramid', [(90, None), (270, None), (180, None), (-20, 'wedge'), (20, 'hashWedge')], label='M')
-    centre('stereo-oct', 'Octahedron', [(90, None), (270, None), (195, 'wedge'), (-15, 'hashWedge'), (165, 'hashWedge'), (15, 'wedge')], label='M')
-    centre('stereo-sqpy', 'Square pyramid', [(90, None), (195, 'wedge'), (-15, 'hashWedge'), (165, 'hashWedge'), (15, 'wedge')], label='M')
-    centre('stereo-sqpl', 'Square planar, in perspective', [(195, 'wedge'), (-15, 'hashWedge'), (165, 'hashWedge'), (15, 'wedge')], label='M')
     # chains with stereocenters: zig-zag with wedges (syn) and wedge + hash (anti)
     def chain(tid, name, marks):
         atoms, bonds = [], []

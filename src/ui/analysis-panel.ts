@@ -20,7 +20,7 @@ export function formulaHtml(f: string): string {
 }
 
 /** An adduct label with its charge raised: [M+H]<sup>+</sup>. */
-function adductHtml(label: string): string {
+export function adductHtml(label: string): string {
   return esc(label).replace(/\](\d*[+-])$/, (_, c) => `]<sup>${c.replace('-', '−')}</sup>`);
 }
 
@@ -143,7 +143,7 @@ function thermoHtml(jb: JobackResult, vp: number | null, henry: number | null, t
   const v = (x: number | null | undefined, d: number, unit: string) => (x === null || x === undefined ? '<span class="muted">—</span>' : `${x.toFixed(d).replace('-', '−')} ${unit}`);
   if (jb.tb === null) return '';
   const sci = (x: number) => x.toExponential(1).replace('e', ' × 10^').replace(/\^\+?(-?\d+)$/, (_, e: string) => `<sup>${e.replace('-', '−')}</sup>`);
-  const vpTip = 'At 25 °C from the estimated boiling point, by Lyman\'s Antoine-type method (Handbook of Chemical Property Estimation Methods, ch. 14); a solid is corrected from the liquid with Walden\'s rule. Rough: often within a factor of 2–3.';
+  const vpTip = 'Estimated at 25 °C from the boiling point (Lyman\'s Antoine-type method; solids corrected with Walden\'s rule). Rough: often within a factor of 2–3.';
   return `<details class="thermo"><summary title="${esc(tip)}">Critical point and thermochemistry (est.)</summary><table>
     <tr><th>Critical temperature</th><td>${v(jb.tc === null || jb.tc === undefined ? null : jb.tc - 273.15, 0, '°C')}</td></tr>
     <tr><th>Critical pressure</th><td>${v(jb.pc, 1, 'bar')}</td></tr>
@@ -167,7 +167,7 @@ export type NameState =
 
 /** The structure's systematic name, or the button that asks for it (the namer loads only when first asked). */
 export function nameHtml(state: NameState, i: number): string {
-  const ask = `<button type="button" data-name="${i}" title="Work out the systematic (IUPAC) name here, offline. It is shown only if reading it back gives exactly this structure. The namer loads the first time (about 14 MB); after that names appear by themselves.">IUPAC name</button>`;
+  const ask = `<button type="button" data-name="${i}" title="Generate the IUPAC name offline. Shown only if it converts back to exactly this structure. The namer (about 14 MB) downloads on first use.">IUPAC name</button>`;
   if (state.kind === 'idle') return `<div class="an-name an-buttons">${ask}</div>`;
   if (state.kind === 'busy') return `<p class="an-name muted small">${state.loading ? 'Loading the namer (first time only)…' : 'Naming…'}</p>`;
   if (state.kind === 'none') return `<p class="an-name muted small">${esc(state.message)}</p>`;
@@ -236,7 +236,7 @@ export function analysisHtml(r: FragmentResult, i: number, adductText: string, e
     <table>${rows.join('')}</table>
     ${extras.electrons ?? ''}${iso}${props}
     <div class="smiles" title="SMILES">${esc(r.smiles)}</div>
-    ${extras.unknown?.length ? `<p class="warn">Not understood (left out): ${extras.unknown.map(esc).join(', ')}</p>` : ''}
+    ${extras.unknown?.length ? `<p class="warn">Not recognized (skipped): ${extras.unknown.map(esc).join(', ')}</p>` : ''}
     ${buttons}${extras.pubchem ?? ''}
   </div>`;
 }

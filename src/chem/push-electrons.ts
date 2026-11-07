@@ -15,8 +15,9 @@ import type { Measure } from '../editor/arrange';
 import { arrowPoints, isCurved } from '../objects';
 import { hasImplicitH, implicitHydrogens, SYMBOLS, valenceOfBonds } from './elements';
 import { groupNumber } from './electrons';
-import { headEnd, isAtomSymbol, pairOwner, pushEndAt, symbolSpot, tailEnd, type PushEnd } from './mechanism';
+import { headEnd, isAtomSymbol, pairOwner, pushEndAt, symbolPin, symbolSpot, tailEnd, type PushEnd } from './mechanism';
 import { sproutDir } from './chemgeom';
+import { plainMeasure } from './reaction';
 import { atomWarnings } from './warnings';
 
 /** Something wrong (or worth a second look) with the arrows: what, and the arrows, atoms and bonds it is about. */
@@ -134,9 +135,9 @@ export function readPushes(doc: Doc, m: Measure, arrows: Arrow[]): PushReading {
   const gaveTo = new Map<number, number[]>();
   for (const r of arrows) {
     const k = r.headStyle === 'full' ? 2 : 1;
-    if (r.tailStyle !== 'none') { say('warning', 'A double-headed curved arrow doesn\'t show which way electrons go, so it was left out.', { arrows: [r.id] }); continue; }
+    if (r.tailStyle !== 'none') { say('warning', 'A double-headed curved arrow doesn\'t show electron direction, so it was skipped.', { arrows: [r.id] }); continue; }
     const from = arrowEnd(doc, m, r, 'tail'), to = arrowEnd(doc, m, r, 'head');
-    if (from.kind === 'point') { say('error', 'This arrow doesn\'t start on a lone pair, a bond or an atom. Start it at the electrons that move.', { arrows: [r.id] }); continue; }
+    if (from.kind === 'point') { say('error', 'This arrow doesn\'t start from a lone pair, bond or an atom.', { arrows: [r.id] }); continue; }
     if (to.kind === 'point') { say('error', 'This arrow doesn\'t point at an atom, a bond or the gap where a new bond forms.', { arrows: [r.id] }); continue; }
     const src = from.kind === 'atom' ? [from.id] : pairOf(doc, from);
     // where the electrons go: onto an atom (as a lone pair), or into a bond (old or new)
@@ -157,7 +158,7 @@ export function readPushes(doc: Doc, m: Measure, arrows: Arrow[]): PushReading {
       if (!src.some((id) => pq.includes(id))) {
         say('error', to.kind === 'gap'
           ? 'This arrow makes a new bond between two atoms its electrons don\'t come from. The electrons for a new bond come from one of its two atoms (a lone pair) or a bond to one of them.'
-          : 'This arrow moves electrons into a bond they aren\'t next to. Point it at the atom they go to instead, or start it on that bond\'s atom or a bond beside it.', { arrows: [r.id], atoms: pq });
+          : 'This arrow moves electrons into a bond they aren\'t next to. Point it at the atom they go to, or start it on that bond\'s atom or an adjacent bond.', { arrows: [r.id], atoms: pq });
         continue;
       }
       dest = { bond: pq };
@@ -181,7 +182,7 @@ export function readPushes(doc: Doc, m: Measure, arrows: Arrow[]): PushReading {
     if (b && b.order === 1.5) { say('error', 'Arrows can\'t be read around an aromatic ring drawn with a circle or dashed bonds. Draw it with alternating single and double bonds.', about); continue; }
     if (b && (outsideValence(b) || b.display === 'dative')) { say('error', 'Arrows into or out of a partial, dative or hapto bond can\'t be read.', about); continue; }
     const after = (b?.order ?? 0) + d / 2;
-    if (!Number.isInteger(after)) say('error', 'A bond would be left with one electron. Each fishhook (half-headed) arrow moves one electron, so a bond made or broken that way needs two: one from each side.', about);
+    if (!Number.isInteger(after)) say('error', 'A bond would be left with one electron. Each fishhook arrow moves one electron, so a bond formed or broken this way needs two fishhooks, one from each side.', about);
     else if (after < 0) say('error', `This bond hasn't the electrons to give: ${(b?.order ?? 0) === 1 ? 'a single bond holds one pair' : `it has ${b?.order ?? 0} pairs`}, and the arrows take ${-d / 2}.`, about);
     else if (after > 3) say('error', 'This would make a bond of more than three pairs.', about);
   }
@@ -274,7 +275,7 @@ const turn = (p: Vec, ang: number): Vec => ({ x: p.x * Math.cos(ang) - p.y * Mat
  * radical dots and circled charges are drawn as the starting drawing had them. The atoms keep
  * their ids (new bonds and symbols get new ones). Null when there is nothing to draw.
  */
-export function productDrawing(doc: Doc, m: Measure, reading: PushReading): Drawing | null {
+export function productDrawing(doc: Doc, reading: PushReading): Drawing | null {
   const touched = pushedAtoms(reading);
   if (!touched.size) return null;
   const atoms = new Set<number>();
@@ -358,7 +359,10 @@ export function productDrawing(doc: Doc, m: Measure, reading: PushReading): Draw
     }
 
     // lone pairs, radical dots and circled charges, as the starting drawing showed them
-    const pm = { atomBoxes: (a: Atom) => m.atomBoxes(a) } as Measure;
+    // measured on the product itself, not the starting drawing: an atom's label can have moved (a
+    // measure that remembers labels by atom gives the old place, and a dot would land on the label)
+    // or changed (a charge sign, an H more or fewer), and a symbol goes just clear of the label it now has
+    const pm = plainMeasure(out);
     for (const id of atoms) {
       const list = symbols.get(id) ?? [];
       const was = doc.atoms.get(id)!, now = out.atoms.get(id)!;
@@ -377,8 +381,12 @@ export function productDrawing(doc: Doc, m: Measure, reading: PushReading): Draw
         continue;
       }
       const dnA = reading.dn.get(id) ?? 0;
-      const nPairs = pairs.length || (showsPairs && dnA > 0) ? Math.max(0, pairs.length + Math.trunc(dnA / 2)) : 0;
+      // count electrons, not pairs: the drawn pairs and dot, plus what the arrows brought or took,
+      // less the dot it has after. A fishhook from a lone pair leaves one pair fewer and a dot;
+      // one electron onto a radical makes its dot a pair.
       const nDots = x.radical === 'doublet' ? 1 : 0;
+      const drawn = 2 * pairs.length + (was.radical === 'doublet' ? 1 : 0) + dnA - nDots;
+      const nPairs = pairs.length || (showsPairs && dnA > 0) ? Math.max(0, Math.floor(drawn / 2)) : 0;
       const circle = now.hideCharge && Math.abs(now.charge) === 1 ? (now.charge > 0 ? 'CirclePlus' : 'CircleMinus') : null;
       const taken: Vec[] = [];
       const put = (kind: 'LonePair' | 'Electron' | 'CirclePlus' | 'CircleMinus', size: number) => {
@@ -389,7 +397,10 @@ export function productDrawing(doc: Doc, m: Measure, reading: PushReading): Draw
         const box = kind === 'LonePair'
           ? { x1: at.x - n.x * half, y1: at.y - n.y * half, x2: at.x + n.x * half, y2: at.y + n.y * half }
           : { x1: at.x - half, y1: at.y - half, x2: at.x + half, y2: at.y + half };
-        out.addShape({ kind: 'symbol', symbol: kind, ...box });
+        // stuck to its atom, so it can be picked and moves with it
+        const sh = out.addShape({ kind: 'symbol', symbol: kind, ...box });
+        const pin = symbolPin(out, sh);
+        if (pin) out.updateShape(sh.id, { pin });
       };
       if (circle) put(circle, 4.5);
       for (let i = 0; i < nPairs; i++) put('LonePair', 2.6);

@@ -150,9 +150,10 @@ export class TextEditing {
       const text = this.text;
       const p = paraAt(text, this.focus);
       const r = paraRange(text, p);
-      if (r.start === r.end) return rt.cleanStyle({ ...this.emptyParaStyle(p), ...this.pending });
+      if (r.start === r.end) return rt.cleanStyle({ ...this.emptyParaStyle(p), ...this.pending, field: undefined });
     }
-    return rt.cleanStyle({ ...rt.typingStyle(this.t.runs, this.start, this.end, this.defaults), ...this.pending });
+    // (typed text is never part of a slide number or date field beside it)
+    return rt.cleanStyle({ ...rt.typingStyle(this.t.runs, this.start, this.end, this.defaults), ...this.pending, field: undefined });
   }
 
   /** The style shown on the bar: what the selection has in common, or what typing will use. */
@@ -256,7 +257,11 @@ export class TextEditing {
    * Enter: a new paragraph, carrying on a list. In an empty list item it ends the list instead,
    * as in Word. With Shift, a list item goes on in a new paragraph without a bullet of its own.
    */
-  enter(soft: boolean): void {
+  /**
+   * Enter, or Shift+Enter (soft): a new line in a list item carries on the item. With `line`
+   * (documents), Shift+Enter's new line carries on the paragraph above, as Word's line break.
+   */
+  enter(soft: boolean, line = false): void {
     const text = this.text;
     const p = paraAt(text, this.start);
     const ps = this.t.paras[p] ?? {};
@@ -269,9 +274,11 @@ export class TextEditing {
     const before = this.t;
     this.replace(this.start, this.end, [{ ...style, text: '\n' }], undefined, 'line');
     if (this.t === before) return;
-    if (soft && ps.list) {
+    // the new line carries on the paragraph (or list item) above after Shift+Enter, and not after Enter
+    const carry = soft && line;
+    if ((soft && ps.list) || !!this.t.paras[p + 1]?.soft !== carry) {
       const paras = this.t.paras.slice();
-      paras[p + 1] = cleanPara({ ...paras[p + 1], cont: true });
+      paras[p + 1] = cleanPara({ ...paras[p + 1], cont: soft && ps.list ? true : paras[p + 1]?.cont, soft: carry || undefined });
       this.t = { ...this.t, paras };
       this.lay = null;
       this.onChange('text');
@@ -597,11 +604,11 @@ export class TextEditing {
     if (this.lookCache?.t === this.t) return this.lookCache.looks.slice(from, to);
     const out: CharLook[] = [];
     let at = 0;
-    for (const r of this.t.runs) {
+    for (const [k, r] of this.t.runs.entries()) {
       const n = r.text.length;
       if (at + n > from && at < to) {
         const italic = !!r.italic;
-        const parts = r.formula && !r.sub && !r.sup ? rt.formulaParts(r.text) : null;
+        const parts = r.formula && !r.sub && !r.sup ? rt.formulaRunParts(this.t.runs, k) : null;
         const pos: CharLook['pos'][] = [];
         if (parts) for (const p of parts) for (let i = 0; i < p.text.length; i++) pos.push(p.pos);
         for (let i = Math.max(0, from - at); i < Math.min(n, to - at); i++) out.push({ pos: r.sub ? 'sub' : r.sup ? 'sup' : parts ? pos[i] : 'base', italic });
@@ -615,10 +622,10 @@ export class TextEditing {
   looks(): CharLook[] {
     if (this.lookCache?.t === this.t) return this.lookCache.looks;
     const looks: CharLook[] = [];
-    for (const r of this.t.runs) {
+    for (const [k, r] of this.t.runs.entries()) {
       const italic = !!r.italic;
       if (r.sub || r.sup) for (let i = 0; i < r.text.length; i++) looks.push({ pos: r.sub ? 'sub' : 'sup', italic });
-      else if (r.formula) for (const p of rt.formulaParts(r.text)) for (let i = 0; i < p.text.length; i++) looks.push({ pos: p.pos, italic });
+      else if (r.formula) for (const p of rt.formulaRunParts(this.t.runs, k)) for (let i = 0; i < p.text.length; i++) looks.push({ pos: p.pos, italic });
       else for (let i = 0; i < r.text.length; i++) looks.push({ pos: 'base', italic });
     }
     this.lookCache = { t: this.t, looks };

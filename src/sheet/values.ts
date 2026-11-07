@@ -23,7 +23,7 @@ export const ERR = {
   /** A calculation Excel can't finish: an empty array, or a LAMBDA left uncalled. */
   calc: (detail = 'The calculation gives nothing to show') => new CellError('#CALC!', detail),
   /** Still being worked out (structure properties come from the chemistry engine a moment later). */
-  busy: () => new CellError('#BUSY!', 'Being worked out'),
+  busy: () => new CellError('#BUSY!', 'Calculating…'),
   /** A field asked of something that isn't a data type (a compound), or that its card doesn't have. */
   field: (detail = 'No such field') => new CellError('#FIELD!', detail),
 };
@@ -61,6 +61,11 @@ export interface Typed {
 }
 
 const NUMBER = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$/;
+/**
+ * Longer text than this is never a number, percentage, date or number with a unit, so it isn't
+ * run through those checks (a workbook can hold the same megabyte of text in thousands of cells).
+ */
+const MAX_TYPED = 255;
 const GROUPED = /^[+-]?\d{1,3}(?:,\d{3})+(?:\.\d*)?$/;
 
 /** Read what was typed into a cell. Starting with = makes a formula; with ' keeps it as text. */
@@ -69,6 +74,7 @@ export function readTyped(input: string): Typed {
   if (input.length > 1 && input[0] === '=') return { value: null, formula: input, format: formulaDateFormat(input) };
   if (input[0] === "'") return { value: input.slice(1) };
   const s = input.trim();
+  if (s.length > MAX_TYPED) return { value: input };
   if (NUMBER.test(s)) {
     const v = Number(s);
     return { value: v, format: /e/i.test(s) ? '0.00E+00' : undefined };
@@ -101,6 +107,7 @@ export function toNumber(v: Value): number | CellError {
   if (v instanceof CellError) return v;
   const t = v.trim();
   if (t === '') return 0;
+  if (t.length > MAX_TYPED) return ERR.value(`"${v.slice(0, 20)}…" is not a number`);
   const typed = readTyped(t);
   // text with a unit stays text in formulas, as in Excel ("5 M"*2 is #VALUE!); typed into a cell it is a number
   if (typeof typed.value === 'number' && !typed.formula && !readWithUnit(t)) return typed.value;

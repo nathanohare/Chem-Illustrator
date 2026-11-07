@@ -64,7 +64,7 @@ export function formatBackground(o: BackgroundDialogOptions): Promise<Background
     h.textContent = 'Format background';
     const note = document.createElement('p');
     note.className = 'muted';
-    note.textContent = o.design ? 'The background of the page.' : o.count > 1 ? `For the ${o.count} slides picked in the slide list, or every slide with Apply to All.` : 'For this slide, or every slide with Apply to All.';
+    note.textContent = o.design ? 'The background of the page.' : o.count > 1 ? `Applies to the ${o.count} slides selected in the slide list, or all slides with Apply to All.` : 'For this slide, or every slide with Apply to All.';
     foldIntoInfo(note, h);
     const preview = document.createElement('canvas');
     preview.className = 'bg-preview';

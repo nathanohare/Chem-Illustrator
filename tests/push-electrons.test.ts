@@ -29,7 +29,7 @@ const bond = (doc: Doc, a: number, b: number): PushEnd => ({ kind: 'bond', id: d
 function run(doc: Doc) {
   const m = plainMeasure(doc);
   const reading = readPushes(doc, m, pushArrowsOf(doc, doc.arrows.keys()));
-  const out = productDrawing(doc, m, reading);
+  const out = productDrawing(doc, reading);
   return { reading, out: out!, errors: reading.issues.filter((i) => i.level === 'error') };
 }
 
@@ -206,6 +206,102 @@ describe('drawing the next intermediate from curved arrows', () => {
     expect(onBr.length).toBe(1);
   });
 
+  /** Lone pairs drawn round an atom, `spots` in bond lengths from it. */
+  function drawPairs(doc: Doc, id: number, spots: number[][]) {
+    const a = doc.atoms.get(id)!;
+    doc.edit('pairs', () => {
+      for (const [dx, dy] of spots) {
+        const x = a.x + dx * L, y = a.y + dy * L;
+        doc.addShape({ kind: 'symbol', symbol: 'LonePair', x1: x - 1.12, y1: y, x2: x + 1.12, y2: y });
+      }
+    });
+  }
+  /** How many of a symbol sit on an atom: nearer it than any other atom, and within a bond length. */
+  const near = (out: Doc, symbol: string, id: number) => [...out.shapes.values()].filter((s) => {
+    if (s.symbol !== symbol) return false;
+    const c = { x: (s.x1 + s.x2) / 2, y: (s.y1 + s.y2) / 2 }, d = dist(c, out.atoms.get(id)!);
+    return d < L && [...out.atoms.values()].every((a) => dist(c, a) >= d);
+  }).length;
+
+  it('counts electrons when one moves: a nitroxide to its N•+–O− form', () => {
+    // Me2N–O•, a pair drawn on N and two pairs and the dot on O; one electron of the N pair goes to O
+    const doc = new Doc();
+    const { n, o } = doc.edit('build', () => {
+      const n = doc.addAtom(100, 100, 7).id;
+      const o = doc.addAtom(100, 100 - L, 8, { radical: 'doublet' }).id;
+      doc.addBond(n, o, 1);
+      doc.addBond(n, doc.addAtom(100 - 0.87 * L, 100 + 0.5 * L, 6).id, 1);
+      doc.addBond(n, doc.addAtom(100 + 0.87 * L, 100 + 0.5 * L, 6).id, 1);
+      return { n, o };
+    });
+    drawPairs(doc, n, [[0, 0.3]]);
+    drawPairs(doc, o, [[-0.3, 0], [0.3, 0]]);
+    push(doc, atom(n), bond(doc, n, o), true);
+    push(doc, bond(doc, n, o), atom(o), true);
+    const { out, errors } = run(doc);
+    expect(errors).toEqual([]);
+    expect(out.bondBetween(n, o)?.order).toBe(1);
+    expect(out.atoms.get(n)!.charge).toBe(1);
+    expect(out.atoms.get(n)!.radical).toBe('doublet');
+    expect(out.atoms.get(o)!.charge).toBe(-1);
+    expect(out.atoms.get(o)!.radical).toBeUndefined();
+    // N: its pair is now one electron, a dot (not a pair and a dot), just clear of its N+ label
+    expect(near(out, 'LonePair', n)).toBe(0);
+    expect(near(out, 'Electron', n)).toBe(1);
+    expect(out.atoms.get(n)!.label).toBeNull();
+    // O: two pairs and a dot, plus one electron, are three pairs
+    expect(near(out, 'LonePair', o)).toBe(3);
+    expect(near(out, 'Electron', o)).toBe(0);
+  });
+
+  it('says a fishhook that puts nine electrons on O is past its octet', () => {
+    // Me2C•–O− drawn turning into Me2C=O•−: O would have two bonds, two pairs and a dot
+    const doc = new Doc();
+    const { o, c } = doc.edit('build', () => {
+      const o = doc.addAtom(100, 100 - L, 8, { charge: -1 }).id;
+      const c = doc.addAtom(100, 100, 6, { radical: 'doublet' }).id;
+      doc.addBond(o, c, 1);
+      doc.addBond(c, doc.addAtom(100 - 0.87 * L, 100 + 0.5 * L, 6).id, 1);
+      doc.addBond(c, doc.addAtom(100 + 0.87 * L, 100 + 0.5 * L, 6).id, 1);
+      return { o, c };
+    });
+    push(doc, atom(o), bond(doc, o, c), true);
+    push(doc, atom(c), bond(doc, o, c), true);
+    const { errors } = run(doc);
+    expect(errors.map((e) => e.text)).toEqual([expect.stringMatching(/O− would end up with 9 electrons: more than an octet/)]);
+  });
+
+  it('reads the enol attacking acetone as π bonds moving: every σ bond stays', () => {
+    // H2C=C(OH)CH3 and (CH3)2C=O: O lone pair into C–O, C=C onto the ketone C, C=O onto its O
+    const doc = new Doc();
+    const ids = doc.edit('build', () => {
+      const o = doc.addAtom(100, 100 - L, 8).id;
+      const c1 = doc.addAtom(100, 100, 6).id;
+      const c2 = doc.addAtom(100 + 0.87 * L, 100 + 0.5 * L, 6).id;
+      doc.addBond(o, c1, 1); doc.addBond(c1, c2, 2);
+      doc.addBond(c1, doc.addAtom(100 - 0.87 * L, 100 + 0.5 * L, 6).id, 1);
+      const k = doc.addAtom(100 + 2.6 * L, 100 + 0.5 * L, 6).id;
+      const ko = doc.addAtom(100 + 2.6 * L, 100 - 0.5 * L, 8).id;
+      doc.addBond(k, ko, 2);
+      doc.addBond(k, doc.addAtom(100 + 3.47 * L, 100 + L, 6).id, 1);
+      doc.addBond(k, doc.addAtom(100 + 2.6 * L, 100 + 1.5 * L, 6).id, 1);
+      return { o, c1, c2, k, ko };
+    });
+    push(doc, atom(ids.o), bond(doc, ids.o, ids.c1));
+    push(doc, bond(doc, ids.c1, ids.c2), atom(ids.k));
+    push(doc, bond(doc, ids.k, ids.ko), atom(ids.ko));
+    const { out, errors } = run(doc);
+    expect(errors).toEqual([]);
+    expect(out.bondBetween(ids.o, ids.c1)?.order).toBe(2);
+    expect(out.bondBetween(ids.c1, ids.c2)?.order).toBe(1);
+    expect(out.bondBetween(ids.c2, ids.k)?.order).toBe(1);
+    expect(out.bondBetween(ids.k, ids.ko)?.order).toBe(1);
+    expect(out.atoms.get(ids.o)!.charge).toBe(1);
+    expect(out.atoms.get(ids.ko)!.charge).toBe(-1);
+    expect(out.atoms.get(ids.c1)!.charge).toBe(0);
+    expect(out.atoms.get(ids.k)!.charge).toBe(0);
+  });
+
   it('turns an arrow that starts nowhere into an error, not a guess', () => {
     const { doc, c } = sn2();
     doc.edit('arrow', () => doc.addArrow({
@@ -213,6 +309,6 @@ describe('drawing the next intermediate from curved arrows', () => {
       headStyle: 'full', tailStyle: 'none', headType: 'solid', line: 'solid', noGo: false, equilibrium: false, headLength: 6, headWidth: 1.5,
     }));
     const { errors } = run(doc);
-    expect(errors[0].text).toMatch(/doesn't start on a lone pair/);
+    expect(errors[0].text).toMatch(/doesn't start from a lone pair/);
   });
 });

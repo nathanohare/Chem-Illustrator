@@ -272,7 +272,8 @@ describe('structures and chemistry in Excel files', () => {
     expect(xml).toMatch(/<c r="E2"[^>]*><v>998\.\d+<\/v><\/c>/);
     expect(xml).toMatch(/<c r="F2"[^>]*><f>D2\*2<\/f><v>92<\/v><\/c>/);
     // the formula's numbers lowered
-    expect(strings).toContain('<r><t>C</t></r><r><rPr><vertAlign val="subscript"/></rPr><t>2</t></r>');
+    // (with the cell's whole look: Excel fills in a run's missing font and size with its own defaults)
+    expect(strings).toMatch(/<r><t>C<\/t><\/r><r><rPr><vertAlign val="subscript"\/><sz val="11"\/><color theme="1"\/><rFont val="[^"]+"\/><family val="2"\/><scheme val="minor"\/><\/rPr><t>2<\/t><\/r>/);
     // pictures over the structure cells, the cells' size
     const drawing = part(bytes, 'xl/drawings/drawing1.xml');
     expect(drawing.match(/<xdr:pic>/g)).toHaveLength(2);

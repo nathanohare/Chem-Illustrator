@@ -7,6 +7,7 @@ import { Vec, Rect } from './geom';
 import { DocStyle, ACS_1996 } from './style';
 import { arrowPoints, gluePoint } from './objects';
 import { followPins } from './chem/pins';
+import { SYMBOLS } from './chem/elements';
 import type { EnergyData } from './design/energy';
 import type { NewmanData } from './design/newman';
 import type { TorsionData } from './design/torsion';
@@ -52,6 +53,9 @@ export type DoublePos = 'auto' | 'left' | 'right' | 'center';
  */
 export interface OleMark { id: number; prog: string }
 
+/** A label that is one element with or without its hydrogens (N, NH2, H2N, OH); the match is the element. */
+export const ELEMENT_WITH_H = /^(?:H\d*)?([A-Z][a-z]?)(?:H\d*)?$/;
+
 export interface Atom {
   /** Auto-Animate Steps: things with the same piece number move as one piece in the slide show (and are one picture in PowerPoint). */
   piece?: number;
@@ -81,6 +85,11 @@ export interface Atom {
   s?: number;
   /** The label's own face bits (1 bold, 96 formula) where they differ from the drawing's labelFace. */
   face?: number;
+  /**
+   * The label's own font where it isn't the drawing's (Home ▸ Font or Style panel ▸ Label font with
+   * the structure picked; a ChemDraw label set in another font keeps it).
+   */
+  font?: string;
   /** The gap bonds keep from this atom's label, in points, where it isn't the document's scaled by `s` (ChemDraw's MarginWidth on an atom). */
   marginWidth?: number;
   /** A 3-D position kept from a file (ChemDraw's xyz on a structure built from a crystal file). */
@@ -108,6 +117,12 @@ export interface Atom {
   alt?: string;
   /** A carbon shown with its letter and hydrogens (CH3 at a chain end; ChemDraw's ShowTerminalCarbonLabels). */
   showCarbon?: boolean;
+  /**
+   * Typed on its own with the Text tool (N, NH2, OMe): shown and read just as written, with no
+   * hydrogens it doesn't show and no "too few bonds" warning, until it is bonded; then a label
+   * of one element (N, NH2) becomes automatic, its hydrogens worked out (Doc.addBond).
+   */
+  asTyped?: boolean;
   /** A carbon with no bonds and no label, from a ChemDraw file: drawn as nothing, as ChemDraw draws it (not CH4). */
   bare?: boolean;
   /** The charge is drawn by a separate circled-charge symbol, so the label leaves it out. */
@@ -348,6 +363,13 @@ export interface TextRun {
   link?: string;
   /** Character spacing: points added after each character (less than 0 is condensed), as PowerPoint's Character Spacing. */
   spacing?: number;
+  /** Slides: a PowerPoint field (slidenum, datetime1…) that PowerPoint fills in; this is the text it last showed. */
+  field?: string;
+  /**
+   * The text's language (a tag such as de-DE), for spelling, when not US English: kept from
+   * PowerPoint, and from Word (w:lang) where not the document's own language (DocText.lang).
+   */
+  lang?: string;
   /** Small capitals: lower-case letters shown as smaller capitals (documents). */
   smallCaps?: boolean;
   /** All capitals: letters shown as capitals, the text itself unchanged (documents). */
@@ -367,6 +389,10 @@ export interface TextRun {
   outlineW?: number;
   /** Text effects: a soft drop shadow, down and to the right. */
   shadow?: boolean;
+  /** Documents: not spell- or grammar-checked (Word's Do not check spelling or grammar: chemical names, citations). */
+  noProof?: boolean;
+  /** Documents: the text raised (less than 0: lowered) from the line by this many points, at its own size (Word's Font > Advanced > Position). */
+  raise?: number;
   /**
    * Which font a ChemDraw file had the run's signs in: true for its Symbol font (•, ° stay in it,
    * though Arial has them), false for an ordinary font (a − stays in Arial, though Symbol has it).
@@ -436,6 +462,12 @@ export interface ParaStyle {
   level?: number;
   /** Carries on the list item above (Shift+Enter): indented with it, with no bullet of its own. */
   cont?: boolean;
+  /**
+   * Documents: the next line of the paragraph above, after a line break (Shift+Enter; Word's text
+   * wrapping break): no space between them and no first-line indent of its own, and saved to Word
+   * in the same paragraph as that one.
+   */
+  soft?: boolean;
   /** This paragraph's own alignment, in place of the text box's. */
   align?: Justify;
   /** Extra space above and below the paragraph, in points. */
@@ -455,6 +487,10 @@ export interface ParaStyle {
   line?: number;
   /** Documents: kept on the same page as the paragraph after it (headings). */
   keepNext?: boolean;
+  /** Documents: its lines kept together on one page (Word's Keep lines together). */
+  keepLines?: boolean;
+  /** Documents: a single first or last line may be left on a page by itself (Word's Widow/Orphan control off). */
+  noWidow?: boolean;
   /** Documents: indent from the right margin, in points. */
   indentRight?: number;
   /** Documents: line spacing in points instead of a multiple: exactly this, or at least this. */
@@ -475,8 +511,16 @@ export interface ParaStyle {
   tabs?: TabStop[];
   /** Documents: a numbered list's multilevel scheme (1. a. i. when left out; see paragraphs.ts LIST_SCHEMES). */
   scheme?: string;
-  /** Documents: a bulleted list item's own bullet (from the bullet library), in place of its level's. */
+  /** A bulleted list item's own bullet (from the bullet library, or a slide's from PowerPoint), in place of its level's. */
   bullet?: string;
+  /** Slides: a numbered item's numbering as PowerPoint's (its buAutoNum type, such as alphaUcParenR), in place of its level's. */
+  numType?: string;
+  /**
+   * The number a numbered list starts at (PowerPoint's Start at, Word's Set Numbering Value), when
+   * not 1. In a document it may also stand further on in a list, where Word's numbers start again
+   * (Restart Numbering): an item whose startAt the item before it at its level doesn't share.
+   */
+  startAt?: number;
   /**
    * Documents: lines round the paragraph (Home > Borders), as Word's paragraph borders. Paragraphs
    * one after another with the same borders share one box, with `between` drawn between them.
@@ -700,6 +744,11 @@ export interface Arrow {
   piece?: number;
   /** Part of a ChemDraw object from PowerPoint: saved back to PowerPoint as that object, which opens in ChemDraw (OleMark). */
   ole?: OleMark;
+  /**
+   * A line with an arrowhead drawn in PowerPoint (read from a slide): saved back as a PowerPoint
+   * line of its own, not into a structure's picture, while it is an arrow PowerPoint can draw.
+   */
+  ppt?: boolean;
   id: number;
   /** The group it belongs to (Format > Group); things with the same number move and select together. */
   grp?: number;
@@ -790,6 +839,12 @@ export interface Pin {
   /** Where the point was when it was last put in place: when it is elsewhere, it was moved by hand. */
   was: Vec;
   /**
+   * On an atom: the length of the line from the first atom to the second when it was stuck, which
+   * `at` is measured in from then on, so the point keeps its distance from the atom when that bond
+   * is stretched (a lone pair or an orbital's lobes stay on the atom). Not set on a bond or gap.
+   */
+  len?: number;
+  /**
    * Which way the thing points in the same frame (a lone pair's two dots, an orbital's lobe), so
    * it turns with its atoms as well as going with them. Not set for things that point no way.
    */
@@ -852,6 +907,11 @@ export interface Shape {
   piece?: number;
   /** Part of a ChemDraw object from PowerPoint: saved back to PowerPoint as that object, which opens in ChemDraw (OleMark). */
   ole?: OleMark;
+  /**
+   * A box, oval or line drawn in PowerPoint (read from a slide, where it was a shape of its own):
+   * saved back to PowerPoint as its own shape, never into a structure's picture beside it.
+   */
+  ppt?: boolean;
   id: number;
   /** The group it belongs to (Format > Group); things with the same number move and select together. */
   grp?: number;
@@ -961,6 +1021,11 @@ export interface Shape {
   bracket?: 'square' | 'round' | 'curly';
   /** Brackets: draw both halves of the pair. */
   pair?: boolean;
+  /**
+   * Brackets drawn as a pair with the bracket tool: both halves carry the same number, and a click
+   * on one selects the other too (editor/groups.ts bracketPartner).
+   */
+  bracketPair?: number;
   /**
    * Brackets: the label of a repeat group, shown by the bracket's lower end: n (or another letter)
    * for a polymer's repeat unit, or a number for a group repeated that many times (chem/polymer.ts).
@@ -1277,6 +1342,45 @@ export interface TableData {
   look?: TableLook;
   /** Documents: the margins of every cell (Word's default cell margins), when not the standard ones. */
   pad?: CellMargins;
+  /** Documents: each row's height, row by row (Word's row height); a row without one is as tall as its text. */
+  rowH?: (RowHeight | null)[];
+  /** Documents: the heading rows only look like headings; they aren't repeated at the top of each page (Word's Repeat Header Rows off). */
+  noRepeat?: boolean;
+  /** Documents: the width Word gives the table, when not its columns' total: a share of the text's width (in percent) or as its contents need ('auto'). */
+  width?: 'auto' | { pct: number };
+  /** Documents: how far the table is moved in from the left margin, in points (Word's Indent from left). */
+  indent?: number;
+  /** Documents: Word fits the columns to their contents (AutoFit), rather than keeping their widths. */
+  autofit?: boolean;
+  /** Documents: a table Word places on the page with the text going round it (a floating table); kept for Word, shown in its line here. */
+  float?: TableFloat;
+}
+
+/** A row's height in a document's table, in points: at least that tall (the text may make it taller), or exactly that tall. */
+export interface RowHeight {
+  h: number;
+  exact?: boolean;
+}
+
+/**
+ * Where Word places a floating table (w:tblpPr), in points. Across, it is measured from the text's
+ * column, the margin or the page (`hFrom`), at `x` or lined up as `xAlign` says; down, from the
+ * paragraph after it, the margin or the page (`vFrom`), at `y` or as `yAlign` says. `left` to
+ * `bottom` is the room kept between it and the text round it. Only what the file gave is set.
+ */
+export interface TableFloat {
+  hFrom?: 'text' | 'margin' | 'page';
+  vFrom?: 'text' | 'margin' | 'page';
+  x?: number;
+  y?: number;
+  xAlign?: 'left' | 'center' | 'right' | 'inside' | 'outside';
+  yAlign?: 'top' | 'center' | 'bottom' | 'inside' | 'outside' | 'inline';
+  left?: number;
+  right?: number;
+  top?: number;
+  bottom?: number;
+  /** Other floating tables may not overlap it (Word's Allow overlap off). */
+  noOverlap?: boolean;
 }
 
 /** A drawing's page: the drawing area of one sheet of paper (inside its margins), in points. */
@@ -2004,6 +2108,12 @@ export class Doc {
   }
 
   addBond(a1: number, a2: number, order = 1, display: BondDisplay = 'solid', extra: Partial<Bond> = {}): Bond {
+    // an atom typed on its own with the Text tool (N or NH2: just what is written) is an atom
+    // like any other once it is bonded, its hydrogens worked out and shown (benzene on N is pyridine)
+    for (const at of [a1, a2]) {
+      const a = this.atoms.get(at);
+      if (a?.asTyped) this.updateAtom(at, { asTyped: undefined, ...(a.label && ELEMENT_WITH_H.exec(a.label)?.[1] === SYMBOLS[a.z] ? { label: null } : {}) });
+    }
     const id = extra.id ?? this.newId();
     this.touch('b', id);
     const b: Bond = { id, a1, a2, order, display, dpos: 'auto', ...extra };

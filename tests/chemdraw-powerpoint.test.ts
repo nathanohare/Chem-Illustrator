@@ -126,7 +126,7 @@ describe('ChemDraw objects in PowerPoint files', () => {
     });
     const parts = splitSlide(doc);
     expect(parts.drawings.length).toBe(2);
-    expect([...parts.chemdraw.values()]).toEqual(['ChemDraw_x64.Document.6.0']);
+    expect([...parts.chemdraw.values()].map((m) => m.prog)).toEqual(['ChemDraw_x64.Document.6.0']);
 
     const bytes = await writePptx({ size: got.size, master: defaultMaster(), slides: [{ layout: 'blank', doc, notes: '' }] }, opts);
     const r = new PackageReader(bytes);
@@ -170,6 +170,96 @@ describe('ChemDraw objects in PowerPoint files', () => {
     const tags = Object.entries(files).filter(([k]) => /ppt\/tags\//.test(k)).map(([, v]) => strFromU8(v)).join('');
     expect(tags).toContain(TAG.oleCdx);
     expect(bytesHash(new Uint8Array(4))).not.toBe(bytesHash(new Uint8Array(5)));
+  });
+});
+
+describe('saving a ChemDraw object not changed here', () => {
+  const SLIDE = 'ppt/slides/slide1.xml';
+  const open = () => {
+    const got = readPptx(fixture('chemdraw-object.pptx'));
+    const doc = new Doc();
+    doc.restoreContents(got.slides[0].contents);
+    return { got, doc };
+  };
+  const save = (got: ReturnType<typeof readPptx>, doc: Doc) => writePptx({ size: got.size, master: defaultMaster(), slides: [{ layout: 'blank', doc, notes: '' }], oleKept: got.oleKept }, opts);
+  const file = (bytes: Uint8Array, kind: RegExp) => {
+    const r = new PackageReader(bytes);
+    const rel = [...r.rels(SLIDE).values()].find((x) => kind.test(x.type))!;
+    return { target: rel.target, bytes: r.bytes(rel.target)! };
+  };
+  const original = () => {
+    const r = new PackageReader(fixture('chemdraw-object.pptx'));
+    const rels = [...r.rels(SLIDE).values()];
+    const pic = rels.find((x) => /image$/.test(x.type))!;
+    return { bin: r.bytes(rels.find((x) => /oleObject$/.test(x.type))!.target)!, picture: r.bytes(pic.target)!, ext: pic.target.split('.').pop()! };
+  };
+
+  it('keeps the object and the picture PowerPoint shows, byte for byte', async () => {
+    const { got, doc } = open();
+    expect(got.oleKept?.size).toBe(1);
+    const bytes = await save(got, doc);
+    const was = original();
+    expect(file(bytes, /oleObject$/).bytes).toEqual(was.bin);
+    const pic = file(bytes, /image$/);
+    expect(pic.bytes).toEqual(was.picture);
+    expect(pic.target.endsWith('.' + was.ext)).toBe(true);
+    // PowerPoint's own frame and sizes
+    const xml = new PackageReader(bytes).xml(SLIDE)!;
+    const ole = xml.getElementsByTagNameNS(NS.p, 'oleObj')[0];
+    const src = new PackageReader(fixture('chemdraw-object.pptx')).xml(SLIDE)!.getElementsByTagNameNS(NS.p, 'oleObj')[0];
+    expect(ole.getAttribute('imgW')).toBe(src.getAttribute('imgW'));
+    expect(ole.getAttribute('imgH')).toBe(src.getAttribute('imgH'));
+    const off = xml.getElementsByTagNameNS(NS.p, 'xfrm')[0].getElementsByTagNameNS(NS.a, 'off')[0];
+    expect(off.getAttribute('x')).toBe('508000');
+    expect(off.getAttribute('y')).toBe('762000');
+    // a file read again is the same object (no drawing of ours beside it)
+    expect(Object.entries(unzipSync(bytes)).filter(([k]) => k.startsWith('ppt/tags/')).map(([, v]) => strFromU8(v)).join('')).not.toContain(TAG.cdxml);
+    const again = readPptx(bytes);
+    expect(again.slides[0].contents.atoms.length).toBe(doc.atoms.size);
+    expect(again.oleKept?.size).toBe(1);
+  });
+
+  it('moves with the object when only moved', async () => {
+    const { got, doc } = open();
+    const c = doc.contents();
+    for (const a of c.atoms) { a.x += 36; a.y += 72; }
+    for (const t of c.captions) { t.x += 36; t.y += 72; }
+    for (const sh of c.shapes) { sh.x1 += 36; sh.x2 += 36; sh.y1 += 72; sh.y2 += 72; }
+    for (const r of c.arrows) { r.tail = { x: r.tail.x + 36, y: r.tail.y + 72 }; r.head = { x: r.head.x + 36, y: r.head.y + 72 }; }
+    doc.restoreContents(c);
+    const bytes = await save(got, doc);
+    expect(file(bytes, /oleObject$/).bytes).toEqual(original().bin);
+    expect(file(bytes, /image$/).bytes).toEqual(original().picture);
+    const off = new PackageReader(bytes).xml(SLIDE)!.getElementsByTagNameNS(NS.p, 'xfrm')[0].getElementsByTagNameNS(NS.a, 'off')[0];
+    expect(Number(off.getAttribute('x'))).toBe(508000 + 36 * 12700);
+    expect(Number(off.getAttribute('y'))).toBe(762000 + 72 * 12700);
+  });
+
+  it('draws and writes it again once it is changed here', async () => {
+    const { got, doc } = open();
+    const a = [...doc.atoms.values()][0];
+    doc.edit('Move', () => doc.updateAtom(a.id, { x: a.x + 5 }));
+    const bytes = await save(got, doc);
+    expect(file(bytes, /oleObject$/).bytes).not.toEqual(original().bin);
+    expect(strFromU8(unzipSync(bytes)[SLIDE])).toContain('progId="ChemDraw_x64.Document.6.0"');
+    expect(Object.entries(unzipSync(bytes)).filter(([k]) => k.startsWith('ppt/tags/')).map(([, v]) => strFromU8(v)).join('')).toContain(TAG.cdxml);
+    // back as it was: the original again
+    doc.edit('Move', () => doc.updateAtom(a.id, { x: a.x }));
+    expect(file(await save(got, doc), /oleObject$/).bytes).toEqual(original().bin);
+  });
+
+  it('keeps a drawing made here with an object saved here, while ChemDraw has not changed it', async () => {
+    const { got, doc } = open();
+    const a = [...doc.atoms.values()][0];
+    doc.edit('Move', () => doc.updateAtom(a.id, { x: a.x + 5 }));
+    const first = await save(got, doc);
+    const again = readPptx(first);
+    const doc2 = new Doc();
+    doc2.restoreContents(again.slides[0].contents);
+    const second = await save(again, doc2);
+    expect(file(second, /oleObject$/).bytes).toEqual(file(first, /oleObject$/).bytes);
+    const tags = (z: Uint8Array) => Object.entries(unzipSync(z)).filter(([k]) => k.startsWith('ppt/tags/')).map(([, v]) => strFromU8(v)).join('');
+    expect(tags(second)).toBe(tags(first));
   });
 });
 

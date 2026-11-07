@@ -33,7 +33,9 @@ function drawGlyphs(ctx: CanvasRenderingContext2D, lay: TextLayout, l: LaidLine,
   // text effects: drawn in a state of their own
   const fx = g.fx && !g.tab ? g.fx : undefined;
   if (fx) ctx.save();
-  const put = fx ? withFx(ctx, fx, g.size) : (t: string, x: number, yy: number) => ctx.fillText(t, x, yy);
+  const draw = fx ? withFx(ctx, fx, g.size) : (t: string, x: number, yy: number) => ctx.fillText(t, x, yy);
+  // a soft hyphen draws nothing (a line broken at one gets a hyphen glyph of its own)
+  const put = (t: string, x: number, yy: number) => { const u = t.includes('\u00ad') ? t.split('\u00ad').join('') : t; if (u) draw(u, x, yy); };
   if (g.tab) {
     // a tab shows nothing but its leader: dots, a dashed or a solid line along the baseline
     if (g.leader === 'underscore') ctx.fillRect(ox + g.x, oy + l.y + Math.max(1, g.size * 0.1), g.w, Math.max(0.5, g.size * 0.05));

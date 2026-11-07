@@ -12,25 +12,29 @@
 // substructure filters) is kept in a part of the file Excel keeps but doesn't show (a "custom XML
 // part"). On opening, each piece of it is used only where the cell still holds what was saved:
 // a structure whose SMILES was changed in Excel, or a calculated value typed over there, stays
-// as Excel left it.
+// as Excel left it. Rows and columns put in, taken out or sorted in Excel are followed (see
+// xlsx-relocate.ts).
 
 import { MAX_CELL_TEXT } from './sheet-sniff';
-import { Package, PackageReader, xml, xmlAttr, hex6, REL, kids, kid, rAttr, ZipTooBigError } from './ooxml';
-import { readKeptParts, writeKeptParts } from './kept-parts';
+import { Package, PackageReader, xml, xmlAttr, hex6, REL, kids, kid, rAttr, PackageError } from './ooxml';
+import { appPropsXml, corePropsXml, readKeptParts, writeKeptParts, readTree, writeTree, type KeptTree } from './kept-parts';
+import { GRID_NAME, gridOf, gridNameXml, readGridName, restoreSheet, moveFilter, STILL, type Grid } from './xlsx-relocate';
 import { officeTarget, linkFromTarget } from '../links';
-import { Workbook, Sheet, Structure, CellStyle, ColumnDef, Filter, Condition, CompareOp, Border, BorderStyle, Side, makeStructure } from '../sheet/workbook';
+import { Workbook, Sheet, Structure, CellStyle, ColumnDef, Filter, Condition, CompareOp, Border, BorderStyle, Side } from '../sheet/workbook';
 import { keyOf, rowOf, colOf, colName, cellName, parseRange, quoteSheet, Range, MAX_COLS, rangesOverlap, rangeName, inRange, MAX_ROWS, sheetNameProblem, fixSheetName } from '../sheet/refs';
 import { normalizeFormula, shiftFormula } from '../sheet/formula';
 import { callsName, fileFormula, legacyFormula, needsDynamic, readFileFormula } from '../sheet/array-formulas';
 import { DefinedName, isBuiltInName } from '../sheet/names';
 import { FUNCTION_NAMES } from '../sheet/evaluate';
-import { readTyped, isError, CellError, Value, EXCEL_ERRORS } from '../sheet/values';
+import { readTyped, isError, CellError, Value } from '../sheet/values';
+import { DAYS_1900_TO_1904, holdsDate } from '../sheet/numfmt';
 import { PROPERTIES } from '../sheet/properties';
 import { ISOTOPE_FUNCTIONS } from '../sheet/isotopes';
 import { chemPieces, showsChem } from '../sheet/cell-text';
 import { type TextRun, looksOf, lookOver, runsFrom, runsOf } from '../sheet/rich-text';
 import { DEFAULT_COL_W, DEFAULT_ROW_H, MAX_AUTO_ROW, structureHeight } from '../sheet/layout';
 import type { Contents } from '../model';
+import type { ExcelStyles, ExcelLook, NamedCellStyle } from '../sheet/workbook';
 import type { DocStyle } from '../style';
 import { applyTint } from '../colours';
 import { chartXml, chartAnchorXml, readChartXml, CT_CHART, REL_CHART, C_NS, CX_NS, CT_CHARTEX, REL_CHARTEX, addChartExStyle } from './xlsx-chart';
@@ -48,13 +52,17 @@ import { type DataTable, seenDataTableId } from '../sheet/what-if';
 import { type PivotTable, seenPivotId } from '../sheet/pivot';
 import { Persons, notesParts, readNotes, shownNotes, validationsXml, readValidations, NOTES_CT, NOTES_REL } from './xlsx-notes';
 import { textRotation, readTextRotation, sheetViewAttrs, readSheetViewOpts, outlinePrXml, outlineLevelAttrs, outlineAttrs, sparklinesExt, readSparklines, customWorkbookViewsXml, customSheetViewsXml, readCustomViews, themeXml, readWorkbookTheme } from './xlsx-view';
+import { readSheetKept, readBookKept, sheetProtectionXml, cellProtectionXml, paneKey, keptPanes } from './xlsx-view';
 import { CELL_STYLES, cellStyleNamed, cellStylePatch, cellStyleBorders } from '../sheet/cell-styles';
 import type { WorkbookTheme } from '../sheet/themes';
 import { themeOf } from '../sheet/themes';
 import type { CustomView } from '../sheet/views';
 import { seenSparkId } from '../sheet/sparklines';
-import { type CompoundCard, isCard } from '../sheet/compound';
+import { type CompoundCard } from '../sheet/compound';
 import { type Query, seenQueryId } from '../sheet/query';
+import { keepFileValues, fileValues, type FileValue } from './xlsx-cached';
+import { readRichValues, writeRichParts, richMetadataXml, keepPointers, pointerOf } from './xlsx-rich';
+import { LeftOut } from './xlsx-left-out';
 export { applyTint };
 
 /** Pictures of structures for Excel (the app draws them; tests use stand-ins). */
@@ -118,10 +126,11 @@ const RELS = {
  * The cell metadata that marks a formula as a dynamic array formula (cm="1" on its cell), as
  * Excel writes it: without it Excel works a formula out the old way, one value per cell.
  */
-const DYNAMIC_ARRAY_METADATA = `<metadata xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:xda="http://schemas.microsoft.com/office/spreadsheetml/2017/dynamicarray">` +
-  `<metadataTypes count="1"><metadataType name="XLDAPR" minSupportedVersion="120000" copy="1" pasteAll="1" pasteValues="1" merge="1" splitFirst="1" rowColShift="1" clearFormats="1" clearComments="1" assign="1" coerce="1" cellMeta="1"/></metadataTypes>` +
-  `<futureMetadata name="XLDAPR" count="1"><bk><extLst><ext uri="{bdbb8cdc-fa1e-496e-a857-3c3f30c029c3}"><xda:dynamicArrayProperties fDynamic="1" fCollapsed="0"/></ext></extLst></bk></futureMetadata>` +
-  `<cellMetadata count="1"><bk><rc t="1" v="0"/></bk></cellMetadata></metadata>`;
+const DYNAMIC_ARRAY_METADATA = {
+  type: `<metadataType name="XLDAPR" minSupportedVersion="120000" copy="1" pasteAll="1" pasteValues="1" merge="1" splitFirst="1" rowColShift="1" clearFormats="1" clearComments="1" assign="1" coerce="1" cellMeta="1"/>`,
+  future: `<futureMetadata name="XLDAPR" count="1"><bk><extLst><ext uri="{bdbb8cdc-fa1e-496e-a857-3c3f30c029c3}"><xda:dynamicArrayProperties fDynamic="1" fCollapsed="0"/></ext></extLst></bk></futureMetadata>`,
+  cells: `<cellMetadata count="1"><bk><rc t="1" v="0"/></bk></cellMetadata>`,
+};
 
 /** Pixels to Office's drawing units (EMU): 9525 to the pixel at 96 to the inch. */
 const PX = 9525;
@@ -163,15 +172,36 @@ const XLFN = new Set(['AGGREGATE', 'BETA.DIST', 'BETA.INV', 'BINOM.DIST', 'BINOM
   'STDEV.P', 'STDEV.S', 'SWITCH', 'T.DIST', 'T.DIST.2T', 'T.DIST.RT', 'T.INV', 'T.INV.2T', 'T.TEST', 'TEXTJOIN', 'TEXTSPLIT', 'UNIQUE',
   'VAR.P', 'VAR.S', 'WEIBULL.DIST', 'XLOOKUP', 'XMATCH', 'XOR', 'Z.TEST', 'NETWORKDAYS.INTL', 'WORKDAY.INTL', 'LAMBDA', 'MAP', 'REDUCE',
   'SCAN', 'BYROW', 'BYCOL', 'MAKEARRAY', 'ISOMITTED', 'VSTACK', 'HSTACK', 'TAKE', 'DROP', 'CHOOSEROWS', 'CHOOSECOLS', 'TOCOL', 'TOROW',
-  'RANDARRAY', 'EXPAND', 'WRAPROWS', 'WRAPCOLS']);
-const XLWS = new Set(['FILTER', 'SORT', 'SORTBY']);
+  'RANDARRAY', 'EXPAND', 'WRAPROWS', 'WRAPCOLS', 'SORTBY']);
+// (SORTBY came later than these, and Excel writes it with only _xlfn.)
+const XLWS = new Set(['FILTER', 'SORT']);
 
-/** A formula (without its =) with Excel's prefixes on the newer functions, leaving text in quotes alone. */
-export function excelFunctionNames(f: string): string {
+/**
+ * The errors a cell's value can be in the file. Excel keeps the newer ones (#SPILL!, #CALC!,
+ * #FIELD!…) as rich values with #VALUE! in the cell (MS-XLSX 2.3.6.1.3), so they are written as
+ * #VALUE! here; Excel works the formula out again on opening.
+ */
+const FILE_ERRORS = ['#NULL!', '#DIV/0!', '#VALUE!', '#REF!', '#NAME?', '#NUM!', '#N/A'];
+
+/**
+ * A formula (without its =) with Excel's prefixes on the newer functions, leaving text in quotes
+ * alone. `kept` are the prefixes the workbook's file had on functions this program doesn't know.
+ */
+export function excelFunctionNames(f: string, kept?: ReadonlyMap<string, string>): string {
   return f.split(/("(?:[^"]|"")*")/).map((part, i) => (i % 2 ? part : part.replace(/(^|[^A-Za-z0-9_.])([A-Za-z][A-Za-z0-9.]*)(?=\()/g, (m, before: string, name: string) => {
     const up = name.toUpperCase();
-    return XLWS.has(up) ? `${before}_xlfn._xlws.${name}` : XLFN.has(up) ? `${before}_xlfn.${name}` : m;
+    const prefix = XLWS.has(up) ? '_xlfn._xlws.' : XLFN.has(up) ? '_xlfn.' : kept?.get(up);
+    return prefix ? `${before}${prefix}${name}` : m;
   }))).join('');
+}
+
+/** Notes the prefixes a formula from a file has on functions this program doesn't prefix by itself. */
+function notePrefixes(text: string, into: Map<string, string>): void {
+  if (!text.includes('_xlfn.')) return;
+  for (const m of text.replace(/"(?:[^"]|"")*"/g, '""').matchAll(/_xlfn\.(_xlws\.)?([A-Za-z][A-Za-z0-9.]*)\(/g)) {
+    const up = m[2].toUpperCase();
+    if (!XLFN.has(up) && !XLWS.has(up)) into.set(up, m[1] ? '_xlfn._xlws.' : '_xlfn.');
+  }
 }
 
 const KNOWN = new Set(FUNCTION_NAMES);
@@ -192,6 +222,19 @@ function usesUnknownFunction(text: string, names: ReadonlySet<string>): boolean 
   return false;
 }
 
+/** Does a formula read another workbook ([1]Sheet1!A1 or '[2]My data'!A1, numbered by the workbook's external links)? */
+function readsOtherWorkbook(text: string): boolean {
+  return /(^|[^A-Za-z0-9_.'"])'?\[[1-9]\d*\]/.test(text.replace(/"(?:[^"]|"")*"/g, '""'));
+}
+
+/** The file an external link points at, by its name ("Inventory.xlsx"; '' when the link doesn't say). */
+function linkedFile(t: KeptTree): string {
+  const target = t.rels.find((r) => r.from === t.path && r.external)?.target ?? '';
+  let name = target.split(/[\\/]/).pop() ?? '';
+  try { name = decodeURIComponent(name); } catch { /* left as written */ }
+  return name;
+}
+
 /** Does a formula use a chemistry function (which Excel can't work out)? */
 export function usesChemistry(formula: string): boolean {
   return CHEM_FUNCTION.test(formula.replace(/"(?:[^"]|"")*"/g, '""'));
@@ -200,9 +243,9 @@ export function usesChemistry(formula: string): boolean {
 // ---------------------------------------------------------------- what only this program reads
 
 /** What a cell held when saved, to tell on opening whether Excel changed it. */
-type Wrote = number | string | boolean | null;
+export type Wrote = number | string | boolean | null;
 
-interface ModelCell {
+export interface ModelCell {
   r: number;
   c: number;
   /** The value saved in the cell. */
@@ -223,8 +266,15 @@ interface ModelCell {
   compound?: CompoundCard;
 }
 
-interface ModelSheet {
+export interface ModelSheet {
   name: string;
+  /** The sheet's sheetId in the file (Excel keeps it when a sheet is renamed or moved). */
+  id?: number;
+  /**
+   * The columns and rows this part points at, as the sheet's hidden name lists them: where Excel
+   * moved them is found from the name (see xlsx-relocate.ts).
+   */
+  grid?: Grid;
   cells: ModelCell[];
   defs: { col: number; def: ColumnDef }[];
   /** Columns formatted as chemistry. */
@@ -265,20 +315,48 @@ class Styles {
   /** The body font of the workbook's theme: cells with no font of their own. */
   private minor: string;
   private fonts: string[];
+  /** Number formats the file read had as its own though they are a built-in one's code (m/d/yyyy from a German Excel). */
+  private ownCodes: Set<string>;
+  /** Named cell styles kept from the file read, by the name cells know them by. */
+  private keptNamed = new Map<string, NamedCellStyle>();
   /** Named cell styles (Good, Heading 1…): the base formats cells point at, by name. */
   private named = new Map<string, number>();
   private namedXfs = ['<xf numFmtId="0" fontId="0" fillId="0" borderId="0"/>'];
+  private normalName: string;
 
-  constructor(private theme: WorkbookTheme | null = null) {
+  /**
+   * `normal` is the look of style 0 (the workbook's Normal style, when it isn't the plain look
+   * here), with its font as the file had it in `kept`.
+   */
+  constructor(private theme: WorkbookTheme | null = null, private normal: CellStyle = {}, kept: ExcelStyles = {}) {
     this.minor = themeOf(theme).minor;
-    this.fonts = [`<font><sz val="11"/><color theme="1"/><name val="${xml(this.minor)}"/><family val="2"/><scheme val="minor"/></font>`];
+    this.ownCodes = new Set(kept.numFmts);
+    this.normalName = kept.normalName ?? 'Normal';
+    this.fonts = [Object.keys(normal).length && kept.normalFont ? kept.normalFont : `<font><sz val="11"/><color theme="1"/><name val="${xml(this.minor)}"/><family val="2"/><scheme val="minor"/></font>`];
+    if (Object.keys(normal).length) {
+      // style 0 (and the Normal style's base format) in that look: the plain look is a style of its own
+      this.byKey.clear();
+      this.xfs.length = 0;
+      this.xf(normal);
+      this.namedXfs[0] = this.xfs[0].replace(/ xfId="\d+"/, '');
+    }
+    // the file's named cell styles, all of them (Excel's Cell Styles gallery keeps those no cell uses), as it had them
+    for (const k of kept.named ?? []) {
+      const key = namedStyleKey(k.name, k.builtinId);
+      if (this.named.has(key)) continue;
+      const { font, fill, border } = this.parts(k.look);
+      const align = this.alignment(k.look);
+      this.namedXfs.push(`<xf numFmtId="${this.numFmt(k.look.numFmt)}" fontId="${font}" fillId="${fill}" borderId="${border}"${k.apply}${align ? `>${align}</xf>` : '/>'}`);
+      this.named.set(key, this.namedXfs.length - 1);
+      this.keptNamed.set(key, k);
+    }
   }
 
   private fills = ['<fill><patternFill patternType="none"/></fill>', '<fill><patternFill patternType="gray125"/></fill>'];
   private borders = ['<border><left/><right/><top/><bottom/><diagonal/></border>'];
   private formats = new Map<string, number>();
   private xfs = ['<xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/>'];
-  private byKey = new Map<string, number>([['{}', 0]]);
+  private byKey = new Map<string, number>([[xfKey({}), 0]]);
   private dxfs: string[] = [];
 
   /** The number of a highlight look (conditional formatting). */
@@ -295,7 +373,8 @@ class Styles {
 
   private numFmt(code: string | undefined): number {
     if (!code || /^general$/i.test(code)) return 0;
-    for (const [id, c] of Object.entries(BUILTIN_FORMATS)) if (c === code && Number(id) < 14 || (c === code && Number(id) === 49)) return Number(id);
+    // a built-in format by its number (Excel shows the short date, 14, as the reader's system has it), unless the file had the code as its own
+    if (!this.ownCodes.has(code)) for (const [id, c] of Object.entries(BUILTIN_FORMATS)) if (c === code) return Number(id);
     let id = this.formats.get(code);
     if (id === undefined) { id = 164 + this.formats.size; this.formats.set(code, id); }
     return id;
@@ -304,36 +383,55 @@ class Styles {
   /** The style index for a cell's formatting. */
   xf(st: CellStyle | undefined): number {
     const s = st ?? {};
-    const key = JSON.stringify([s.bold, s.italic, s.underline, s.color, s.fill, s.font, s.size, s.align, s.valign, s.wrap, s.numFmt, s.borders, s.indent, s.rotate, s.cellStyle]);
+    const key = xfKey(s) + (s.unlocked ? '|unlocked' : '') + (s.formulaHidden ? '|hidden' : '');
     const got = this.byKey.get(key);
     if (got !== undefined) return got;
     const { font, fill, border } = this.parts(s);
     const fmt = this.numFmt(s.numFmt);
-    // an indent needs the text aligned to a side (left when it isn't set)
-    const horizontal = s.align ?? (s.indent ? 'left' : undefined);
-    const align = horizontal || s.valign || s.wrap || s.rotate
-      ? `<alignment${horizontal ? ` horizontal="${horizontal}"` : ''}${s.valign && s.valign !== 'bottom' ? ` vertical="${s.valign === 'middle' ? 'center' : 'top'}"` : ''}${s.rotate ? ` textRotation="${textRotation(s.rotate)}"` : ''}${s.wrap ? ' wrapText="1"' : ''}${s.indent && horizontal !== 'center' ? ` indent="${s.indent}"` : ''}/>`
-      : '';
+    const align = this.alignment(s);
     const xfId = s.cellStyle ? this.namedStyle(s.cellStyle) : 0;
+    const protection = cellProtectionXml(s);
     const x = `<xf numFmtId="${fmt}" fontId="${font}" fillId="${fill}" borderId="${border}" xfId="${xfId}"` +
       `${fmt ? ' applyNumberFormat="1"' : ''}${font ? ' applyFont="1"' : ''}${fill ? ' applyFill="1"' : ''}${border ? ' applyBorder="1"' : ''}` +
-      `${align ? ` applyAlignment="1">${align}</xf>` : '/>'}`;
+      `${align || protection ? `${align ? ' applyAlignment="1"' : ''}${protection ? ' applyProtection="1"' : ''}>${align}${protection}</xf>` : '/>'}`;
     this.xfs.push(x);
     const i = this.xfs.length - 1;
     this.byKey.set(key, i);
     return i;
   }
 
+  /** A look's alignment element ('' when it has none). */
+  private alignment(s: CellStyle): string {
+    // Excel's own alignment where it still shows as this one (centered across the selection…)
+    const ex = s.excel;
+    const keptH = ex?.horizontal && (SHOWN_H[ex.horizontal] ?? undefined) === s.align ? ex.horizontal : undefined;
+    // an indent needs the text aligned to a side (left when it isn't set)
+    const horizontal = keptH ?? s.align ?? (s.indent ? 'left' : undefined);
+    const vertical = s.valign === 'middle' ? (ex?.vertical ?? 'center') : s.valign === 'top' ? 'top' : undefined;
+    return horizontal || vertical || s.wrap || s.rotate || ex?.shrinkToFit || ex?.readingOrder
+      ? `<alignment${horizontal ? ` horizontal="${horizontal}"` : ''}${vertical ? ` vertical="${vertical}"` : ''}${s.rotate ? ` textRotation="${textRotation(s.rotate)}"` : ''}${s.wrap ? ' wrapText="1"' : ''}${s.indent && horizontal !== 'center' ? ` indent="${s.indent}"` : ''}` +
+        `${ex?.shrinkToFit ? ' shrinkToFit="1"' : ''}${ex?.readingOrder ? ` readingOrder="${ex.readingOrder}"` : ''}/>`
+      : '';
+  }
+
   /** The font, fill and border numbers for a look. */
   private parts(s: CellStyle): { font: number; fill: number; border: number } {
-    const font = s.bold || s.italic || s.underline || s.color || s.font || s.size
-      ? this.index(this.fonts, `<font>${s.bold ? '<b/>' : ''}${s.italic ? '<i/>' : ''}${s.underline ? '<u/>' : ''}<sz val="${s.size ?? 11}"/>` +
+    const fontLook = (l: CellStyle) => JSON.stringify([!!l.bold, !!l.italic, !!l.underline, l.color, l.font, l.size, l.excel?.strike, l.excel?.vertAlign]);
+    const font = fontLook(s) !== fontLook(this.normal)
+      ? this.index(this.fonts, `<font>${s.bold ? '<b/>' : ''}${s.italic ? '<i/>' : ''}${s.excel?.strike ? '<strike/>' : ''}${s.underline ? '<u/>' : ''}` +
+        `${s.excel?.vertAlign ? `<vertAlign val="${xmlAttr(s.excel.vertAlign)}"/>` : ''}<sz val="${s.size ?? 11}"/>` +
         `${s.color ? `<color rgb="FF${hex6(s.color)}"/>` : '<color theme="1"/>'}<name val="${xml(s.font ?? this.minor)}"/><family val="2"/>${s.font ? '' : '<scheme val="minor"/>'}</font>`)
       : 0;
-    const fill = s.fill ? this.index(this.fills, `<fill><patternFill patternType="solid"><fgColor rgb="FF${hex6(s.fill)}"/><bgColor indexed="64"/></patternFill></fill>`) : 0;
+    // a patterned fill as it was, while it still shows its color
+    const p = s.excel?.pattern;
+    const fill = p && (p.fg ?? p.bg) === s.fill
+      ? this.index(this.fills, `<fill><patternFill patternType="${xmlAttr(p.type)}">${p.fg ? `<fgColor rgb="FF${hex6(p.fg)}"/>` : ''}${p.bg ? `<bgColor rgb="FF${hex6(p.bg)}"/>` : ''}</patternFill></fill>`)
+      : s.fill ? this.index(this.fills, `<fill><patternFill patternType="solid"><fgColor rgb="FF${hex6(s.fill)}"/><bgColor indexed="64"/></patternFill></fill>`) : 0;
     const side = (name: Side) => {
       const b = s.borders?.[name];
-      return b ? `<${name} style="${borderName(b.style)}"><color rgb="FF${hex6(b.color ?? '#000000')}"/></${name}>` : `<${name}/>`;
+      // Excel's own border style where it still shows as this one (hair as thin…)
+      const was = s.excel?.borders?.[name];
+      return b ? `<${name} style="${was && BORDER_STYLES[was] === b.style ? was : borderName(b.style)}"><color rgb="FF${hex6(b.color ?? '#000000')}"/></${name}>` : `<${name}/>`;
     };
     const border = s.borders && Object.keys(s.borders).length
       ? this.index(this.borders, `<border>${side('left')}${side('right')}${side('top')}${side('bottom')}<diagonal/></border>`)
@@ -343,6 +441,7 @@ class Styles {
 
   /** The base format of a named cell style (Excel's cellStyleXfs), added the first time it is used. */
   private namedStyle(name: string): number {
+    if (this.named.has(name)) return this.named.get(name)!;
     const def = cellStyleNamed(name);
     if (!def) return 0;
     let i = this.named.get(def.name);
@@ -365,9 +464,25 @@ class Styles {
       `<borders count="${this.borders.length}">${this.borders.join('')}</borders>` +
       `<cellStyleXfs count="${this.namedXfs.length}">${this.namedXfs.join('')}</cellStyleXfs>` +
       `<cellXfs count="${this.xfs.length}">${this.xfs.join('')}</cellXfs>` +
-      `<cellStyles count="${this.named.size + 1}"><cellStyle name="Normal" xfId="0" builtinId="0"/>${[...this.named].map(([n, i]) => `<cellStyle name="${xmlAttr(n)}" xfId="${i}" builtinId="${cellStyleNamed(n)!.builtinId}"/>`).join('')}</cellStyles>` +
+      `<cellStyles count="${this.named.size + 1}"><cellStyle name="${xmlAttr(this.normalName)}" xfId="0" builtinId="0"/>${[...this.named].map(([n, i]) => {
+        const k = this.keptNamed.get(n);
+        return k ? `<cellStyle name="${xmlAttr(k.name)}" xfId="${i}"${k.builtinId !== undefined ? ` builtinId="${k.builtinId}"` : ''}${k.attrs}/>` : `<cellStyle name="${xmlAttr(n)}" xfId="${i}" builtinId="${cellStyleNamed(n)!.builtinId}"/>`;
+      }).join('')}</cellStyles>` +
       `<dxfs count="${this.dxfs.length}">${this.dxfs.join('')}</dxfs><tableStyles count="0" defaultTableStyle="TableStyleMedium2" defaultPivotStyle="PivotStyleLight16"/></styleSheet>`;
   }
+}
+
+/**
+ * The name cells here know a named cell style by: a built-in one's own (Heading 1, whatever the
+ * file's language called it), else the file's.
+ */
+function namedStyleKey(name: string, builtinId: number | undefined): string {
+  return (cellStyleNamed(name) ?? (builtinId !== undefined ? CELL_STYLES.find((d) => d.builtinId === builtinId) : undefined))?.name ?? name;
+}
+
+/** What makes two cell looks the same style in the file (an empty look is style 0). */
+function xfKey(s: CellStyle): string {
+  return JSON.stringify([s.bold, s.italic, s.underline, s.color, s.fill, s.font, s.size, s.align, s.valign, s.wrap, s.numFmt, s.borders, s.indent, s.rotate, s.cellStyle, s.excel]);
 }
 
 function borderName(b: BorderStyle): string {
@@ -397,7 +512,8 @@ class Strings {
     const pieces = chem ? chemPieces(text) : null;
     const chemRich = !!pieces && pieces.some((p) => p.pos !== 'base' || p.italic);
     const fit = runs && runsOf({ input: text, runs }) ? runs : undefined;
-    const key = fit ? '2' + JSON.stringify([text, chem, fit, style?.bold, style?.italic, style?.underline, style?.color, style?.size, style?.font]) : (chemRich ? '1' : '0') + text;
+    const look = [style?.bold, style?.italic, style?.underline, style?.color, style?.size, style?.font];
+    const key = fit ? '2' + JSON.stringify([text, chem, fit, ...look]) : chemRich ? '1' + JSON.stringify([text, ...look]) : '0' + text;
     const got = this.byKey.get(key);
     if (got !== undefined) return got;
     const t = (s: string) => `<t${/^\s|\s$|\n/.test(s) ? ' xml:space="preserve"' : ''}>${xml(excelEscape(s))}</t>`;
@@ -413,8 +529,10 @@ class Strings {
       const merged = runsFrom(text, looks) ?? [{ text }];
       this.list.push(`<si>${merged.map((r) => `<r>${this.runLook(lookOver(style, r))}${t(r.text)}</r>`).join('')}</si>`);
     } else {
+      // a lowered or raised piece with its cell's whole look as well: Excel fills a run's missing
+      // font and size with its own defaults (11 pt), not the cell's
       this.list.push(chemRich
-        ? `<si>${pieces!.map((p) => `<r>${p.pos !== 'base' || p.italic ? `<rPr>${p.italic ? '<i/>' : ''}${p.pos !== 'base' ? `<vertAlign val="${p.pos === 'sub' ? 'subscript' : 'superscript'}"/>` : ''}</rPr>` : ''}${t(p.text)}</r>`).join('')}</si>`
+        ? `<si>${pieces!.map((p) => `<r>${p.pos !== 'base' || p.italic ? this.runLook(lookOver(style, { ...(p.italic ? { italic: true } : {}), ...(p.pos !== 'base' ? { pos: p.pos } : {}) })) : ''}${t(p.text)}</r>`).join('')}</si>`
         : `<si>${t(text)}</si>`);
     }
     this.byKey.set(key, this.list.length - 1);
@@ -472,12 +590,13 @@ export async function writeXlsx(book: Workbook, deps: XlsxPictures, opts: { macr
 async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: boolean }): Promise<Uint8Array> {
   const pkg = new Package();
   const vba = opts.macros ? book.macros : null;
-  const styles = new Styles(book.theme);
+  const styles = new Styles(book.theme, book.normalStyle, book.excelStyles);
   const strings = new Strings(themeOf(book.theme).minor);
   const model: Model = { app: 'Chem Illustrator', version: 1, drawingStyle: book.drawingStyle, sheets: [], autoChem: book.autoChem, ...(book.customViews.length ? { customViews: book.customViews } : {}), ...(book.queries.length ? { queries: book.queries } : {}) };
   const sheetEntries: string[] = [];
   const filterNames: string[] = [];
   const printTitleNames: string[] = [];
+  const gridNames: string[] = [];
   let imageNo = 0, drawingNo = 0, tableNo = 0, chartNo = 0, notesNo = 0, pivotNo = 0;
   const pivotCaches: string[] = [];
   let anyDynamic = false;
@@ -485,6 +604,8 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
   const lambdaNames = new Set(book.names.map((n) => n.name.toUpperCase()));
   const nameCase = book.nameCase();
   const persons = new Persons();
+  // Excel's own values for formulas this program can't work out, while they still hold
+  const saved = fileValues(book);
   pkg.defaultType('png', 'image/png');
   // drop-down lists too long for Excel to hold typed: their items on a hidden sheet, as Excel does itself
   const lists: { ref: string; text: string; items: string[] }[] = [];
@@ -506,7 +627,7 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
     const standIn = own.dashboard ? dashboardStandIn(book, own) : null;
     const s = standIn?.sheet ?? own;
     const path = `xl/worksheets/sheet${si + 1}.xml`;
-    const ms: ModelSheet = { name: s.name, cells: [], defs: [...s.colDefs].map(([col, def]) => ({ col, def })), chemCols: [], filter: s.filter };
+    const ms: ModelSheet = { name: s.name, id: si + 1, cells: [], defs: [...s.colDefs].map(([col, def]) => ({ col, def })), chemCols: [], filter: s.filter };
     if (s.condFormats.length) ms.condFormats = s.condFormats;
     if (s.tables.length) ms.tables = s.tables;
     if (s.charts.length && !own.dashboard) ms.charts = s.charts;
@@ -519,26 +640,40 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
     const headerName = new Map<number, string>();
     const tableNames = new Map<TableDef, string[]>();
     for (const t of s.tables) {
+      // (a table without a header row has its names only in its part: its first row is data)
       const heads: string[] = [];
-      for (let c = t.range.c1; c <= t.range.c2; c++) heads.push(s.shownText(t.range.r1, c));
+      for (let c = t.range.c1; c <= t.range.c2; c++) heads.push(t.header ? s.shownText(t.range.r1, c) : t.columns?.[c - t.range.c1]?.name ?? '');
       const names = tableColumnNames(heads);
       tableNames.set(t, names);
-      names.forEach((n, i) => headerName.set(keyOf(t.range.r1, t.range.c1 + i), n));
+      if (t.header) names.forEach((n, i) => headerName.set(keyOf(t.range.r1, t.range.c1 + i), n));
     }
     for (const [c, st] of s.colStyles) if (st.chem) ms.chemCols.push(c);
 
     // sizes: set by hand, else grown to fit structures (and wrapped text, measured by the grid)
     const colW = (c: number) => (s.hiddenCols.has(c) ? 0 : s.colWidths.get(c) ?? DEFAULT_COL_W);
     const auto = new Map<number, number>(deps.rowHeights?.(s) ?? []);
+    // rows Excel fitted itself go back as Excel had them (a height it fits again, no customHeight)
+    for (const [r, px] of s.fittedRows) if (!auto.has(r)) auto.set(r, px);
+    // rows grown for a structure's picture keep their height in Excel (its text can't show how tall the picture is)
+    const pictureRows = new Set<number>();
     for (const [k, c] of s.cells) {
       if (!c.structure) continue;
       const r = rowOf(k);
       const h = Math.min(MAX_AUTO_ROW, Math.ceil(structureHeight(deps.box(c.structure, book.drawingStyle), s.colWidths.get(colOf(k)) ?? DEFAULT_COL_W)));
-      if (h > DEFAULT_ROW_H) auto.set(r, Math.max(auto.get(r) ?? 0, h));
+      if (h > DEFAULT_ROW_H) { auto.set(r, Math.max(auto.get(r) ?? 0, h)); pictureRows.add(r); }
     }
     const rowH = (r: number) => (s.hiddenRows.has(r) ? 0 : s.rowHeights.get(r) ?? auto.get(r) ?? DEFAULT_ROW_H);
     ms.autoRows = [...auto].filter(([r]) => !s.rowHeights.has(r));
     const cols = new Axis(colW), rows = new Axis(rowH);
+    // a column's style number (the many columns a range to the end of the sheet formats share one look, looked up once)
+    const colXfs = new Map<CellStyle, number>();
+    const colXf = (c: number) => {
+      const st = s.colStyles.get(c);
+      if (!st) return 0;
+      let xf = colXfs.get(st);
+      if (xf === undefined) colXfs.set(st, (xf = styles.xf(st)));
+      return xf;
+    };
 
     // every cell in use: typed, formatted, or worked out by a property column
     const keys = new Set<number>([...s.cells.keys(), ...s.values.keys(), ...headerName.keys()]);
@@ -549,6 +684,13 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
       if (list) list.push(k); else byRow.set(r, [k]);
     }
     for (const r of [...s.rowHeights.keys(), ...auto.keys(), ...s.hiddenRows.keys(), ...s.rowLevels.keys(), ...[...s.rowLevels.keys()].map((r) => (s.outline?.summaryAbove ? r - 1 : r + 1)).filter((r) => r >= 0)]) if (!byRow.has(r)) byRow.set(r, []);
+    // a sheet whose unlisted rows are hidden (zeroHeight): every row shown, down to the last in use, is listed
+    const zero = !!own.fileRowHeight?.zero;
+    if (zero) {
+      let last = s.lastRow;
+      for (const r of byRow.keys()) if (r > last) last = r;
+      for (let r = 0; r <= Math.min(last, MAX_ROWS - 1); r++) if (!byRow.has(r)) byRow.set(r, []);
+    }
 
     const anchors: string[] = [];
     const pictures: { png: Uint8Array; key: string; name: string }[] = [];
@@ -561,7 +703,7 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
         const c = colOf(k);
         const cell = s.cell(r, c);
         const header = headerName.get(k);
-        const v = header ?? s.values.get(k) ?? null;
+        const v = header ?? saved(s, k) ?? s.values.get(k) ?? null;
         const style = s.styleAt(r, c);
         const ref = cellName(r, c);
         const own = cell?.style;
@@ -569,6 +711,8 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
         let formula: string | null = null;
         /** The block a dynamic array formula fills (its own cell when it doesn't spill). */
         let arrayRef: string | null = null;
+        /** The block a legacy array formula fills. */
+        let legacyRef: string | null = null;
         let wrote: Wrote = null;
         // what only this program reads, kept for the cell
         let entry: ModelCell | null = null;
@@ -582,33 +726,41 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
           entry = { r, c, wrote: null, fix, formula: input, ...(sp ? { spill: [sp.r2, sp.c2] as [number, number] } : {}) };
         } else if (input?.startsWith('=') && header === undefined) {
           const sp = s.spills.get(k);
-          const dynamic = !!sp || s.spillWanted.has(k) || needsDynamic(input) || callsName(input, lambdaNames);
-          formula = excelFunctionNames(fileFormula(normalizeFormula(input, nameCase), dynamic));
-          if (dynamic) { arrayRef = sp ? rangeName(sp) : ref; anyDynamic = true; }
+          // a legacy array formula (Ctrl+Shift+Enter) goes back as one, over its block, unless something here is in its way
+          const legacy = cell?.array && (cell.array.rows * cell.array.cols === 1 || sp) ? (sp ? rangeName(sp) : ref) : null;
+          const dynamic = !legacy && (!!sp || s.spillWanted.has(k) || needsDynamic(input) || callsName(input, lambdaNames));
+          formula = excelFunctionNames(fileFormula(normalizeFormula(input, nameCase), dynamic), book.excelPrefixes);
+          if (legacy) legacyRef = legacy;
+          else if (dynamic) { arrayRef = sp ? rangeName(sp) : ref; anyDynamic = true; }
         }
         if (!entry && fix) entry = { r, c, wrote: null, fix };
         if (cell?.compound) entry = { ...(entry ?? { r, c, wrote: null }), compound: cell.compound };
         if (entry) ms.cells.push(entry);
         // a structure's SMILES is in its cell, hidden under the picture (the format ;;; shows nothing)
         const xf = styles.xf(cell?.structure ? { ...style, numFmt: HIDDEN } : style);
-        const sAttr0 = xf ? ` s="${xf}"` : '';
+        // a cell in style 0 in a formatted column says so (some programs give a cell with no style its column's)
+        const sAttr0 = xf ? ` s="${xf}"` : colXf(c) ? ' s="0"' : '';
         const dt = dataTableAt.get(k);
-        const f = dt ? dataTableXml(dt) : formula === null ? '' : arrayRef ? `<f t="array" ref="${arrayRef}">${xml(formula)}</f>` : `<f>${xml(formula)}</f>`;
+        const blockRef = arrayRef ?? legacyRef;
+        const f = dt ? dataTableXml(dt) : formula === null ? '' : blockRef ? `<f t="array" ref="${blockRef}">${xml(formula)}</f>` : `<f>${xml(formula)}</f>`;
         // a dynamic array formula's cell points at the metadata that says so
-        const sAttr = arrayRef ? `${sAttr0} cm="1"` : sAttr0;
+        // a picture placed in the cell (a rich value), while the cell is as it was read
+        const vm = book.excel?.richValues ? pointerOf(cell) : undefined;
+        const sAttr = (arrayRef ? `${sAttr0} cm="1"` : sAttr0) + (vm !== undefined ? ` vm="${vm}"` : '');
         let body = '';
         if (v === null || v === '') {
           body = f ? `<c r="${ref}"${sAttr}>${f}</c>` : sAttr ? `<c r="${ref}"${sAttr}/>` : '';
         } else if (typeof v === 'number') {
-          wrote = v;
-          body = `<c r="${ref}"${sAttr}>${f}<v>${Number.isFinite(v) ? String(v) : 0}</v></c>`;
+          // a workbook counting from 1904 holds its dates 1462 lower than they are held here
+          wrote = book.date1904 && holdsDate(style?.numFmt, v) ? v - DAYS_1900_TO_1904 : v;
+          body = `<c r="${ref}"${sAttr}>${f}<v>${Number.isFinite(wrote) ? String(wrote) : 0}</v></c>`;
         } else if (typeof v === 'boolean') {
           wrote = v;
           body = `<c r="${ref}"${sAttr} t="b">${f}<v>${v ? 1 : 0}</v></c>`;
         } else if (isError(v)) {
           const code = (v as CellError).code;
           wrote = code;
-          body = `<c r="${ref}"${sAttr} t="e">${f}<v>${EXCEL_ERRORS.includes(code) ? code : '#VALUE!'}</v></c>`;
+          body = `<c r="${ref}"${sAttr} t="e">${f}<v>${FILE_ERRORS.includes(code) ? code : '#VALUE!'}</v></c>`;
         } else {
           wrote = excelCellText(v as string);
           body = f
@@ -616,6 +768,8 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
             : `<c r="${ref}"${sAttr} t="s"><v>${strings.index(wrote, chem, wrote === v ? runsOf(cell) : undefined, style)}</v></c>`;
         }
         if (entry) entry.wrote = wrote;
+        // (a rich value's cell holds the error Excel shows where it can't show the value)
+        if (vm !== undefined && !f && typeof v === 'string' && FILE_ERRORS.includes(v)) body = `<c r="${ref}"${sAttr} t="e"><v>${v}</v></c>`;
         if (body) cells.push(body);
 
         // the structure's picture, over the cell (or merged block)
@@ -648,7 +802,7 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
                 `<xdr:twoCellAnchor editAs="oneCell">` +
                 `<xdr:from><xdr:col>${from.col}</xdr:col><xdr:colOff>${from.colOff * PX}</xdr:colOff><xdr:row>${from.row}</xdr:row><xdr:rowOff>${from.rowOff * PX}</xdr:rowOff></xdr:from>` +
                 `<xdr:to><xdr:col>${end.i}</xdr:col><xdr:colOff>${Math.round(end.off * PX)}</xdr:colOff><xdr:row>${endR.i}</xdr:row><xdr:rowOff>${Math.round(endR.off * PX)}</xdr:rowOff></xdr:to>` +
-                `<xdr:pic><xdr:nvPicPr><xdr:cNvPr id="${n}" name="Structure ${ref}" descr="${xml(smiles)}"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr>` +
+                `<xdr:pic><xdr:nvPicPr><xdr:cNvPr id="${n}" name="Structure ${ref}" descr="${xmlAttr(smiles)}"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr>` +
                 `<xdr:blipFill><a:blip r:embed="${id}"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill>` +
                 `<xdr:spPr><a:xfrm><a:off x="${(x + 1) * PX}" y="${(y + 1) * PX}"/><a:ext cx="${(w - 2) * PX}" cy="${(h - 2) * PX}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic>` +
                 `<xdr:clientData/></xdr:twoCellAnchor>`,
@@ -657,19 +811,30 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
           }
         }
       }
+      // a row grown to fit its wrapped text is one Excel fits again when the text changes (no customHeight)
       const custom = s.rowHeights.get(r) ?? auto.get(r);
-      const attrs = `${custom !== undefined ? ` ht="${ptFromPx(custom)}" customHeight="1"` : ''}${s.hiddenRows.has(r) ? ' hidden="1"' : ''}${outlineAttrs(s.rowLevels, s.hiddenRows, r, !!s.outline?.summaryAbove)}`;
-      if (cells.length || attrs) rowXml.push(`<row r="${r + 1}"${attrs}>${cells.join('')}</row>`);
+      const fixed = s.rowHeights.has(r) || pictureRows.has(r);
+      // (a shown row of a zeroHeight sheet says its height, to be sure Excel shows it)
+      const attrs = `${custom !== undefined ? ` ht="${ptFromPx(custom)}"${fixed ? ' customHeight="1"' : ''}` : zero && !s.hiddenRows.has(r) ? ` ht="${own.fileRowHeight!.pt}"` : ''}${s.hiddenRows.has(r) ? ' hidden="1"' : ''}${outlineAttrs(s.rowLevels, s.hiddenRows, r, !!s.outline?.summaryAbove)}`;
+      if (cells.length || attrs || zero) rowXml.push(`<row r="${r + 1}"${attrs}>${cells.join('')}</row>`);
     }
 
     // columns: widths, hidden, and whole-column formatting
-    const colKeys = [...new Set([...s.colWidths.keys(), ...s.hiddenCols.keys(), ...s.colStyles.keys(), ...s.colLevels.keys()])].sort((a, b) => a - b);
-    const colXml = colKeys.map((c) => {
+    // (columns pushed past the sheet's last by inserting ones are gone, as in Excel)
+    const colKeys = [...new Set([...s.colWidths.keys(), ...s.hiddenCols.keys(), ...s.colStyles.keys(), ...s.colLevels.keys()])].filter((c) => c < MAX_COLS).sort((a, b) => a - b);
+    const colAttrs = colKeys.map((c): [number, string] => {
       const w = s.colWidths.get(c);
-      const st = s.colStyles.get(c);
-      const xf = st ? styles.xf(st) : 0;
-      return `<col min="${c + 1}" max="${c + 1}" width="${widthFromPx(w ?? DEFAULT_COL_W)}"${w !== undefined ? ' customWidth="1"' : ''}${s.hiddenCols.has(c) ? ' hidden="1"' : ''}${xf ? ` style="${xf}"` : ''}${outlineAttrs(s.colLevels, s.hiddenCols, c, !!s.outline?.summaryLeft)}/>`;
+      const xf = colXf(c);
+      return [c, ` width="${widthFromPx(w ?? DEFAULT_COL_W)}"${w !== undefined ? ' customWidth="1"' : ''}${s.hiddenCols.has(c) ? ' hidden="1"' : ''}${xf ? ` style="${xf}"` : ''}${outlineAttrs(s.colLevels, s.hiddenCols, c, !!s.outline?.summaryLeft)}`];
     });
+    // neighboring columns set the same way as one range, as Excel writes them (to the end of the sheet: min="8" max="16384")
+    const colXml: string[] = [];
+    for (let i = 0; i < colAttrs.length;) {
+      let j = i;
+      while (j + 1 < colAttrs.length && colAttrs[j + 1][0] === colAttrs[j][0] + 1 && colAttrs[j + 1][1] === colAttrs[i][1]) j++;
+      colXml.push(`<col min="${colAttrs[i][0] + 1}" max="${colAttrs[j][0] + 1}"${colAttrs[i][1]}/>`);
+      i = j + 1;
+    }
 
     const used = s.lastRow >= 0 ? `A1:${cellName(Math.max(s.lastRow, 0), Math.max(s.lastCol, 0))}` : 'A1';
     const fr = s.frozen.rows, fc = s.frozen.cols;
@@ -785,7 +950,7 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
       const vid = pkg.relate(sheetRels, NOTES_REL.vml, `../drawings/vmlDrawing${notesNo}.vml`);
       drawingXml += `<legacyDrawing r:id="${vid}"/>`;
     }
-    const dvXml = standIn ? '' : validationsXml(s.validations, excelFunctionNames, longList);
+    const dvXml = standIn ? '' : validationsXml(s.validations, (f) => excelFunctionNames(f, book.excelPrefixes), longList, book.date1904 ? DAYS_1900_TO_1904 : 0);
     // links (Insert > Link): a place in the workbook as Excel's location, anything else through a relationship
     const linkXml: string[] = [];
     for (const [k, c] of s.cells) {
@@ -800,21 +965,27 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
     printTitleNames.push(...printNames(own.pageSetup, s.name, si));
     const code = vba && own.codeName ? ` codeName="${xmlAttr(own.codeName)}"` : '';
     const outlinePr = outlinePrXml(s);
-    const sheetPr = s.filter && !filterTable || page.fitToPage || outlinePr || code
-      ? `<sheetPr${code}${s.filter && !filterTable ? ' filterMode="1"' : ''}>${outlinePr}${page.fitToPage ? '<pageSetUpPr fitToPage="1"/>' : ''}</sheetPr>`
+    const tabColor = own.excel?.tabColor ?? '';
+    const sheetPr = s.filter && !filterTable || page.fitToPage || outlinePr || code || tabColor
+      ? `<sheetPr${code}${s.filter && !filterTable ? ' filterMode="1"' : ''}>${tabColor}${outlinePr}${page.fitToPage ? '<pageSetUpPr fitToPage="1"/>' : ''}</sheetPr>`
       : '';
+    // where the sheet was scrolled to and what was selected, and the like, as the file had them
+    const view = keptPanes(own.excel, fr || fc ? paneKey(fr, fc, true) : paneKey(sp?.rows ?? 0, sp?.cols ?? 0), pane);
     const sparkExt = standIn ? '' : sparklinesExt(s.sparklines, s.name);
     pkg.add(path,
       `${HEAD}<worksheet xmlns="${MAIN}" xmlns:r="${RNS}">` +
       `${sheetPr}<dimension ref="${used}"/>` +
-      `<sheetViews><sheetView${sheetViewAttrs(own.viewOpts)}${si === book.active ? ' tabSelected="1"' : ''} workbookViewId="0">${pane}</sheetView></sheetViews>` +
-      `<sheetFormatPr defaultRowHeight="15"${outlineLevelAttrs(s)}/>` +
+      `<sheetViews><sheetView${sheetViewAttrs(own.viewOpts)}${own.excel?.viewAttrs ?? ''}${si === book.active ? ' tabSelected="1"' : ''} workbookViewId="0">${view}</sheetView></sheetViews>` +
+      `<sheetFormatPr defaultRowHeight="${own.fileRowHeight?.pt ?? 15}"${own.fileRowHeight?.custom ? ' customHeight="1"' : ''}${own.fileRowHeight?.zero ? ' zeroHeight="1"' : ''}${outlineLevelAttrs(s)}/>` +
       (colXml.length ? `<cols>${colXml.join('')}</cols>` : '') +
-      `<sheetData>${rowXml.join('')}</sheetData>${filterXml}${standIn ? '' : customSheetViewsXml(book, own)}${merges}${cfXml}${dvXml}${hyperlinks}` +
-      `${page.printOptions}${page.pageMargins}${page.pageSetup}${page.headerFooter}${page.breaks}${drawingXml}${tableParts}${sparkExt ? `<extLst>${sparkExt}</extLst>` : ''}</worksheet>`,
+      `<sheetData>${rowXml.join('')}</sheetData>${sheetProtectionXml(own.excel)}${filterXml}${own.excel?.sortState ?? ''}${standIn ? '' : customSheetViewsXml(book, own)}${merges}${cfXml}${dvXml}${hyperlinks}` +
+      `${page.printOptions}${page.pageMargins}${page.pageSetup}${page.headerFooter}${page.breaks}${own.excel?.ignoredErrors ?? ''}${drawingXml}${tableParts}${sparkExt ? `<extLst>${sparkExt}</extLst>` : ''}</worksheet>`,
       CT.sheet);
     const rid = pkg.relate('xl/workbook.xml', RELS.worksheet, `worksheets/sheet${si + 1}.xml`);
     sheetEntries.push(`<sheet name="${xml(s.name)}" sheetId="${si + 1}" r:id="${rid}"/>`);
+    // the columns and rows the part points at, in a hidden name Excel moves when rows and columns are put in or taken out
+    const grid = gridOf(ms, s.name);
+    if (grid) { ms.grid = grid; gridNames.push(gridNameXml(grid, s.name, si)); }
     model.sheets.push(ms);
   }
   if (lists.length) {
@@ -834,10 +1005,12 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
 
   pkg.relate('xl/workbook.xml', RELS.styles, 'styles.xml');
   pkg.add('xl/styles.xml', styles.toXml(), CT.styles);
-  // the theme, when it isn't Excel's own default
-  if (book.theme) {
+  // the theme: the file's own while it isn't changed here (its fonts for each script, effects and
+  // the rest kept), else made from the workbook's when it isn't Excel's own default
+  const keptTheme = book.kept?.theme && book.kept.theme.look === JSON.stringify(book.theme) ? book.kept.theme.xml : null;
+  if (keptTheme || book.theme) {
     pkg.relate('xl/workbook.xml', RELS.theme, 'theme/theme1.xml');
-    pkg.add('xl/theme/theme1.xml', themeXml(book.theme), CT.theme);
+    pkg.add('xl/theme/theme1.xml', keptTheme ?? themeXml(book.theme!), CT.theme);
   }
   pkg.relate('xl/workbook.xml', RELS.sharedStrings, 'sharedStrings.xml');
   pkg.add('xl/sharedStrings.xml', strings.toXml(), CT.strings);
@@ -853,26 +1026,36 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
   pkg.add('customXml/itemProps1.xml', `${HEAD}<ds:datastoreItem ds:itemID="{6D1F3A52-6C1B-4D5E-9A57-3C0B1E0C1A01}" xmlns:ds="http://schemas.openxmlformats.org/officeDocument/2006/customXml"><ds:schemaRefs><ds:schemaRef ds:uri="${MODEL_NS}"/></ds:schemaRefs></ds:datastoreItem>`, CT.itemProps);
   // other programs' data kept from the file read: custom XML, custom properties, add-ins' settings
   writeKeptParts(pkg, book.kept, { main: 'xl/workbook.xml', firstItem: 2 });
+  // links to other workbooks, in the order their formulas number them ([1]Sheet1!A1)
+  const linkIds = book.externalLinks.map((t) => writeTree(pkg, t, 'xl/workbook.xml')).filter((id): id is string => !!id);
 
-  if (anyDynamic) {
+  // cell metadata (dynamic arrays) and value metadata (rich values, with their parts)
+  const rich = book.excel?.richValues;
+  if (rich) writeRichParts(pkg, rich.trees, 'xl/workbook.xml');
+  if (anyDynamic || rich) {
+    const dyn = anyDynamic ? DYNAMIC_ARRAY_METADATA : null;
+    const values = rich ? richMetadataXml(rich.metadata, dyn ? [dyn.type] : []) : null;
+    const types = [...(dyn ? [dyn.type] : []), ...(values?.types ?? [])];
     pkg.relate('xl/workbook.xml', RELS.metadata, 'metadata.xml');
-    pkg.add('xl/metadata.xml', HEAD + DYNAMIC_ARRAY_METADATA, CT.metadata);
+    pkg.add('xl/metadata.xml', `${HEAD}<metadata xmlns="${MAIN}" xmlns:xda="http://schemas.microsoft.com/office/spreadsheetml/2017/dynamicarray">` +
+      `<metadataTypes count="${types.length}">${types.join('')}</metadataTypes>${dyn?.future ?? ''}${values?.future ?? ''}${dyn?.cells ?? ''}${values?.values ?? ''}</metadata>`, CT.metadata);
   }
 
   // defined names (Name Manager): a sheet's own carry its place in the list of sheets
   const nameXml = book.liveNames().map((n) => {
     const local = n.sheet ? ` localSheetId="${book.sheets.indexOf(n.sheet)}"` : '';
     const f = n.formula.startsWith('=') ? n.formula : '=' + n.formula;
-    return `<definedName name="${xmlAttr(n.name)}"${local}${n.comment ? ` comment="${xmlAttr(n.comment)}"` : ''}${n.hidden ? ' hidden="1"' : ''}>${xml(excelFunctionNames(fileFormula(f, true)))}</definedName>`;
+    return `<definedName name="${xmlAttr(n.name)}"${local}${n.comment ? ` comment="${xmlAttr(n.comment)}"` : ''}${n.hidden ? ' hidden="1"' : ''}>${xml(excelFunctionNames(fileFormula(f, true), book.excelPrefixes))}</definedName>`;
   });
-  const allNames = [...filterNames, ...printTitleNames, ...nameXml];
+  const allNames = [...filterNames, ...printTitleNames, ...nameXml, ...gridNames];
   pkg.add('xl/workbook.xml',
-    `${HEAD}<workbook xmlns="${MAIN}" xmlns:r="${RNS}"><workbookPr${vba?.codeName ? ` codeName="${xmlAttr(vba.codeName)}"` : ''}/>` +
+    `${HEAD}<workbook xmlns="${MAIN}" xmlns:r="${RNS}">${book.excel?.fileSharing ?? ''}<workbookPr${book.date1904 ? ' date1904="1"' : ''}${vba?.codeName ? ` codeName="${xmlAttr(vba.codeName)}"` : ''}/>${book.excel?.protection ?? ''}` +
     `<bookViews><workbookView activeTab="${book.active}"/></bookViews>` +
     `<sheets>${sheetEntries.join('')}</sheets>` +
+    (linkIds.length ? `<externalReferences>${linkIds.map((id) => `<externalReference r:id="${id}"/>`).join('')}</externalReferences>` : '') +
     (allNames.length ? `<definedNames>${allNames.join('')}</definedNames>` : '') +
     // formulas are worked out again when Excel opens the file
-    `<calcPr calcId="191029" fullCalcOnLoad="1"/>` + customWorkbookViewsXml(book) +
+    `<calcPr calcId="191029"${book.excel?.calcAttrs ?? ''} fullCalcOnLoad="1"/>` + customWorkbookViewsXml(book) +
     (pivotCaches.length ? `<pivotCaches>${pivotCaches.join('')}</pivotCaches>` : '') + '</workbook>',
     opts.macros ? CT.workbookMacros : CT.workbook);
   if (vba) {
@@ -888,10 +1071,9 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
   pkg.relate('', REL.officeDocument, 'xl/workbook.xml');
   pkg.relate('', REL.coreProps, 'docProps/core.xml');
   pkg.relate('', REL.extendedProps, 'docProps/app.xml');
-  const now = new Date().toISOString().replace(/\.\d+Z$/, 'Z');
-  pkg.add('docProps/core.xml', `${HEAD}<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:dcmitype="http://purl.org/dc/dcmitype/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">` +
-    `<dcterms:created xsi:type="dcterms:W3CDTF">${now}</dcterms:created><dcterms:modified xsi:type="dcterms:W3CDTF">${now}</dcterms:modified></cp:coreProperties>`, CT.core);
-  pkg.add('docProps/app.xml', `${HEAD}<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes"><Application>Chem Illustrator</Application></Properties>`, CT.app);
+  // the workbook's properties (File > Info) as the file had them, brought up to date
+  pkg.add('docProps/core.xml', corePropsXml(book.kept?.docProps), CT.core);
+  pkg.add('docProps/app.xml', appPropsXml(book.kept?.docProps), CT.app);
   return pkg.build();
 }
 
@@ -942,22 +1124,45 @@ function readColour(el: Element | null, theme: string[]): string | undefined {
   return '#' + (tint ? applyTint(hex, tint) : hex).toLowerCase();
 }
 
+/** Horizontal alignments shown as another here: centered across the selection or spread out as centered, justified and filled as general. */
+const SHOWN_H: Record<string, CellStyle['align'] | null> = { centerContinuous: 'center', distributed: 'center', justify: null, fill: null };
+
 const BORDER_STYLES: Record<string, BorderStyle> = {
   thin: 'thin', hair: 'thin', medium: 'medium', thick: 'thick', double: 'double', dashed: 'dashed', mediumDashed: 'dashed',
   dashDot: 'dashed', mediumDashDot: 'dashed', dashDotDot: 'dotted', mediumDashDotDot: 'dashed', slantDashDot: 'dashed', dotted: 'dotted',
 };
 
-/** The cell formats of a file (cellXfs), as cell styles. */
-function readStyles(doc: Document | null, theme: string[]): (CellStyle | undefined)[] {
+/** The parts of a font Excel writes, kept from the Normal style's (font 0) to write it back. */
+const FONT_PARTS = new Set(['b', 'i', 'strike', 'condense', 'extend', 'outline', 'shadow', 'u', 'vertAlign', 'sz', 'color', 'name', 'family', 'charset', 'scheme']);
+
+/** A font element as written again here (its known parts and their values only). */
+function fontXml(f: Element): string {
+  return `<font>${Array.from(f.children).filter((k) => FONT_PARTS.has(k.localName)).map((k) =>
+    `<${k.localName}${Array.from(k.attributes).filter((a) => !a.prefix && /^(val|rgb|theme|indexed|tint|auto)$/.test(a.name)).map((a) => ` ${a.name}="${xmlAttr(a.value)}"`).join('')}/>`).join('')}</font>`;
+}
+
+/**
+ * The cell formats of a file (cellXfs), as cell styles: fonts as they show (a cell in the theme's
+ * body font at 11 pt has no font or size of its own here). `faces` are the theme's fonts; the
+ * Normal style's font as written goes in `kept`.
+ */
+function readStyles(doc: Document | null, theme: string[], faces: { minor: string; major: string } = { minor: 'Calibri', major: 'Calibri Light' }, kept: ExcelStyles = {}): (CellStyle | undefined)[] {
   if (!doc) return [];
   const root = doc.documentElement;
   const formats = new Map<number, string>(Object.entries(BUILTIN_FORMATS).map(([k, v]) => [Number(k), v]));
-  for (const f of kids(kid(root, 'numFmts'), 'numFmt')) formats.set(Number(f.getAttribute('numFmtId')), f.getAttribute('formatCode') ?? 'General');
+  for (const f of kids(kid(root, 'numFmts'), 'numFmt')) {
+    const id = Number(f.getAttribute('numFmtId')), code = f.getAttribute('formatCode') ?? 'General';
+    // a code of the file's own that is also a built-in one's stays the file's own when saved
+    if (!(id in BUILTIN_FORMATS) && Object.values(BUILTIN_FORMATS).includes(code)) (kept.numFmts ??= []).push(code);
+    formats.set(id, code);
+  }
   const fontEls = kids(kid(root, 'fonts'), 'font');
   const val = (el: Element, name: string) => kid(el, name)?.getAttribute('val');
   const on = (el: Element, name: string) => { const k = kid(el, name); return !!k && k.getAttribute('val') !== '0' && k.getAttribute('val') !== 'false' && k.getAttribute('val') !== 'none'; };
   const base = fontEls[0];
-  const baseName = base ? val(base, 'name') ?? 'Calibri' : 'Calibri';
+  // a font in the theme's scheme shows the theme's font, whatever name it was written with
+  const faceOf = (f: Element) => (val(f, 'scheme') === 'minor' ? faces.minor : val(f, 'scheme') === 'major' ? faces.major : val(f, 'name') ?? undefined);
+  const baseFace = (base && faceOf(base)) || faces.minor;
   const baseSize = base ? Number(val(base, 'sz') ?? 11) : 11;
   const fonts: CellStyle[] = fontEls.map((f) => {
     const st: CellStyle = {};
@@ -965,12 +1170,15 @@ function readStyles(doc: Document | null, theme: string[]): (CellStyle | undefin
     if (on(f, 'i')) st.italic = true;
     if (on(f, 'u')) st.underline = true;
     const sz = Number(val(f, 'sz') ?? baseSize);
-    if (sz !== baseSize || baseSize !== 11) st.size = sz === 11 ? undefined : sz;
+    if (sz !== 11 && sz > 0) st.size = sz;
     const color = readColour(kid(f, 'color'), theme);
     if (color && color !== '#000000') st.color = color;
-    const name = val(f, 'name');
+    const face = faceOf(f) || baseFace;
     // the theme's body font is no font of the cell's own
-    if (name && name !== baseName && name !== 'Calibri' && val(f, 'scheme') !== 'minor') st.font = name;
+    if (face.toLowerCase() !== faces.minor.toLowerCase()) st.font = face;
+    // raised, lowered or struck through: not shown here, written back
+    const va = val(f, 'vertAlign');
+    if (va === 'superscript' || va === 'subscript' || on(f, 'strike')) st.excel = { ...(va === 'superscript' || va === 'subscript' ? { vertAlign: va } : {}), ...(on(f, 'strike') ? { strike: true as const } : {}) };
     return st;
   });
   const fills: (string | undefined)[] = kids(kid(root, 'fills'), 'fill').map((f) => {
@@ -978,6 +1186,14 @@ function readStyles(doc: Document | null, theme: string[]): (CellStyle | undefin
     const type = p?.getAttribute('patternType');
     if (!p || !type || type === 'none') return undefined;
     return readColour(kid(p, 'fgColor'), theme) ?? (type === 'solid' ? undefined : readColour(kid(p, 'bgColor'), theme));
+  });
+  // patterned fills (shown as the plain fill), with their colors, to write back
+  const patterns: ExcelLook['pattern'][] = kids(kid(root, 'fills'), 'fill').map((f) => {
+    const p = kid(f, 'patternFill');
+    const type = p?.getAttribute('patternType');
+    if (!p || !type || type === 'none' || type === 'solid') return undefined;
+    const fg = readColour(kid(p, 'fgColor'), theme), bg = readColour(kid(p, 'bgColor'), theme);
+    return { type, ...(fg ? { fg } : {}), ...(bg ? { bg } : {}) };
   });
   const borders: CellStyle['borders'][] = kids(kid(root, 'borders'), 'border').map((b) => {
     const out: Partial<Record<Side, Border>> = {};
@@ -988,13 +1204,26 @@ function readStyles(doc: Document | null, theme: string[]): (CellStyle | undefin
     }
     return Object.keys(out).length ? out : undefined;
   });
-  // the named cell styles Excel built in (Good, Heading 1…), by their base format's number
+  // border styles shown as others here (hair as thin, dashDot as dashed…), to write back
+  const borderNames: ExcelLook['borders'][] = kids(kid(root, 'borders'), 'border').map((b) => {
+    const out: Partial<Record<Side, string>> = {};
+    for (const side of ['left', 'right', 'top', 'bottom'] as Side[]) {
+      const style = kid(b, side)?.getAttribute('style');
+      if (style && BORDER_STYLES[style] && BORDER_STYLES[style] !== style) out[side] = style;
+    }
+    return Object.keys(out).length ? out : undefined;
+  });
+  // the named cell styles (Good, Heading 1, Hyperlink, the file's own…), by their base format's number
   const named = new Map<number, string>();
+  const namedEls = new Map<number, Element>();
+  const builtinOf = (cs: Element) => (cs.getAttribute('builtinId') !== null ? Number(cs.getAttribute('builtinId')) : undefined);
   for (const cs of kids(kid(root, 'cellStyles'), 'cellStyle')) {
-    const def = cellStyleNamed(cs.getAttribute('name') ?? '') ?? CELL_STYLES.find((d) => cs.getAttribute('builtinId') !== null && d.builtinId === Number(cs.getAttribute('builtinId')));
-    if (def && def.name !== 'Normal') named.set(Number(cs.getAttribute('xfId') ?? -1), def.name);
+    const key = namedStyleKey(cs.getAttribute('name') ?? '', builtinOf(cs));
+    const xfId = Number(cs.getAttribute('xfId') ?? -1);
+    if (cs.getAttribute('name') && key !== 'Normal' && builtinOf(cs) !== 0 && xfId > 0 && !named.has(xfId)) { named.set(xfId, key); namedEls.set(xfId, cs); }
+    else if (builtinOf(cs) === 0 && cs.getAttribute('name') && cs.getAttribute('name') !== 'Normal') kept.normalName = cs.getAttribute('name')!;
   }
-  return kids(kid(root, 'cellXfs'), 'xf').map((x) => {
+  const xfLook = (x: Element): CellStyle | undefined => {
     const st: CellStyle = { ...fonts[Number(x.getAttribute('fontId') ?? 0)] };
     const styleName = named.get(Number(x.getAttribute('xfId') ?? 0));
     if (styleName) st.cellStyle = styleName;
@@ -1018,8 +1247,40 @@ function readStyles(doc: Document | null, theme: string[]): (CellStyle | undefin
       const rot = readTextRotation(a.getAttribute('textRotation'));
       if (rot) st.rotate = rot;
     }
+    // Format Cells > Protection, for Excel (cells are locked, formulas shown, unless it says otherwise)
+    const prot = kid(x, 'protection');
+    if (prot?.getAttribute('locked') === '0' || prot?.getAttribute('locked') === 'false') st.unlocked = true;
+    if (isOn(prot?.getAttribute('hidden'))) st.formulaHidden = true;
+    // what shows here as the nearest thing, or not at all, written back as it was
+    const pattern = patterns[Number(x.getAttribute('fillId') ?? 0)], sides = borderNames[Number(x.getAttribute('borderId') ?? 0)];
+    const h = a?.getAttribute('horizontal'), v = a?.getAttribute('vertical'), order = Number(a?.getAttribute('readingOrder') ?? 0);
+    const ex: ExcelLook = {
+      ...st.excel,
+      ...(pattern ? { pattern } : {}),
+      ...(sides ? { borders: sides } : {}),
+      ...(h && SHOWN_H[h] !== undefined ? { horizontal: h } : {}),
+      ...(v === 'justify' || v === 'distributed' ? { vertical: v } : {}),
+      ...(isOn(a?.getAttribute('shrinkToFit')) ? { shrinkToFit: true as const } : {}),
+      ...(order === 1 || order === 2 ? { readingOrder: order } : {}),
+    };
+    if (Object.keys(ex).length) st.excel = ex;
     return Object.keys(st).some((k) => (st as Record<string, unknown>)[k] !== undefined) ? st : undefined;
-  });
+  };
+  const xfs = kids(kid(root, 'cellXfs'), 'xf').map(xfLook);
+  // each named cell style's look and settings, to save back
+  const styleXfs = kids(kid(root, 'cellStyleXfs'), 'xf');
+  for (const [xfId, cs] of namedEls) {
+    const x = styleXfs[xfId];
+    const attrs = (el: Element | undefined, keep: RegExp) => Array.from(el?.attributes ?? []).filter((a) => !a.prefix && keep.test(a.name)).map((a) => ` ${a.name}="${xmlAttr(a.value)}"`).join('');
+    (kept.named ??= []).push({
+      name: cs.getAttribute('name')!, ...(builtinOf(cs) !== undefined ? { builtinId: builtinOf(cs) } : {}),
+      attrs: attrs(cs, /^(customBuiltin|hidden|iLevel)$/), look: (x && xfLook(x)) || {}, apply: attrs(x, /^apply/),
+    });
+  }
+  // the Normal style's font as written, when cells with no format of their own don't look as they do here
+  const font0 = fontEls[Number(kids(kid(root, 'cellXfs'), 'xf')[0]?.getAttribute('fontId') ?? 0)];
+  if (xfs[0] && font0) kept.normalFont = fontXml(font0);
+  return xfs;
 }
 
 /** The theme's colours, in the order cell formats number them (light 1, dark 1, light 2, dark 2, accents…). */
@@ -1090,7 +1351,7 @@ function cellRuns(runs: FileRun[] | undefined, style: CellStyle | undefined, min
   const out: TextRun[] = runs.map((r) => {
     const l = r.look;
     if (!l) return { text: r.text };
-    const font = l.font && !l.minor && l.font !== (style?.font ?? minorFont) && !(l.font === 'Calibri' && !style?.font) ? l.font : undefined;
+    const font = l.font && !l.minor && l.font !== (style?.font ?? minorFont) ? l.font : undefined;
     const color = l.color && l.color !== (style?.color ?? '#000000') ? l.color : undefined;
     return {
       text: r.text,
@@ -1126,7 +1387,7 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
   try {
     pkg = new PackageReader(bytes);
   } catch (e) {
-    throw e instanceof ZipTooBigError ? e : new Error('This is not an Excel workbook (or it is damaged).');
+    throw e instanceof PackageError ? e : new Error('This is not an Excel workbook (or it is damaged).');
   }
   const wbPath = pkg.relOfType('', REL.officeDocument) ?? 'xl/workbook.xml';
   const wbDoc = pkg.xml(wbPath);
@@ -1135,16 +1396,25 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
   const rels = pkg.rels(wbPath);
   const warnings: string[] = [];
   const notKept = new Set<string>();
-  if (isOn(kid(root, 'workbookPr')?.getAttribute('date1904'))) warnings.push('This workbook counts dates from 1904 (an old Mac setting): dates may show four years early.');
+  // dates counted from 1904 (the old Mac default) are held here counting from 1900, and saved back as they were
+  const date1904 = isOn(kid(root, 'workbookPr')?.getAttribute('date1904'));
+  const bookKept = readBookKept(root);
+  // pictures placed in cells and other rich values: their parts and the metadata cells point into
+  const richValues = readRichValues(pkg, wbPath, [...rels.values()].find((r) => r.type === RELS.metadata)?.target ?? null);
+  const pointers = new Map<Sheet, Map<number, number>>();
+  let richCells = 0;
+  // controls, data connections, query tables, background pictures, macro sheets and XML maps: named on opening
+  const leftOut = new LeftOut();
 
   const relTarget = (type: string) => [...rels.values()].find((r) => r.type === type)?.target ?? null;
   const themeDoc = relTarget(RELS.theme) ? pkg.xml(relTarget(RELS.theme)!) : null;
   const theme = readTheme(themeDoc);
   const workbookTheme = readWorkbookTheme(themeDoc);
   const stylesDoc = relTarget(RELS.styles) ? pkg.xml(relTarget(RELS.styles)!) : null;
-  const xfs = readStyles(stylesDoc, theme);
-  // the workbook's own font (the Normal style's), which a run of rich text in it isn't set apart by
-  const baseFont = kid(kids(kid(stylesDoc?.documentElement ?? null, 'fonts'), 'font')[0] ?? null, 'name')?.getAttribute('val') ?? themeOf(workbookTheme).minor;
+  const excelStyles: ExcelStyles = {};
+  const xfs = readStyles(stylesDoc, theme, themeOf(workbookTheme), excelStyles);
+  // the font cells show with none of their own (the theme's body font), which a run of rich text in one isn't set apart by
+  const baseFont = themeOf(workbookTheme).minor;
   const colourOf = (el: Element | null) => readColour(el, theme);
   const dxfs = readDxfs(stylesDoc, colourOf);
   const personsPath = relTarget(NOTES_REL.persons);
@@ -1167,19 +1437,32 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
   }
 
   // (the hidden sheet saved here to hold long drop-down lists is not one of the workbook's own)
-  const sheetEls = kids(kid(root, 'sheets'), 'sheet').filter((el) => !model?.listSheet || el.getAttribute('name') !== model.listSheet);
+  const allSheetEls = kids(kid(root, 'sheets'), 'sheet');
+  const sheetEls = allSheetEls.filter((el) => !model?.listSheet || el.getAttribute('name') !== model.listSheet);
   if (!sheetEls.length) throw new Error('This workbook has no sheets.');
   const names = sheetEls.map((s, i) => s.getAttribute('name') || `Sheet${i + 1}`);
   const book = new Workbook(names);
+  book.date1904 = date1904;
+  // the Normal style, when cells with no format of their own don't look as they do here
+  book.normalStyle = xfs[0];
+  if (Object.keys(excelStyles).length) book.excelStyles = excelStyles;
   const activeTab = Number(kid(root, 'bookViews', 'workbookView')?.getAttribute('activeTab') ?? 0);
   if (sheetEls.some((s) => s.getAttribute('state') === 'hidden' || s.getAttribute('state') === 'veryHidden')) notKept.add('hidden sheets (shown here)');
+  leftOut.workbook(pkg, wbPath, sheetEls.map((el) => rels.get(rAttr(el, 'id') ?? '')?.type ?? ''));
   const definedNames = kids(kid(root, 'definedNames'), 'definedName');
   const nameSet = new Set(definedNames.map((d) => (d.getAttribute('name') ?? '').toUpperCase()));
   const nameCase = new Map(definedNames.map((d) => [(d.getAttribute('name') ?? '').toUpperCase(), d.getAttribute('name') ?? '']));
 
   if (model?.drawingStyle) book.drawingStyle = { ...book.drawingStyle, ...model.drawingStyle };
   // other programs' data (custom XML, custom properties, add-ins' settings), to save back
-  book.kept = readKeptParts(pkg, { main: wbPath, ours: (r) => r.namespaceURI === MODEL_NS });
+  book.kept = readKeptParts(pkg, { main: wbPath, ours: (r) => r.namespaceURI === MODEL_NS, theme: true });
+  if (book.kept?.theme) book.kept.theme.look = JSON.stringify(workbookTheme);
+  // links to other workbooks (formulas reading [1]Sheet1!A1), kept as they are to save back in the same order
+  for (const ref of kids(kid(root, 'externalReferences'), 'externalReference')) {
+    const r = rels.get(rAttr(ref, 'id') ?? '');
+    const tree = r && !r.external ? readTree(pkg, r.target) : null;
+    if (r && tree) book.externalLinks.push({ from: 'main', type: r.type, path: r.target, ...tree });
+  }
   // another program's text is shown as it wrote it (Q1 stays Q1); ours as it was made here
   book.autoChem = !!model && model.autoChem !== false;
 
@@ -1200,7 +1483,16 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
   const filters: { s: Sheet; f: Filter }[] = [];
   const sheetDocs: { name: string; ws: Element | null }[] = [];
   let unknownFormulas = 0;
+  /** Formulas reading other workbooks ([1]Sheet1!A1): kept for Excel, not worked out here. */
+  let linkedFormulas = 0;
+  const countFormula = (text: string) => {
+    notePrefixes(text, book.excelPrefixes);
+    if (readsOtherWorkbook(text)) linkedFormulas++;
+    else if (usesUnknownFunction(text, nameSet)) unknownFormulas++;
+  };
   let foreignPictures = 0;
+  // the values formulas had in the file, for those this program can't work out
+  const formulaValues = new Map<Sheet, Map<number, FileValue>>();
   const restored = { structures: 0, changed: 0 };
   book.build(() => {
     sheetEls.forEach((el, si) => {
@@ -1213,6 +1505,8 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
       const raw = new Map<number, Wrote>();
       const codeName = kid(ws, 'sheetPr')?.getAttribute('codeName');
       if (codeName) s.codeName = codeName;
+      // protection and the like, for Excel
+      s.excel = readSheetKept(ws);
       const sheetView = kid(ws, 'sheetViews', 'sheetView');
       const viewOpts = readSheetViewOpts(sheetView);
       if (viewOpts) s.setViewOpts(viewOpts);
@@ -1221,19 +1515,30 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
 
       // columns
       const fmtPr = kid(ws, 'sheetFormatPr');
+      // the height of rows with none of their own (14.25 in an Aptos Narrow workbook), to save back
+      const defH = Number(fmtPr?.getAttribute('defaultRowHeight') ?? NaN);
+      // (zeroHeight: rows the file doesn't list are hidden)
+      const zero = isOn(fmtPr?.getAttribute('zeroHeight'));
+      if ((defH > 0 && defH < 410) || zero) s.fileRowHeight = { pt: defH > 0 && defH < 410 ? defH : 15, ...(isOn(fmtPr?.getAttribute('customHeight')) ? { custom: true as const } : {}), ...(zero ? { zero: true as const } : {}) };
+      const rowPt = s.fileRowHeight?.pt ?? 15;
+      const listed = new Set<number>();
+      const fitted = new Map<number, number>();
       let defW = fmtPr?.getAttribute('defaultColWidth') ? pxFromWidth(Number(fmtPr.getAttribute('defaultColWidth')))
         // a base width in digits, with padding and gridline, rounded up to 8 pixels (18.3.1.81)
         : fmtPr?.getAttribute('baseColWidth') ? Math.ceil((Number(fmtPr.getAttribute('baseColWidth')) * 7 + 5) / 8) * 8 : DEFAULT_COL_W;
       // other programs' standard widths, a few pixels either way, are the standard width here
       if (Math.abs(defW - DEFAULT_COL_W) <= 3) defW = DEFAULT_COL_W;
       const widthSet = new Set<number>();
+      // (Excel's ranges don't overlap: a damaged file's are read only so far)
+      let colBudget = 4 * MAX_COLS;
       for (const col of kids(kid(ws, 'cols'), 'col')) {
         const min = Number(col.getAttribute('min')) - 1, max = Math.min(Number(col.getAttribute('max')) - 1, MAX_COLS - 1);
         const w = col.getAttribute('width');
         const hidden = isOn(col.getAttribute('hidden'));
         const st = col.getAttribute('style') ? xfs[Number(col.getAttribute('style'))] : undefined;
-        // a format for every column to the end of the sheet only matters where there are cells
-        const last = max - min > 1000 ? min : max;
+        // every column of the range, to the end of the sheet too (hidden columns right of a table stay hidden)
+        const last = Math.min(max, min + colBudget - 1);
+        if (last >= min) colBudget -= last - min + 1;
         for (let c = min; c <= last; c++) {
           if (w !== null) {
             const px = pxFromWidth(Number(w));
@@ -1257,18 +1562,24 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
       for (const row of kids(kid(ws, 'sheetData'), 'row')) {
         rowNo = row.hasAttribute('r') ? Number(row.getAttribute('r')) - 1 : rowNo + 1;
         const r = rowNo;
-        if (isOn(row.getAttribute('customHeight')) && row.hasAttribute('ht')) s.setRowHeight(r, pxFromPt(Number(row.getAttribute('ht'))));
+        if (row.hasAttribute('ht')) {
+          const ht = Number(row.getAttribute('ht'));
+          if (isOn(row.getAttribute('customHeight'))) s.setRowHeight(r, pxFromPt(ht));
+          // a height Excel fitted the row to (wrapped text, a bigger font): shown as Excel shows it
+          else if (Number.isFinite(ht) && ht >= 0 && Math.abs(ht - rowPt) > 0.01) fitted.set(r, pxFromPt(ht));
+        }
+        listed.add(r);
         if (isOn(row.getAttribute('hidden'))) s.setRowHidden(r, true);
         const lv = Number(row.getAttribute('outlineLevel') ?? 0);
         if (lv > 0) s.setRowLevel(r, lv);
-        const rowStyle = isOn(row.getAttribute('customFormat')) && row.getAttribute('s') ? xfs[Number(row.getAttribute('s'))] : undefined;
         let colNo = -1;
         for (const c of kids(row, 'c')) {
           const at = c.getAttribute('r') ? parseRange(c.getAttribute('r')!) : null;
           colNo = at ? at.c1 : colNo + 1;
           const col = colNo;
           maxCol = Math.max(maxCol, col);
-          const style = c.hasAttribute('s') ? xfs[Number(c.getAttribute('s'))] : rowStyle;
+          // a cell's format is all of it, a plain one too (no s is style 0), where its column's or the Normal style would otherwise show
+          const style = xfs[Number(c.getAttribute('s') ?? 0)] ?? (s.colStyles.has(col) || book.normalStyle ? {} : undefined);
           const t = c.getAttribute('t') ?? 'n';
           const v = kid(c, 'v')?.textContent ?? null;
           const f = kid(c, 'f');
@@ -1276,6 +1587,7 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
           let chem = false;
           let value: Wrote = null;
           let fileRuns: FileRun[] | undefined;
+          let legacyArray: { rows: number; cols: number } | undefined;
           if (t === 's' && v !== null) {
             const item = shared[Number(v)];
             value = item?.text ?? '';
@@ -1292,6 +1604,14 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
           else if (t === 'd' && v) value = Date.parse(v) / 86400000 + 25569;
           else if (v !== null && v !== '') value = Number(v);
           raw.set(keyOf(r, col), value);
+          // a rich value's cell (a picture placed in it): its pointer, kept with the cell
+          const vm = c.getAttribute('vm');
+          if (vm !== null) {
+            richCells++;
+            let list = pointers.get(s);
+            if (!list) pointers.set(s, (list = new Map()));
+            if (richValues && Number(vm) >= 1 && Number(vm) <= richValues.metadata.blocks.length) list.set(keyOf(r, col), Number(vm));
+          }
           // a data table: its results are worked out again here (its formula is on the first of them)
           const dt = f ? readDataTable(f) : null;
           if (dt) {
@@ -1311,30 +1631,53 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
               }
             }
             if (text) {
-              if (usesUnknownFunction(text, nameSet)) unknownFormulas++;
+              countFormula(text);
               const isArray = f.getAttribute('t') === 'array';
               // a formula from before arrays spilled keeps working out one value (Excel shows it with @)
               input = normalizeFormula(isArray ? readFileFormula(text) : legacyFormula(readFileFormula(text)), nameCase);
               const R = isArray ? parseRange(f.getAttribute('ref') ?? '') : null;
               if (R && (R.r2 > R.r1 || R.c2 > R.c1)) arrays.push({ R, r, c: col });
+              // an array formula not marked as dynamic (cm, Excel 365's cell metadata) is a legacy one: it fills its block and no more
+              if (isArray && !c.hasAttribute('cm')) legacyArray = R && R.r1 === r && R.c1 === col ? { rows: R.r2 - R.r1 + 1, cols: R.c2 - R.c1 + 1 } : { rows: 1, cols: 1 };
+              if (v !== null && value !== null) {
+                let list = formulaValues.get(s);
+                if (!list) formulaValues.set(s, (list = new Map()));
+                list.set(keyOf(r, col), { v: value, ...(t === 'e' ? { error: true } : {}) });
+              }
             }
           } else if (arrays.some((a) => inRange(a.R, r, col) && !(a.r === r && a.c === col))) {
-            // spilled there: the formula fills it again
+            // spilled there: the formula fills it again (the file's value is kept for one this program can't work out)
+            if (v !== null && value !== null) {
+              let list = formulaValues.get(s);
+              if (!list) formulaValues.set(s, (list = new Map()));
+              list.set(keyOf(r, col), { v: value, ...(t === 'e' ? { error: true } : {}) });
+            }
             if (style) s.setCell(r, col, { style });
             continue;
           }
           if (input === undefined) {
-            if (typeof value === 'number') input = Number.isFinite(value) ? String(value) : undefined;
+            if (typeof value === 'number') {
+              const n = date1904 && t !== 'd' && holdsDate(style?.numFmt, value + DAYS_1900_TO_1904) ? value + DAYS_1900_TO_1904 : value;
+              input = Number.isFinite(n) ? String(n) : undefined;
+            }
             else if (typeof value === 'boolean') input = value ? 'TRUE' : 'FALSE';
             else if (typeof value === 'string') input = t === 'e' ? value : textInput(value);
           }
           const st = chem ? { ...style, chem: true } : style;
           // part of the text bold, italic, coloured… (rich text)
           const runs = !f && typeof value === 'string' && input ? runsOf({ input, runs: cellRuns(fileRuns, style, baseFont) }) : undefined;
-          if (input || st) s.setCell(r, col, { input: input || undefined, style: st, ...(runs ? { runs } : {}) });
+          if (input || st) s.setCell(r, col, { input: input || undefined, style: st, ...(runs ? { runs } : {}), ...(legacyArray && input ? { array: legacyArray } : {}) });
         }
       }
       if (defW !== DEFAULT_COL_W) for (let c = 0; c <= maxCol; c++) if (!widthSet.has(c)) s.setColWidth(c, defW);
+      // (after the cells, which would otherwise take Excel's fit off)
+      for (const [r, px] of fitted) s.setFittedRow(r, px);
+      // rows hidden unless listed: those up to the last listed are hidden here too (the rest of the sheet stays hidden in Excel)
+      if (s.fileRowHeight?.zero) {
+        let last = -1;
+        for (const r of listed) if (r > last) last = r;
+        for (let r = 0; r <= last; r++) if (!listed.has(r)) s.setRowHidden(r, true);
+      }
 
       // merged cells, frozen panes, the filter
       const merges: Range[] = [];
@@ -1353,7 +1696,7 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
           while (i < 5000 && at + size(i) / 2 < px) at += size(i++);
           return i;
         };
-        const rowsUp = nearest(Number(pane.getAttribute('ySplit') ?? 0), (r) => (s.hiddenRows.has(r) ? 0 : s.rowHeights.get(r) ?? DEFAULT_ROW_H));
+        const rowsUp = nearest(Number(pane.getAttribute('ySplit') ?? 0), (r) => (s.hiddenRows.has(r) ? 0 : s.rowHeights.get(r) ?? s.fittedRows.get(r) ?? DEFAULT_ROW_H));
         const colsLeft = nearest(Number(pane.getAttribute('xSplit') ?? 0), (c) => (s.hiddenCols.has(c) ? 0 : s.colWidths.get(c) ?? DEFAULT_COL_W));
         if (rowsUp || colsLeft) s.setSplit({ rows: rowsUp, cols: colsLeft });
       }
@@ -1369,36 +1712,24 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
         filters.push({ s, f: { range: afRange, conditions } });
       }
 
-      // what Excel can't show for itself, where the cells still hold what was saved
-      const ms = model?.sheets.find((x) => x.name === s.name) ?? (model?.sheets.length === book.sheets.length ? model.sheets[si] : undefined);
+      // what Excel can't show for itself, where the cells still hold what was saved (wherever Excel moved them)
+      const sheetId = Number(el.getAttribute('sheetId') ?? NaN);
+      const ms = model?.sheets.find((x) => x.id !== undefined && x.id === sheetId)
+        ?? model?.sheets.find((x) => x.name === s.name) ?? (model?.sheets.length === book.sheets.length ? model.sheets[si] : undefined);
+      // (the drawing is read here for where Excel moved the structures' pictures, and below for its own pictures and charts)
+      const drawingPath = [...pkg.rels(path!).values()].find((r) => r.type === RELS.drawing)?.target;
+      const dr = drawingPath ? pkg.xml(drawingPath) : null;
       if (ms) {
-        for (const [r, px] of ms.autoRows ?? []) if (s.rowHeights.get(r) === px) s.setRowHeight(r, undefined);
-        for (const { col, def } of ms.defs) s.setColDef(col, def);
-        for (const col of ms.chemCols) s.setColStyle(col, { ...s.colStyles.get(col), chem: true });
-        for (const m of ms.cells) {
-          const same = sameWrote(raw.get(keyOf(m.r, m.c)) ?? null, m.wrote);
-          if (!same) { if (m.structure || m.computed || m.formula) restored.changed++; continue; }
-          const cur = s.cell(m.r, m.c);
-          // Excel's formatting, with what it couldn't hold put back
-          const style = m.fix ? tidy({ ...cur?.style, ...m.fix } as Record<string, unknown>) : cur?.style;
-          if (m.structure) {
-            s.setCell(m.r, m.c, { structure: makeStructure(m.structure), style });
-            restored.structures++;
-          } else if (m.computed) s.setCell(m.r, m.c, { style });
-          else if (m.formula) {
-            s.setCell(m.r, m.c, { input: m.formula, style });
-            // the array it spilled was saved as values: the formula fills those cells again
-            if (m.spill) for (let r = m.r; r <= m.spill[0]; r++) for (let c = m.c; c <= m.spill[1]; c++) {
-              const x = s.cell(r, c);
-              if ((r !== m.r || c !== m.c) && x?.input && !x.input.startsWith('=')) s.setCell(r, c, { style: x.style });
-            }
-          }
-          else s.setCell(m.r, m.c, { input: cur?.input, style, ...(cur?.runs ? { runs: cur.runs } : {}) });
-          if (m.compound && isCard(m.compound)) { const x = s.cell(m.r, m.c); s.setCell(m.r, m.c, { ...x, compound: m.compound }); }
-        }
-        if (ms.filter && afRange && sameRange(ms.filter.range, afRange)) {
+        const fileIndex = allSheetEls.indexOf(el);
+        const gridName = definedNames.find((d) => d.getAttribute('name') === GRID_NAME && Number(d.getAttribute('localSheetId')) === fileIndex);
+        const mover = ms.grid ? readGridName(gridName?.textContent, ms.grid) : STILL;
+        const got = restoreSheet(s, ms, raw, mover, dr ? structurePictures(dr) : new Map(), sameWrote, HIDDEN);
+        restored.structures += got.structures;
+        restored.changed += got.changed;
+        const mine = ms.filter ? moveFilter(ms.filter, mover) : null;
+        if (mine && afRange && sameRange(mine.range, afRange)) {
           const i = filters.findIndex((x) => x.s === s);
-          if (i >= 0) filters[i].f = ms.filter;
+          if (i >= 0) filters[i].f = mine;
         }
       }
 
@@ -1451,11 +1782,9 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
       if (pivots.length) s.setPivots(pivots);
 
       // pictures and charts that aren't structures saved here
-      const drawingPath = [...pkg.rels(path!).values()].find((r) => r.type === RELS.drawing)?.target;
-      const dr = drawingPath ? pkg.xml(drawingPath) : null;
       if (dr) {
         const colPx = (c: number) => (s.hiddenCols.has(c) ? 0 : s.colWidths.get(c) ?? DEFAULT_COL_W);
-        const rowPx = (r: number) => (s.hiddenRows.has(r) ? 0 : s.rowHeights.get(r) ?? DEFAULT_ROW_H);
+        const rowPx = (r: number) => (s.hiddenRows.has(r) ? 0 : s.rowHeights.get(r) ?? s.fittedRows.get(r) ?? DEFAULT_ROW_H);
         // pictures, shapes and text boxes (not our structures' pictures, which are their cells)
         const drawRels = pkg.rels(drawingPath!);
         const got = readObjects(dr, (rid) => {
@@ -1486,6 +1815,9 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
             if (ext) { w = Number(ext.getAttribute('cx') ?? 0) / 9525; h = Number(ext.getAttribute('cy') ?? 0) / 9525; }
           }
           const at = { row: a.row, col: a.col, dx: Math.round(a.colOff), dy: Math.round(a.rowOff) };
+          // how it follows its cells in Excel, as the file had it
+          const editAs = anchor?.localName === 'oneCellAnchor' ? 'oneCell' : anchor?.localName === 'absoluteAnchor' ? 'absolute' : anchor?.getAttribute('editAs');
+          const placement = editAs === 'oneCell' || editAs === 'absolute' ? { placement: editAs as Chart['placement'] } : {};
           const name = kid(gf, 'nvGraphicFramePr', 'cNvPr')?.getAttribute('name') ?? '';
           const mine = ms?.charts?.find((c) => name === `Chart ${c.id}`);
           const got = readChartXml(cdoc, at, w, h, mine?.id ?? newChartId());
@@ -1493,9 +1825,9 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
           // its alt text, as set here or in Excel
           const descr = kid(gf, 'nvGraphicFramePr', 'cNvPr')?.getAttribute('descr')?.trim();
           const alt = descr ? { alt: descr } : {};
-          if (mine && sameChartData(mine, got.chart)) { seenChartId(mine.id); const { alt: _was, ...kept } = mine; charts.push({ ...kept, at, ...alt }); continue; }
+          if (mine && sameChartData(mine, got.chart)) { seenChartId(mine.id); const { alt: _was, placement: _had, ...kept } = mine; charts.push({ ...kept, at, ...alt, ...placement }); continue; }
           if (got.partial) notKept.add('parts of combined charts');
-          charts.push({ ...got.chart, ...alt });
+          charts.push({ ...got.chart, ...alt, ...placement });
         }
         if (charts.length) s.setCharts(charts);
       }
@@ -1510,11 +1842,12 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
       const sheetRelList = [...pkg.rels(path!).values()];
       const relOf = (type: string) => sheetRelList.find((r) => r.type === type)?.target;
       const commentsPath = relOf(NOTES_REL.comments), vmlPath = relOf(NOTES_REL.vml), threadedPath = relOf(NOTES_REL.threaded);
+      leftOut.sheet(pkg, path!, ws, vmlPath ? pkg.text(vmlPath) : null);
       if (commentsPath || threadedPath) {
         const notes = readNotes(commentsPath ? pkg.xml(commentsPath) : null, shownNotes(vmlPath ? pkg.text(vmlPath) : null), threadedPath ? pkg.xml(threadedPath) : null, personsDoc);
         for (const [k, n] of notes) s.setNote(rowOf(k), colOf(k), n);
       }
-      const dv = readValidations(ws).map((v) => {
+      const dv = readValidations(ws, date1904 ? DAYS_1900_TO_1904 : 0).map((v) => {
         const typed = v.kind === 'list' ? model?.lists?.find((l) => '=' + l.ref === v.value1) : undefined;
         return typed ? { ...v, value1: typed.text } : v;
       });
@@ -1539,11 +1872,11 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
     for (const d of kids(kid(root, 'definedNames'), 'definedName')) {
       const name = d.getAttribute('name') ?? '';
       const text = d.textContent ?? '';
-      if (!name || isBuiltInName(name) || !text) continue;
+      if (!name || isBuiltInName(name) || name === GRID_NAME || !text) continue;
       const local = d.getAttribute('localSheetId');
       const sheet = local !== null ? book.sheets[Number(local)] : undefined;
       if (local !== null && !sheet) continue;
-      if (usesUnknownFunction(text, nameSet)) unknownFormulas++;
+      countFormula(text);
       names.push({
         name, formula: normalizeFormula(readFileFormula(text), nameCase),
         ...(sheet ? { sheet } : {}),
@@ -1567,12 +1900,39 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
   // a filter goes back as it was: the rows it hid are hidden already
   if (filters.length) book.build(() => { for (const { s, f } of filters) s.restoreFilter(f); });
   book.active = Math.min(Math.max(0, activeTab), book.sheets.length - 1);
+  book.excel = richValues ? { ...bookKept, richValues } : bookKept;
+  keepFileValues(book, formulaValues);
+  if (richValues) keepPointers(book, pointers);
 
+  if (richCells && richValues) {
+    warnings.push(`${richCells} cell${richCells > 1 ? 's hold pictures or other values' : ' holds a picture or other value'} placed in ${richCells > 1 ? 'them' : 'it'} in Excel: ` +
+      `shown as #VALUE! here, and kept for Excel unless ${richCells > 1 ? 'the cells are' : 'the cell is'} changed.`);
+  } else if (richCells) notKept.add(`${richCells} picture${richCells > 1 ? 's' : ''} or other value${richCells > 1 ? 's' : ''} placed in cells`);
+  for (const item of leftOut.items()) notKept.add(item);
   if (foreignPictures) notKept.add(`${foreignPictures} picture${foreignPictures > 1 ? 's' : ''} or chart${foreignPictures > 1 ? 's' : ''}`);
   if (unknownFormulas) warnings.push(`${unknownFormulas} formula${unknownFormulas > 1 ? 's use' : ' uses'} Excel functions this program can't work out yet.`);
+  if (linkedFormulas) {
+    const files = [...new Set(book.externalLinks.map(linkedFile).filter(Boolean))];
+    warnings.push(`${linkedFormulas} formula${linkedFormulas > 1 ? 's read' : ' reads'} values from other workbooks${files.length ? ` (${files.join(', ')})` : ''}. ` +
+      `${linkedFormulas > 1 ? 'They are' : 'It is'} kept for Excel, which updates ${linkedFormulas > 1 ? 'them' : 'it'} from those files, but can't be worked out here.`);
+  }
   if (restored.changed) warnings.push(`${restored.changed} structure or calculated cell${restored.changed > 1 ? 's were' : ' was'} changed in another program: ${restored.changed > 1 ? 'they show' : 'it shows'} what that program saved.`);
   if (notKept.size) warnings.push(`Not shown here, and left out if you save over this file: ${[...notKept].join(', ')}.`);
   return { book, warnings };
+}
+
+/** The cell each structure's picture (named "Structure A2" by the cell it was saved over) is over now. */
+function structurePictures(dr: Document): Map<string, { r: number; c: number }> {
+  const out = new Map<string, { r: number; c: number }>();
+  for (const anchor of Array.from(dr.documentElement.children)) {
+    const name = anchor.getElementsByTagNameNS(XDR, 'cNvPr')[0]?.getAttribute('name') ?? '';
+    const m = /^Structure ([A-Z]{1,3}\d{1,7})$/.exec(name);
+    const from = kid(anchor, 'from');
+    if (!m || !from || !anchor.getElementsByTagNameNS(XDR, 'pic').length) continue;
+    const a = anchorPos(from);
+    out.set(m[1], { r: a.row, c: a.col });
+  }
+  return out;
 }
 
 /** A drawing anchor's corner: its cell (held within Excel's last row and column, as a damaged file
@@ -1612,13 +1972,6 @@ function anchorPlace(anchor: Element, colPx: (c: number) => number, rowPx: (r: n
   const editAs = anchor.getAttribute('editAs');
   const placement = anchor.localName === 'oneCellAnchor' ? 'oneCell' : editAs === 'oneCell' || editAs === 'absolute' ? editAs : 'twoCell';
   return { from: a, w, h, placement };
-}
-
-/** A style without its unset parts (undefined when nothing is set). */
-function tidy(st: Record<string, unknown>): CellStyle | undefined {
-  const out: Record<string, unknown> = {};
-  for (const [k, v] of Object.entries(st)) if (v !== undefined && v !== null && v !== false) out[k] = v;
-  return Object.keys(out).length ? (out as CellStyle) : undefined;
 }
 
 const sameRange = (a: Range, b: Range) => a.r1 === b.r1 && a.c1 === b.c1 && a.c2 === b.c2;

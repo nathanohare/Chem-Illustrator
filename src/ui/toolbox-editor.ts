@@ -9,7 +9,7 @@
 // itself, and Undo takes changes back one at a time.
 
 import {
-  boxGrid, boxIds, boxTitle, isEditable, isOwnBox, KEEP, overflowOf, withBoxesRestored, withBoxMoved, withFlyGrid,
+  boxGrid, boxIds, boxTitle, isEditable, isOwnBox, KEEP, MAIN_COLS, overflowOf, withBoxesRestored, withBoxMoved, withFlyGrid,
   withGrid, withItemsReset, withNewBox, withoutBox, withOverflow, withTitle, type Overflow, type Pickable, type ToolboxState,
 } from './toolboxes';
 import { added, cutOff, emptied, GRID_PRESETS, gridItems, MAX_COLS, MAX_ROWS, placed, resized, withLine, type Grid } from './toolbox-grid';
@@ -238,6 +238,11 @@ export class ToolboxEditor {
 
   // ------------------------------------------------------------ the grid being changed
 
+  /** The most columns the grid showing can have: the drawing tools are held to two (they scroll when the window is short). */
+  private maxCols(): number {
+    return !this.folder && this.box === 'main' ? MAIN_COLS : MAX_COLS;
+  }
+
   /** The grid showing now: the toolbox's, or the open fly-out's (its cells tool names). */
   private grid(): Grid {
     if (this.folder) return this.hooks.flyGrid(this.folder);
@@ -274,7 +279,7 @@ export class ToolboxEditor {
   private async resize(cols: number, rows: number): Promise<void> {
     const g = this.grid();
     const folder = this.folder, box = this.box;
-    cols = Math.max(1, Math.min(MAX_COLS, Math.round(cols) || g.cols));
+    cols = Math.max(1, Math.min(this.maxCols(), Math.round(cols) || g.cols));
     rows = Math.max(1, Math.min(MAX_ROWS, Math.round(rows) || g.rows));
     if (cols === g.cols && rows === g.rows) { this.draw(); return; }
     const lost = cutOff(g, cols, rows);
@@ -360,8 +365,11 @@ export class ToolboxEditor {
     }
     const g = this.grid();
     cols.value = String(g.cols);
+    cols.max = String(this.maxCols());
     rows.value = String(g.rows);
-    fit.hidden = !!this.folder;
+    for (const o of this.els.preset.options) o.disabled = !!o.value && Number(o.value.split('x')[0]) > this.maxCols();
+    // (the drawing tools always scroll)
+    fit.hidden = !!this.folder || this.box === 'main';
     overflow.value = overflowOf(this.hooks.get(), this.box);
     // a gutter down the left for the lines between rows (not in a fly-out), then the cells
     const gutter = !this.folder;
@@ -375,7 +383,7 @@ export class ToolboxEditor {
         b.className = 'tbe-rule' + (lines.has(r) ? ' on' : '');
         b.disabled = r === 0;
         if (r) {
-          b.title = lines.has(r) ? 'Take away the line above this row' : 'Put a thin line above this row, to set a group apart';
+          b.title = lines.has(r) ? 'Remove the line above this row' : 'Put a thin line above this row, to set a group apart';
           b.setAttribute('aria-label', b.title);
           b.setAttribute('aria-pressed', String(lines.has(r)));
           b.addEventListener('click', () => this.setGrid(withLine(this.grid(), r, !lines.has(r))));
@@ -401,7 +409,7 @@ export class ToolboxEditor {
     } else {
       const key = this.keyOf(k);
       const it = this.hooks.describe(key);
-      cell.title = `${it.label}. Drag to another cell (two swap), or out to take it away${key.startsWith('pal:') ? '; click to lay out its tools' : ''}. Ctrl+arrow keys move it, Delete takes it out.`;
+      cell.title = `${it.label}. Drag to another cell to swap, or out to remove${key.startsWith('pal:') ? '; click to lay out its tools' : ''}. Ctrl+arrow keys move it; Delete removes it.`;
       cell.setAttribute('aria-label', `${it.label}, row ${r}, column ${c}`);
       const t = document.createElement('div');
       t.className = 'tbe-tile' + (key.startsWith('pal:') ? ' folder' : '');

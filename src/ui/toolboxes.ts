@@ -6,7 +6,7 @@
 import { showContextMenu, topMenuEntry, type MenuItem } from './context-menu';
 import { commandIcon } from './command-icons';
 import { COMMAND_NAMES } from '../editor/keymap';
-import { listToGrid, parseGrid, withoutGone, type Grid } from './toolbox-grid';
+import { listToGrid, narrowed, parseGrid, withoutGone, type Grid } from './toolbox-grid';
 
 export type Dock = 'left' | 'right' | 'top' | 'bottom' | 'float';
 export const DOCKS: Dock[] = ['left', 'right', 'top', 'bottom', 'float'];
@@ -846,10 +846,14 @@ export function slotAt(boxes: readonly Box[], x: number, y: number): number {
 /** How wide a toolbox's grid is when made from a list (the drawing tools: two columns, as on the bar). */
 const LIST_COLS: Record<string, number> = { main: 2 };
 
+/** The drawing tools are never more than this many columns wide, in any mode or dock (they scroll instead). */
+export const MAIN_COLS = 2;
+
 /** A toolbox's buttons on their grid: as set, or laid out from its list (`given`: what it comes with). */
 export function boxGrid(st: ToolboxState, id: string, given: readonly string[] = []): Grid {
   const g = st.grids?.[id];
-  if (g) return g;
+  // (a drawing tools grid made wider before they were held to two columns closes up into two)
+  if (g) return id === 'main' ? narrowed(g, MAIN_COLS) : g;
   const list = boxItems(st, id, given);
   // a new toolbox of your own starts as an empty 4 × 3
   if (!list.length) return { cols: 4, rows: 3, cells: Array(12).fill(null) };
@@ -875,9 +879,9 @@ export function withFlyGrid(st: ToolboxState, palette: string, g: Grid | null): 
   return { ...st, flyGrids, flyouts };
 }
 
-/** What a toolbox does when the window is too short: as set, else the drawing tools wrap (as they always have) and the rest scroll. */
+/** What a toolbox does when the window is too short: as set, else scroll. The drawing tools always scroll, so they stay two columns wide. */
 export function overflowOf(st: ToolboxState, id: string): Overflow {
-  return st.overflow?.[id] ?? (id === 'main' ? 'wrap' : 'scroll');
+  return id === 'main' ? 'scroll' : st.overflow?.[id] ?? 'scroll';
 }
 
 export function withOverflow(st: ToolboxState, id: string, o: Overflow): ToolboxState {

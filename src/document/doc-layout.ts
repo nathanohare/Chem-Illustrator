@@ -14,10 +14,10 @@ import type { FieldObj } from './fields';
 import type { CellMargins, Contents, Justify, ParaStyle, TableData, TextRun } from '../model';
 import type { DocStyle } from '../style';
 import { withStack, layoutText, type Glyphs, type InlineBox, type LaidLine, type Measure, type Narrow, type TextFrame, type TextLayout } from '../text/layout';
-import { fitParas, listMarkers, paraCount, splitParagraphs } from '../text/paragraphs';
+import { fitParas, laidParas, listMarkers, paraCount, splitParagraphs } from '../text/paragraphs';
 import { isCovered, rowSpanOf, spanOf } from '../table';
 import * as rt from '../richtext';
-import { drawingOwnSize, nestedTables, BOX_PAD, FLOAT_GAP, LINE_NUMBER_GAP, OBJECT_CHAR, columnsOf, fieldTexts, floatOf, lookExtent, lookOf, noteStyle, objectsInText, styleOf, FORM_SHADE, type DocObject, type DocText, type HeaderFooter, type NamedStyle, type PageSetup, type WrapKind } from './document';
+import { drawingOwnSize, nestedTables, BOX_PAD, LINE_NUMBER_GAP, OBJECT_CHAR, columnsOf, fieldTexts, floatOf, floatGaps, lookExtent, lookOf, noteStyle, objectsInText, styleOf, FORM_SHADE, type DocObject, type DocText, type HeaderFooter, type NamedStyle, type PageSetup, type WrapKind } from './document';
 import { pageNumText, samePaper, sectionOfParas, sectionsOf } from './sections';
 import { bibliography, type BibEntry } from './references';
 import { emptyTof, tocEntries, tocLines, tofEntries, type TocEntry } from './toc';
@@ -132,7 +132,7 @@ export function bibFrame(entries: BibEntry[], st: NamedStyle, ps: ParaStyle, mea
     if (i) runs.push({ ...base, text: '\n' });
     runs.push({ ...base, text: e.label }, { ...base, obj: -(i + 1), text: OBJECT_CHAR });
     widths.push(Math.max(0.25 * size, hang - measure(e.label, size, family, '')));
-    for (const p of e.pieces) runs.push({ ...rt.cleanStyle({ ...base, italic: p.italic, bold: p.bold }), text: p.text });
+    for (const p of e.pieces) runs.push({ ...rt.cleanStyle({ ...base, italic: p.italic, bold: p.bold, underline: p.underline, sup: p.sup, sub: p.sub, link: p.link }), text: p.text });
   });
   const paras = entries.map((): ParaStyle => ({ indent: hang, firstLine: -hang, line: ps.line }));
   return { runs, paras, spacer: (id) => widths[-id - 1] ?? 0 };
@@ -168,6 +168,8 @@ export interface TableBox {
   rows: { page: number; x: number; y: number }[];
   /** 0 for a table in the text, 1 for one in a cell of such a table, and so on. */
   depth: number;
+  /** How far it is moved in from the left margin when it lines up at the left (Word's indent from left). */
+  indent?: number;
 }
 
 export { CELL_PAD, GRID_LINE, ACS_LINE } from './table-styles';
@@ -327,7 +329,7 @@ export class DocLayouter {
         const w = tb.xs[tb.xs.length - 1];
         const room = frame.wrap ?? w;
         const align = ps.align ?? 'left';
-        const x = align === 'center' ? Math.max(0, (room - w) / 2) : align === 'right' ? Math.max(0, room - w) : 0;
+        const x = align === 'center' ? Math.max(0, (room - w) / 2) : align === 'right' ? Math.max(0, room - w) : tb.indent ?? 0;
         const family = withStack(st.font);
         let y = 0;
         tb.hs.forEach((h, i) => {
@@ -448,7 +450,7 @@ export class DocLayouter {
     this.used.clear();
     const text = rt.plainText(t.runs);
     const n = paraCount(text);
-    const paras = fitParas(t.paras, n);
+    const paras = laidParas(fitParas(t.paras, n));
     const markers = listMarkers(paras);
     const fields = fieldTexts(t, (p) => this.tocPages[p] ?? '', this.pageCount);
     const hyph = hyphenation(t.hyphen);
@@ -864,8 +866,8 @@ export class DocLayouter {
         bx = Math.max(0, Math.min(bx, page.w - bw));
         by = Math.max(0, Math.min(by, page.h - bh));
         objects.push({ id: r.obj!, page: pageIdx, x: ox + bx + el, y: pageTop(pageIdx) + by + et, w: s.w, h: s.h, line: lines.length, wrap: fl.wrap });
-        const g = fl.gap ?? FLOAT_GAP;
-        rects.push({ x1: bx - page.left - g, y1: by - page.top - g, x2: bx + bw - page.left + g, y2: by + bh - page.top + g, wrap: fl.wrap });
+        const g = floatGaps(fl);
+        rects.push({ x1: bx - page.left - g.l, y1: by - page.top - g.t, x2: bx + bw - page.left + g.r, y2: by + bh - page.top + g.b, wrap: fl.wrap });
       }
       const wl = rects.length ? wrapped(p, cursor, rects, colX[col]).lines : pl;
       if (wl !== pl) { pl = only?.firstLine?.has(p) ? wl.slice(0, 1) : wl; hs = pl.map(heightOf); }
@@ -1052,7 +1054,7 @@ export class DocLayouter {
           }
           const { tb } = part;
           const tw = tb.xs[tb.xs.length - 1];
-          const tx = x0 + (part.align === 'center' ? (W - tw) / 2 : part.align === 'right' ? W - tw : 0);
+          const tx = x0 + (part.align === 'center' ? (W - tw) / 2 : part.align === 'right' ? W - tw : tb.indent ?? 0);
           const rows = tb.hs.map((_rh, r) => { const at = { page: pg.index, x: tx, y: y + sum(tb.hs.slice(0, r)) }; return at; });
           const box: TableBox = { ...tb, rows };
           placed.tables.push({ id: part.id, tb: box });
@@ -1154,17 +1156,20 @@ export class DocLayouter {
         if (down > 1) merged.push({ r, c, down });
         else h = Math.max(h, tall(lay) + m.top + m.bottom);
       }
+      // a row's own height (Word's row height): at least that tall, or exactly
+      const own = tb.rowH?.[r];
+      if (own && own.h > 0) h = own.exact ? own.h : Math.max(h, own.h);
       hs.push(h);
       cells.push(out);
       pads.push(ms);
     });
-    // a merged cell taller than its rows: the last of them grows (as in Word)
+    // a merged cell taller than its rows: the last of them grows (as in Word), unless its height is exact
     merged.sort((a, b) => a.r + a.down - (b.r + b.down));
     for (const m of merged) {
       const p = pads[m.r][m.c];
       const need = tall(cells[m.r][m.c]) + p.top + p.bottom;
       const have = sum(hs.slice(m.r, m.r + m.down));
-      if (need > have) hs[m.r + m.down - 1] += need - have;
+      if (need > have && !tb.rowH?.[m.r + m.down - 1]?.exact) hs[m.r + m.down - 1] += need - have;
     }
     const drop = cells.map((out, r) => out.map((l, c) => {
       if (!l) return 0;
@@ -1174,7 +1179,7 @@ export class DocLayouter {
       const v = tb.rows[r]?.[c]?.valign;
       return v === 'center' ? room / 2 : v === 'bottom' ? room : 0;
     }));
-    return { id, xs, hs, cells, drop, pads, rows: [], depth };
+    return { id, xs, hs, cells, drop, pads, rows: [], depth, ...(tb.indent ? { indent: tb.indent } : {}) };
   }
 
   /** A table cell's text laid out in its width (`w`, the inner margins taken off). */

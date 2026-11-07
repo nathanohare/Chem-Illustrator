@@ -72,9 +72,22 @@ export function pictureCanvas(doc: Doc, p: Picture, dpi = 300): { canvas: HTMLCa
   return { canvas, dpi: k * 72 };
 }
 
-/** A PNG of a picture canvas, with a transparent background. */
-export function canvasPng(canvas: HTMLCanvasElement): Promise<Blob> {
-  return new Promise((resolve, reject) => canvas.toBlob((b) => (b ? resolve(b) : reject(new Error('Could not make the picture'))), 'image/png'));
+/**
+ * A PNG of a picture canvas, with a transparent background, or on `background` (ChemDraw shows
+ * a pasted PNG's see-through parts as black, so a copy for other programs goes on white).
+ */
+export function canvasPng(canvas: HTMLCanvasElement, background?: string): Promise<Blob> {
+  let c = canvas;
+  if (background) {
+    c = document.createElement('canvas');
+    c.width = canvas.width;
+    c.height = canvas.height;
+    const ctx = c.getContext('2d')!;
+    ctx.fillStyle = background;
+    ctx.fillRect(0, 0, c.width, c.height);
+    ctx.drawImage(canvas, 0, 0);
+  }
+  return new Promise((resolve, reject) => c.toBlob((b) => (b ? resolve(b) : reject(new Error('Could not make the picture'))), 'image/png'));
 }
 
 /** A Windows bitmap (DIB) of a picture canvas on white, for programs that cannot take EMF or PNG. */

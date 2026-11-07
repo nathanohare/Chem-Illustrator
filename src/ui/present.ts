@@ -423,7 +423,7 @@ export class Presenter {
       { name: 'narration', label: 'Keep the narration too', type: 'checkbox', value: 'true', help: 'Clear to keep only the times (the slides keep any narration they had)' },
     ] : [], {
       ok: 'Keep',
-      note: `This run took ${clockText(r.before)}. Keep each slide's time${recorded ? ' and its narration' : ''}, so the show goes on by itself when it is played? Slides not shown keep what they had. (${recorded ? 'Narration goes on each slide as a sound that plays as it comes in. ' : ''}Set Up Show can turn timings off.)`,
+      note: `This run took ${clockText(r.before)}. Save each slide's timing${recorded ? ' and its narration' : ''} so the show advances automatically? Slides not shown keep their timings. (${recorded ? 'Narration goes on each slide as a sound that plays as it comes in. ' : ''}Set Up Show can turn timings off.)`,
       lines,
     });
     if (got) this.onRehearsed({ times: r.times, recordings: got.narration === 'false' ? new Map() : r.recordings, total: r.before });

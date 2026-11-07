@@ -446,6 +446,8 @@ export class SheetView {
       }
       if (h > DEFAULT_ROW_H) out.set(row, Math.min(MAX_AUTO_ROW, Math.max(out.get(row) ?? 0, Math.ceil(h))));
     }
+    // rows Excel fitted itself, where nothing here fits them
+    for (const [r, px] of s.fittedRows) if (!out.has(r)) out.set(r, px);
     return out;
   }
 

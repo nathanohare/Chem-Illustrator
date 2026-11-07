@@ -11,7 +11,8 @@ import { frameBox, frameMembers } from '../editor/frames';
 import { shapeBox } from '../objects';
 import { chemRuns } from '../text/chemtext';
 import { drawMo, MO_PRESETS, type MoSpec } from './mo';
-import { drawCrystal, type CrystalSpec } from './xray';
+import { crystalSvg, type CrystalSpec } from './xray';
+import { dataUrl } from '../render/images';
 import { isInkId } from './geo';
 
 /** A TLC plate, a gel, or a molecular orbital diagram (design/mo.ts), which is kept and redrawn the same way. */
@@ -40,6 +41,8 @@ export interface PlateData {
   lines: boolean;
   /** Lane names. */
   labels: boolean;
+  /** TLC: the spots can't be dragged (unlocked, dragging a spot up or down its lane changes its Rf). */
+  locked?: boolean;
   /** A line under a TLC plate (the eluent: "20% EtOAc/hexanes") or under a gel. */
   note: string;
   /** Gel: what the sizes are in, and whether the marker's sizes are written beside it. */
@@ -101,6 +104,57 @@ const COLOURS: Record<string, string> = {
   purple: '#7b3c8f', violet: '#6b4bb0', brown: '#8a5a2b', black: '#222222', grey: '#777777', gray: '#777777', white: '#ffffff',
 };
 
+/** The spot colors offered in the TLC Plate window (words parseMarks reads). */
+export const SPOT_COLORS = ['red', 'pink', 'orange', 'yellow', 'green', 'blue', 'purple', 'brown', 'black'] as const;
+
+/** A spot color word's color ('blue' → '#2b5bb5'). */
+export const spotColorHex = (name: string): string | undefined => COLOURS[name];
+
+/** One spot as the TLC Plate window shows it: its Rf as typed, and how it looks. */
+export interface SpotRow {
+  rf: string;
+  strength: '' | 'faint' | 'strong';
+  size: '' | 'small' | 'large';
+  streak: boolean;
+  /** A color word ('blue') or '#rrggbb'; '' for the stain's own color. */
+  color: string;
+}
+
+/** A lane's text as rows of spots (the words after each number read as parseMarks reads them). */
+export function spotRows(text: string): SpotRow[] {
+  const out: SpotRow[] = [];
+  for (const part of text.split(/[,;\n]+/)) {
+    const words = part.trim().split(/\s+/).filter(Boolean);
+    if (!words.length) continue;
+    const r: SpotRow = { rf: words[0], strength: '', size: '', streak: false, color: '' };
+    for (const raw of words.slice(1)) {
+      const w = raw.toLowerCase();
+      if (/^(faint|weak|trace)$/.test(w)) r.strength = 'faint';
+      else if (/^(strong|dark|heavy|intense)$/.test(w)) r.strength = 'strong';
+      else if (/^(big|large|wide)$/.test(w)) r.size = 'large';
+      else if (/^(small|tiny)$/.test(w)) r.size = 'small';
+      else if (/^(streak|streaky|tail|tailing)$/.test(w)) r.streak = true;
+      else if (COLOURS[w]) r.color = w === 'grey' ? 'gray' : w;
+      else if (/^#[0-9a-f]{6}$/.test(w)) r.color = w;
+    }
+    out.push(r);
+  }
+  return out;
+}
+
+/** Rows of spots as a lane's text ("0.55 faint streak, 0.30"); rows with no Rf are left out. */
+export function spotText(rows: SpotRow[]): string {
+  return rows.filter((r) => r.rf.trim()).map((r) => [r.rf.trim(), r.strength, r.size, r.streak ? 'streak' : '', r.color].filter(Boolean).join(' ')).join(', ');
+}
+
+/** How a spot looks, in words for its Description menu: "Normal", or "Faint, large, streak, blue". */
+export function spotSummary(r: SpotRow): string {
+  const parts = [r.strength, r.size, r.streak ? 'streak' : '', r.color.startsWith('#') ? 'custom color' : r.color].filter(Boolean);
+  if (!parts.length) return 'Normal';
+  const t = parts.join(', ');
+  return t[0].toUpperCase() + t.slice(1);
+}
+
 /** The spots or bands in a lane's text: numbers, each with words after it (faint, strong, big, small, streak, a colour). */
 export function parseMarks(text: string): PlateMark[] {
   const out: PlateMark[] = [];
@@ -155,7 +209,7 @@ export function newPlate(kind: PlateKind, L: number): PlateData {
   if (kind === 'crystal') return { kind, look: '', w: Math.round(20 * L), h: Math.round(14 * L), rf: false, lines: false, labels: true, note: '', unit: 'bp', sizes: false, lanes: [] };
   if (kind === 'mo') {
     const spec = MO_PRESETS[0].spec;
-    return { kind, look: '', w: Math.round(12 * L), h: Math.round(9 * L), rf: false, lines: false, labels: true, note: '', unit: 'bp', sizes: false, lanes: [], mo: { ...spec, levels: spec.levels.map((l) => ({ ...l })) } };
+    return { kind, look: '', w: Math.round(14 * L), h: Math.round(12 * L), rf: false, lines: false, labels: true, note: '', unit: 'bp', sizes: false, lanes: [], mo: { ...spec, levels: spec.levels.map((l) => ({ ...l })), labelBack: 'white' } };
   }
   if (kind === 'tlc') {
     return {
@@ -176,7 +230,7 @@ export function newPlate(kind: PlateKind, L: number): PlateData {
  */
 export function drawPlate(doc: Doc, m: Measure, d: PlateData, at: Vec): PlateParts {
   if (d.kind === 'mo') return d.mo ? drawMo(doc, m, d.mo, at, d.w, d.h) : { captions: [], arrows: [], shapes: [] };
-  if (d.kind === 'crystal') return d.crystal ? drawCrystal(doc, m, d.crystal, at, d.w, d.h) : { captions: [], arrows: [], shapes: [] };
+  if (d.kind === 'crystal') return { captions: [], arrows: [], shapes: [] };
   const out: PlateParts = { captions: [], arrows: [], shapes: [] };
   const lw = doc.style.lineWidth, L = doc.style.bondLength;
   const n = Math.max(1, d.lanes.length);
@@ -199,13 +253,11 @@ export function drawPlate(doc: Doc, m: Measure, d: PlateData, at: Vec): PlatePar
   if (d.kind === 'tlc') {
     const look = TLC_LOOKS.find((t) => t.id === d.look) ?? TLC_LOOKS[0];
     shape({ kind: 'rect', x1: at.x, y1: at.y, x2: at.x + d.w, y2: at.y + d.h, filled: look.plate !== '#ffffff', fillColor: look.plate, color: '#000000' });
-    const origin = at.y + d.h * 0.88, front = at.y + d.h * 0.08;
+    const { origin, front, yOf, r0 } = tlcGeometry(d, at, L);
     if (d.lines) {
       shape({ kind: 'line', x1: at.x, y1: origin, x2: at.x + d.w, y2: origin, color: '#6b6b6b', lineWidth: lw * 0.6 });
       shape({ kind: 'line', x1: at.x, y1: front, x2: at.x + d.w, y2: front, color: '#6b6b6b', lineWidth: lw * 0.6, dashed: true });
     }
-    const yOf = (rf: number) => origin - Math.max(0, Math.min(1, rf)) * (origin - front);
-    const r0 = Math.min(laneW * 0.2, 0.45 * L);
     const small = { size: Math.round(doc.style.captionSize * 0.8 * 10) / 10 };
     d.lanes.forEach((lane, k) => {
       const cx = x(k);
@@ -278,6 +330,55 @@ export function drawPlate(doc: Doc, m: Measure, d: PlateData, at: Vec): PlatePar
   return out;
 }
 
+/** What Lock spots does (behind its "i" in the TLC Plate window and the details panel). */
+export const LOCK_SPOTS_INFO = 'Locked spots can\'t be dragged. Unlocked, drag a spot up or down its lane to change its Rf (from 0 at the start line to 1 at the solvent front).';
+
+/** Where a TLC plate's start line (Rf 0) and solvent front (Rf 1) are, how far up a spot of Rf `rf` sits, and a spot's usual half-width. */
+export function tlcGeometry(d: PlateData, at: Vec, L: number): { origin: number; front: number; laneW: number; r0: number; yOf: (rf: number) => number } {
+  const origin = at.y + d.h * 0.88, front = at.y + d.h * 0.08;
+  const laneW = d.w / Math.max(1, d.lanes.length);
+  return { origin, front, laneW, r0: Math.min(laneW * 0.2, 0.45 * L), yOf: (rf: number) => origin - Math.max(0, Math.min(1, rf)) * (origin - front) };
+}
+
+/** The Rf at height `y` on a TLC plate drawn at `at`: kept between 0 (the start line) and 1 (the solvent front), to two decimals. */
+export function rfAtY(d: PlateData, at: Vec, L: number, y: number): number {
+  const { origin, front } = tlcGeometry(d, at, L);
+  const rf = (origin - y) / (origin - front || 1);
+  return Math.round(Math.max(0, Math.min(1, rf)) * 100) / 100;
+}
+
+/** The spot under `p` on a TLC plate drawn at `at` (its lane, and which of the lane's spots), if any. */
+export function tlcSpotAt(d: PlateData, at: Vec, L: number, p: Vec): { lane: number; index: number } | null {
+  if (d.kind !== 'tlc') return null;
+  const { laneW, r0, yOf } = tlcGeometry(d, at, L);
+  const lane = Math.floor((p.x - at.x) / laneW);
+  if (lane < 0 || lane >= d.lanes.length) return null;
+  const cx = at.x + (lane + 0.5) * laneW;
+  let best: { lane: number; index: number } | null = null, bestD = Infinity;
+  parseMarks(d.lanes[lane].marks).forEach((s, index) => {
+    const rx = r0 * s.size, ry = rx * 0.72;
+    const top = yOf(s.at) - ry, bottom = yOf(Math.max(0, s.at - s.tail)) + ry;
+    // (a little slack round small spots, so they are easy to catch)
+    const slack = Math.max(0, 0.15 * L - ry);
+    if (Math.abs(p.x - cx) > rx + slack || p.y < top - slack || p.y > bottom + slack) return;
+    const dist = Math.abs(p.y - yOf(s.at));
+    if (dist < bestD) { bestD = dist; best = { lane, index }; }
+  });
+  return best;
+}
+
+/** A lane's text with its `index`th spot (as parseMarks counts them) at Rf `rf`; the words after the number stay. */
+export function setMarkAt(text: string, index: number, rf: number): string {
+  let n = 0;
+  return text.replace(/[^,;\n]+/g, (part) => {
+    const lead = part.match(/^(\s*)(\S+)/);
+    if (!lead) return part;
+    const at = parseFloat(lead[2].replace(',', '.'));
+    if (!Number.isFinite(at) || at < 0) return part;
+    return n++ === index ? lead[1] + rfText(rf) + part.slice(lead[0].length) : part;
+  });
+}
+
 /** Where the plate goes in its frame's box, and its size (when drawn again, or resized by hand). */
 export function plateFromBox(b: Rect, d: PlateData, L: number): { at: Vec; w: number; h: number } {
   const g = d.margins ?? { l: 0.3 * L, t: 0.3 * L, r: 0.3 * L, b: 0.3 * L };
@@ -291,6 +392,7 @@ export function plateFromBox(b: Rect, d: PlateData, L: number): { at: Vec; w: nu
  */
 export function putPlate(doc: Doc, m: Measure, d: PlateData, at: Vec, id?: number): number {
   const old = id !== undefined ? doc.shapes.get(id) : undefined;
+  if (d.kind === 'crystal') return putCrystal(doc, d, at, old);
   const kept: Pick<Frame, 'atoms' | 'shapes'> = { atoms: [], shapes: [] };
   if (old?.frame) {
     const f = old.frame;
@@ -308,9 +410,37 @@ export function putPlate(doc: Doc, m: Measure, d: PlateData, at: Vec, id?: numbe
   const b = frameBox(doc, frame, m) ?? { x1: at.x, y1: at.y, x2: at.x + d.w, y2: at.y + d.h };
   const r = (v: number) => Math.round(v * 100) / 100;
   const plate: PlateData = { ...d, margins: { l: r(at.x - b.x1), t: r(at.y - b.y1), r: r(b.x2 - at.x - d.w), b: r(b.y2 - at.y - d.h) } };
-  const name = d.kind === 'tlc' ? 'TLC plate' : d.kind === 'gel' ? 'Gel' : d.kind === 'crystal' ? 'Crystal structure' : 'MO diagram';
+  const name = d.kind === 'tlc' ? 'TLC plate' : d.kind === 'gel' ? 'Gel' : 'MO diagram';
   if (old) { doc.updateShape(old.id, { ...b, frame, plate }); return old.id; }
   return doc.addShape({ kind: 'geo', geo: 'rect', ...b, filled: false, lineWidth: 0, color: '#000000', frame, plate, name }).id;
+}
+
+/** A crystal structure as an SVG data URL, `w` × `h` points. */
+export function crystalSrc(c: CrystalSpec, w: number, h: number): string {
+  return dataUrl(new TextEncoder().encode(crystalSvg(c, w, h)), 'image/svg+xml');
+}
+
+/**
+ * A crystal structure: one picture that keeps the structure (double-click it to open it again),
+ * not dozens of ovals, lines and labels, so it is quick to draw and goes to ChemDraw and Office
+ * whole. One placed before (a frame round its shapes) becomes a picture in the frame's place;
+ * structures and pictures put on it stay.
+ */
+function putCrystal(doc: Doc, d: PlateData, at: Vec, old: Shape | undefined): number {
+  const plate: PlateData = { ...d, margins: { l: 0, t: 0, r: 0, b: 0 } };
+  const look = { x1: at.x, y1: at.y, x2: at.x + d.w, y2: at.y + d.h, src: d.crystal ? crystalSrc(d.crystal, d.w, d.h) : '', px: { w: Math.round(d.w), h: Math.round(d.h) }, plate };
+  if (old?.kind === 'picture') { doc.updateShape(old.id, look); return old.id; }
+  if (old?.frame) {
+    const f = old.frame;
+    for (const c of f.captions) doc.removeCaption(c);
+    for (const r of f.arrows) doc.removeArrow(r);
+    for (const s of f.shapes) {
+      const sh = doc.shapes.get(s);
+      if (sh && (sh.kind === 'line' || sh.kind === 'rect' || sh.kind === 'oval' || (sh.kind === 'geo' && isInkId(sh.geo)))) doc.removeShape(s);
+    }
+    doc.removeShape(old.id);
+  }
+  return doc.addShape({ kind: 'picture', ...look, name: 'Crystal structure', ...(old?.z !== undefined ? { z: old.z } : {}) }).id;
 }
 
 /** The plate or gel a thing belongs to (its frame's id), if any. */
@@ -333,11 +463,19 @@ export function plateFrameOf(doc: Doc, kind: 'atom' | 'bond' | 'caption' | 'arro
 /** At the end of a change: a plate whose frame was resized by hand is drawn again to fill it. */
 export function refitPlates(doc: Doc, before: ReadonlyMap<string, Entity | null>, m: Measure): void {
   for (const s of [...doc.shapes.values()]) {
-    if (!s.plate || !s.frame) continue;
+    if (!s.plate || !(s.frame || s.kind === 'picture')) continue;
     const old = before.get('s' + s.id) as Shape | null | undefined;
     if (!old) continue;
     const a = shapeBox(old), b = shapeBox(s);
     if (Math.abs(a.x1 - b.x1) + Math.abs(a.y1 - b.y1) + Math.abs(a.x2 - b.x2) + Math.abs(a.y2 - b.y2) < 1e-6) continue;
+    if (!s.frame) {
+      // a crystal structure's picture resized: drawn again at its new size (its labels keep their size in points)
+      const w = b.x2 - b.x1, h = b.y2 - b.y1;
+      if (s.plate.crystal && Math.abs(w - (a.x2 - a.x1)) + Math.abs(h - (a.y2 - a.y1)) > 1e-6 && w > 1 && h > 1) {
+        doc.updateShape(s.id, { src: crystalSrc(s.plate.crystal, w, h), px: { w: Math.round(w), h: Math.round(h) }, plate: { ...s.plate, w, h } });
+      }
+      continue;
+    }
     const f = s.frame;
     const touched = f.captions.some((id) => before.has('c' + id)) || f.arrows.some((id) => before.has('r' + id)) || f.shapes.some((id) => before.has('s' + id));
     if (touched) continue;

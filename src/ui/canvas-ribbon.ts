@@ -5,10 +5,10 @@
 // have no names shown); the rest are pictures, named in their tooltips. Settings ▸ Ribbon offers
 // the one-row Simplified look.
 //
-// Tabs for one kind of object (Arrow, Ring, Bond) come up beside the others while that kind is
-// being drawn or is selected, and the ribbon switches to them; it goes back to the tab you were
-// on when they leave. The right end of the tab row holds the warnings, and the right end of the
-// buttons a one-line Analysis drop-down (see canvas-ribbon-boxes.ts).
+// The tabs stay put whatever is drawn or selected: the Canvas has no tabs that come and go with an
+// object (the arrow commands are on Chemistry, the ring and bond tools in the toolbox, and all of
+// them on the right-click menu). The right end of the tab row holds the warnings, and the right
+// end of the buttons a one-line Analysis drop-down (see canvas-ribbon-boxes.ts).
 
 /** A command button (data-cmd, run as the menus run it) or a drawing tool. */
 export type RibbonItem =
@@ -20,11 +20,9 @@ export type RibbonItem =
  * groups (every button and box of the text formatting bar, which hides while they show).
  */
 export interface RibbonGroup { name: string; items: RibbonItem[]; gallery?: 'favorites'; special?: 'clipboard' | 'font' | 'paragraph' }
-export interface RibbonTab { id: string; title: string; groups: RibbonGroup[]; context?: ContextKind }
-export type ContextKind = 'arrow' | 'ring' | 'bond';
+export interface RibbonTab { id: string; title: string; groups: RibbonGroup[] }
 
 const c = (cmd: string, label: string, major = false): RibbonItem => ({ cmd, label, major });
-const t = (tool: string, label: string, major = false): RibbonItem => ({ tool, label, major });
 
 /** What the Canvas ribbon holds. Home is the essentials; the other tabs take the rest. */
 export const CANVAS_TABS: RibbonTab[] = [
@@ -55,13 +53,15 @@ export const CANVAS_TABS: RibbonTab[] = [
       { name: 'Structure', items: [c('clean-up', 'Clean Up', true), c('check-structure', 'Check Structure'), c('expand-label', 'Expand Label'), c('contract-label', 'Contract Label'), c('stereo-labels', 'Stereo Labels'), c('explicit-h', 'Show Hydrogens')] },
       { name: 'Reaction', items: [c('clean-up-reaction', 'Clean Up Reaction', true), c('number-compounds', 'Number Compounds'), c('add-frame', 'Add Frame'), c('attach-descriptors', 'Attach Descriptors')] },
       { name: 'Rings', items: [c('aromatic-circles', 'Aromatic Circles'), c('fill-rings', 'Fill Rings'), c('hapto-bond', 'Add Hapto Bond (η)')] },
+      // (once on an Arrow tab that came up with a selected arrow)
+      { name: 'Arrows', items: [c('clean-up-arrow', 'Clean Up Arrow', true), c('arrow-reverse', 'Reverse Direction'), c('flip-arrow-bend', 'Flip Bend'), c('arrow-single-curve', 'Single Curve'), c('arrow-s-shape', 'S-Shape'), c('arrow-shape-u', 'U-Turn'), c('arrow-shape-loop', 'Loop'), c('arrow-add-bend', 'Add Bend'), c('arrow-remove-bend', 'Remove Bend'), c('arrow-smooth-path', 'Smooth Path'), c('arrow-simplify-path', 'Simplify Path'), c('attach-arrow', 'Attach to Structure'), c('detach-arrow', 'Detach from Structure')] },
     ],
   },
   {
     id: 'arrange', title: 'Arrange', groups: [
       { name: 'Align', items: [c('align-left', 'Align Left'), c('align-hcenter', 'Align Center'), c('align-right', 'Align Right'), c('align-top', 'Align Top'), c('align-vcenter', 'Align Middle'), c('align-bottom', 'Align Bottom')] },
       { name: 'Distribute', items: [c('distribute-h', 'Distribute Horizontally'), c('distribute-v', 'Distribute Vertically'), c('arrange-row', 'Arrange in a Row'), c('arrange-column', 'Arrange in a Column'), c('arrange-grid', 'Arrange in a Grid…')] },
-      { name: 'Turn', items: [c('flip-h', 'Flip Horizontal'), c('flip-v', 'Flip Vertical'), c('rotate-cw', 'Rotate Right 90°'), c('rotate-ccw', 'Rotate Left 90°'), c('rotate-dialog', 'Rotate…')] },
+      { name: 'Rotate', items: [c('flip-h', 'Flip Horizontal'), c('flip-v', 'Flip Vertical'), c('rotate-cw', 'Rotate Right 90°'), c('rotate-ccw', 'Rotate Left 90°'), c('rotate-dialog', 'Rotate…')] },
       { name: 'Order', items: [c('shape-front', 'Bring to Front'), c('shape-forward', 'Bring Forward'), c('shape-back', 'Send to Back'), c('shape-backward', 'Send Backward')] },
     ],
   },
@@ -69,27 +69,6 @@ export const CANVAS_TABS: RibbonTab[] = [
     id: 'view', title: 'View', groups: [
       { name: 'Zoom', items: [c('zoom-fit', 'Fit', true), c('focus-view', 'Focus View')] },
       { name: 'Show', items: [c('navigator', 'Document Map'), c('dark-page', 'Reading Mode'), c('show-stereo', 'Stereo Labels')] },
-    ],
-  },
-  {
-    id: 'arrow', title: 'Arrow', context: 'arrow', groups: [
-      { name: 'Shape', items: [c('arrow-single-curve', 'Single Curve'), c('arrow-s-shape', 'S-Shape'), c('arrow-shape-u', 'U-Turn'), c('arrow-shape-loop', 'Loop'), c('flip-arrow-bend', 'Flip Bend'), c('arrow-reverse', 'Reverse Direction')] },
-      { name: 'Path', items: [c('arrow-add-bend', 'Add Bend'), c('arrow-remove-bend', 'Remove Bend'), c('arrow-smooth-path', 'Smooth Path'), c('arrow-simplify-path', 'Simplify Path')] },
-      { name: 'Structure', items: [c('attach-arrow', 'Attach to Structure'), c('detach-arrow', 'Detach from Structure'), c('check-arrows', 'Check Arrows'), c('clean-up-arrow', 'Clean Up Arrow', true)] },
-    ],
-  },
-  {
-    id: 'ring', title: 'Ring', context: 'ring', groups: [
-      { name: 'Rings', items: [t('ring-benzene', 'Benzene'), t('ring-cp', 'Cyclopentadiene'), t('ring-3', 'Cyclopropane'), t('ring-4', 'Cyclobutane'), t('ring-5', 'Cyclopentane'), t('ring-6', 'Cyclohexane'), t('ring-7', 'Cycloheptane'), t('ring-8', 'Cyclooctane')] },
-      { name: 'Aromatic', items: [c('aromatic-circles', 'Aromatic Circles'), c('fill-rings', 'Fill Rings'), c('hapto-bond', 'Add Hapto Bond (η)')] },
-    ],
-  },
-  {
-    id: 'bond', title: 'Bond', context: 'bond', groups: [
-      { name: 'Order', items: [t('bond-single', 'Single'), t('bond-double', 'Double'), t('bond-triple', 'Triple'), t('bond-dative', 'Dative'), t('bond-wavy', 'Wavy'), t('bond-bold', 'Bold')] },
-      { name: 'Stereo', items: [t('bond-wedge', 'Wedge'), t('bond-hashWedge', 'Hashed Wedge'), t('bond-hollowWedge', 'Hollow Wedge'), t('bond-wavyWedge', 'Wavy Wedge'), t('bond-hash', 'Hashed')] },
-      { name: 'Non-Covalent', items: [t('bond-hydrogen', 'Hydrogen Bond'), t('bond-ionic', 'Ionic Bond')] },
-      { name: 'Highlight', items: [c('centre-highlight', 'Center Highlight on Double Bonds')] },
     ],
   },
 ];
@@ -123,9 +102,6 @@ export class CanvasRibbon {
   readonly bodyEnd: HTMLDivElement;
   private tabs = new Map<string, HTMLButtonElement>();
   private panels = new Map<string, HTMLDivElement>();
-  /** The tab picked by hand: the ribbon comes back to it when an object's tab goes. */
-  private chosen = 'home';
-  private context: ContextKind | null = null;
 
   /** Made in front of `place` (the first of the other modes' ribbons). */
   constructor(private host: CanvasRibbonHost, place: HTMLElement) {
@@ -148,8 +124,7 @@ export class CanvasRibbon {
       b.dataset.crTab = tab.id;
       b.textContent = tab.title;
       b.setAttribute('aria-selected', String(tab.id === 'home'));
-      if (tab.context) { b.classList.add('cr-ctx-tab'); b.hidden = true; b.title = `${tab.title} tools: shown while you draw or select ${tab.context === 'arrow' ? 'arrows' : tab.context === 'ring' ? 'rings' : 'bonds'}`; }
-      b.addEventListener('click', () => { if (!tab.context) this.chosen = tab.id; this.pick(tab.id); });
+      b.addEventListener('click', () => this.pick(tab.id));
       this.tabRow.append(b);
       this.tabs.set(tab.id, b);
       this.panels.set(tab.id, this.panel(tab));
@@ -173,7 +148,6 @@ export class CanvasRibbon {
     p.dataset.crPanel = tab.id;
     p.hidden = tab.id !== 'home';
     p.setAttribute('role', 'tabpanel');
-    if (tab.context) p.classList.add('cr-ctx-panel');
     const text: Partial<Record<'font' | 'paragraph', HTMLElement>> = {};
     for (const g of tab.groups) {
       const items = g.items.filter((it) => !('tool' in it) || this.host.hasTool(it.tool));
@@ -293,16 +267,5 @@ export class CanvasRibbon {
     // (the Analysis box stays at the right end of whichever tab is open)
     this.panels.get(id)!.append(this.bodyEnd);
     this.el.dispatchEvent(new CustomEvent('cr-tab', { detail: id }));
-  }
-
-  /**
-   * The kind of object being drawn or selected (or none): its tab comes up and opens; when it
-   * goes, the ribbon goes back to the tab picked last.
-   */
-  setContext(kind: ContextKind | null): void {
-    if (kind === this.context) return;
-    this.context = kind;
-    for (const tab of CANVAS_TABS) if (tab.context) this.tabs.get(tab.id)!.hidden = tab.context !== kind;
-    this.pick(kind ?? this.chosen);
   }
 }

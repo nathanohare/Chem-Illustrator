@@ -36,8 +36,8 @@ export function askDiagram(editing: DiagramData | null, o: DiagramDialogOptions)
         <div class="dg-text">
           <label for="dg-text"><b>Text</b></label>
           <textarea id="dg-text" name="text" rows="12" spellcheck="true"></textarea>
-          <p class="muted small">One item per line. <kbd>Tab</kbd> moves a line a level down (under the line above), <kbd>Shift+Tab</kbd> back up.
-            Formulas get their subscripts (CO2, ArB(OH)2); <code>_</code> and <code>^</code> make others (TS^‡).</p>
+          <p class="muted small">One item per line. <kbd>Tab</kbd> indents a line, <kbd>Shift+Tab</kbd> outdents.
+            Formulas are subscripted automatically (CO2); use <code>_</code> and <code>^</code> for others (TS^‡).</p>
           <p class="muted small dg-blurb"></p>
         </div>
         <div class="dg-preview" aria-label="How it will look"></div>
