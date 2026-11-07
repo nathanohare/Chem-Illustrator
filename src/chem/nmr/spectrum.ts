@@ -4,7 +4,7 @@
 // size limit, with the couplings between clusters kept to first order.
 
 import { predictCouplings, protonGroups, type JGraph, type ProtonGroup } from './coupling';
-import { lorentzian, transitions, type LineList } from './spin';
+import { lorentzian, mergeLines, transitions, type LineList } from './spin';
 import type { ProtonJ } from './karplus';
 
 export type NmrQuality = 'fast' | 'balanced' | 'accurate';
@@ -184,8 +184,7 @@ export function predictSpectrum(g: JGraph, h1: number[], codes: string[], sf = 4
 }
 
 function sorted(hz: number[], int: number[], w: number[], sf: number): LineList {
-  const o = hz.map((_, i) => i).sort((a, b) => hz[a] - hz[b]);
-  return { hz: Float64Array.from(o, (i) => hz[i]), intensity: Float64Array.from(o, (i) => int[i]), width: Float64Array.from(o, (i) => w[i]), sf };
+  return mergeLines(hz, int, w, hz.map((_, i) => i), sf);
 }
 
 /** The spectrum on an axis from hi to lo ppm (n points). */

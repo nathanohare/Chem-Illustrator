@@ -325,24 +325,58 @@ export function transitions(sys: SpinSystem, sf: number, observed = '1H'): LineL
   for (const v of I) if (v > max) max = v;
   const keep: number[] = [];
   for (let i = 0; i < I.length; i++) if (I[i] > MIN_RELATIVE * max) keep.push(i);
-  keep.sort((a, b) => F[a] - F[b]);
-  return {
-    hz: Float64Array.from(keep, (i) => F[i]),
-    intensity: Float64Array.from(keep, (i) => I[i]),
-    width: Float64Array.from(keep, (i) => W[i]),
-    sf,
-  };
+  return mergeLines(F, I, W, keep, sf);
+}
+
+/** Lines closer than this (Hz) with the same width are one line: far below any line width, so the
+ *  drawn spectrum is the same, but a long chain's hundreds of thousands of degenerate transitions
+ *  shrink to a few thousand. */
+export const MERGE_HZ = 0.005;
+
+/** The lines `idx` of F/I/W sorted by frequency, with near-coincident lines of equal width merged
+ *  (intensities added, frequency their intensity-weighted mean). */
+export function mergeLines(F: ArrayLike<number>, I: ArrayLike<number>, W: ArrayLike<number>, idx: number[], sf: number): LineList {
+  idx.sort((a, b) => F[a] - F[b]);
+  const hz: number[] = [], int: number[] = [], wd: number[] = [];
+  let first = -Infinity; // the lowest frequency in the line being merged, so a run can't drift
+  for (const i of idx) {
+    const last = hz.length - 1;
+    if (last >= 0 && wd[last] === W[i] && F[i] - first < MERGE_HZ) {
+      const t = int[last] + I[i];
+      if (t > 0) hz[last] = (hz[last] * int[last] + F[i] * I[i]) / t;
+      int[last] = t;
+      continue;
+    }
+    hz.push(F[i]); int.push(I[i]); wd.push(W[i]);
+    first = F[i];
+  }
+  return { hz: Float64Array.from(hz), intensity: Float64Array.from(int), width: Float64Array.from(wd), sf };
 }
 
 /** Sum of area-normalized absorption Lorentzians on a frequency axis (Hz). */
 export function lorentzian(lines: LineList, hz: ArrayLike<number>): Float64Array {
-  const out = new Float64Array(hz.length);
+  const n = hz.length, out = new Float64Array(n);
+  // on a sorted axis (the usual case: ppm high to low, or Hz low to high) each line only visits
+  // the points within its reach, found by bisection, rather than the whole axis
+  let dir = 0;
+  if (n > 1) {
+    dir = hz[n - 1] >= hz[0] ? 1 : -1;
+    for (let p = 1; p < n; p++) if ((hz[p] - hz[p - 1]) * dir < 0) { dir = 0; break; }
+  }
+  // first index whose value is past v (ascending axis) or below it (descending)
+  const bisect = (v: number) => {
+    let lo = 0, hi = n;
+    while (lo < hi) { const m = (lo + hi) >> 1; if (dir > 0 ? hz[m] < v : hz[m] > v) lo = m + 1; else hi = m; }
+    return lo;
+  };
   for (let l = 0; l < lines.hz.length; l++) {
     const f = lines.hz[l], a = lines.intensity[l] / Math.PI, hw = lines.width[l] / 2, hw2 = hw * hw;
     // only evaluate within 200 half-widths; the tail beyond holds < 0.4% of the area
     const reach = 200 * hw;
-    for (let p = 0; p < hz.length; p++) {
+    const from = dir ? bisect(dir > 0 ? f - reach : f + reach) : 0;
+    for (let p = from; p < n; p++) {
       const x = hz[p] - f;
+      if (dir && (dir > 0 ? x > reach : x < -reach)) break;
       if (x > reach || x < -reach) continue;
       out[p] += (a * hw) / (hw2 + x * x);
     }
