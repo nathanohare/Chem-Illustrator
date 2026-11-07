@@ -7,7 +7,7 @@ import { protonGroups } from '../chem/nmr/coupling';
 import { envCodes } from '../chem/nmr/env';
 import { ShiftTable, type AtomShifts, type ShiftHit } from '../chem/nmr/lookup';
 import { MeasuredStore } from '../chem/nmr/measured';
-import { blendNet, ShiftNet } from '../chem/nmr/net';
+import { blendNet, ShiftNet, type NetBlend, type NetShift } from '../chem/nmr/net';
 import { netInBackground } from '../chem/nmr/net-client';
 import { predictSpectrum, type NmrQuality, type PredictedSpectrum } from '../chem/nmr/spectrum';
 import { exchangeRange, type ExchangeRange } from '../chem/nmr/exchange';
@@ -276,6 +276,9 @@ interface Shown {
 
 export interface NmrHost {
   url: string;
+  /** Set where prediction isn't offered (the browser and iPad versions): the section shows this
+   *  note (HTML) instead, and none of the data is fetched. */
+  unavailable?: string;
   /** The measured-shift store (whole structures); optional, predictions stand without it. */
   measuredUrl?: string;
   /** The shift networks; optional, the lookup stands alone without them. */
@@ -314,8 +317,37 @@ export class NmrPanel {
   /** Check Data by structure (molfile), kept while the program runs. */
   private checks = new Map<string, CheckState>();
   private winItem = 0;
+  /** The latest fill of each structure (an older one still running is dropped when it ends). */
+  private fillTok = new Map<number, number>();
+  /** Network shifts by structure and solvent: the Analysis panel is rebuilt on every selection
+   *  change, and the wide networks take up to a second or so for a large structure. */
+  private netCache = new Map<string, { net: NetShift[] | null; blend: NetBlend } | null>();
 
   constructor(private host: NmrHost) {}
+
+  /** The networks' shifts for a structure (cached), in the background worker or here without one. */
+  private async netShifts(graph: NamerGraph, solvent: string): Promise<{ net: NetShift[] | null; blend: NetBlend } | null> {
+    const url = this.host.netUrl;
+    if (!url) return null;
+    const key = solvent + '|' + JSON.stringify([graph.atoms.map((a) => [a.el, a.q, a.arom, a.h, a.cip ?? '']), graph.bonds.map((b) => [b.u, b.v, b.o, b.ez ?? ''])]);
+    if (this.netCache.has(key)) {
+      const hit = this.netCache.get(key)!;
+      this.netCache.delete(key); this.netCache.set(key, hit); // most recently used last
+      return hit;
+    }
+    const bg = netInBackground(url, graph, solvent)?.catch(() => null);
+    let r: { net: NetShift[] | null; blend: NetBlend } | null;
+    if (bg) r = await bg;
+    else {
+      const net = await this.loadNet();
+      r = net ? { net: net.predict(graph, solvent), blend: net.blend } : null;
+    }
+    if (r?.net) {
+      this.netCache.set(key, r);
+      while (this.netCache.size > 64) this.netCache.delete(this.netCache.keys().next().value!);
+    }
+    return r;
+  }
 
   private get open(): boolean { try { return localStorage.getItem('ci-nmr-open') === '1'; } catch { return false; } }
   private set open(v: boolean) { try { localStorage.setItem('ci-nmr-open', v ? '1' : '0'); } catch { /* not remembered */ } }
@@ -364,6 +396,20 @@ export class NmrPanel {
     this.hot = [];
     const seq = ++this.seq;
     const frags = [...panel.querySelectorAll<HTMLElement>(':scope > .frag')];
+    if (this.host.unavailable) {
+      const note = this.host.unavailable;
+      items.forEach((item, i) => {
+        const frag = frags[i];
+        if (!item || !frag) return;
+        const d = document.createElement('details');
+        d.className = 'nmr nmr-off';
+        d.open = this.open;
+        d.innerHTML = `<summary>NMR (predicted)</summary><div class="nmr-body"><p class="muted small">${note}</p></div>`;
+        d.addEventListener('toggle', () => { this.open = d.open; });
+        frag.insertBefore(d, [...frag.querySelectorAll(':scope > .an-buttons')].pop() ?? null);
+      });
+      return;
+    }
     items.forEach((item, i) => {
       const frag = frags[i];
       if (!item || !frag) return;
@@ -463,32 +509,29 @@ export class NmrPanel {
     const item = this.items[i];
     const body = d.querySelector<HTMLElement>('.nmr-body')!;
     if (!item) return;
+    // a newer fill of the same structure (the solvent changed meanwhile) wins
+    const tok = (this.fillTok.get(i) ?? 0) + 1;
+    this.fillTok.set(i, tok);
+    const stale = () => seq !== this.seq || this.fillTok.get(i) !== tok;
     try {
       const [table, store, { graph }] = await Promise.all([this.load(), this.loadStore(), this.host.graph(item.molblock)]);
-      if (seq !== this.seq) return;
+      if (stale()) return;
       const heavy = molfileHeavyAtoms(item.molblock);
       if (!graph || graph.atoms.length !== heavy.length) { body.innerHTML = '<p class="muted small">No prediction for this structure.</p>'; return; }
-      const shifts = table.predictAll(graph, this.solvent);
-      // the networks run in the background worker (a few tenths of a second), or here without one
-      const solvent = this.solvent, url = this.host.netUrl;
-      const bg = url ? netInBackground(url, graph, solvent)?.catch(() => null) : null;
-      if (bg) {
-        const r = await bg;
-        if (seq !== this.seq) return;
-        if (r?.net) blendNet(r.blend, graph, shifts, r.net);
-      } else {
-        const net = await this.loadNet();
-        if (seq !== this.seq) return;
-        net?.apply(graph, shifts, solvent);
-      }
-      store?.apply(graph, shifts, this.solvent);
+      if (stale()) return;
+      const solvent = this.solvent;
+      const shifts = table.predictAll(graph, solvent);
+      const r = await this.netShifts(graph, solvent);
+      if (stale()) return;
+      if (r?.net) blendNet(r.blend, graph, shifts, r.net);
+      store?.apply(graph, shifts, solvent);
       const rows = nmrRows(graph, shifts);
-      for (const r of rows) r.exch = exchangeRange(graph, r.atoms[0], this.solvent);
+      for (const r of rows) r.exch = exchangeRange(graph, r.atoms[0], solvent);
       if (rows.some((r) => r.xNuc)) {
         const fp = await this.loadFp();
-        if (seq !== this.seq) return;
+        if (stale()) return;
         const all = envCodes(graph);
-        for (const r of rows) if (r.xNuc) r.x = fp?.predict(r.xNuc, all[r.atoms[0]], this.solvent) ?? null;
+        for (const r of rows) if (r.xNuc) r.x = fp?.predict(r.xNuc, all[r.atoms[0]], solvent) ?? null;
       }
       const ids = heavy.map((k) => { const id = item.map[k]; return id !== undefined && id >= 0 ? id : null; });
       const ring = new Set<string>();
@@ -514,7 +557,7 @@ export class NmrPanel {
       if (this.win?.visible && this.winItem === i) this.win.refresh();
       if (this.marks) this.host.redraw();
     } catch (e) {
-      if (seq === this.seq) body.innerHTML = `<p class="warn small">${esc(e instanceof Error ? e.message : String(e))}</p>`;
+      if (!stale()) body.innerHTML = `<p class="warn small">${esc(e instanceof Error ? e.message : String(e))}</p>`;
     }
   }
 

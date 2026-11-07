@@ -88,7 +88,7 @@ export function stereoStates(g: EnvGraph, degree: number[]): number[] {
     return new Set(subs).size === subs.length ? 1 : 0;
   });
   // the reference: the labelled centre whose class no other labelled centre shares, first by class
-  const labelled = g.atoms.map((a, i) => i).filter((i) => g.atoms[i].cip === 'R' || g.atoms[i].cip === 'S');
+  const labelled = g.atoms.map((_, i) => i).filter((i) => g.atoms[i].cip === 'R' || g.atoms[i].cip === 'S');
   const count = new Map<string, number>();
   for (const i of labelled) count.set(cls[i], (count.get(cls[i]) ?? 0) + 1);
   const unique = labelled.filter((i) => count.get(cls[i]) === 1).sort((p, q) => (cls[p] < cls[q] ? -1 : cls[p] > cls[q] ? 1 : 0));

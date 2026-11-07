@@ -222,7 +222,12 @@ export function readBrukerProcessed(files: Map<string, Uint8Array>): MeasuredSpe
 export function readSpectrumFile(name: string, bytes: Uint8Array): MeasuredSpectrum {
   if (/\.zip$/i.test(name) || (bytes[0] === 0x50 && bytes[1] === 0x4b)) {
     let files: Record<string, Uint8Array>;
-    try { files = unzipSync(bytes); } catch { throw new SpectrumFileError('The .zip could not be opened.'); }
+    // unpack only what is read: a whole experiment folder can hold hundreds of MB of FID and 2-D data
+    const names: string[] = [];
+    const wanted = (n: string) => /(^|[/\\])(pdata[/\\]\d+[/\\](1r|procs)|acqus)$/.test(n) || /\.(jdx|dx|jcamp)$/i.test(n);
+    try { files = unzipSync(bytes, { filter: (f) => { names.push(f.name); return wanted(f.name); } }); } catch { throw new SpectrumFileError('The .zip could not be opened.'); }
+    // names only, for the "only the raw FID" message
+    for (const n of names) if (!(n in files) && /(^|[/\\])fid$/.test(n)) files[n] = new Uint8Array(0);
     const map = new Map(Object.entries(files));
     const jdx = [...map.keys()].find((k) => /\.(jdx|dx|jcamp)$/i.test(k));
     if (jdx && ![...map.keys()].some((k) => /pdata\/\d+\/1r$/.test(k))) return readJcamp(new TextDecoder('latin1').decode(map.get(jdx)!));
