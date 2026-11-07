@@ -5,7 +5,7 @@
 // PowerPoint files as their own charts, with the workbook embedded for their Edit Data.
 
 import { Workbook, type Sheet } from './workbook';
-import { Chart, ChartKind, SeriesData, chartData, chartFromRange, newChartId, mapChartRefs, isXY, isLevelled } from './chart';
+import { Chart, ChartKind, SeriesData, chartData, chartFromRange, newChartId, mapChartRefs, isXY, hasLevels } from './chart';
 import { MAX_COLS } from './refs';
 import { renameSheetInFormula } from './formula';
 
@@ -91,11 +91,16 @@ export function sampleCells(kind: ChartKind): string[][] {
       ['PdCl₂', '41', '410'],
     ];
   }
-  if (isLevelled(kind)) {
+  if (hasLevels(kind)) {
+    // a year of a lab's solvent waste: its class, its kind, the solvent, and liters
     return [
-      ['Ring', 'Size', 'Heterocycle', 'Drugs'],
-      ['Aromatic', '6-membered', 'Pyridine', '54'], ['Aromatic', '6-membered', 'Pyrimidine', '13'], ['Aromatic', '5-membered', 'Imidazole', '15'],
-      ['Saturated', '6-membered', 'Piperidine', '40'], ['Saturated', '6-membered', 'Piperazine', '36'], ['Saturated', '5-membered', 'Pyrrolidine', '25'],
+      ['Class', 'Kind', 'Solvent', 'Liters'],
+      ['Non-halogenated', 'Hydrocarbon', 'Hexanes', '55'],
+      ['Non-halogenated', 'Ester', 'Ethyl acetate', '47'],
+      ['Non-halogenated', 'Ether', 'THF', '31'],
+      ['Non-halogenated', 'Ether', 'Diethyl ether', '18'],
+      ['Halogenated', 'Chlorinated', 'Dichloromethane', '42'],
+      ['Halogenated', 'Chlorinated', 'Chloroform', '9'],
     ];
   }
   if (kind === 'radar') {
@@ -125,7 +130,7 @@ export function newChartBox(kind: ChartKind, w = 360, h = 216): ChartBox {
   chart.h = Math.round(h * PX_PER_PT);
   if (kind === 'histogram') chart.y = { ...chart.y, title: 'Count' };
   else if (kind === 'combo') { chart.y = { ...chart.y, title: 'Yield (%)' }; chart.y2 = { title: 'TON' }; }
-  else if (kind !== 'pie' && !isXY(kind) && kind !== 'radar' && !isLevelled(kind) && !chart.y.title) chart.y = { ...chart.y, title: '%' };
+  else if (kind !== 'pie' && kind !== 'radar' && !isXY(kind) && !hasLevels(kind) && !chart.y.title) chart.y = { ...chart.y, title: '%' };
   return { chart, cells };
 }
 

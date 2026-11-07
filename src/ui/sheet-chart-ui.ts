@@ -11,7 +11,7 @@ import type { Sheet } from '../sheet/workbook';
 import { Range, colName, parseCellRef } from '../sheet/refs';
 import {
   Chart, ChartKind, ChartAxis, Series, SeriesFit, ErrorBars, MarkerShape, CHART_NAMES, CHART_PALETTES, MARKERS,
-  chartFromRange, chartData, readRef, refText, isXY, isLevelled, comboAs, onSecondAxis, Bins, BoxOptions,
+  chartFromRange, chartData, readRef, refText, isXY, hasLevels, comboAs, onSecondAxis, Bins, BoxOptions,
 } from '../sheet/chart';
 import { CHEM_FITS, FIT_NAMES, FitKind, fitEquation, fitResults, isChemFit, isTemperatureFit, r2Text, fitNumber } from '../sheet/fit';
 import { histogram } from '../sheet/chart-stats';
@@ -442,17 +442,19 @@ export class SheetCharts {
     out.push(row('Border', check(c.border !== false, (v) => this.patch((x) => clean({ ...x, border: v ? undefined : false }), 'Chart border'))));
     if (!this.ownData) out.push(row('Hidden rows', check(!!c.showHidden, (v) => this.patch((x) => clean({ ...x, showHidden: v || undefined }), 'Chart hidden rows'), 'Chart them too (off: a filtered table charts what shows)')));
 
-    // a treemap is drilled into, and a decomposition tree expanded, by clicking it once it is picked
-    if (c.kind === 'treemap' || c.kind === 'decomp') {
-      const tree = c.kind === 'decomp';
-      out.push(row(tree ? 'Expanded' : 'Drilled into', note(c.path?.length ? c.path.join(' › ') : tree ? 'The first level only' : 'The whole', 'cp-value'),
-        c.path?.length ? button(tree ? 'Collapse' : 'Drill Up', () => this.patch((x) => clean({ ...x, path: undefined }), tree ? 'Collapse tree' : 'Drill up')) : null));
-      out.push(note(tree ? 'Click a node of the chart to split it by the next level; click it again to close it up.' : 'Click a box of the chart to drill into it, and the trail over it to go back up.'));
+    // treemaps and decomposition trees open up by clicks on the chart once it is selected
+    const opened = c.path?.length ? c.path.join(' › ') : '';
+    if (c.kind === 'treemap') {
+      out.push(row('Drilled into', note(opened || 'The whole', 'cp-value'), opened ? button('Drill Up', () => this.patch((x) => clean({ ...x, path: undefined }), 'Drill up')) : null));
+      out.push(note('Click a box of the chart to drill into it, and a step of the trail above it to go back up.'));
+    } else if (c.kind === 'decomp') {
+      out.push(row('Expanded', note(opened || 'The first level only', 'cp-value'), opened ? button('Collapse', () => this.patch((x) => clean({ ...x, path: undefined }), 'Collapse tree')) : null));
+      out.push(note('Click a node of the chart to split it by the next level, and click it again to close it.'));
     }
 
-    // a Sankey chart, treemap or decomposition tree has no axes, and its series are its levels
-    const sankey = isLevelled(c.kind);
-    if (c.kind !== 'pie' && !sankey) {
+    // charts of levels have no axes, and their series are the levels
+    const levels = hasLevels(c.kind);
+    if (c.kind !== 'pie' && !levels) {
       const axis = (p: 'x' | 'y' | 'y2', name: string) => {
         const a = c[p] ?? {};
         const set = (q: Partial<ChartAxis>, label = 'Axis') => this.patch((x) => ({ ...x, [p]: clean({ ...x[p], ...q }) }), label);
@@ -476,11 +478,14 @@ export class SheetCharts {
     const data = chartData(this.view.wb!, this.sheet, c);
     const fits = chartFits(c, data);
     c.series.forEach((s, i) => {
-      out.push(head(`${sankey ? 'Level' : 'Series'} ${i + 1}: ${data[i]?.name ?? ''}`));
+      out.push(head(`${levels ? 'Level' : 'Series'} ${i + 1}: ${data[i]?.name ?? ''}`));
       out.push(row('Name', text(s.name ?? '', (v) => this.patchSeries(i, { name: v || undefined }, 'Series name'), `Series ${i + 1}`)));
-      out.push(row(sankey ? 'Amounts' : 'Values', text(s.y, (v) => v && this.patchSeries(i, { y: this.asRef(v)! }, 'Series values'), '', true)));
-      if ((c.kind !== 'pie' || i === 0) && c.kind !== 'histogram') out.push(row(isXY(c.kind) ? 'X values' : sankey ? 'Categories' : 'Labels', text(s.x ?? '', (v) => this.patchSeries(i, { x: this.asRef(v) }, 'Series x values'), c.kind === 'box' ? 'one box' : '1, 2, 3…', true)));
-      if (sankey) { if (c.series.length > 1) out.push(row('', button('Remove this level', () => this.patch((x) => ({ ...x, series: x.series.filter((_, j) => j !== i) }), 'Remove level')))); return; }
+      out.push(row(levels ? 'Weights' : 'Values', text(s.y, (v) => v && this.patchSeries(i, { y: this.asRef(v)! }, 'Series values'), '', true)));
+      if ((c.kind !== 'pie' || i === 0) && c.kind !== 'histogram') out.push(row(isXY(c.kind) ? 'X values' : levels ? 'Categories' : 'Labels', text(s.x ?? '', (v) => this.patchSeries(i, { x: this.asRef(v) }, 'Series x values'), c.kind === 'box' ? 'one box' : '1, 2, 3…', true)));
+      if (levels) {
+        if (c.series.length > 1) out.push(row('', button('Remove Level', () => this.patch((x) => ({ ...x, series: x.series.filter((_, j) => j !== i) }), 'Remove level'))));
+        return;
+      }
       if (c.kind === 'bubble') out.push(row('Sizes', text(s.size ?? '', (v) => this.patchSeries(i, { size: this.asRef(v) }, 'Bubble sizes'), 'all the same', true)));
       if (c.kind === 'combo') {
         out.push(row('Drawn as', select([['column', 'Columns'], ['line', 'A line']], comboAs(s, i), (v) => this.patchSeries(i, { as: v === (i === 0 ? 'column' : 'line') ? undefined : v as 'column' | 'line' }, 'Series drawn as')),

@@ -1505,7 +1505,7 @@ function diagramSvg(d: DiagramData): string {
 async function smartDiagram(id: number | null): Promise<void> {
   finishTyping();
   const now = id !== null ? doc.shapes.get(id)?.diagram ?? null : null;
-  const got = await askDiagram(now, { preview: diagramSvg, scale: deckNow() ? 1 : 0.7, doc });
+  const got = await askDiagram(now, { drawing: doc, preview: diagramSvg, scale: deckNow() ? 1 : 0.7 });
   if (got) editor.putDiagramAt(got, pasteCentre(), now ? id! : undefined, deckNow()?.size);
 }
 editor.onDiagram = (id) => void smartDiagram(id);
@@ -1514,7 +1514,7 @@ editor.onDiagram = (id) => void smartDiagram(id);
 async function documentDiagram(contents: Contents | null): Promise<Contents | null> {
   const d = structureDoc(contents ?? { atoms: [], bonds: [], captions: [], arrows: [], shapes: [] }, docStyle());
   const frame = [...d.shapes.values()].find((s) => s.diagram);
-  const got = await askDiagram(frame?.diagram ?? null, { preview: diagramSvg, scale: 0.75, doc: d });
+  const got = await askDiagram(frame?.diagram ?? null, { drawing: d, preview: diagramSvg, scale: 0.75 });
   if (!got) return null;
   d.edit(frame ? 'Change Diagram' : 'Diagram', () => putDiagram(d, POINTS, got, frame ? { x: Math.min(frame.x1, frame.x2), y: Math.min(frame.y1, frame.y2) } : { x: 0, y: 0 }, frame?.id));
   return d.contents();

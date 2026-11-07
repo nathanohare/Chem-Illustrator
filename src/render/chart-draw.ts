@@ -2,11 +2,10 @@
 // or EMF picture for documents and slides. Everything is laid out in the chart's own pixels at
 // 100%; the caller scales the canvas. Titles take simple sub- and superscripts: k_{obs}, s^{−1}.
 
-import type { Chart, ChartAxis, ChartPick, SeriesData, MarkerShape } from '../sheet/chart';
-import { niceTicks, logTicks, CHART_PALETTES, isXY, isLevelled, comboAs, onSecondAxis } from '../sheet/chart';
+import type { Chart, ChartAxis, CategoryPick, SeriesData, MarkerShape } from '../sheet/chart';
+import { niceTicks, logTicks, CHART_PALETTES, isXY, hasLevels, comboAs, onSecondAxis } from '../sheet/chart';
 import { histogram, boxGroups } from '../sheet/chart-stats';
-import { sankeyFlows } from '../sheet/sankey';
-import { hierarchy, nodeAt, validPath, squarify, type HierNode } from '../sheet/hierarchy';
+import { bandAt, drawDecomp, drawSankey, drawTreemap, type Pen } from './level-charts';
 import { fitPoints, fitAt, fitEquation, fitResults, r2Text, Fit, FitKind } from '../sheet/fit';
 import { cssFamily } from '../text/layout';
 import { formatValue, generalNumber } from '../sheet/numfmt';
@@ -27,64 +26,53 @@ export interface ChartHits {
   fitLabels: { series: number; box: Box }[];
   /** The fitted lines worked out, one per series (null where none). */
   fits: (Fit | null)[];
-  /** Bars, pie slices, a Sankey chart's nodes and bands, a treemap's boxes and a decomposition tree's nodes, with what a click on each picks. */
-  parts?: ChartPart[];
+  /** The parts a click can land on (on a dashboard, or a treemap or decomposition tree on a sheet). */
+  parts?: ClickPart[];
 }
 
-export type { ChartPick };
+export type { CategoryPick };
 
 /**
- * A part of a chart. `drill`, on a treemap or decomposition tree, is the chart's `path` a click on
- * it leads to: a treemap drilled into a box's category (or back up, from its trail of categories),
- * a decomposition tree's node expanded (or closed up again).
+ * A part of a chart that can be clicked, and the categories a click picks. `drill`, on a treemap or
+ * a decomposition tree, is the chart's `path` once it is clicked: a treemap drilled into a box (or
+ * back up to a step of its trail), a decomposition tree's node expanded (or closed up).
  */
-export type ChartPart = (
-  | { shape: 'box'; box: Box; pick: ChartPick }
-  | { shape: 'slice'; cx: number; cy: number; r: number; a0: number; a1: number; pick: ChartPick }
-  /** A band from x0 to x1, its top and bottom at each end, curving as drawn (sankeyCurve). */
-  | { shape: 'band'; x0: number; x1: number; top0: number; bottom0: number; top1: number; bottom1: number; pick: ChartPick }
-) & { drill?: string[] };
+export type ClickPart = { pick: CategoryPick; drill?: string[] } & (
+  | { shape: 'rect'; x: number; y: number; w: number; h: number }
+  | { shape: 'wedge'; cx: number; cy: number; r: number; from: number; to: number }
+  /** A Sankey band from x0 to x1, with its top and its bottom at each end (curving as level-charts.ts draws it). */
+  | { shape: 'band'; x0: number; x1: number; top: [number, number]; bottom: [number, number] }
+);
 
-/** The part of a chart at a point (in the chart's own pixels), and what clicking it picks. */
-export function partAt(hits: ChartHits, x: number, y: number): ChartPick | null {
-  return partHit(hits, x, y)?.pick ?? null;
+/** Is (x, y), in the chart's own pixels, on this part? */
+function isOn(p: ClickPart, x: number, y: number): boolean {
+  switch (p.shape) {
+    case 'rect': return x >= p.x && x <= p.x + p.w && y >= p.y && y <= p.y + p.h;
+    case 'wedge': {
+      if ((x - p.cx) ** 2 + (y - p.cy) ** 2 > p.r * p.r) return false;
+      const turn = 2 * Math.PI;
+      const a = (((Math.atan2(y - p.cy, x - p.cx) - p.from) % turn) + turn) % turn;
+      return a <= p.to - p.from;
+    }
+    case 'band': {
+      const edges = bandAt(p, x);
+      return !!edges && y >= edges[0] && y <= edges[1];
+    }
+  }
 }
 
-/** The part of a chart at a point (in the chart's own pixels). */
-export function partHit(hits: ChartHits, x: number, y: number): ChartPart | null {
+/** The part of a chart a click at (x, y) lands on: the one drawn last, so nodes and bars win over bands. */
+export function hitPart(hits: ChartHits, x: number, y: number): ClickPart | null {
   const parts = hits.parts ?? [];
-  // nodes and bars over bands
-  for (let k = parts.length - 1; k >= 0; k--) {
-    const p = parts[k];
-    if (p.shape === 'box') { if (x >= p.box.x && x <= p.box.x + p.box.w && y >= p.box.y && y <= p.box.y + p.box.h) return p; continue; }
-    if (p.shape === 'slice') {
-      const dx = x - p.cx, dy = y - p.cy;
-      if (Math.hypot(dx, dy) > p.r) continue;
-      let a = Math.atan2(dy, dx);
-      while (a < p.a0) a += 2 * Math.PI;
-      if (a <= p.a1) return p;
-      continue;
-    }
-    if (x < p.x0 || x > p.x1 || p.x1 <= p.x0) continue;
-    // where along the curve this x is (it runs one way), then the band's top and bottom there
-    let lo = 0, hi = 1;
-    for (let i = 0; i < 30; i++) { const m = (lo + hi) / 2; if (sankeyCurve(p.x0, p.x1, m).x < x) lo = m; else hi = m; }
-    const e = sankeyCurve(p.x0, p.x1, lo).e;
-    const top = p.top0 + (p.top1 - p.top0) * e, bottom = p.bottom0 + (p.bottom1 - p.bottom0) * e;
-    if (y >= top && y <= bottom) return p;
-  }
+  for (let i = parts.length - 1; i >= 0; i--) if (isOn(parts[i], x, y)) return parts[i];
   return null;
 }
 
-/** A band's curve (a cubic with its handles halfway across) at t: how far across, and how far from its start height to its end height (0 to 1). */
-function sankeyCurve(x0: number, x1: number, t: number): { x: number; e: number } {
-  return { x: x0 + (x1 - x0) * (1.5 * t - 1.5 * t * t + t * t * t), e: 3 * t * t - 2 * t * t * t };
+/** Do two picks name the same categories at the same levels? */
+export function picksEqual(a: CategoryPick | undefined, b: CategoryPick | undefined): boolean {
+  if (!a || !b || a.length !== b.length) return false;
+  return a.every((p, i) => p.level === b[i].level && p.value === b[i].value);
 }
-
-/** Do two picks pick the same thing? */
-export const samePick = (a: ChartPick | undefined, b: ChartPick | undefined): boolean =>
-  !!a && !!b && a.length === b.length && a.every((p, i) => p.level === b[i].level && p.value === b[i].value);
-
 const TEXT = '#404040', AXIS = '#bfbfbf', GRID = '#e3e3e3';
 export const CHART_FONT = 'Arial';
 
@@ -311,11 +299,11 @@ export function chartFits(chart: Chart, data: SeriesData[]): (Fit | null)[] {
 interface LegendItem { name: string; color: string; kind: 'line' | 'box' | 'fit'; marker?: MarkerShape; dash?: number[]; line?: boolean }
 
 /**
- * Draw a chart. `lit` is the same chart's data with a click's pick applied (a dashboard): bars,
- * slices and Sankey nodes and bands are drawn faded, with what the pick leaves drawn solid over
- * them, as PowerBI highlights.
+ * Draw a chart, and say where its parts went. On a dashboard, `shown` is the same chart's data
+ * with its own pick applied: the bars, slices, nodes and bands the pick leaves out are faded, the
+ * rest drawn as usual, so the pick stands out as it does in PowerBI.
  */
-export function drawChart(ctx: Ctx, chart: Chart, data0: SeriesData[], w: number, h: number, lit?: SeriesData[]): ChartHits {
+export function drawChart(ctx: Ctx, chart: Chart, data0: SeriesData[], w: number, h: number, shown?: SeriesData[]): ChartHits {
   // a histogram is drawn as columns of the counts in its bins
   const data = chart.kind === 'histogram' ? histogramData(chart, data0) : data0;
   const family = chart.font ? `${cssFamily(chart.font)}, ${CHART_FONT}` : CHART_FONT;
@@ -343,7 +331,7 @@ export function drawChart(ctx: Ctx, chart: Chart, data0: SeriesData[], w: number
   if (kind === 'pie') {
     const pal = (CHART_PALETTES[chart.palette ?? 'office'] ?? CHART_PALETTES.office).colors;
     (data[0]?.cats ?? []).forEach((c, i) => legend.push({ name: c || String(i + 1), color: pal[i % pal.length], kind: 'box' }));
-  } else if (!isLevelled(kind)) {
+  } else if (!hasLevels(kind)) {
     data.forEach((d, i) => {
       const s = chart.series[i];
       const lineLike = kind === 'scatter' || kind === 'line' || kind === 'bubble' || (kind === 'radar' && !chart.filled) || (kind === 'combo' && comboAs(s, i) === 'line');
@@ -385,10 +373,16 @@ export function drawChart(ctx: Ctx, chart: Chart, data0: SeriesData[], w: number
     }
   }
 
-  if (kind === 'pie') return drawPie(ctx, chart, data, { x: left, y: top, w: Math.max(1, right - left), h: Math.max(1, bottom - top) }, fs, family, lit);
-  if (kind === 'sankey') return drawSankey(ctx, chart, data, { x: left, y: top, w: Math.max(1, right - left), h: Math.max(1, bottom - top) }, opt, lit);
-  if (kind === 'treemap') return drawTreemap(ctx, chart, data, { x: left, y: top, w: Math.max(1, right - left), h: Math.max(1, bottom - top) }, opt, lit);
-  if (kind === 'decomp') return drawDecomp(ctx, chart, data, { x: left, y: top, w: Math.max(1, right - left), h: Math.max(1, bottom - top) }, opt, lit);
+  const space = { x: left, y: top, w: Math.max(1, right - left), h: Math.max(1, bottom - top) };
+  if (kind === 'pie') return drawPie(ctx, chart, data, space, fs, family, shown);
+  if (hasLevels(kind)) {
+    const pen: Pen = {
+      write: (s, x, y, size, style = {}) => text(ctx, s, x, y, opt(size, style)),
+      width: (s, size, style = {}) => measure(ctx, s, opt(size, style)),
+    };
+    const draw = kind === 'sankey' ? drawSankey : kind === 'treemap' ? drawTreemap : drawDecomp;
+    return { plot: space, fitLabels: [], fits: [], parts: draw(ctx, pen, chart, data, space, shown) };
+  }
   if (kind === 'radar') return drawRadar(ctx, chart, data, { x: left, y: top, w: Math.max(1, right - left), h: Math.max(1, bottom - top) }, opt);
 
   // value ranges
@@ -508,31 +502,34 @@ export function drawChart(ctx: Ctx, chart: Chart, data0: SeriesData[], w: number
   // columns, bars and areas
   const baseOf = (a: NumAxis) => (horizontal ? X : Y)(a.frac(a.log ? a.min : Math.min(Math.max(0, a.min), a.max)));
   const base = baseOf(vAxis);
-  const parts: ChartPart[] = [];
+  const clickable: ClickPart[] = [];
   if (data.some((_, i) => isBar(i))) {
     const pos = new Array<number>(ncat).fill(0), neg = new Array<number>(ncat).fill(0);
     data.forEach((d, i) => {
       if (!isBar(i)) return;
-      // with a pick, what it leaves of each bar (by its label), drawn solid over the faded whole
-      const shown = lit && kind !== 'histogram' ? new Map((lit[i]?.cats ?? []).map((c, j) => [c, lit[i].ys[j]] as const).reverse()) : null;
+      // on a dashboard, how much of each category the pick leaves (the first bar of a repeated label)
+      const left = new Map<string, number>();
+      if (shown && kind !== 'histogram') shown[i]?.cats.forEach((c, j) => { if (!left.has(c)) left.set(c, shown[i].ys[j]); });
       d.ys.forEach((v, j) => {
         if (!Number.isFinite(v)) return;
         let a: number, b: number;
         if (stackable) { const from = v >= 0 ? pos[j] : neg[j]; a = valAt(from); b = valAt(from + v); if (v >= 0) pos[j] += v; else neg[j] += v; }
         else { a = baseOf(axisOf(i)); b = valAt(v, i); }
         const c = barMid(i, j) - each / 2;
-        const rect = (p: number, q: number) => { const lo = Math.min(p, q), len = Math.abs(q - p); return horizontal ? clipBox({ x: lo, y: c, w: len, h: each }, plot) : clipBox({ x: c, y: lo, w: each, h: len }, plot); };
-        const r = rect(a, b);
+        const span = (p: number, q: number) => {
+          const box = horizontal ? { x: Math.min(p, q), y: c, w: Math.abs(q - p), h: each } : { x: c, y: Math.min(p, q), w: each, h: Math.abs(q - p) };
+          return clipBox(box, plot);
+        };
+        const r = span(a, b);
         if (!r) return;
-        const kept = shown?.get(d.cats[j]);
-        ctx.fillStyle = shown ? withAlpha(d.color, 0.3) : d.color;
-        ctx.fillRect(r.x, r.y, r.w, r.h);
-        if (shown && kept !== undefined && Number.isFinite(kept) && kept !== 0) {
-          // a stacked bar shows solid whole when the pick leaves any of it
-          const s = stackable ? r : rect(a, valAt(kept, i));
-          if (s) { ctx.fillStyle = d.color; ctx.fillRect(s.x, s.y, s.w, s.h); }
-        }
-        if (kind !== 'histogram' && d.cats[j]) parts.push({ shape: 'box', box: r, pick: [{ level: 0, value: d.cats[j] }] });
+        const rest = shown ? left.get(d.cats[j]) : undefined;
+        const kept = rest !== undefined && Number.isFinite(rest) && rest !== 0;
+        const paint = (box: Box, color: string) => { ctx.fillStyle = color; ctx.fillRect(box.x, box.y, box.w, box.h); };
+        paint(r, shown ? withAlpha(d.color, 0.3) : d.color);
+        // over the faded bar, the part the pick leaves (all of a stacked bar, when it leaves any)
+        const solid = kept ? (stackable ? r : span(a, valAt(rest, i))) : null;
+        if (solid) paint(solid, d.color);
+        if (kind !== 'histogram' && d.cats[j]) clickable.push({ shape: 'rect', ...r, pick: [{ level: 0, value: d.cats[j] }] });
       });
     });
   } else if (kind === 'area') {
@@ -816,7 +813,7 @@ export function drawChart(ctx: Ctx, chart: Chart, data0: SeriesData[], w: number
   if (yTitle) text(ctx, yTitle, pad + fs * 1.1, plot.y + plot.h / 2, opt(fs, { align: 'center', angle: 90 }));
   if (y2Title) text(ctx, y2Title, y2TitleX, plot.y + plot.h / 2, opt(fs, { align: 'center', angle: 90 }));
 
-  return { plot, fitLabels, fits, parts };
+  return { plot, fitLabels, fits, parts: clickable };
 }
 
 /** Label categories, skipping some when they would overlap. */
@@ -851,22 +848,6 @@ function withAlpha(hex: string, a: number): string {
   return `rgba(${n >> 16}, ${(n >> 8) & 255}, ${n & 255}, ${a})`;
 }
 
-/** A colour mixed with white (`t` of the way to white). */
-function lighter(hex: string, t: number): string {
-  const m = /^#([0-9a-f]{6})$/i.exec(hex);
-  if (!m) return hex;
-  const n = parseInt(m[1], 16);
-  const f = (c: number) => Math.round(c + (255 - c) * t).toString(16).padStart(2, '0');
-  return `#${f(n >> 16)}${f((n >> 8) & 255)}${f(n & 255)}`;
-}
-
-/** Text cut short with an ellipsis to fit a width ('' when not even the first letter fits). */
-function fitText(ctx: Ctx, s: string, width: number, o: TextOpts): string {
-  if (measure(ctx, s, o) <= width) return s;
-  let lo = 0, hi = s.length;
-  while (lo < hi) { const m = Math.ceil((lo + hi) / 2); if (measure(ctx, s.slice(0, m) + '…', o) <= width) lo = m; else hi = m - 1; }
-  return lo ? s.slice(0, lo) + '…' : '';
-}
 
 /** A darker shade of a colour (a box's mean marker, against its own fill). */
 function darker(hex: string): string {
@@ -950,7 +931,7 @@ function drawRadar(ctx: Ctx, chart: Chart, data: SeriesData[], area: Box, opt: (
   return { plot, fitLabels: [], fits: [] };
 }
 
-function drawPie(ctx: Ctx, chart: Chart, data: SeriesData[], area: Box, fs: number, family: string, lit?: SeriesData[]): ChartHits {
+function drawPie(ctx: Ctx, chart: Chart, data: SeriesData[], area: Box, fs: number, family: string, shown?: SeriesData[]): ChartHits {
   const d = data[0];
   const plot = area;
   if (!d) return { plot, fitLabels: [], fits: [] };
@@ -958,18 +939,19 @@ function drawPie(ctx: Ctx, chart: Chart, data: SeriesData[], area: Box, fs: numb
   const vals = d.ys.map((v) => (Number.isFinite(v) && v > 0 ? v : 0));
   const total = vals.reduce((a, b) => a + b, 0);
   const cx = area.x + area.w / 2, cy = area.y + area.h / 2, r = Math.max(4, Math.min(area.w, area.h) / 2 - 4);
-  // with a pick, the slices it leaves nothing of are faded
-  const kept = lit ? new Set((lit[0]?.cats ?? []).filter((_, j) => lit[0].ys[j] > 0)) : null;
-  const parts: ChartPart[] = [];
+  // on a dashboard, the categories the pick leaves any of (the rest are faded)
+  const leftIn = shown && new Set(shown[0]?.cats.filter((_, j) => shown[0].ys[j] > 0));
+  const wedges: ClickPart[] = [];
   let a0 = -Math.PI / 2;
   vals.forEach((v, j) => {
     if (!total || !v) return;
     const a1 = a0 + (v / total) * Math.PI * 2;
     ctx.beginPath(); ctx.moveTo(cx, cy); ctx.arc(cx, cy, r, a0, a1); ctx.closePath();
-    const c = pal[j % pal.length];
-    ctx.fillStyle = kept && !kept.has(d.cats[j]) ? withAlpha(c, 0.3) : c; (ctx as CanvasRenderingContext2D).fill();
+    const color = pal[j % pal.length], cat = d.cats[j];
+    ctx.fillStyle = !leftIn || leftIn.has(cat) ? color : withAlpha(color, 0.3);
+    (ctx as CanvasRenderingContext2D).fill();
     ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 1.5; ctx.setLineDash([]); ctx.stroke();
-    if (d.cats[j]) parts.push({ shape: 'slice', cx, cy, r, a0, a1, pick: [{ level: 0, value: d.cats[j] }] });
+    if (cat) wedges.push({ shape: 'wedge', cx, cy, r, from: a0, to: a1, pick: [{ level: 0, value: cat }] });
     if (chart.series[0]?.labels) {
       const m = (a0 + a1) / 2;
       const t = `${Math.round((v / total) * 1000) / 10}%`;
@@ -977,255 +959,7 @@ function drawPie(ctx: Ctx, chart: Chart, data: SeriesData[], area: Box, fs: numb
     }
     a0 = a1;
   });
-  return { plot, fitLabels: [], fits: [], parts };
-}
-
-/**
- * A Sankey chart: a column of nodes for each level, each node as tall as all the rows through it,
- * and bands from each node to the next level's nodes, as wide as the rows they carry. A level's
- * name goes over its column, and each node's label and total beside it.
- */
-function drawSankey(ctx: Ctx, chart: Chart, data: SeriesData[], area: Box, opt: (size: number, more?: Partial<TextOpts>) => TextOpts, lit?: SeriesData[]): ChartHits {
-  const fs = chart.fontSize ?? 12, tickFs = fs * 0.92;
-  const flows = sankeyFlows(data);
-  const L = flows.levels.length;
-  const parts: ChartPart[] = [];
-  const out = (): ChartHits => ({ plot: area, fitLabels: [], fits: [], parts });
-  if (!L || flows.levels.every((l) => !l.length)) return out();
-  const pal = (CHART_PALETTES[chart.palette ?? 'office'] ?? CHART_PALETTES.office).colors;
-  // the levels' names over their columns
-  let top = area.y;
-  const named = data.some((d, i) => d.name && d.name !== `Series ${i + 1}`);
-  if (named) {
-    data.forEach((d, i) => {
-      const x = L === 1 ? area.x + area.w / 2 : area.x + (i * area.w) / (L - 1);
-      text(ctx, d.name, x, top + tickFs, opt(tickFs, { bold: true, align: L === 1 ? 'center' : i === 0 ? 'left' : i === L - 1 ? 'right' : 'center' }));
-    });
-    top += tickFs * 1.8;
-  }
-  const h = Math.max(10, area.y + area.h - top);
-  const nodeW = Math.max(8, Math.min(16, area.w * 0.022));
-  const colX = (i: number) => (L === 1 ? area.x + (area.w - nodeW) / 2 : area.x + (i * (area.w - nodeW)) / (L - 1));
-  // one scale for every level: the fullest level fills the height, less the gaps between its nodes
-  // (narrower gaps in a level of many nodes, so the gaps never take more than a third of it)
-  const most = Math.max(1, ...flows.levels.map((l) => l.length));
-  const gap = Math.max(1, Math.min(10, h * 0.025, (h / 3) / Math.max(1, most - 1)));
-  const k = Math.min(...flows.levels.filter((l) => l.length).map((l) => Math.max(1, h - gap * (l.length - 1)) / l.reduce((a, n) => a + n.value, 0)));
-  // with a pick, what it leaves is drawn solid and the rest faded
-  const litFlows = lit ? sankeyFlows(lit) : null;
-  const litNodes = litFlows ? new Set(litFlows.levels.flatMap((l) => l.map((n) => `${n.level}\u0000${n.label}`))) : null;
-  const litLinks = litFlows ? new Set(litFlows.links.map((l) => `${l.level}\u0000${l.from}\u0000${l.to}`)) : null;
-  type Placed = { x: number; y: number; h: number; color: string; out: number; in: number };
-  const at = new Map<string, Placed>();
-  let colour = 0;
-  flows.levels.forEach((level, i) => {
-    const used = level.reduce((a, n) => a + n.value * k, 0) + gap * Math.max(0, level.length - 1);
-    let y = top + Math.max(0, (h - used) / 2);
-    for (const n of level) {
-      const nh = Math.max(1, n.value * k);
-      at.set(`${i}\u0000${n.label}`, { x: colX(i), y, h: nh, color: pal[colour++ % pal.length], out: y, in: y });
-      y += nh + gap;
-    }
-  });
-  // the bands, under the nodes
-  for (const l of flows.links) {
-    const f = at.get(`${l.level}\u0000${l.from}`), t = at.get(`${l.level + 1}\u0000${l.to}`);
-    if (!f || !t) continue;
-    const wd = l.value * k;
-    const x0 = f.x + nodeW, x1 = t.x, xm = (x0 + x1) / 2;
-    const y0 = f.out, y1 = t.in;
-    f.out += wd; t.in += wd;
-    ctx.beginPath();
-    ctx.moveTo(x0, y0);
-    ctx.bezierCurveTo(xm, y0, xm, y1, x1, y1);
-    ctx.lineTo(x1, y1 + wd);
-    ctx.bezierCurveTo(xm, y1 + wd, xm, y0 + wd, x0, y0 + wd);
-    ctx.closePath();
-    const on = !litLinks || litLinks.has(`${l.level}\u0000${l.from}\u0000${l.to}`);
-    ctx.fillStyle = withAlpha(f.color, on ? 0.42 : 0.12);
-    (ctx as CanvasRenderingContext2D).fill();
-    parts.push({ shape: 'band', x0, x1, top0: y0, bottom0: y0 + wd, top1: y1, bottom1: y1 + wd, pick: [{ level: l.level, value: l.from }, { level: l.level + 1, value: l.to }] });
-  }
-  // the nodes, and their labels beside them (the last level's on its left)
-  flows.levels.forEach((level, i) => {
-    for (const n of level) {
-      const p = at.get(`${i}\u0000${n.label}`)!;
-      const on = !litNodes || litNodes.has(`${i}\u0000${n.label}`);
-      ctx.fillStyle = on ? p.color : withAlpha(p.color, 0.3);
-      ctx.fillRect(p.x, p.y, nodeW, p.h);
-      parts.push({ shape: 'box', box: { x: p.x, y: p.y, w: nodeW, h: p.h }, pick: [{ level: i, value: n.label }] });
-      if (p.h < tickFs * 0.7 && level.length > 1) continue;
-      const last = i === L - 1 && L > 1;
-      text(ctx, `${n.label} (${generalNumber(n.value)})`, last ? p.x - 4 : p.x + nodeW + 4, p.y + p.h / 2 + tickFs * 0.35, opt(tickFs, { align: last ? 'right' : 'left' }));
-    }
-  });
-  return out();
-}
-
-/** The categories of a path as a pick (a category at each level from the first). */
-const pathPick = (path: readonly string[]): ChartPick => path.map((value, level) => ({ level, value }));
-
-/** Is a node of the whole still there (any of it) once a pick is applied? */
-const litHas = (lit: HierNode | null, node: HierNode): boolean => !lit || (nodeAt(lit, node.path)?.value ?? 0) > 0;
-
-/**
- * A treemap: the categories of the level it is drilled to (the first, undrilled) as boxes as big
- * as the rows in them, each holding the next level's categories as smaller boxes in shades of its
- * colour. Drilled in, a trail of categories over it ("All › Aromatic") leads back up.
- */
-function drawTreemap(ctx: Ctx, chart: Chart, data: SeriesData[], area: Box, opt: (size: number, more?: Partial<TextOpts>) => TextOpts, lit?: SeriesData[]): ChartHits {
-  const fs = chart.fontSize ?? 12, small = fs * 0.92;
-  const parts: ChartPart[] = [];
-  const out = (): ChartHits => ({ plot: area, fitLabels: [], fits: [], parts });
-  const root = hierarchy(data);
-  if (!root.value) return out();
-  const path = validPath(root, chart.path);
-  const at = nodeAt(root, path)!;
-  const litRoot = lit ? hierarchy(lit) : null;
-  const pal = (CHART_PALETTES[chart.palette ?? 'office'] ?? CHART_PALETTES.office).colors;
-  let top = area.y;
-  // the trail back up: each category but the last leads back to it
-  if (path.length) {
-    const crumbs = ['All', ...path];
-    let x = area.x;
-    const y = top + small;
-    crumbs.forEach((c, i) => {
-      const last = i === crumbs.length - 1;
-      const cw = text(ctx, c, x, y, opt(small, { bold: last, color: last ? TEXT : '#2f5597' }));
-      if (!last) {
-        parts.push({ shape: 'box', box: { x, y: top, w: cw, h: small * 1.4 }, pick: [], drill: path.slice(0, i) });
-        x += cw + text(ctx, ' › ', x + cw, y, opt(small, { color: '#8c8c8c' }));
-      }
-    });
-    top += small * 1.8;
-  }
-  const box = { x: area.x, y: top, w: area.w, h: Math.max(1, area.y + area.h - top) };
-  /** A box's words: its category, and its amount under it where there's room. */
-  const label = (n: HierNode, r: Box, bold: boolean) => {
-    if (r.w < small * 1.5 || r.h < small * 1.3) return;
-    const o = opt(small, { color: '#ffffff', bold });
-    const name = fitText(ctx, n.label, r.w - 8, o);
-    if (!name) return;
-    text(ctx, name, r.x + 4, r.y + small + 2, o);
-    if (r.h >= small * 2.7) text(ctx, generalNumber(n.value), r.x + 4, r.y + small * 2.2 + 2, opt(small * 0.9, { color: '#ffffff' }));
-  };
-  // nothing below the category drilled to: it fills the box
-  const groups = at.children.length ? at.children : [at];
-  const rects = squarify(groups.map((g) => g.value), box);
-  groups.forEach((g, k) => {
-    const r = { x: rects[k].x + 1, y: rects[k].y + 1, w: rects[k].w - 2, h: rects[k].h - 2 };
-    if (r.w < 1 || r.h < 1) return;
-    const colour = pal[k % pal.length];
-    const head = small * 1.6;
-    const nested = g !== at && g.children.length > 0 && r.h > head + small * 1.5 && r.w > small * 3;
-    ctx.fillStyle = litHas(litRoot, g) ? colour : withAlpha(colour, 0.3);
-    ctx.fillRect(r.x, r.y, r.w, r.h);
-    const drill = g !== at && g.children.length ? g.path : undefined;
-    if (!nested) {
-      label(g, r, false);
-      parts.push({ shape: 'box', box: r, pick: pathPick(g.path), ...(drill ? { drill } : {}) });
-      return;
-    }
-    // a band across its top with its category, then its own categories in shades of its colour
-    const hb = { x: r.x, y: r.y, w: r.w, h: head };
-    const o = opt(small, { color: '#ffffff', bold: true });
-    const name = fitText(ctx, `${g.label} (${generalNumber(g.value)})`, r.w - 8, o) || fitText(ctx, g.label, r.w - 8, o);
-    if (name) text(ctx, name, r.x + 4, r.y + small * 1.15, o);
-    const inner = { x: r.x + 2, y: r.y + head, w: r.w - 4, h: r.h - head - 2 };
-    const kids = squarify(g.children.map((c) => c.value), inner);
-    g.children.forEach((c, m) => {
-      const kr = { x: kids[m].x + 0.75, y: kids[m].y + 0.75, w: kids[m].w - 1.5, h: kids[m].h - 1.5 };
-      if (kr.w < 1 || kr.h < 1) return;
-      const shade = lighter(colour, Math.min(0.45, 0.12 + (m % 5) * 0.07));
-      ctx.fillStyle = litHas(litRoot, c) ? shade : withAlpha(shade, 0.3);
-      ctx.fillRect(kr.x, kr.y, kr.w, kr.h);
-      label(c, kr, false);
-      // a click inside drills into the box it is in (into it, if it goes further down)
-      parts.push({ shape: 'box', box: kr, pick: pathPick(c.path), drill: g.path });
-    });
-    parts.push({ shape: 'box', box: hb, pick: pathPick(g.path), drill: g.path });
-  });
-  return out();
-}
-
-/**
- * A decomposition tree, as PowerBI draws one: the total, then a column for each level the tree is
- * expanded to, each node a bar as long as its share of the node it splits, with lines from the
- * node expanded to the nodes it splits into. Clicking a node expands it; clicking it again closes
- * it up.
- */
-function drawDecomp(ctx: Ctx, chart: Chart, data: SeriesData[], area: Box, opt: (size: number, more?: Partial<TextOpts>) => TextOpts, lit?: SeriesData[]): ChartHits {
-  const fs = chart.fontSize ?? 12, small = fs * 0.92;
-  const parts: ChartPart[] = [];
-  const out = (): ChartHits => ({ plot: area, fitLabels: [], fits: [], parts });
-  const L = data.length;
-  const root = hierarchy(data);
-  if (!L || !root.value) return out();
-  // the last level has nothing under it to expand
-  const path = validPath(root, chart.path).slice(0, L - 1);
-  const litRoot = lit ? hierarchy(lit) : null;
-  const pal = (CHART_PALETTES[chart.palette ?? 'office'] ?? CHART_PALETTES.office).colors;
-  const colour = pal[0];
-  // the columns: the total, then what each node expanded splits into
-  const cols: HierNode[][] = [[root]];
-  for (let i = 0; i <= path.length && i < L; i++) cols.push(nodeAt(root, path.slice(0, i))!.children);
-  const colW = area.w / Math.max(cols.length, 3);
-  const barW = Math.max(20, colW - 30);
-  const nodeH = small * 2.7;
-  // each column's name over it
-  const named = data.some((d, i) => d.name && d.name !== `Series ${i + 1}`);
-  const headH = small * 1.8;
-  cols.forEach((_, i) => {
-    const name = i === 0 ? 'Total' : named ? data[i - 1].name : `Level ${i}`;
-    text(ctx, fitText(ctx, name, colW - 6, opt(small, { bold: true })), area.x + i * colW, area.y + small, opt(small, { bold: true, color: '#595959' }));
-  });
-  const top = area.y + headH, h = Math.max(nodeH, area.y + area.h - top);
-  const fits = Math.max(1, Math.floor(h / nodeH));
-  /** Where each column's expanded node's bar is (the lines to the next column start there). */
-  let from: { x: number; y: number } | null = null;
-  cols.forEach((col, i) => {
-    const x = area.x + i * colW;
-    const parent = i === 0 ? null : nodeAt(root, path.slice(0, i - 1))!;
-    // more than fit: the largest, and a note of how many more
-    const shown = col.length > fits ? col.slice(0, Math.max(1, fits - 1)) : col;
-    const rows = shown.length + (shown.length < col.length ? 1 : 0);
-    // centred on the node it splits, as far as the column allows
-    const want = from ? from.y - (rows * nodeH) / 2 : top + (h - rows * nodeH) / 2;
-    const y0 = Math.max(top, Math.min(want, top + h - rows * nodeH));
-    let next: { x: number; y: number } | null = null;
-    shown.forEach((n, k) => {
-      const y = y0 + k * nodeH;
-      const barY = y + small * 1.45, barH = Math.max(5, small * 0.8);
-      const open = i > 0 && path[i - 1] === n.label;
-      const on = litHas(litRoot, n);
-      if (from) {
-        ctx.strokeStyle = open ? '#7f7f7f' : '#c9c9c9'; ctx.lineWidth = open ? 1.5 : 1; ctx.setLineDash([]);
-        const xm = (from.x + x) / 2, yy = barY + barH / 2;
-        ctx.beginPath(); ctx.moveTo(from.x, from.y); ctx.bezierCurveTo(xm, from.y, xm, yy, x - 2, yy); ctx.stroke();
-      }
-      const share = parent ? n.value / (parent.value || 1) : 1;
-      ctx.fillStyle = '#ededed';
-      ctx.fillRect(x, barY, barW, barH);
-      const c = i === 0 || open ? darker(colour) : colour;
-      ctx.fillStyle = on ? c : withAlpha(c, 0.3);
-      ctx.fillRect(x, barY, Math.max(1, barW * share), barH);
-      const amount = generalNumber(n.value);
-      const vo = opt(small, { align: 'right', color: on ? TEXT : '#a6a6a6' });
-      const aw = measure(ctx, amount, vo);
-      text(ctx, amount, x + barW, y + small * 1.05, vo);
-      const lo = opt(small, { bold: open || i === 0, color: on ? TEXT : '#a6a6a6' });
-      text(ctx, fitText(ctx, i === 0 ? 'Total' : n.label, barW - aw - 6, lo), x, y + small * 1.05, lo);
-      if (open) next = { x: x + barW, y: barY + barH / 2 };
-      if (i === 0) next = { x: x + barW, y: barY + barH / 2 };
-      // what a click does: the total closes everything up; a node expands (or closes up, open)
-      const expandable = i > 0 && i < L;
-      const drill = i === 0 ? [] : open ? path.slice(0, i - 1) : expandable ? n.path : undefined;
-      parts.push({ shape: 'box', box: { x, y, w: barW, h: nodeH }, pick: pathPick(n.path), ...(drill ? { drill } : {}) });
-    });
-    if (shown.length < col.length) text(ctx, `+${col.length - shown.length} more`, x, y0 + shown.length * nodeH + small * 1.1, opt(small * 0.9, { color: '#8c8c8c' }));
-    from = next;
-  });
-  return out();
+  return { plot, fitLabels: [], fits: [], parts: wedges };
 }
 
 // ---------------------------------------------------------------- pictures

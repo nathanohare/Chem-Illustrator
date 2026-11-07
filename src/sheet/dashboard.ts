@@ -1,15 +1,15 @@
 // Dashboards: a sheet of tiles (charts, headline numbers, tables, slicers, galleries of
 // structures, notes) laid out on a grid and fed by the workbook's tables. Clicking values in a
-// slicer filters every tile fed by the same table, as PowerBI's slicers do, and so does clicking a
-// bar, a slice, a Sankey node or band, a treemap's box or a decomposition tree's node (the chart
-// itself shows what was picked); the cells themselves are never changed.
+// slicer filters every tile fed by the same table, as PowerBI's slicers do. Clicking a chart's
+// bar, slice, Sankey node or band, treemap box or decomposition tree node filters them the same
+// way, and the chart clicked shows what it picked. The cells themselves never change.
 
 import type { Sheet, Workbook } from './workbook';
 import type { Range } from './refs';
 import { inRange } from './refs';
 import type { Value } from './values';
 import { isError } from './values';
-import { Chart, ChartPick, SeriesData, readRef, refText, mapChartRefs, levelsOfColumns, toLabel } from './chart';
+import { Chart, CategoryPick, SeriesData, readRef, refText, mapChartRefs, levelChart, cellLabel } from './chart';
 import { adjustFormula, renameSheetInFormula, SheetChange } from './formula';
 
 /** Where a tile's rows come from: a table by name (it grows with the table), or a block of cells with a header row. */
@@ -38,8 +38,8 @@ export interface ChartTile extends TileBase {
   chart: Chart;
   /** Rows with the same label are combined into one bar or point (an average, a total…); unset: one per row. */
   group?: Aggregate;
-  /** What a click on the chart picked: rows that don't match are left out of the other tiles, as a slicer leaves them out. */
-  pick?: ChartPick;
+  /** The categories a click on the chart picked: the other tiles leave out the rows not in them, as for a slicer. */
+  pick?: CategoryPick;
 }
 export interface KpiTile extends TileBase {
   kind: 'kpi';
@@ -183,52 +183,62 @@ export function slicerMask(wb: Workbook, d: Dashboard): Map<Sheet, Set<number>> 
 }
 
 /**
- * The rows the charts' picks leave out (all but chart `except`, which shows its own pick as a
- * highlight; `only` takes that one chart's alone): a row is left out when its label at a picked
- * level isn't the one picked. A level's labels are the cells its series reads them from.
+ * The rows the charts' picks leave out: a row is out when its category at a picked level isn't
+ * the one picked (a level's categories are the cells its series takes its labels from). Chart
+ * `except` is skipped (it draws its own pick as a highlight instead); `only`, when given, is the
+ * one chart whose pick counts.
  */
-export function pickMask(wb: Workbook, d: Dashboard, except?: number, only?: number): Map<Sheet, Set<number>> {
+export function chartPickMask(wb: Workbook, d: Dashboard, except?: number, only?: number): Map<Sheet, Set<number>> {
   const out = new Map<Sheet, Set<number>>();
-  for (const t of d.tiles) {
-    if (t.kind !== 'chart' || !t.pick?.length || t.id === except || (only !== undefined && t.id !== only)) continue;
-    for (const p of t.pick) {
-      const s = t.chart.series[p.level] ?? t.chart.series[0];
-      const got = s?.x ? readRef(wb, s.x, wb.sheet) : null;
-      if (!got) continue;
-      let set = out.get(got.sheet);
-      if (!set) out.set(got.sheet, (set = new Set()));
-      for (let r = got.range.r1; r <= Math.min(got.range.r2, Math.max(got.sheet.lastRow, got.range.r1)); r++) {
-        if (toLabel(got.sheet.value(r, got.range.c1)) !== p.value) set.add(r);
-      }
+  const counts = (t: Tile): t is ChartTile => t.kind === 'chart' && !!t.pick?.length && t.id !== except && (only === undefined || t.id === only);
+  for (const t of d.tiles.filter(counts)) {
+    for (const { level, value } of t.pick!) {
+      const labels = (t.chart.series[level] ?? t.chart.series[0])?.x;
+      const at = labels ? readRef(wb, labels, wb.sheet) : null;
+      if (!at) continue;
+      const rows = out.get(at.sheet) ?? new Set<number>();
+      out.set(at.sheet, rows);
+      const end = Math.min(at.range.r2, Math.max(at.range.r1, at.sheet.lastRow));
+      for (let r = at.range.r1; r <= end; r++) if (cellLabel(at.sheet.value(r, at.range.c1)) !== value) rows.add(r);
     }
   }
   return out;
 }
 
-/** Two sets of rows left out, together. */
-export function joinMasks(...masks: Map<Sheet, Set<number>>[]): Map<Sheet, Set<number>> {
+/** Every row left out by any of several masks. */
+export function unionMasks(...masks: Map<Sheet, Set<number>>[]): Map<Sheet, Set<number>> {
   const out = new Map<Sheet, Set<number>>();
-  for (const m of masks) for (const [s, rows] of m) { const set = out.get(s) ?? new Set<number>(); for (const r of rows) set.add(r); out.set(s, set); }
+  for (const mask of masks) {
+    for (const [sheet, rows] of mask) out.set(sheet, new Set([...(out.get(sheet) ?? []), ...rows]));
+  }
   return out;
 }
 
-/** The rows a tile leaves out: the slicers', and every chart's pick but its own. */
-export const filterMask = (wb: Workbook, d: Dashboard, tile?: number): Map<Sheet, Set<number>> => joinMasks(slicerMask(wb, d), pickMask(wb, d, tile));
-
-/** Does any slicer or chart pick filter the dashboard? */
-export const filtered = (d: Dashboard): boolean => d.tiles.some((t) => (t.kind === 'slicer' && !!t.selected?.length) || (t.kind === 'chart' && !!t.pick?.length));
-
-/** The dashboard with every slicer and chart pick cleared. */
-export const unfiltered = (d: Dashboard): Dashboard => ({
-  ...d,
-  tiles: d.tiles.map((t): Tile => (t.kind === 'slicer' && t.selected ? { ...t, selected: undefined } : t.kind === 'chart' && t.pick ? { ...t, pick: undefined } : t)),
-});
-
-/** A picked part described for people ("Ring: Aromatic → Size: 6-membered"). */
-export function pickText(t: ChartTile, names: string[]): string {
-  return (t.pick ?? []).map((p) => (names[p.level] ? `${names[p.level]}: ${p.value}` : p.value)).join(' → ');
+/** The rows a tile leaves out (or, with no tile, the whole dashboard): the slicers', and every other chart's pick. */
+export function tileMask(wb: Workbook, d: Dashboard, tile?: number): Map<Sheet, Set<number>> {
+  return unionMasks(slicerMask(wb, d), chartPickMask(wb, d, tile));
 }
 
+/** Is anything filtering the dashboard: a slicer with buttons on, or a chart with a pick? */
+export function hasFilters(d: Dashboard): boolean {
+  return d.tiles.some((t) => (t.kind === 'slicer' ? !!t.selected?.length : t.kind === 'chart' && !!t.pick?.length));
+}
+
+/** The dashboard with no slicer buttons on and no chart picks. */
+export function withoutFilters(d: Dashboard): Dashboard {
+  const clear = (t: Tile): Tile => {
+    if (t.kind === 'slicer' && t.selected) return { ...t, selected: undefined };
+    if (t.kind === 'chart' && t.pick) return { ...t, pick: undefined };
+    return t;
+  };
+  return { ...d, tiles: d.tiles.map(clear) };
+}
+
+/** A chart's pick in words, given the names of its levels: "Ring: Aromatic → Size: 6-membered". */
+export function describePick(t: ChartTile, levelNames: string[]): string {
+  const say = ({ level, value }: { level: number; value: string }) => (levelNames[level] ? `${levelNames[level]}: ${value}` : value);
+  return (t.pick ?? []).map(say).join(' → ');
+}
 /** The rows of a source a tile shows, with the slicers applied. */
 export function shownRows(res: Resolved, mask: Map<Sheet, Set<number>>): number[] {
   const m = mask.get(res.sheet);
@@ -326,15 +336,16 @@ export function chartOfColumns(res: Resolved, kind: Chart['kind'], x: string | u
 }
 
 /**
- * A chart of levels (Sankey, treemap or decomposition tree) of a source: its level columns left to
- * right, and a column of amounts (unset: each row counts once).
+ * A chart of levels (Sankey chart, treemap or decomposition tree) of a source: the columns named
+ * in `levels`, in that order, weighed by the column named `weights` (unset: every row weighs one).
  */
-export function levelsOfSource(res: Resolved, levels: string[], value: string | undefined, id: number, kind: Chart['kind'] = 'sankey'): Chart {
-  const first = res.range.r1 + 1, last = Math.max(first, res.rows[res.rows.length - 1] ?? first);
-  const cols = levels.map((n) => columnOf(res, n)).filter((c): c is number => c !== null);
-  return { ...levelsOfColumns(res.sheet.name, res.range.r1, first, last, cols, columnOf(res, value), kind), id, w: 480, h: 290 };
+export function levelChartOfSource(res: Resolved, levels: string[], weights: string | undefined, id: number, kind: Chart['kind'] = 'sankey'): Chart {
+  const first = res.range.r1 + 1;
+  const last = Math.max(first, res.rows.at(-1) ?? first);
+  const cols = levels.flatMap((name) => { const c = columnOf(res, name); return c === null ? [] : [c]; });
+  const chart = levelChart(res.sheet.name, res.range.r1, first, last, cols, columnOf(res, weights), kind);
+  return { ...chart, id, w: 480, h: 290 };
 }
-
 // ---------------------------------------------------------------- keeping references right
 
 function mapRefs(d: Dashboard, fn: (f: string) => string): Dashboard {
