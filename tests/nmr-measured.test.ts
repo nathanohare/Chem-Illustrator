@@ -1,6 +1,8 @@
-import { describe, expect, it } from 'vitest';
+import { createRequire } from 'node:module';
+import { beforeAll, describe, expect, it } from 'vitest';
+import { namerGraph } from '../src/chem/namer-graph';
 import { envCodes, type EnvGraph } from '../src/chem/nmr/env';
-import { atomPositions, MeasuredStore, structureKey } from '../src/chem/nmr/measured';
+import { atomPositions, hasStereoisomers, MeasuredStore, structureKey } from '../src/chem/nmr/measured';
 
 // Ethanol: C0 (CH3), C1 (CH2), O2 (OH)
 const ethanol: EnvGraph = {
@@ -59,5 +61,34 @@ describe('measured-shift store', () => {
 
   it('ignores structures it does not hold', () => {
     expect(new MeasuredStore(buf).find(123)).toBeNull();
+  });
+});
+
+describe('measured shifts and stereoisomers', () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  let RDKit: any;
+  beforeAll(async () => { RDKit = await createRequire(import.meta.url)('@rdkit/rdkit')(); });
+  const graph = (smiles: string) => { const m = RDKit.get_mol(smiles); const g = namerGraph(m); m.delete(); return g; };
+
+  it('skips structures whose stereoisomers share its entry (E/Z, cis/trans, several centres)', () => {
+    for (const smi of ['COC(=O)/C=C/c1ccccc1', 'COC(=O)C=Cc1ccccc1', 'CC=CC', 'CC(C)(C)[C@H]1CC[C@@H](O)CC1', 'CC(C)(C)C1CCC(O)CC1',
+      'CC(C)[C@@H]1CC[C@@H](C)C[C@H]1O', 'C1CCC2CCCCC2C1', 'CC1CC1C', 'C1CCCC=CCC1']) expect(hasStereoisomers(graph(smi)), smi).toBe(true);
+  });
+
+  it('keeps structures with one stereocentre or none (enantiomers have the same shifts)', () => {
+    for (const smi of ['CCC(C)O', 'C[C@@H](O)CC', 'CC(C)=C', 'C=Cc1ccccc1', 'C1CC=CCC1', 'CC1CCCCC1', 'CC1(C)CCCCC1', 'c1ccccc1C1CCCCC1', 'OC(=O)C1CCCN1'])
+      expect(hasStereoisomers(graph(smi)), smi).toBe(false);
+  });
+
+  it('gives 2-butene no measured shifts even when the store holds it', () => {
+    const g = graph('CC=CC');
+    const codes = envCodes(g);
+    const pos = atomPositions(codes);
+    const buf = store(structureKey(codes), 1, [{ atom: pos[0], h: false, solvent: 0, ppm: 17.6 }]);
+    expect(new MeasuredStore(buf).find(structureKey(codes))).not.toBeNull();
+    const p = () => ({ value: 0, spread: 1, radius: 3, n: 5 });
+    const shifts = g.atoms.map((a, i) => ({ atom: i, c13: p(), h1: p(), hCount: a.h }));
+    expect(new MeasuredStore(buf).apply(g, shifts, 'CDCl3')).toBe(0);
+    expect(shifts[0].c13.value).toBe(0);
   });
 });

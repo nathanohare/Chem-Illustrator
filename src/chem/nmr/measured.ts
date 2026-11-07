@@ -1,9 +1,11 @@
 // Measured shifts of whole structures, shipped as public/nmr/nmr-measured.dat (built by
 // scripts/nmr/train_lookup.py --store from NMRShiftDB2 and CC BY NMRBank). When the drawn structure
 // is in it, its own measured shifts replace the predictions for the atoms they cover.
-// Structures are found by a key over their deepest atom codes, so stereoisomers share one entry.
+// Structures are found by a key over their deepest atom codes, so stereoisomers share one entry:
+// the store is used only where that can't matter (see hasStereoisomers).
 
-import { envCodes, hash52, type EnvGraph } from './env';
+import { envCodes, hash52, MAX_RADIUS, ringInfo, type EnvGraph } from './env';
+import { stereoStates } from './features';
 import type { AtomShifts, Nucleus } from './lookup';
 
 interface Header { version: number; scale: Record<Nucleus, number>; solvents: string[]; count: number; entries: number }
@@ -22,6 +24,49 @@ export function atomPositions(codes: string[][]): number[] {
   const deep = codes.map((c) => parseInt(c[c.length - 1], 16));
   const uniq = [...new Set(deep)].sort((a, b) => a - b);
   return deep.map((d) => uniq.indexOf(d));
+}
+
+/**
+ * Whether the structure has diastereomers (two or more stereocentres, cis/trans on a ring, or a
+ * double bond that can be E or Z). The store's key ignores stereochemistry, so its shifts could belong to another isomer
+ * (E for Z, cis for trans, neomenthol for menthol): such structures keep their predictions. One
+ * stereocentre alone is fine, as enantiomers have the same shifts.
+ */
+export function hasStereoisomers(g: EnvGraph): boolean {
+  const ri = ringInfo(g);
+  if (stereoStates(g, ri.degree).filter((x) => x !== 0).length >= 2) return true;
+  const cls = envCodes(g, MAX_RADIUS).map((c) => c[MAX_RADIUS]);
+  const nb: number[][] = g.atoms.map(() => []);
+  for (const b of g.bonds) { nb[b.u].push(b.v); nb[b.v].push(b.u); }
+  // cis/trans on a ring drawn without wedges (4-t-butylcyclohexanol, decalin): two sp3 carbons in
+  // one ring system that each carry two different groups off the ring (a hydrogen counts as one),
+  // or a hydrogen at a ring fusion
+  const multiple = new Set<number>();
+  g.bonds.forEach((b) => { if (b.o > 1) { multiple.add(b.u); multiple.add(b.v); } });
+  const root = g.atoms.map((_, i) => i);
+  const find = (x: number): number => (root[x] === x ? x : (root[x] = find(root[x])));
+  const ringBond = new Map<string, boolean>();
+  g.bonds.forEach((b, i) => { ringBond.set(`${b.u},${b.v}`, ri.bond[i] > 0); ringBond.set(`${b.v},${b.u}`, ri.bond[i] > 0); if (ri.bond[i] > 0) root[find(b.u)] = find(b.v); });
+  const seen = new Set<number>();
+  for (let i = 0; i < g.atoms.length; i++) {
+    const a = g.atoms[i];
+    if (!ri.atom[i] || a.el !== 'C' || a.arom || multiple.has(i) || a.h > 1 || ri.degree[i] + a.h !== 4) continue;
+    const inRing = nb[i].filter((n) => ringBond.get(`${i},${n}`)).length;
+    const off = nb[i].filter((n) => !ringBond.get(`${i},${n}`)).map((n) => cls[n]);
+    if (a.h) off.push('H');
+    if (!((inRing === 2 && off.length === 2 && off[0] !== off[1]) || (inRing === 3 && a.h === 1))) continue;
+    if (seen.has(find(i))) return true;
+    seen.add(find(i));
+  }
+  // an end of a double bond with two different substituents (a hydrogen counts as one)
+  const twoKinds = (x: number, other: number) => {
+    const subs = nb[x].filter((y) => y !== other).map((y) => cls[y]);
+    const h = g.atoms[x].h;
+    if (subs.length + h !== 2) return false;
+    return h === 1 ? subs.length === 1 : subs.length === 2 && subs[0] !== subs[1];
+  };
+  return g.bonds.some((b, i) => b.o === 2 && !(g.atoms[b.u].arom && g.atoms[b.v].arom) && !(ri.bond[i] > 0 && ri.bond[i] < 8)
+    && (b.ez === 'E' || b.ez === 'Z' || (twoKinds(b.u, b.v) && twoKinds(b.v, b.u))));
 }
 
 export class MeasuredStore {
@@ -82,9 +127,11 @@ export class MeasuredStore {
 
   /**
    * Replaces predictions with the structure's measured shifts taken in the given solvent (or with no
-   * solvent recorded). Returns how many atoms changed.
+   * solvent recorded). Returns how many atoms changed. Structures with diastereomers are left alone
+   * (the store can't tell them apart).
    */
   apply(g: EnvGraph, shifts: AtomShifts[], solvent: string): number {
+    if (hasStereoisomers(g)) return 0;
     const codes = envCodes(g);
     const hit = this.find(structureKey(codes));
     if (!hit) return 0;
