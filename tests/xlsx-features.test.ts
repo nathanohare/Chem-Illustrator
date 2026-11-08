@@ -235,7 +235,7 @@ describe('pictures placed in cells (X13)', () => {
 
   it('says so on opening, and keeps the picture and its cell for Excel', async () => {
     const { book, warnings } = await readXlsx(file());
-    expect(warnings).toContain('1 cell holds a picture or other value placed in it in Excel: shown as #VALUE! here, and kept for Excel unless the cell is changed.');
+    expect(warnings).toContain('1 cell holds a picture placed in it in Excel: shown as #VALUE! here, and kept for Excel unless the cell is changed.');
     // a dynamic array formula and a floating picture of this program's own, beside it
     book.edit('type', () => book.sheet.setInput(0, 1, '=SEQUENCE(2)'));
     book.build(() => book.sheet.setObjects([{ id: 1, kind: 'picture', at: { row: 4, col: 4, dx: 0, dy: 0 }, w: 10, h: 10, src: `data:image/png;base64,${btoa(String.fromCharCode(...PNG))}` }]));

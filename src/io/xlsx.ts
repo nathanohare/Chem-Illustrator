@@ -61,7 +61,7 @@ import { seenSparkId } from '../sheet/sparklines';
 import { type CompoundCard } from '../sheet/compound';
 import { type Query, seenQueryId } from '../sheet/query';
 import { keepFileValues, fileValues, type FileValue } from './xlsx-cached';
-import { readRichValues, writeRichParts, richMetadataXml, keepPointers, pointerOf } from './xlsx-rich';
+import { readRichValues, writeRichParts, richMetadataXml, keepPointers, pointerOf, richValueKinds } from './xlsx-rich';
 import { LeftOut } from './xlsx-left-out';
 export { applyTint };
 
@@ -1400,9 +1400,12 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
   const date1904 = isOn(kid(root, 'workbookPr')?.getAttribute('date1904'));
   const bookKept = readBookKept(root);
   // pictures placed in cells and other rich values: their parts and the metadata cells point into
-  const richValues = readRichValues(pkg, wbPath, [...rels.values()].find((r) => r.type === RELS.metadata)?.target ?? null);
+  const metadataPath = [...rels.values()].find((r) => r.type === RELS.metadata)?.target ?? null;
+  const richValues = readRichValues(pkg, wbPath, metadataPath);
   const pointers = new Map<Sheet, Map<number, number>>();
-  let richCells = 0;
+  // the cells holding them, by kind (Excel 365's #SPILL! and #CALC! are rich values too, and need no word)
+  const richKind = richValueKinds(pkg, wbPath, metadataPath);
+  let richCells = 0, richOther = false;
   // controls, data connections, query tables, background pictures, macro sheets and XML maps: named on opening
   const leftOut = new LeftOut();
 
@@ -1607,7 +1610,9 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
           // a rich value's cell (a picture placed in it): its pointer, kept with the cell
           const vm = c.getAttribute('vm');
           if (vm !== null) {
-            richCells++;
+            const kind = richKind(Number(vm));
+            if (kind !== 'error') richCells++;
+            if (kind === 'other') richOther = true;
             let list = pointers.get(s);
             if (!list) pointers.set(s, (list = new Map()));
             if (richValues && Number(vm) >= 1 && Number(vm) <= richValues.metadata.blocks.length) list.set(keyOf(r, col), Number(vm));
@@ -1904,10 +1909,12 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
   keepFileValues(book, formulaValues);
   if (richValues) keepPointers(book, pointers);
 
+  // (only pictures, unless some are data types or the like)
+  const what = (many: boolean) => (richOther ? (many ? 'pictures or other values' : 'a picture or other value') : many ? 'pictures' : 'a picture');
   if (richCells && richValues) {
-    warnings.push(`${richCells} cell${richCells > 1 ? 's hold pictures or other values' : ' holds a picture or other value'} placed in ${richCells > 1 ? 'them' : 'it'} in Excel: ` +
+    warnings.push(`${richCells} cell${richCells > 1 ? 's hold' : ' holds'} ${what(richCells > 1)} placed in ${richCells > 1 ? 'them' : 'it'} in Excel: ` +
       `shown as #VALUE! here, and kept for Excel unless ${richCells > 1 ? 'the cells are' : 'the cell is'} changed.`);
-  } else if (richCells) notKept.add(`${richCells} picture${richCells > 1 ? 's' : ''} or other value${richCells > 1 ? 's' : ''} placed in cells`);
+  } else if (richCells) notKept.add(`${richCells} ${what(richCells > 1).replace(/^a /, '')} placed in cells`);
   for (const item of leftOut.items()) notKept.add(item);
   if (foreignPictures) notKept.add(`${foreignPictures} picture${foreignPictures > 1 ? 's' : ''} or chart${foreignPictures > 1 ? 's' : ''}`);
   if (unknownFormulas) warnings.push(`${unknownFormulas} formula${unknownFormulas > 1 ? 's use' : ' uses'} Excel functions this program can't work out yet.`);
