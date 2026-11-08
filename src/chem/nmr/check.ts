@@ -351,10 +351,12 @@ export function measuredLines(list: MeasuredList, sf: number, width = 0.9): { hz
     const w = (p.mult ?? '').replace(/^(br|app)\s*/, '');
     const broad = /^br/.test(p.mult ?? '');
     if (p.hi > p.lo || w === 'm' || !w && p.mult) {
-      // a range: lines across it (a lump the width of the range, at least 8 Hz)
+      // a range or a plain "m": a flat top across the range (at least 8 Hz) with soft shoulders,
+      // made of lines close enough together that they blend into one smooth shape
       const lo = p.hi > p.lo ? p.lo : p.value - 4 / sf, hi = p.hi > p.lo ? p.hi : p.value + 4 / sf;
-      const k = 9;
-      for (let i = 0; i < k; i++) { HZ.push((lo + ((hi - lo) * i) / (k - 1)) * sf); I.push(n / k); W.push(Math.max(width, ((hi - lo) * sf) / k)); }
+      const span = (hi - lo) * sf, w = Math.max(width * 1.6, 0.18 * span, broad ? 12 : 0);
+      const k = Math.max(2, Math.ceil(span / (w / 3)) + 1);
+      for (let i = 0; i < k; i++) { HZ.push((lo + ((hi - lo) * i) / (k - 1)) * sf); I.push(n / k); W.push(w); }
       continue;
     }
     const letters = w === 'sext' || w === 'sept' ? [w] : w.split('');

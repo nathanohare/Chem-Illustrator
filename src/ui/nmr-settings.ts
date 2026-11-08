@@ -38,3 +38,29 @@ export function rangeFor(nuc: RangeNucleus, shifts: number[]): { lo: number; hi:
   }
   return { lo, hi };
 }
+
+/** What the Spectrum window writes over each predicted peak, and how. */
+export interface PeakLabels {
+  /** The atoms (as in the list's Atoms column), the shift (a range for "m"), the multiplicity, the number of H, the J values. */
+  label: boolean; shift: boolean; mult: boolean; count: boolean; j: boolean;
+  /** Font size, px. */
+  size: number;
+  /** Stacked over each peak; on one line along the top with a line down to the peak; or upright over each peak. */
+  place: 'above' | 'top' | 'upright';
+  /** Only the first part shows; hovering a peak shows the rest. */
+  hover: boolean;
+}
+
+export const DEFAULT_PEAK_LABELS: PeakLabels = { label: false, shift: false, mult: true, count: true, j: false, size: 10, place: 'above', hover: false };
+
+export function peakLabels(): PeakLabels {
+  try {
+    const v = JSON.parse(get('ci-nmr-peak-labels') ?? 'null') as Partial<PeakLabels> | null;
+    if (!v || typeof v !== 'object') return { ...DEFAULT_PEAK_LABELS };
+    const out = { ...DEFAULT_PEAK_LABELS, ...v };
+    if (!(out.size >= 6 && out.size <= 24)) out.size = DEFAULT_PEAK_LABELS.size;
+    if (!['above', 'top', 'upright'].includes(out.place)) out.place = 'above';
+    return out;
+  } catch { return { ...DEFAULT_PEAK_LABELS }; }
+}
+export function setPeakLabels(v: PeakLabels): void { put('ci-nmr-peak-labels', JSON.stringify(v)); }

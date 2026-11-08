@@ -38,6 +38,8 @@ export const CANVAS_TABS: RibbonTab[] = [
       { name: 'Diagrams', items: [c('energy-diagram', 'Energy Diagram', true), c('mo-diagram', 'MO Diagram…'), c('orbital', 'Orbital…'), c('ts-brackets', 'Transition State Brackets ‡'), c('torsion-chart', 'Torsional Energy Chart…')] },
       { name: 'Mechanism', items: [c('animate-reaction', 'Animate', true), c('check-arrows', 'Check Arrows'), c('draw-from-arrows', 'Draw Next Intermediate'), c('homolysis-arrows', 'Homolysis Arrows'), c('model-3d', '3-D Model…')] },
       { name: 'Insert', items: [c('name-to-structure', 'Name to Structure…'), c('import-picture', 'Structures from Picture…'), c('sequence-to-structure', 'Structure from Sequence…'), c('tlc-plate', 'TLC Plate…'), c('insert-table', 'Table'), c('rgroup-table', 'R-Group Table…')] },
+      // (one button with a menu; the Chemistry tab has the whole NMR group. Left out where NMR isn't offered)
+      { name: 'NMR', items: [{ cmd: 'nmr-menu', label: 'NMR', major: true, tip: 'NMR: predict, the spectrum window, shifts on the drawing, Check Data, settings' }] },
       { name: 'Look Up', items: [c('structure-to-name', 'Structure to Name'), c('find-cas', 'Find CAS RN'), c('pubchem-lookup', 'Look Up on PubChem'), c('knowledge-base', 'Knowledge Base…'), c('compound-library', 'Compound Library…'), c('periodic-table', 'Periodic Table…')] },
     ],
   },
@@ -52,6 +54,7 @@ export const CANVAS_TABS: RibbonTab[] = [
     id: 'chemistry', title: 'Chemistry', groups: [
       { name: 'Structure', items: [c('clean-up', 'Clean Up', true), c('check-structure', 'Check Structure'), c('expand-label', 'Expand Label'), c('contract-label', 'Contract Label'), c('stereo-labels', 'Stereo Labels'), c('explicit-h', 'Show Hydrogens')] },
       { name: 'Reaction', items: [c('clean-up-reaction', 'Clean Up Reaction', true), c('number-compounds', 'Number Compounds'), c('add-frame', 'Add Frame'), c('attach-descriptors', 'Attach Descriptors')] },
+      { name: 'NMR', items: [c('predict-nmr', 'Predict NMR', true), { cmd: 'nmr-1h', label: '¹H', tip: 'Show the ¹H prediction' }, { cmd: 'nmr-13c', label: '¹³C', tip: 'Show the ¹³C prediction' }, { cmd: 'nmr-solvent', label: 'Solvent…', tip: 'Solvent for the prediction' }, c('nmr-window', 'Spectrum Window'), c('nmr-marks', 'Show on Drawing'), c('nmr-check', 'Check Data…'), c('nmr-settings', 'NMR Settings…')] },
       { name: 'Rings', items: [c('aromatic-circles', 'Aromatic Circles'), c('fill-rings', 'Fill Rings'), c('hapto-bond', 'Add Hapto Bond (η)')] },
       // (once on an Arrow tab that came up with a selected arrow)
       { name: 'Arrows', items: [c('clean-up-arrow', 'Clean Up Arrow', true), c('arrow-reverse', 'Reverse Direction'), c('flip-arrow-bend', 'Flip Bend'), c('arrow-single-curve', 'Single Curve'), c('arrow-s-shape', 'S-Shape'), c('arrow-shape-u', 'U-Turn'), c('arrow-shape-loop', 'Loop'), c('arrow-add-bend', 'Add Bend'), c('arrow-remove-bend', 'Remove Bend'), c('arrow-smooth-path', 'Smooth Path'), c('arrow-simplify-path', 'Simplify Path'), c('attach-arrow', 'Attach to Structure'), c('detach-arrow', 'Detach from Structure')] },

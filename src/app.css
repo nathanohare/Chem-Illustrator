@@ -4335,12 +4335,19 @@ details.nmr .nmr-mode { font: inherit; font-size: var(--fs-xs); padding: 0 2px; 
 .nmr-spec .sp-hot { fill: none; stroke: var(--accent); stroke-width: 1.8; }
 .nmr-spec .sp-lab { font-size: 10px; fill: var(--text); }
 .nmr-spec .sp-tick { font-size: 9.5px; fill: var(--muted); font-variant-numeric: tabular-nums; }
+.nmr-spec .sp-lead { stroke: var(--muted); stroke-width: 0.6; fill: none; }
+.nmr-spec .sp-cursor { stroke: var(--accent); stroke-width: 0.8; stroke-dasharray: 3 3; }
+.nmr-spec .sp-cursor-at { fill: var(--accent); }
+.nmr-spec-tools .nmr-cmp { display: inline-flex; }
+.nmr-spec-tools .nmr-cmp button[aria-pressed="true"] { background: var(--accent); color: #fff; }
+.nmr-spec-tools .nmr-meas-k { width: 70px; }
 .nmr-spec .sp-ax { stroke: var(--line); }
 .nmr-spec-win { position: fixed; z-index: 60; display: flex; flex-direction: column; min-width: 320px; min-height: 180px; height: 300px; resize: both; overflow: hidden; background: var(--panel); border: 1px solid var(--line); border-radius: 6px; box-shadow: 0 6px 18px rgba(0, 0, 0, .18); }
 .nmr-spec-win[hidden] { display: none; }
-.nmr-spec-hd { display: flex; align-items: center; gap: 6px; padding: 2px 6px 2px 8px; border-bottom: 1px solid var(--line); font-size: var(--fs-sm); font-weight: 600; cursor: move; user-select: none; }
+.nmr-spec-hd { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 6px; padding: 2px 6px 2px 8px; border-bottom: 1px solid var(--line); font-size: var(--fs-sm); font-weight: 600; cursor: move; user-select: none; }
 .nmr-spec-hd sup { font-size: .72em; }
-.nmr-spec-tools { margin-left: auto; display: flex; gap: 4px; align-items: center; font-weight: 400; cursor: default; }
+.nmr-spec-title { white-space: nowrap; }
+.nmr-spec-tools { margin-left: auto; display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 4px; white-space: nowrap; align-items: center; font-weight: 400; cursor: default; }
 .nmr-spec-tools select, .nmr-spec-tools button { font: inherit; font-size: var(--fs-xs); padding: 0 6px; min-height: 0; line-height: 18px; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-control); }
 .nmr-spec-tools [hidden] { display: none; }
 .nmr-spec-plot { flex: 1; min-height: 0; overflow: hidden; }
@@ -4368,3 +4375,4 @@ details.nmr .nmr-mode { font: inherit; font-size: var(--fs-xs); padding: 0 2px; 
 /* Chemistry ▸ Orbital: the orbital as it will go in */
 .orbital-preview { display: flex; justify-content: center; align-items: center; height: 132px; border: 1px solid var(--line); border-radius: var(--r-control); background: #fff; }
 .orbital-preview svg { height: 120px; width: auto; max-width: 100%; }
+.ck-row .sp button { white-space: nowrap; }

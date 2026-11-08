@@ -81,3 +81,32 @@ describe('multiplicities in SI text', () => {
     expect(siText(rows, 'CDCl3')).toBe('1H NMR (400 MHz, CDCl3) δ 4.10 (q, J = 7.1 Hz, 2H), 1.20 (t, J = 7.1 Hz, 3H); 13C NMR (101 MHz, CDCl3) δ 60.0, 15.0.');
   });
 });
+
+describe('pasted multiplets and peak labels', () => {
+  it('draws a pasted range "m" as a flat top with no dips', async () => {
+    const { parsePeakLists, measuredLines } = await import('../src/chem/nmr/check');
+    const { lorentzian } = await import('../src/chem/nmr/spin');
+    const [list] = parsePeakLists('1H NMR (400 MHz, CDCl3) δ 7.40 – 7.20 (m, 5H)');
+    const lines = measuredLines(list, 400);
+    const hz = Float64Array.from({ length: 400 }, (_, k) => (7.18 + (k / 399) * 0.24) * 400);
+    const y = lorentzian(lines, hz);
+    const inside = [...y].filter((_, k) => hz[k] / 400 > 7.23 && hz[k] / 400 < 7.37);
+    const max = Math.max(...inside), min = Math.min(...inside);
+    expect(min / max).toBeGreaterThan(0.9);
+  });
+
+  it('labels predicted peaks with the chosen details', () => {
+    const s = predictSpectrum(ea, h1, codes, 400);
+    const d = { nuc: '1H' as const, spec: s, groupRows: s.groups.map((_, i) => i), rowLabels: s.groups.map((_, i) => `H${i + 1}`) };
+    const r = autoRange(d);
+    const all = { label: true, shift: true, mult: true, count: true, j: true, size: 10, place: 'above' as const, hover: false };
+    const svg = spectrumSvg(d, { w: 400, h: 160, hi: r.hi, lo: r.lo, labels: true, peakLabels: all });
+    expect(svg).toContain('H1');
+    expect(svg).toMatch(/3H/);
+    expect(svg).toMatch(/J = 7/);
+    // hover mode: only the label until the row is hot
+    const quiet = spectrumSvg(d, { w: 400, h: 160, hi: r.hi, lo: r.lo, labels: true, peakLabels: { ...all, hover: true } });
+    expect(quiet).toContain('H1');
+    expect(quiet).not.toMatch(/J = 7/);
+  });
+});

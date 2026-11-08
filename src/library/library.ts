@@ -57,8 +57,31 @@ export interface LibCompound {
   collections: string[];
   /** The files it appears in, most recent first. */
   files: FileMention[];
+  /** NMR spectra kept with it (Save to Library in the NMR section), newest first. */
+  spectra?: LibSpectrum[];
   added: number;
   modified: number;
+}
+
+/** An NMR spectrum kept with a compound: a peak report as an SI writes it, predicted or measured (pasted). */
+export interface LibSpectrum {
+  id: string;
+  kind: 'predicted' | 'measured';
+  /** "1H NMR (400 MHz, CDCl3) δ 7.26 (s, 1H), …; 13C NMR …" */
+  text: string;
+  solvent: string;
+  saved: number;
+  /** How a prediction was made (Fast, Balanced, Accurate). */
+  quality?: string;
+}
+
+function cleanSpectrum(raw: unknown): LibSpectrum | null {
+  const m = (raw && typeof raw === 'object' ? raw : {}) as Record<string, unknown>;
+  const text = str(m.text).trim();
+  if (!text) return null;
+  const out: LibSpectrum = { id: str(m.id) || newId('s'), kind: m.kind === 'measured' ? 'measured' : 'predicted', text, solvent: str(m.solvent).trim(), saved: num(m.saved) };
+  if (str(m.quality)) out.quality = str(m.quality);
+  return out;
 }
 
 export type CollectionKind = 'references' | 'compounds';
@@ -145,6 +168,7 @@ export function cleanCompound(raw: unknown, now = Date.now()): LibCompound | nul
     formula: str(c.formula).trim(), mw: num(c.mw), cas: str(c.cas).trim(), notes: str(c.notes),
     tags: uniq(strings(c.tags)), collections: uniq(strings(c.collections)),
     files: sortMentions(files),
+    ...(Array.isArray(c.spectra) && c.spectra.length ? { spectra: c.spectra.map(cleanSpectrum).filter((x): x is LibSpectrum => !!x) } : {}),
     added: num(c.added, now), modified: num(c.modified, now),
   };
 }
