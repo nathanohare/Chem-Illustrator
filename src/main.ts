@@ -12468,7 +12468,7 @@ function drawingMenu(): MenuItem[] {
       ...metalMenu(),
       { label: 'Structure', items: [
         { cmd: 'clean-up-options' }, null,
-        { cmd: 'stereo-labels' }, { cmd: 'aromatic-circles' }, { cmd: 'chain-ends' }, { cmd: 'explicit-h' }, null,
+        { cmd: 'stereo-labels' }, { cmd: 'aromatic-circles' }, { cmd: 'explicit-h' }, null,
         { cmd: 'contract-label' }, { cmd: 'expand-label' }, { cmd: 'expand-label-full' }, { cmd: 'join' }, null,
         { cmd: 'hapto-bond' }, { cmd: 'split-hapto' }, { cmd: 'hapto-kekule' }, null,
         { cmd: 'enhanced-stereo' }, { cmd: 'chiral-flag' }, { cmd: 'repeat-group' }, { cmd: 'rgroup-table' }, null,
@@ -13088,7 +13088,7 @@ const BOX_TITLES: Record<string, string> = {
 const cmds = (list: (string | null)[]) => list.map((c) => (c ? `cmd:${c}` : 'sep'));
 const BOX_ITEMS: Record<string, readonly string[]> = {
   main: MAIN_ITEMS,
-  structure: cmds(['clean-up', 'clean-up-options', 'add-frame', 'fill-rings', 'highlight', 'remove-highlight', null, 'chain-ends', 'explicit-h', 'aromatic-circles', 'stereo-labels', null, 'add-id-label', 'add-caption', 'attach-descriptors', 'number-compounds', null, 'contract-label', 'expand-label', 'expand-label-full', 'hapto-bond', 'name-to-structure']),
+  structure: cmds(['clean-up', 'clean-up-options', 'add-frame', 'fill-rings', 'highlight', 'remove-highlight', null, 'aromatic-circles', 'stereo-labels', null, 'add-id-label', 'add-caption', 'attach-descriptors', 'number-compounds', null, 'contract-label', 'expand-label', 'expand-label-full', 'hapto-bond', 'name-to-structure']),
   arrange: cmds(['align-left', 'align-hcenter', 'align-right', 'align-top', 'align-vcenter', 'align-bottom', null, 'distribute-h', 'distribute-v', 'arrange-row', 'arrange-column', 'arrange-grid', null, 'flip-h', 'flip-v', 'rotate-cw', 'rotate-ccw', null, 'shape-front', 'shape-back']),
   highlight: [...cmds(['highlight', 'remove-highlight', null, 'smooth-highlight', 'centre-highlight', 'soft-highlight', 'outline-highlight', 'shadow-highlight', 'glow-highlight', null, 'save-highlight-look']), 'w:looks'],
   custom: defaultToolboxes().custom,
