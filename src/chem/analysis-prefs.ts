@@ -24,10 +24,10 @@ export const ROW_NAMES: Record<string, string> = {
 };
 
 /** What the descriptors under a structure can show. */
-export type DescKey = 'formula' | 'exact' | 'mw' | 'mz' | 'ea' | 'hrms' | `calc:${string}`;
-export const DESC_NAMES: Record<string, string> = { formula: 'Formula', exact: 'Exact mass', mw: 'Molecular weight', mz: 'm/z of the ion', ea: 'Elemental analysis (%)', hrms: 'HRMS line' };
+export type DescKey = 'formula' | 'name' | 'exact' | 'mw' | 'mz' | 'ea' | 'hrms' | `calc:${string}`;
+export const DESC_NAMES: Record<string, string> = { formula: 'Formula', name: 'Name', exact: 'Exact mass', mw: 'Molecular weight', mz: 'm/z of the ion', ea: 'Elemental analysis (%)', hrms: 'HRMS line' };
 /** Each descriptor line's own words before its value, as journals write them (blank: the line has none). */
-export const DESC_LABELS: Record<string, string> = { formula: '', exact: 'Exact Mass:', mw: 'Mol. Wt.:', mz: 'm/z:', ea: 'Elemental Analysis:', hrms: '' };
+export const DESC_LABELS: Record<string, string> = { formula: '', name: '', exact: 'Exact Mass:', mw: 'Mol. Wt.:', mz: 'm/z:', ea: 'Elemental Analysis:', hrms: '' };
 
 export type TempUnit = '°C' | '°F' | 'K';
 export type PressureUnit = 'kPa' | 'mmHg' | 'Pa' | 'bar';
@@ -65,7 +65,7 @@ export const DEFAULT_ANALYSIS: AnalysisPrefs = {
   calcs: [newCalc('1')],
   ribbon: { lines: ['mw', 'exact', 'mz'], simple: 'mw' },
   descriptors: [
-    { key: 'formula', on: true, label: '', dp: null }, { key: 'exact', on: true, label: DESC_LABELS.exact, dp: 4 }, { key: 'mw', on: true, label: DESC_LABELS.mw, dp: 2 },
+    { key: 'formula', on: true, label: '', dp: null }, { key: 'name', on: false, label: '', dp: null }, { key: 'exact', on: true, label: DESC_LABELS.exact, dp: 4 }, { key: 'mw', on: true, label: DESC_LABELS.mw, dp: 2 },
     { key: 'mz', on: false, label: DESC_LABELS.mz, dp: 4 }, { key: 'ea', on: false, label: DESC_LABELS.ea, dp: 2 }, { key: 'hrms', on: false, label: '', dp: null },
   ],
   autoName: true,
@@ -147,7 +147,12 @@ export function parseAnalysisPrefs(v: unknown): AnalysisPrefs {
       if (!isDesc(x?.key, out.calcs) || list.some((y) => y.key === x.key)) continue;
       list.push({ key: x.key, on: x.on === true, label: typeof x.label === 'string' ? x.label.slice(0, 40) : DESC_LABELS[x.key] ?? '', dp: x.dp === null ? null : dp(x.dp, 2) });
     }
-    for (const d of DEFAULT_ANALYSIS.descriptors) if (!list.some((y) => y.key === d.key)) list.push({ ...d });
+    // lines added to the program since: after the default line before them
+    DEFAULT_ANALYSIS.descriptors.forEach((d, i) => {
+      if (list.some((y) => y.key === d.key)) return;
+      const before = DEFAULT_ANALYSIS.descriptors.slice(0, i).reverse().find((x) => list.some((y) => y.key === x.key));
+      list.splice(before ? list.findIndex((y) => y.key === before.key) + 1 : 0, 0, { ...d });
+    });
     out.descriptors = list;
   }
   if (typeof o.autoName === 'boolean') out.autoName = o.autoName;

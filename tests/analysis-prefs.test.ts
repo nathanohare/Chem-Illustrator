@@ -76,6 +76,11 @@ describe('saved Analysis settings', () => {
     expect(p.rows[at('exact')].on).toBe(false);
     expect(p.rows.length).toBe(DEFAULT_ANALYSIS.rows.length);
   });
+  it('puts the Name line after the formula in descriptor settings saved before it existed', () => {
+    const p = parseAnalysisPrefs({ descriptors: [{ key: 'formula', on: true }, { key: 'exact', on: true }, { key: 'mw', on: true }] });
+    expect(p.descriptors.map((x) => x.key).slice(0, 4)).toEqual(['formula', 'name', 'exact', 'mw']);
+    expect(p.descriptors[1].on).toBe(false);
+  });
   it('drops rows and ribbon lines it doesn\'t know', () => {
     const p = parseAnalysisPrefs({ rows: [{ key: 'nonsense', on: true }], ribbon: { lines: ['nonsense', 'mw', 'calc:9'], simple: 'exact' } });
     expect(p.rows.some((r) => (r.key as string) === 'nonsense')).toBe(false);
@@ -146,5 +151,8 @@ describe('what the settings show', () => {
     const text = (runs: { text: string }[]) => runs.map((x) => x.text).join('');
     expect(text(descriptorRuns(r, ['mw', 'formula'], '[M+H]+', d, bench))).toBe('C5H5N\nMW: 79.1');
     expect(text(descriptorRuns(r, ['calc:1'], '[M+H]+', d, bench))).toBe('0.5 mmol: 39.6 mg, 40.3 µL');
+    // the name, after the formula, once it is known
+    expect(text(descriptorRuns(r, ['mw', 'name', 'formula'], '[M+H]+', d, bench, 'pyridine'))).toBe('C5H5N\npyridine\nMW: 79.1');
+    expect(text(descriptorRuns(r, ['name', 'formula'], '[M+H]+', d, bench, null))).toBe('C5H5N');
   });
 });

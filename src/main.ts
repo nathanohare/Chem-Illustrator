@@ -11267,6 +11267,7 @@ const analysisHost: AnalysisSettingsHost = {
   sample: analysisSample,
   bench: (r) => benchOf(r),
   adduct: () => adductSel.value,
+  name: (r) => { const s = nameStates.get(r.smiles); return s?.kind === 'found' ? s.name : null; },
 };
 
 /** Starts the offline namer a few seconds after the first structure is analysed, so names come without asking. */
@@ -11424,15 +11425,14 @@ $('#analysis-body').addEventListener('click', (e) => {
     flash('Added the CAS RN under the structure; it follows it. Double-click to edit.');
     return;
   }
-  if (kind === 'pcname' || kind === 'pccas' || kind === 'pchaz' || kind === 'name') {
+  if (kind === 'pcname' || kind === 'pccas' || kind === 'pchaz') {
     const st = r && pubchemStates.get(r.smiles);
-    const named = kind === 'name' && r ? nameStates.get(r.smiles) : undefined;
-    const runs = kind === 'name' ? (named?.kind === 'found' ? nameRuns(named.name) : null) : st?.kind === 'found' ? pubchemRuns(kind, st.c) : null;
+    const runs = st?.kind === 'found' ? pubchemRuns(kind, st.c) : null;
     if (!runs || !frag) return;
     // tied to the structure like Add Caption's, so it follows it; edit or retype it like any text
     // (the structure stays selected, so the panel stays open for the other buttons)
     const m = editor.measure();
-    doc.edit(kind === 'pcname' || kind === 'name' ? 'Name caption' : kind === 'pccas' ? 'CAS caption' : 'Hazards caption', () => {
+    doc.edit(kind === 'pcname' ? 'Name caption' : kind === 'pccas' ? 'CAS caption' : 'Hazards caption', () => {
       const c = doc.addCaption({ x: 0, y: 0, runs, justify: 'center', attach: { atoms: [...frag], side: 'below', gap: defaultGap(doc), shift: 0, role: 'caption' } });
       placeAttached(doc, c, m);
     });
@@ -11482,6 +11482,16 @@ async function weigh(atoms: Set<number>): Promise<FragmentResult | null> {
   return r && !r.error ? r : null;
 }
 
+/** A structure's checked systematic name for its descriptors (the namer starts if need be), or null when it has none. */
+async function descriptorName(atoms: Set<number>, r: FragmentResult | null): Promise<string | null> {
+  if (!r?.smiles) return null;
+  const ex = toMolfile(doc, atoms, '');
+  if (ex.generic.length) return null;
+  if (!namer.ready) flash('Loading the namer for the Name line (first time only)…', 15000);
+  const s = await nameOf(r.smiles, ex.molblock).catch(() => null);
+  return s?.kind === 'found' ? s.name : null;
+}
+
 /**
  * Chemistry > Attach Descriptors (and the Analysis panel's button): the formula and masses under
  * each structure, tied to it. They follow it, and are worked out again when it changes; the Style
@@ -11492,13 +11502,14 @@ async function attachDescriptors(frags = chosenStructures()): Promise<void> {
   if (!chem.ready) { flash('The chemistry engine is still loading. Try again in a moment.'); return; }
   const made: number[] = [];
   const weighed = await Promise.all(frags.map((f) => weigh(f)));
+  const show = newDescriptors();
+  const names = show.includes('name') ? await Promise.all(frags.map((f, i) => descriptorName(f, weighed[i]))) : [];
   doc.edit('Attach descriptors', () => {
     frags.forEach((f, i) => {
       const r = weighed[i];
       if (!r) return;
       const adduct = adductSel.value;
-      const show = newDescriptors();
-      const runs = descriptorRuns(r, show, adduct, analysisPrefs(), benchOf(r));
+      const runs = descriptorRuns(r, show, adduct, analysisPrefs(), benchOf(r), names[i]);
       const attach: Attachment = { atoms: [...f], side: 'below', gap: defaultGap(doc), shift: 0, role: 'descriptors', show, adduct, sig: structureSig(doc, f) };
       const c = doc.addCaption({ x: 0, y: 0, runs, justify: 'center', attach });
       placeAttached(doc, c, editor.measure());
@@ -11528,11 +11539,12 @@ async function refreshDescriptors(): Promise<void> {
         if (!atoms.size || sig === a.sig) continue;
         const version = doc.version;
         const r = await weigh(atoms);
+        const name = (a.show ?? newDescriptors()).includes('name') ? await descriptorName(atoms, r) : null;
         // something else changed meanwhile: look again from the start
         if (doc.version !== version) { descriptorAgain = true; break; }
         const now = doc.captions.get(c.id);
         if (!r || !now?.attach) continue;
-        doc.amend('Descriptors', () => doc.updateCaption(c.id, { runs: descriptorRuns(r, now.attach!.show ?? newDescriptors(), now.attach!.adduct ?? adductSel.value, analysisPrefs(), benchOf(r)), attach: { ...now.attach!, sig } }));
+        doc.amend('Descriptors', () => doc.updateCaption(c.id, { runs: descriptorRuns(r, now.attach!.show ?? newDescriptors(), now.attach!.adduct ?? adductSel.value, analysisPrefs(), benchOf(r), name), attach: { ...now.attach!, sig } }));
         editor.changed();
       }
     } while (descriptorAgain);
@@ -11667,7 +11679,7 @@ async function runAnalysis(force: boolean): Promise<void> {
     rows: prefs.ribbon.lines.map(boxRow),
     simple: boxRow(prefs.ribbon.simple),
   } : null);
-  panel.innerHTML = results.map((r, i) => polymers[i] ? polymerHtml(polymers[i]!) : analysisHtml(r, i, adductSel.value, { prefs, bench: benchOf(r), customize: analysisCustomize, ions: COMMON_ADDUCTS, stereo: r.error ? '' : stereoSummary(frags[i]), unknown: exports[i].unknownLabels, electrons: frags[i].size ? electronsHtml(countElectrons(doc, frags[i].values().next().value!)) : '', rGroups: rGroupNames(frags[i]), name: r.error || !r.smiles || rGroupNames(frags[i]).length ? '' : nameHtml(nameStates.get(r.smiles) ?? { kind: 'idle' }, i), pubchem: r.error || !r.smiles ? '' : pubchemHtml(pubchemStates.get(r.smiles) ?? { kind: 'idle' }, i), cas: r.error || !r.smiles ? undefined : casHtml(casStateOf(r.smiles), i) })).join('');
+  panel.innerHTML = results.map((r, i) => polymers[i] ? polymerHtml(polymers[i]!) : analysisHtml(r, i, adductSel.value, { prefs, bench: benchOf(r), customize: analysisCustomize, ions: COMMON_ADDUCTS, stereo: r.error ? '' : stereoSummary(frags[i]), unknown: exports[i].unknownLabels, electrons: frags[i].size ? electronsHtml(countElectrons(doc, frags[i].values().next().value!)) : '', rGroups: rGroupNames(frags[i]), name: r.error || !r.smiles || rGroupNames(frags[i]).length ? '' : nameHtml(nameStates.get(r.smiles) ?? { kind: 'idle' }), pubchem: r.error || !r.smiles ? '' : pubchemHtml(pubchemStates.get(r.smiles) ?? { kind: 'idle' }, i), cas: r.error || !r.smiles ? undefined : casHtml(casStateOf(r.smiles), i) })).join('');
   if (analysisCustomize) panel.insertAdjacentHTML('afterbegin', CUSTOMIZE_BAR);
   const nmrOn = prefs.rows.some((x) => x.key === 'nmr' && x.on);
   nmrPanel.attach(panel, results.map((r, i) => (!nmrOn || r.error || !r.smiles || polymers[i] || rGroupNames(frags[i]).length ? null : { molblock: exports[i].molblock, map: exports[i].map })));
