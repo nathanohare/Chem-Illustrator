@@ -5,6 +5,7 @@
 // The keys are the slide show's: → ↓ Space Enter Page Down N for next, ← ↑ Backspace Page Up P
 // for back, a number then Enter to jump, B and W for a black or white screen, Esc to end.
 
+import { showNotesIn } from '../deck/notes-look';
 import { isTauri } from '@tauri-apps/api/core';
 import type { Deck } from '../deck/deck';
 import { Player } from '../deck/playback';
@@ -328,7 +329,9 @@ export class PresenterView {
     const keys = this.deck.slides[i].canvas?.keys.length ?? 0;
     this.els.count.textContent = `Slide ${i + 1} of ${n}${keys ? ` · keyframe ${this.player.key + 1} of ${keys}` : ''}${steps ? ` · animation ${done} of ${steps}` : ''}`;
     this.keyMap();
-    this.els.notes.textContent = this.deck.slides[i].notes || 'No notes for this slide.';
+    const s = this.deck.slides[i];
+    if (s.notes) showNotesIn(this.els.notes, s.notes, s.notesLook);
+    else this.els.notes.textContent = 'No notes for this slide.';
     this.els.notes.classList.toggle('muted', !this.deck.slides[i].notes);
     this.els.where.textContent = this.audience === 'other-screen' ? 'Audience: full screen on the second screen'
       : this.audience === 'window' ? 'Audience: in its own window (drag it to the projector; F fills the screen in a browser)'

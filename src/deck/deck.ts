@@ -8,6 +8,7 @@
 // on a slide is undone on that slide (the deck goes back to it), and adding, deleting or
 // moving slides, or changing the master, are undone too.
 
+import type { NotesLook } from './notes-look';
 import type { KeptParts } from '../io/kept-parts';
 import type { KeptOle, KeptPicture } from '../io/ole-kept';
 import type { SlideView } from './guides';
@@ -702,6 +703,8 @@ export interface Slide {
   zotero?: SlideZotero;
   /** Its notes as PowerPoint had them, saved back while they are unchanged. */
   notesKept?: NotesKept;
+  /** The notes' bold, italic and underlined words (deck/notes-look.ts), while they are still these notes. */
+  notesLook?: NotesLook;
 }
 
 /**
@@ -718,7 +721,7 @@ export interface SectionCount { name: string; count: number }
 export type SizeFit = 'centre' | 'fit' | 'max';
 
 /** A slide's transition, animations, comments, own background and whether it is hidden, copied (for duplicates and the undo history). */
-export interface Motion { transition?: Transition; anims?: Anim[]; comments?: PinnedComment[]; background?: Background; hideGraphics?: boolean; hidden?: boolean; hf?: SlideHF; canvas?: CanvasData; refs?: string[]; refLook?: Partial<RefLook>; refList?: RefListSpec; zotero?: SlideZotero; notesKept?: NotesKept }
+export interface Motion { transition?: Transition; anims?: Anim[]; comments?: PinnedComment[]; background?: Background; hideGraphics?: boolean; hidden?: boolean; hf?: SlideHF; canvas?: CanvasData; refs?: string[]; refLook?: Partial<RefLook>; refList?: RefListSpec; zotero?: SlideZotero; notesKept?: NotesKept; notesLook?: NotesLook }
 
 /**
  * Speaker notes as PowerPoint had them, formatting and all (its notes text body, links as kept
@@ -739,6 +742,7 @@ const copyMotion = (m: Motion): Motion => ({
   ...(m.refList ? { refList: structuredClone(m.refList) } : {}),
   ...(m.zotero ? { zotero: structuredClone(m.zotero) } : {}),
   ...(m.notesKept ? { notesKept: m.notesKept } : {}),
+  ...(m.notesLook ? { notesLook: structuredClone(m.notesLook) } : {}),
 });
 
 /** A slide copied out of a deck (Copy, or Reuse Slides): its layout, drawing, notes and the rest. */
@@ -1892,13 +1896,17 @@ export class Deck {
     this.record(label, () => put(before), () => put(after));
   }
 
-  /** Change a slide's speaker notes. */
-  setNotes(text: string, i = this.index): void {
+  /** Change a slide's speaker notes (and, from the Notes pane, their bold, italic and underlined words). */
+  setNotes(text: string, i = this.index, look?: NotesLook): void {
     const s = this.slides[i];
-    if (!s || s.notes === text) return;
+    if (!s) return;
+    const was = s.notesLook?.text === s.notes ? s.notesLook : undefined;
+    const now = look?.text === text ? look : undefined;
+    if (s.notes === text && JSON.stringify(was) === JSON.stringify(now)) return;
     const before = s.notes;
-    s.notes = text;
-    this.record('Edit notes', () => { s.notes = before; this.onSwitch(); }, () => { s.notes = text; this.onSwitch(); }, s);
+    const put = (t: string, l: NotesLook | undefined) => { s.notes = t; if (l) s.notesLook = structuredClone(l); else delete s.notesLook; };
+    put(text, now);
+    this.record('Edit notes', () => { put(before, was); this.onSwitch(); }, () => { put(text, now); this.onSwitch(); }, s);
   }
 
   /** Change the transition of some slides (the current one by default). One undo step. */

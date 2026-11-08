@@ -1307,8 +1307,14 @@ dialog.design-size { width: min(94vw, 500px); }
   color: var(--text);
   font: var(--fs-md)/1.45 var(--ui-font);
   outline: none;
+  /* (a box keeping bold, italic and underlined words: its lines as typed) */
+  overflow-y: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  cursor: text;
+  position: relative;
 }
-#notes::placeholder { color: var(--muted); }
+#notes.empty::before { content: attr(data-placeholder); color: var(--muted); position: absolute; pointer-events: none; }
 
 /* ------------------------------------------------------------------ the slide show */
 .present { position: fixed; inset: 0; z-index: 100; background: #000; outline: none; }

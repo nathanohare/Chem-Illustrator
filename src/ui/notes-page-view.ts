@@ -7,6 +7,8 @@ import type { Deck, Master, NotesHF } from '../deck/deck';
 import { defaultNotesHF, DATE_FORMATS } from '../deck/deck';
 import { HANDOUT_COUNTS, defaultHandout, notesLayout, pageTexts, type Box, type HandoutSetup, type NotesPageSetup } from '../deck/notes-pages';
 import { paintSlide } from '../deck/slide-view';
+import { notesCharLooks, notesLookOf } from '../deck/notes-look';
+import { spliceLooks } from '../sheet/rich-text';
 import { ask } from './ask';
 
 export interface NotesPageHooks {
@@ -88,8 +90,10 @@ export class NotesPageView {
       ta.style.fontFamily = `"${font}", sans-serif`;
       ta.style.fontSize = `${size}px`;
       at(ta, L.notes);
-      ta.addEventListener('change', () => { if (ta.value !== s.notes) d.setNotes(ta.value, i); });
-      ta.addEventListener('blur', () => { if (ta.value !== s.notes) d.setNotes(ta.value, i); });
+      // (the words left as they were keep their bold, italic and underlining)
+      const typed = () => { if (ta.value !== s.notes) d.setNotes(ta.value, i, notesLookOf(ta.value, spliceLooks(s.notes, ta.value, notesCharLooks(s.notes, s.notesLook)))); };
+      ta.addEventListener('change', typed);
+      ta.addEventListener('blur', typed);
       const label = document.createElement('div');
       label.className = 'np-label';
       label.textContent = `Slide ${i + 1}`;
