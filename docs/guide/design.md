@@ -1,4 +1,4 @@
-# Design (TOC graphic, abstract, poster, figure)
+# Design (Posters, Graphical abstracts, Figures)
 
 This page covers Design mode: single-page graphics such as TOC graphics, graphical abstracts, posters, flowcharts and workup schemes, and how to export them for a journal.
 

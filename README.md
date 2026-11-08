@@ -97,7 +97,7 @@ Every hotkey can be changed (**Edit ▸ Hotkeys**), and the hotkeys can be expor
 
 ## Presentations, spreadsheets, documents and designs
 
-Chem Illustrator has five modes: **Canvas** (chemistry), **Presentation** (slideshow), **Spreadsheet** (tables, charts, dashboards), **Document** (text) and **Design** (TOC graphic, abstract, poster, figure). Each Office-like mode works like the Office program it matches, and adds what Office can't do for a chemist.
+Chem Illustrator has five modes: **Canvas** (Chemistry), **Presentation** (Slideshow), **Spreadsheet** (Tables, Charts, and Dashboards), **Document** (Text document) and **Design** (Posters, Graphical abstracts, Figures). Each Office-like mode works like the Office program it matches, and adds what Office can't do for a chemist.
 
 | Presentation | Spreadsheet |
 |---|---|

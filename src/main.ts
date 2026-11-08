@@ -5476,8 +5476,8 @@ tabList.addEventListener('click', () => {
 tabAdd.addEventListener('click', () => {
   const [x, y] = menuAt(tabAdd);
   showContextMenu(x, y, [
-    { cmd: 'new', label: 'Canvas (chemistry)' }, { cmd: 'new-slides', label: 'Presentation (slideshow)' },
-    { cmd: 'new-sheet', label: 'Spreadsheet (tables, charts, dashboards)' }, { cmd: 'new-document', label: 'Document (text)' }, { cmd: 'new-design', label: 'Design (TOC graphic, abstract, poster, figure)' },
+    { cmd: 'new', label: 'Canvas (Chemistry)' }, { cmd: 'new-slides', label: 'Presentation (Slideshow)' },
+    { cmd: 'new-sheet', label: 'Spreadsheet (Tables, Charts, and Dashboards)' }, { cmd: 'new-document', label: 'Document (Text document)' }, { cmd: 'new-design', label: 'Design (Posters, Graphical abstracts, Figures)' },
     { cmd: 'new-from-template', label: 'Document or Spreadsheet from Template…' },
   ], { run: (cmd) => void command(cmd), key: commandKey });
 });
