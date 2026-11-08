@@ -4081,7 +4081,8 @@ function pptxOptions(): PptxOptions {
     bakePicture: (p) => fxPng(p, 'baked'),
     fonts: bundledFaces,
     smiles: drawingSmiles,
-    chemdrawObjects: officeStructures.pptx === 'chemdraw',
+    // read when saving (the tab manager keeps these options from the start; Settings ▸ General can change it since)
+    get chemdrawObjects() { return officeStructures.pptx === 'chemdraw'; },
   };
 }
 
