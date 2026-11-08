@@ -330,11 +330,34 @@ export function chemdrawInObject(cfb: Uint8Array): Uint8Array | null {
   }
 }
 
-/** A ChemDraw object holding a drawing (its CDX), as PowerPoint keeps one: double-clicked in PowerPoint, it opens in ChemDraw. */
-export function chemdrawObject(cdx: Uint8Array, prog = chemdrawProg()): Uint8Array {
+/** A picture an object shows until it is opened: an EMF, and its size in points. */
+export interface ObjectPicture { emf: Uint8Array; w: number; h: number }
+
+/**
+ * The "\u0002OlePres000" stream ([MS-OLEDS] 2.3.4): the object's picture and its size, as
+ * ChemDraw writes it (an EMF, for the content, any target device). PowerPoint sizes the object
+ * by it when it is opened in place; without it the frame opened empty and Edit was greyed out.
+ */
+export function olePresStream(pic: ObjectPicture): Uint8Array {
+  const himetric = (pt: number) => Math.max(1, Math.round((pt * 2540) / 72));
+  const head = new DataView(new ArrayBuffer(40));
+  // a standard clipboard format (-1), CF_ENHMETAFILE (14), no target device (4), DVASPECT_CONTENT, lindex -1, ADVF_NODATA… 2, reserved
+  [0xffffffff, 14, 4, 1, 0xffffffff, 2, 0, himetric(pic.w), himetric(pic.h), pic.emf.length].forEach((v, i) => head.setUint32(4 * i, v >>> 0, true));
+  const out = new Uint8Array(40 + pic.emf.length);
+  out.set(new Uint8Array(head.buffer), 0);
+  out.set(pic.emf, 40);
+  return out;
+}
+
+/**
+ * A ChemDraw object holding a drawing (its CDX), as PowerPoint keeps one: double-clicked in
+ * PowerPoint, it opens in ChemDraw. `pic` is its picture until then, as ChemDraw keeps it.
+ */
+export function chemdrawObject(cdx: Uint8Array, prog = chemdrawProg(), pic?: ObjectPicture | null): Uint8Array {
   return writeCfb([
     ['\u0001CompObj', compObj(chemdrawObjectName(prog), prog, CHEMDRAW_CLASS, 'ChemDraw Interchange Format')],
     ['\u0001Ole', OLE_STREAM],
+    ...(pic?.emf.length ? [['\u0002OlePres000', olePresStream(pic)] as [string, Uint8Array]] : []),
     ['CONTENTS', cdx],
   ], CHEMDRAW_CLASS);
 }

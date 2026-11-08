@@ -115,7 +115,7 @@ import { DARK_PALETTES, darkPaletteNamed, showDarkPage, type DarkPalette } from 
 import { STYLE_PRESETS, applyStyle, presetNamed, restyleContents, sameLook, styleNamed, type StyleMode } from './drawing-styles';
 import { askCleanUpOption } from './ui/cleanup-picker';
 import { looksTangled, turnOption } from './chem/cleanup';
-import { recordPicture, pictureSvg, pictureCanvas, canvasPng, bitmapScale, EXPORT_MAX_SIDE, EXPORT_MAX_PIXELS } from './render/picture';
+import { recordPicture, pictureSvg, pictureEmf, pictureCanvas, canvasPng, bitmapScale, EXPORT_MAX_SIDE, EXPORT_MAX_PIXELS } from './render/picture';
 import { pngWithDpi } from './render/emf-read';
 import { whiteToClear } from './render/background';
 
@@ -3957,7 +3957,7 @@ const docFiles: DocxDeps = {
     const pic = fb ? { items: drawn?.items ?? [], box: drawn ? { x1: Math.min(fb.x1, drawn.box.x1), y1: Math.min(fb.y1, drawn.box.y1), x2: Math.max(fb.x2, drawn.box.x2), y2: Math.max(fb.y2, drawn.box.y2) } : fb } : drawn;
     if (!pic) return null;
     const png = new Uint8Array(await (await canvasPng(pictureCanvas(d, pic).canvas)).arrayBuffer());
-    return { png, svg: pictureSvg(pic), w: pic.box.x2 - pic.box.x1, h: pic.box.y2 - pic.box.y1, x: pic.box.x1, y: pic.box.y1 };
+    return { png, svg: pictureSvg(pic), w: pic.box.x2 - pic.box.x1, h: pic.box.y2 - pic.box.y1, x: pic.box.x1, y: pic.box.y1, ...(officeStructures.docx === 'chemdraw' ? { emf: pictureEmf(pic) } : {}) };
   },
   svgToPng,
   bakePicture: (p) => fxPng(p, 'baked'),
@@ -4092,7 +4092,8 @@ function pptxOptions(): PptxOptions {
       const pic = recordPicture(d, 1);
       if (!pic) return null;
       const png = new Uint8Array(await (await canvasPng(pictureCanvas(d, pic, PPTX_FALLBACK_DPI).canvas)).arrayBuffer());
-      return { svg: pictureSvg(pic), png, box: pic.box };
+      // (a ChemDraw object keeps an EMF of it, as ChemDraw does, to show until it is opened)
+      return { svg: pictureSvg(pic), png, box: pic.box, ...(officeStructures.pptx === 'chemdraw' ? { emf: pictureEmf(pic) } : {}) };
     },
     svgToPng,
     bakePicture: (p) => fxPng(p, 'baked'),

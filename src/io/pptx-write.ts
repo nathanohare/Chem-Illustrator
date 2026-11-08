@@ -254,7 +254,8 @@ function highlightSpot(doc: Doc, h: Selection): { x: number; y: number; bond?: t
 }
 
 /** A picture of part of a slide (structures, schemes): SVG and PNG, and the area it shows, in points. */
-export interface DrawingPicture { svg: string; png: Uint8Array; box: Rect }
+/** `emf`: the same picture as an EMF, for a ChemDraw object to show until it is opened. */
+export interface DrawingPicture { svg: string; png: Uint8Array; box: Rect; emf?: Uint8Array }
 
 export interface PptxOptions {
   /** A picture of a drawing (made by the app, which can draw). Null when there is nothing to show. */
@@ -1208,7 +1209,7 @@ class Writer {
     mark(sel, id);
     const smiles = await this.opts.smiles?.(part).catch(() => null) ?? null;
     const alt = contentsAlt(part.contents()) ?? structureAltText(smiles);
-    if (cdx) out.push(this.chemdrawObject(path, cdx, prog!, id, png, svg, pic.box, tags, alt));
+    if (cdx) out.push(this.chemdrawObject(path, cdx, prog!, id, png, svg, pic.box, tags, alt, (pic as DrawingPicture).emf));
     else out.push(picXml(id, `Structure ${id - 1}`, png, svg, pic.box, null, tags, undefined, alt));
   }
 
@@ -1227,10 +1228,10 @@ class Writer {
    * double-click in PowerPoint opens it in ChemDraw; until then PowerPoint shows its picture.
    */
   private oleObjects = 0;
-  private chemdrawObject(path: string, cdx: Uint8Array, prog: string, id: number, png: string, svg: string, box: Rect, tags: string, alt?: string): string {
+  private chemdrawObject(path: string, cdx: Uint8Array, prog: string, id: number, png: string, svg: string, box: Rect, tags: string, alt?: string, emf?: Uint8Array): string {
     const part = `ppt/embeddings/oleObject${++this.oleObjects}.bin`;
     this.pkg.defaultType('bin', OLE_TYPE);
-    this.pkg.add(part, chemdrawObject(cdx, prog));
+    this.pkg.add(part, chemdrawObject(cdx, prog, emf ? { emf, w: box.x2 - box.x1, h: box.y2 - box.y1 } : null));
     const rid = this.pkg.relate(path, OLE_REL, fromPpt(path, part));
     const w = emu(box.x2 - box.x1), h = emu(box.y2 - box.y1);
     return `<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="${id}" name="Object ${id - 1}"${alt ? ` descr="${xmlAttr(alt)}"` : ''}/><p:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></p:cNvGraphicFramePr>` +
