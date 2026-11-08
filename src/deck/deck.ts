@@ -328,8 +328,8 @@ export function decorShapes(size: SlideSize, m: Master, layout: LayoutId): Decor
           { kind: 'line', x1: 0.05 * w, y1: (CONTENT_RULE + 0.012) * h, x2: 0.95 * w, y2: (CONTENT_RULE + 0.012) * h, color: b, width: 1 }];
     case 'hairlines':
       return title
-        ? [{ kind: 'line', x1: 0.2 * w, y1: 0.25 * h, x2: 0.8 * w, y2: 0.25 * h, color: a, width: 0.75 },
-          { kind: 'line', x1: 0.2 * w, y1: 0.75 * h, x2: 0.8 * w, y2: 0.75 * h, color: a, width: 0.75 }]
+        ? [{ kind: 'line', x1: 0.2 * w, y1: 0.25 * h, x2: 0.8 * w, y2: 0.25 * h, color: a, width: 1.5 },
+          { kind: 'line', x1: 0.2 * w, y1: 0.75 * h, x2: 0.8 * w, y2: 0.75 * h, color: a, width: 1.5 }]
         : [{ kind: 'line', x1: 0.05 * w, y1: 0.035 * h, x2: 0.95 * w, y2: 0.035 * h, color: a, width: 0.75 },
           { kind: 'line', x1: 0.05 * w, y1: 0.915 * h, x2: 0.95 * w, y2: 0.915 * h, color: b, width: 0.75 }];
     case 'title-tab':
