@@ -297,7 +297,8 @@ describe('charts in Excel files', () => {
     const doc = new DOMParser().parseFromString(xmlText, 'application/xml');
     const got = readChartXml(doc, { row: 1, col: 3, dx: 0, dy: 0 }, 400, 250, 99)!;
     expect(got.chart).toMatchObject({ kind: 'bar', stacked: true, legend: 'bottom', x: { title: 'Yield (%)', max: 100, grid: true } });
-    expect(got.chart.series).toEqual([{ name: '=Data!$B$1', x: '=Data!$A$2:$A$5', y: '=Data!$B$2:$B$5' }]);
+    // (the theme colour is kept to write back)
+    expect(got.chart.series).toEqual([{ name: '=Data!$B$1', x: '=Data!$A$2:$A$5', y: '=Data!$B$2:$B$5', scheme: '<a:schemeClr val="accent1"/>' }]);
     expect(got.partial).toBe(false);
   });
 

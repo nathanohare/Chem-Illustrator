@@ -70,6 +70,39 @@ export function readRichValues(pkg: PackageReader, wbPath: string, metadataPath:
 }
 
 /**
+ * What each rich value of a workbook is, by its cells' pointer (vm, from 1): a picture placed in
+ * the cell or an IMAGE() result ('picture'), an error Excel 365 has more to say about than the
+ * #VALUE! it writes in the cell, such as #SPILL! or #CALC! ('error'), or something else, such as a
+ * data type ('other'). The way there: the value metadata's record, the rich value it names
+ * (futureMetadata's rvb), and that value's structure (rdrichvalue.xml's s, rdrichvaluestructure.xml's t).
+ * Unknown pointers are 'other'.
+ */
+export function richValueKinds(pkg: PackageReader, wbPath: string, metadataPath: string | null): (vm: number) => 'picture' | 'error' | 'other' {
+  const read = (path: string | null | undefined) => {
+    try { return path ? pkg.xml(path)?.documentElement ?? null : null; } catch { return null; }
+  };
+  const meta = read(metadataPath);
+  const types = kids(kid(meta, 'metadataTypes'), 'metadataType').map((t) => t.getAttribute('name') ?? '');
+  const rvb = new Map(kids(meta, 'futureMetadata').map((f) => [f.getAttribute('name') ?? '', kids(f, 'bk').map((bk) => {
+    const at = bk.getElementsByTagNameNS(RD_NS, 'rvb')[0]?.getAttribute('i');
+    return at === null || at === undefined ? -1 : Number(at);
+  })]));
+  const records = kids(kid(meta, 'valueMetadata'), 'bk').map((bk) => kid(bk, 'rc'));
+  const target = (type: string) => [...pkg.rels(wbPath).values()].find((r) => !r.external && r.type.endsWith(type))?.target;
+  const values = kids(read(target('/rdRichValue')), 'rv').map((rv) => Number(rv.getAttribute('s') ?? -1));
+  const structures = kids(read(target('/rdRichValueStructure')), 's').map((s) => s.getAttribute('t') ?? '');
+  return (vm) => {
+    const rc = records[vm - 1];
+    const name = types[Number(rc?.getAttribute('t') ?? 0) - 1];
+    const i = name ? rvb.get(name)?.[Number(rc?.getAttribute('v') ?? -1)] : undefined;
+    const t = i !== undefined && i >= 0 ? structures[values[i]] : undefined;
+    return t === '_localImage' || t === '_webimage' ? 'picture' : t === '_error' ? 'error' : 'other';
+  };
+}
+
+const RD_NS = 'http://schemas.microsoft.com/office/spreadsheetml/2017/richdata';
+
+/**
  * Write the rich values' parts back, related from the workbook. A picture whose name a part
  * of this file already has (xl/media/image1.png) is given another.
  */

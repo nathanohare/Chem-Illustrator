@@ -81,6 +81,11 @@ export interface Series {
   secondary?: boolean;
   /** Bubble charts: the bubble sizes, as a reference (each bubble's area goes with its number). */
   size?: string;
+  /**
+   * The series' colour in an Excel file as a colour of the workbook's theme (its DrawingML
+   * schemeClr element, such as accent1 made darker), written back so while it has no colour of its own.
+   */
+  scheme?: string;
 }
 
 export interface ChartAxis {
@@ -100,6 +105,12 @@ export interface Chart {
   id: number;
   kind: ChartKind;
   title?: string;
+  /**
+   * Excel's automatic title, made from the series' names ("Chart Title" for more than one), on as
+   * an Excel file had it, for a chart with no title of its own: 'title' with its title element
+   * (the title Excel shows), 'on' without one. Unset: no title but its own.
+   */
+  autoTitle?: 'title' | 'on';
   /** Alt text: what the chart shows, for people who can't see it (saved as the chart's description). */
   alt?: string;
   series: Series[];
@@ -143,6 +154,12 @@ export interface Chart {
   placement?: 'oneCell' | 'absolute';
   w: number;
   h: number;
+  /**
+   * The chart's part in the Excel file it came from, with the parts it leads to (its style and
+   * colours), and the print of the chart as read from it: written back as it was, with its numbers
+   * brought up to date, while the chart's print is the same (nothing about it changed here).
+   */
+  file?: { print: string; path: string; parts: { path: string; xml?: string; data?: string; type?: string }[]; rels: { from: string; type: string; target: string; external?: boolean; id?: string }[] };
 }
 
 export interface Bins {
