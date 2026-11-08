@@ -17,7 +17,7 @@ import type { SmartData } from './chem/smart-scheme';
 import type { ChartBox } from './sheet/chart-box';
 import { isMetal, isMetalLabel, lowestValence } from './chem/elements';
 import { NICKNAMES } from './chem/labels';
-import { layoutText } from './text/layout';
+import { layoutText, PPT_SINGLE } from './text/layout';
 import { arialWidth } from './text-metrics';
 
 /**
@@ -1059,6 +1059,12 @@ export interface Shape {
   zoom?: { back?: boolean; to?: string; summary?: boolean };
   /** Parts of a picture cut off, as fractions of its width and height from each side. */
   crop?: { l: number; t: number; r: number; b: number };
+  /**
+   * A slide's picture put in one of its layout's picture placeholders (PowerPoint's picture button
+   * in Picture with Caption), by the placeholder's place in the layout's list (LayoutDef.pics):
+   * saved as that placeholder's picture.
+   */
+  phPic?: number;
   /** A picture's frame, corners and shadow (PowerPoint's Picture Styles). */
   look?: PictureLook;
   /** A picture's corrections, colour, see-through amount, background taken out and the shape it is cut to (Picture Format). */
@@ -2441,7 +2447,7 @@ export class Doc {
     for (const a of this.atoms.values()) grow(a.x, a.y);
     for (const c of this.captions.values()) {
       // without a stored width, measure the text (a guess past a short caption at the page's edge adds a page)
-      const b = c.width === undefined ? layoutText(c, this.style.captionSize, (t, s, _f, st) => arialWidth(t, s, st.includes('bold'))).box : null;
+      const b = c.width === undefined ? layoutText(this.textStyles ? { ...c, single: PPT_SINGLE } : c, this.style.captionSize, (t, s, _f, st) => arialWidth(t, s, st.includes('bold'))).box : null;
       grow(c.x + Math.min(0, b?.x1 ?? 0), c.y - 10); grow(c.x + (b ? b.x2 : c.width!), c.y + 4);
     }
     for (const r of this.arrows.values()) for (const p of arrowPoints(r, 12)) grow(p.x, p.y);

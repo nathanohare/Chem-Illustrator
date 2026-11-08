@@ -45,6 +45,11 @@ export interface TextFrame {
   lineSpacing?: number;
   /** ChemDraw's variable line spacing: each line goes down by how far the ink of its own line reaches up and the line above's reaches down (inkGap). */
   inkLines?: boolean;
+  /**
+   * Single line spacing as a multiple of the text size, for lines that step down by the size of
+   * the line above (not `boxes`): SINGLE when not given. Slides give PPT_SINGLE, PowerPoint's.
+   */
+  single?: number;
   /** Bullets and numbers worked out elsewhere (a document lays out one paragraph at a time). */
   markers?: (string | null)[];
   /**
@@ -190,6 +195,12 @@ export const ASCENT = 0.8;
 export const DESCENT = 0.25;
 /** Single line spacing as a multiple of the text size. */
 export const SINGLE = 1.15;
+/**
+ * PowerPoint's single line spacing as a multiple of the text size: it spaces lines at the
+ * percentage times 1.2 times the size (90% of 20 pt is 21.6 pt, 120% is 28.8 pt). Used for text
+ * on slides (TextFrame.single); Word's line spacing is its own.
+ */
+export const PPT_SINGLE = 1.2;
 
 /**
  * ChemDraw's variable line spacing, measured from its own drawings (Arial and Times New Roman,
@@ -687,7 +698,7 @@ function layoutPlain(f: TextFrame, defaultSize: number, measure: Measure): TextL
       if (f.boxes) y += prev.below! + l.above!;
       else {
         const sp = paras[prev.para].line && paras[prev.para].line! > 0 ? paras[prev.para].line! : spacing;
-        y += f.lineHeight ?? (f.inkLines && sp === 1 ? inkGap(prev, l) : SINGLE * sp * prev.size);
+        y += f.lineHeight ?? (f.inkLines && sp === 1 ? inkGap(prev, l) : (f.single ?? SINGLE) * sp * prev.size);
       }
       if (prev.para !== l.para) y += (paras[prev.para].spaceAfter ?? 0) + (paras[l.para].spaceBefore ?? 0);
     }
