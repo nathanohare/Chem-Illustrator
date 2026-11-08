@@ -825,6 +825,11 @@ class DocxReader {
     const path = this.pkg.relOfType(this.main, DOCX_REL.settings);
     const vars = path ? this.pkg.xml(path)?.getElementsByTagNameNS('*', 'docVars')[0] : undefined;
     if (vars && vars.children.length) this.kept = { ...this.kept, vars: elementXml(vars).replaceAll(` xmlns:w="${W_NS}"`, '') };
+    // and its ids for the document (Word 2010's and 2013's), which it keeps from save to save
+    const settings = path ? this.pkg.xml(path)?.documentElement : undefined;
+    const idOf = (ns: string, re: RegExp) => { const v = settings?.getElementsByTagNameNS(ns, 'docId')[0]?.getAttributeNS(ns, 'val') ?? ''; return re.test(v) ? v.toUpperCase() : undefined; };
+    const w14 = idOf(W14_NS, /^[0-9A-F]{8}$/i), w15 = idOf(W15_NS, /^\{[0-9A-F]{8}(-[0-9A-F]{4}){3}-[0-9A-F]{12}\}$/i);
+    if (w14 || w15) this.kept = { ...this.kept, docIds: { ...(w14 ? { w14 } : {}), ...(w15 ? { w15 } : {}) } };
   }
 
   /**
