@@ -389,6 +389,12 @@ export function itemBounds(items: Item[]): { x1: number; y1: number; x2: number;
   for (const it of items) {
     if (it.kind === 'text') {
       const w = it.widths.reduce((a, b) => a + b, 0);
+      if (it.angle) {
+        // turned text: its box turned about where it starts (an axis title reading upwards
+        // reaches left of that point by its height, and a superscript in it further still)
+        for (const p of turnedCorners({ x1: it.x, y1: it.y - it.size * 0.8, x2: it.x + w, y2: it.y + it.size * 0.25 }, { x: it.x, y: it.y }, -it.angle)) grow(p.x, p.y);
+        continue;
+      }
       grow(it.x, it.y - it.size * 0.8);
       grow(it.x + w, it.y + it.size * 0.25);
     } else if (it.kind === 'image') {

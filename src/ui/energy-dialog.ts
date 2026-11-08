@@ -185,7 +185,8 @@ export function askEnergy(editing: EnergyData | null, size: { w: number; h: numb
         const cell = rows[i]?.[j];
         if (!cell?.geom?.length) return;
         const sv = $<HTMLSelectElement>('select[name=structures]').value;
-        const look = (sv.startsWith('3d-') ? sv.slice(3) : 'ball') as GeomLook;
+        // the look the diagram gives it now, so the one marked in the window is the one shown
+        const look = (sv === '2d' ? '2d' : sv.startsWith('3d-') ? sv.slice(3) : 'ball') as GeomLook | '2d';
         d.close();
         const got = await askGeomView(who, cell.geom, qmBonds(cell.geom, /‡/.test(cell.label)), cell.view ?? {}, look);
         d.showModal();
@@ -223,7 +224,8 @@ export function askEnergy(editing: EnergyData | null, size: { w: number; h: numb
           ...(rows[i]?.[j]?.geom ? [['Use the File\'s Geometry', () => set(null), has] as [string, () => void, boolean]] : []),
           ...(rows[i]?.[j]?.geom?.length ? [['Geometry View…', () => void viewIt(), !has] as [string, () => void, boolean]] : []),
           null,
-          ['Remove Structure', () => { read(); const cell = rows[i]?.[j]; if (cell) { delete cell.drawn; delete cell.geom; delete cell.flat; } draw(); redraw(); }, has || !!rows[i]?.[j]?.geom],
+          // named as Geometry View's button names it when the cell has a file's geometry
+          [rows[i]?.[j]?.geom?.length ? 'Remove Geometry' : 'Remove Structure', () => { read(); const cell = rows[i]?.[j]; if (cell) { delete cell.drawn; delete cell.geom; delete cell.flat; } draw(); redraw(); }, has || !!rows[i]?.[j]?.geom],
         ]);
       });
       b.addEventListener('contextmenu', (e) => { e.preventDefault(); b.click(); });

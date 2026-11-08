@@ -347,7 +347,8 @@ export class PresenterView {
   private keyMap(): void {
     const keys = this.deck!.slides[this.player!.i].canvas?.keys ?? [];
     const box = this.els.keys;
-    box.hidden = this.els.keysLabel.hidden = keys.length < 2;
+    // (not on the end-of-show screen, where there is no keyframe to fly to)
+    box.hidden = this.els.keysLabel.hidden = keys.length < 2 || this.blank === 'end';
     const id = `${this.player!.i}:${keys.map((k) => `${k.id} ${k.title ?? ''}`).join('|')}`;
     if (box.dataset.for !== id) {
       box.dataset.for = id;

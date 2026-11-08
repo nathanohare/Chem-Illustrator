@@ -1723,11 +1723,13 @@ export class Workbook {
     return v;
   }
 
-  /** The value of a structure cell when a formula reads it: its SMILES. */
+  /** The value of a structure cell when a formula reads it: its SMILES (none for a drawing with no atoms, as a diagram or arrow). */
   private structureValue(s: Structure): Value {
     const p = this.chem?.structure(s);
     if (!p) return '';
-    return isError(p) ? p : p.smiles;
+    // (a drawing with no atoms that has no molecule in it: blank rather than #VALUE!)
+    if (isError(p)) return s.contents.atoms?.length || p.code !== '#VALUE!' ? p : '';
+    return p.smiles;
   }
 
   /**
