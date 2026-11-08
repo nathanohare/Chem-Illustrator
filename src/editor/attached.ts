@@ -263,7 +263,8 @@ export function attachFromTag(text: string | null): Attachment | undefined {
     const n = (x: unknown, d: number) => (typeof x === 'number' && isFinite(x) ? x : d);
     const role = v.role === 'label' || v.role === 'caption' || v.role === 'descriptors' ? v.role : 'caption';
     const out: Attachment = { atoms: [], side: SIDES.includes(v.side as AttachSide) ? (v.side as AttachSide) : 'below', gap: n(v.gap, 4), shift: n(v.shift, 0), role };
-    if (Array.isArray(v.show)) out.show = v.show.filter((k) => KEYS.includes(k));
+    // (a lab calculation is kept by its id: one this computer hasn't got is left out of the text)
+    if (Array.isArray(v.show)) out.show = v.show.filter((k) => KEYS.includes(k) || (typeof k === 'string' && /^calc:[\w-]{1,20}$/.test(k)));
     if (typeof v.adduct === 'string') out.adduct = v.adduct;
     if (v.keepText === true) out.keepText = true;
     if (role === 'descriptors' && typeof v.sig === 'string' && v.sig) out.sig = v.sig;
