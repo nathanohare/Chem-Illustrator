@@ -3099,7 +3099,7 @@ async function schemeSettings(): Promise<void> {
     { name: 'lead', label: 'Arrow before the text starts', value: pt(p.lead), type: 'number', unit: 'pt', placeholder: auto(SPACING.overhang) },
     { name: 'headGap', label: 'Space between text and arrowhead', value: pt(p.headGap), type: 'number', unit: 'pt', placeholder: auto(SPACING.overhang) },
   ], { ok: 'Save', note: 'Used when you type text beside an arrow, and by Clean Up Reaction and Arrange Scheme. These are the usual values for every file; a drawing style can have its own (Drawing Style ▸ Reaction arrows, with a preview), and those win. The text\'s size and font are in Drawing Style too. Leave a distance blank to scale it with the bond length. Existing schemes change when you next clean them up.',
-    preview: { title: 'Preview', below: true, draw: (v) => schemePreview(doc.style, schemeFrom(v)) } });
+    preview: { title: 'Preview', below: true, draw: (v, focus) => schemePreview(doc.style, schemeFrom(v), undefined, focus) } });
   if (!got) return;
   setSchemePrefs(schemeFrom(got));
   storeSettings();
@@ -6617,7 +6617,7 @@ async function drawingStyleDialog(): Promise<void> {
   const got = await editDrawingStyle({
     current, own: ownStyles, kindPlural: STYLE_KINDS[mode].plural, where: STYLE_KINDS[mode].where,
     isDefault: modeStyleFor(mode) === current.name, hasStructures,
-    preview: (st) => stylePreview(st),
+    preview: (st, focus) => stylePreview(st, undefined, undefined, focus),
   });
   if (!got || ws.active !== tab) return;
   ownStyles = got.own;
@@ -10275,7 +10275,7 @@ async function drawingPreferences(): Promise<void> {
     { name: 'startGap', label: 'Gap between tail of an arrow and its origin', value: arrowGaps.start === null ? '' : String(arrowGaps.start), type: 'number', unit: 'pt', placeholder: 'Automatic' },
     { name: 'endGap', label: 'Gap between head of an arrow and its target', value: arrowGaps.end === null ? '' : String(arrowGaps.end), type: 'number', unit: 'pt', placeholder: 'Automatic',
       help: 'Both gaps are measured from the atom\'s label (or a bare carbon\'s corner) or the lone pair\'s dots. Leave blank for the usual gap, which grows with the bond length. New arrows, and arrows stuck to a structure, use them when they are next drawn; Clean Up Arrow redraws the selected ones now.' },
-  ], { ok: 'Save', preview: { title: 'Mechanism arrows', draw: (v) => mechanismPreview({ start: arrowGap(v.startGap), end: arrowGap(v.endGap) }, doc.style) } });
+  ], { ok: 'Save', preview: { title: 'Mechanism arrows', draw: (v, focus) => mechanismPreview({ start: arrowGap(v.startGap), end: arrowGap(v.endGap) }, doc.style, undefined, focus) } });
   if (!r) return;
   editor.options.circledCharges = r.charges === 'circled';
   editor.options.rerouteArrows = r.reroute === 'true';

@@ -29,7 +29,8 @@ export interface StyleDialogOptions {
   /** There are structures already, so ask what happens to them. */
   hasStructures: boolean;
   /** A sample drawing in the style shown, beside the settings (drawn again as they change). */
-  preview?: (st: DocStyle) => Node;
+  /** `focus` names the box being hovered or typed in (textGap, headLength…), for the preview to show what it sets. */
+  preview?: (st: DocStyle, focus?: string) => Node;
 }
 
 
@@ -112,6 +113,8 @@ export function editDrawingStyle(o: StyleDialogOptions): Promise<StyleChoice | n
     const arrowWidth = arrowNum('Leave blank for the bonds\' line width');
     const headLength = arrowNum('Leave blank for ten line widths');
     const headWidth = arrowNum('Leave blank for 2.5 line widths each side');
+    // (each box names the distance it sets, for the preview's magnifier)
+    arrowWidth.dataset.span = 'arrowWidth'; headLength.dataset.span = 'headLength'; headWidth.dataset.span = 'headWidth';
     row('Line width', arrowWidth, el('span', { className: 'muted', textContent: 'pt' }));
     row('Arrowhead length, width', headLength, headWidth, el('span', { className: 'muted', textContent: 'pt' }));
     // how arrows sit in a scheme: as Clean Up Reaction and typing text by an arrow lay them out
@@ -119,12 +122,15 @@ export function editDrawingStyle(o: StyleDialogOptions): Promise<StyleChoice | n
     for (const [v, t] of [['center', 'Centered'], ['left', 'Left'], ['right', 'Right']]) align.append(new Option(t, v));
     row('Lines of text line up', align);
     const textGap = arrowNum('Leave blank to scale with the bond length');
+    textGap.dataset.span = 'textGap';
     row('Gap between arrow and text', textGap, el('span', { className: 'muted', textContent: 'pt' }));
     const fit = el('input', { type: 'checkbox' });
     row('', fit, el('span', { className: 'muted', textContent: 'Fit the arrow to its text (moves the products)' }));
     const lead = arrowNum('Leave blank to scale with the bond length'), headGap = arrowNum('Leave blank to scale with the bond length');
+    lead.dataset.span = 'lead'; headGap.dataset.span = 'headGap';
     const beyond = row('Arrow before and after the text', lead, headGap, el('span', { className: 'muted', textContent: 'pt' }));
     const structGap = arrowNum('Leave blank to scale with the bond length'), plusGap = arrowNum('Leave blank to scale with the bond length');
+    structGap.dataset.span = 'structGap'; plusGap.dataset.span = 'plusGap';
     row('Gap to the structures', structGap, el('span', { className: 'muted', textContent: 'pt' }));
     row('Space either side of +', plusGap, el('span', { className: 'muted', textContent: 'pt' }));
     const showScheme = () => {
@@ -324,11 +330,20 @@ export function editDrawingStyle(o: StyleDialogOptions): Promise<StyleChoice | n
       if (!slot) { slot = el('div', { className: 'ask-preview' }); form.insertBefore(slot, grid); }
       const box = slot;
       let queued = 0;
-      const redraw = () => { cancelAnimationFrame(queued); queued = requestAnimationFrame(() => box.replaceChildren(o.preview!(read()))); };
-      box.replaceChildren(o.preview(read()));
+      // the box pointed at, or else typed in: the preview shows the distance it sets
+      let hovered: string | undefined, focused: string | undefined, shownFor: string | undefined;
+      const spanOf = (t: EventTarget | null) => (t instanceof HTMLElement ? (t.dataset.span ?? t.closest('.md-row')?.querySelector<HTMLElement>('[data-span]')?.dataset.span) : undefined);
+      const draw = () => { shownFor = hovered ?? focused; box.replaceChildren(o.preview!(read(), shownFor)); };
+      const redraw = () => { cancelAnimationFrame(queued); queued = requestAnimationFrame(draw); };
+      draw();
       form.addEventListener('input', redraw);
       form.addEventListener('change', redraw);
       pick.addEventListener('change', redraw);
+      const moved = () => { if ((hovered ?? focused) !== shownFor) redraw(); };
+      form.addEventListener('mouseover', (e) => { hovered = spanOf(e.target); moved(); });
+      form.addEventListener('mouseleave', () => { hovered = undefined; moved(); });
+      form.addEventListener('focusin', (e) => { focused = spanOf(e.target); moved(); });
+      form.addEventListener('focusout', (e) => { if (!spanOf(e.relatedTarget)) { focused = undefined; moved(); } });
     }
     pick.focus();
   });
