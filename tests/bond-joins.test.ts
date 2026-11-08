@@ -48,6 +48,23 @@ describe('bold bond joins', () => {
     for (const x of j.values()) for (const p of [x.plus, x.minus]) expect(Math.hypot(p.x, p.y)).toBeLessThan(4.01);
   });
 
+  it('mitres a bold bond into a plain bond it meets, with the corner filled', () => {
+    // a bold bond (half width 1) and a plain line (half width 0.3) at 120°, as round a ring
+    const line = { ...end(2, O, dirAt(150), 0.3), line: true };
+    const j = joinWideEnds([end(1, O, dirAt(30), 1), line]);
+    const b = j.get(1)!;
+    // both of the band's corners move onto the line's edges (no square corner sticking out)
+    const n = { x: -line.u.y, y: line.u.x };
+    const off = (p: Vec) => p.x * n.x + p.y * n.y;
+    expect(Math.abs(off(b.plus))).toBeCloseTo(0.3);
+    expect(Math.abs(off(b.minus))).toBeCloseTo(0.3);
+    // and the band fills the corner between the line's square end and the outer mitre point
+    expect(b.fill.length).toBe(2);
+    // two lines on their own are left to lineMitres
+    const lines = joinWideEnds([{ ...end(1, O, dirAt(30), 0.3), line: true }, line]);
+    expect([...lines.values()].every((x) => !x.fill.length && Math.hypot(x.plus.x, x.plus.y) < 0.31)).toBe(true);
+  });
+
   it('leaves a lone band square', () => {
     expect(joinWideEnds([end(1, O, dirAt(0), 1)]).size).toBe(0);
   });

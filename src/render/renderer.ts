@@ -549,7 +549,8 @@ export class Renderer {
       const ds = doc.style, w = bondWidths(ds, b);
       let h = w.lineWidth / 2;
       if (b.order === 1 || b.order === PARTIAL || b.display === 'dative' || (b.order === 1.5 && b.plain && !b.circle) || this.bondInfo(doc, b).pi) {
-        if (b.display === 'dative' || b.display === 'dash' || b.display === 'hash' || b.display === 'hashWedge' || b.display === 'wavy' || b.display === 'wavyWedge' || b.display === 'hydrogen' || b.display === 'ionic') continue;
+        // (a dashed bond starts and ends with a dash, so it meets other lines as a plain one does)
+        if (b.display === 'dative' || b.display === 'hash' || b.display === 'hashWedge' || b.display === 'wavy' || b.display === 'wavyWedge' || b.display === 'hydrogen') continue;
         if (b.display === 'bold') h = w.boldWidth / 2;
         else if (b.display === 'wedge' && b.a2 === a.id) h = wedgeWidth({ ...ds, boldWidth: w.boldWidth }) / 2;
       } else if (b.order === 2 || (b.order === 1.5 && !b.circle && !b.plain)) {
@@ -1258,7 +1259,17 @@ export class Renderer {
       const u = norm(sub(far, at)), n = perp(u);
       ends.push({ id: bid, at, u, h, farPlus: add(far, mul(n, hf)), farMinus: sub(far, mul(n, hf)) });
     }
-    if (ends.length < 2 || !ends.some((x) => x.id === bondId)) return null;
+    if (!ends.some((x) => x.id === bondId)) return null;
+    // the plain and dashed lines ending here, so the band is mitred into them too
+    for (const le of this.joinsAt(doc, atom)) {
+      if (ends.some((x) => x.id === le.id)) continue;
+      const b = doc.bonds.get(le.id), o = b && doc.atoms.get(b.a1 === atom.id ? b.a2 : b.a1);
+      // (a wedge's narrow end, or a hollow wedge's outline, is no straight line to mitre into)
+      if (!b || !o || b.display === 'wedge' || b.display === 'hollowWedge') continue;
+      const n = perp(le.u), far = { x: o.x, y: o.y };
+      ends.push({ id: le.id, at: { x: atom.x, y: atom.y }, u: le.u, h: le.h, farPlus: add(far, mul(n, le.h)), farMinus: sub(far, mul(n, le.h)), line: true });
+    }
+    if (ends.length < 2) return null;
     return joinWideEnds(ends).get(bondId) ?? null;
   }
 

@@ -4792,12 +4792,20 @@ export class Editor {
    * and bonds lying in a thin strip (a chain drawn straight across or down).
    */
   private boxInsideHighlight(b: Rect): boolean {
-    const s = this.sel;
-    if (s.captions.size || s.arrows.size || s.shapes.size || !s.bonds.size) return false;
+    const s = this.sel, doc = this.doc;
+    // (only bonds, arrows and lines: anything else needs its box)
+    const lines = [...s.shapes].every((id) => doc.shapes.get(id)?.kind === 'line');
+    if (s.captions.size || !lines || (!s.bonds.size && !s.arrows.size && !s.shapes.size)) return false;
     // one bond (with its atoms): the highlight shows it well enough at any angle
-    const one = s.bonds.size === 1 ? this.doc.bonds.get([...s.bonds][0]) : undefined;
+    const one = s.bonds.size === 1 && !s.arrows.size && !s.shapes.size ? doc.bonds.get([...s.bonds][0]) : undefined;
     if (one && [...s.atoms].every((id) => id === one.a1 || id === one.a2)) return true;
-    return Math.min(b.x2 - b.x1, b.y2 - b.y1) < this.doc.style.bondLength * 0.3;
+    // one straight arrow or line on its own: its handles show it, as PowerPoint shows a line
+    if (!s.bonds.size && s.arrows.size + s.shapes.size === 1) {
+      const r = s.arrows.size ? doc.arrows.get([...s.arrows][0]) : undefined;
+      if (!r || arrowPoints(r).length === 2) return true;
+    }
+    // a box only as wide as the highlight (a level arrow, a straight chain) would be drawn along it
+    return Math.min(b.x2 - b.x1, b.y2 - b.y1) < doc.style.bondLength * 0.3;
   }
 
   /** The handle above the selection that turns it (none when turning would do nothing). */
@@ -7460,29 +7468,37 @@ export class Editor {
       ctx.fillStyle = mk.selFill;
       ctx.strokeStyle = mk.selLine;
       ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
       const L = doc.style.bondLength;
-      ctx.lineWidth = L * 0.22;
-      const path = new Path2D();
+      // The bonds' bands and the atoms' discs are one area, filled once, so where they meet (at
+      // the joints, and round each atom) the see-through tint isn't laid on twice and darker.
+      // An atom with none of its bonds selected keeps the lighter tint of its own.
+      const area = new Path2D(), dots = new Path2D(), onBond = new Set<number>();
       for (const id of s.bonds) {
         const b = doc.bonds.get(id);
         if (!b) continue;
         const p = doc.atoms.get(b.a1)!, q = doc.atoms.get(b.a2)!;
-        path.moveTo(p.x, p.y);
-        path.lineTo(q.x, q.y);
+        selBand(area, p, q, L * 0.11);
+        onBond.add(b.a1).add(b.a2);
       }
-      ctx.stroke(path);
-      const dots = new Path2D();
       for (const id of s.atoms) {
         const a = doc.atoms.get(id);
-        if (!a) continue;
-        dots.moveTo(a.x + L * 0.14, a.y);
-        dots.arc(a.x, a.y, L * 0.14, 0, Math.PI * 2);
+        if (a) selDisc(onBond.has(id) ? area : dots, a, L * 0.14);
       }
+      ctx.fillStyle = mk.selLine;
+      ctx.fill(area);
+      ctx.fillStyle = mk.selFill;
       ctx.fill(dots);
       ctx.lineWidth = px;
-      for (const id of s.captions) { const c = doc.captions.get(id); if (c) { ctx.fill(this.captionOutline(c)); } }
+      const boxes = new Path2D();
+      for (const id of s.captions) { const c = doc.captions.get(id); if (c) boxes.addPath(this.captionOutline(c)); }
+      ctx.fill(boxes);
+      // the arrows as one path, stroked once, so two that cross aren't darker where they do
       ctx.lineWidth = L * 0.15;
-      for (const id of s.arrows) { const r = doc.arrows.get(id); if (r) strokeAlong(ctx, arrowPoints(r)); }
+      ctx.beginPath();
+      for (const id of s.arrows) { const r = doc.arrows.get(id); if (r) arrowPoints(r).forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y))); }
+      ctx.stroke();
+      ctx.lineJoin = 'miter';
       for (const id of s.shapes) {
         const sh = doc.shapes.get(id);
         // a table being typed into shows only a thin frame, so its text stays easy to read
@@ -7721,7 +7737,7 @@ export class Editor {
       const b = this.selBox()!;
       ctx.lineWidth = px;
       ctx.strokeStyle = mk.box;
-      // no box round a bond or a straight run of bonds: it would sit inside their blue highlight
+      // no box round a bond, a straight run of bonds or a straight arrow: it would sit inside their highlight
       if (!this.boxInsideHighlight(b)) {
         ctx.setLineDash([3 * px, 3 * px]);
         ctx.strokeRect(b.x1 - 2 * px, b.y1 - 2 * px, b.x2 - b.x1 + 4 * px, b.y2 - b.y1 + 4 * px);
@@ -8050,6 +8066,34 @@ export class Editor {
       }
     }
   }
+}
+
+/**
+ * A selected bond's highlight as an area: a band `w` either side of the line from p to q with
+ * round ends. Every piece is traced the same way round (clockwise on screen, as arc() traces a
+ * circle), so filling many at once with the non-zero rule paints where they overlap only once.
+ */
+function selBand(path: Path2D, p: Vec, q: Vec, w: number): void {
+  const d = sub(q, p), l = len(d);
+  if (l > 1e-9) {
+    const n = mul(perp(mul(d, 1 / l)), w);
+    let ring = [add(p, n), add(q, n), sub(q, n), sub(p, n)];
+    let area = 0;
+    ring.forEach((v, i) => { const u = ring[(i + 1) % 4]; area += v.x * u.y - u.x * v.y; });
+    if (area < 0) ring = ring.reverse();
+    path.moveTo(ring[0].x, ring[0].y);
+    for (const v of ring.slice(1)) path.lineTo(v.x, v.y);
+    path.closePath();
+  }
+  selDisc(path, p, w);
+  selDisc(path, q, w);
+}
+
+/** A disc traced clockwise on screen (see selBand). */
+function selDisc(path: Path2D, c: Vec, r: number): void {
+  path.moveTo(c.x + r, c.y);
+  path.arc(c.x, c.y, r, 0, Math.PI * 2);
+  path.closePath();
 }
 
 function strokeAlong(ctx: CanvasRenderingContext2D, pts: Vec[]): void {
