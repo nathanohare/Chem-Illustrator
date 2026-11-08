@@ -98,7 +98,8 @@ export function pickTemplate(): Promise<TemplatePick> {
   });
 }
 
-function card(name: string, detail: string, tip: string, paint: (c: HTMLCanvasElement) => void, onPick: () => void, blurb?: string): HTMLButtonElement {
+/** A compact card: the picture, the name and the page size; what the template is for shows as its tooltip. */
+function card(name: string, detail: string, tip: string, paint: (c: HTMLCanvasElement) => void, onPick: () => void): HTMLButtonElement {
   const b = document.createElement('button');
   b.type = 'button';
   b.className = 'tg-card';
@@ -109,12 +110,6 @@ function card(name: string, detail: string, tip: string, paint: (c: HTMLCanvasEl
   const t = document.createElement('strong');
   t.textContent = name;
   b.append(c, t);
-  if (blurb) {
-    const p = document.createElement('span');
-    p.className = 'tg-blurb';
-    p.textContent = blurb;
-    b.append(p);
-  }
   const s = document.createElement('span');
   s.className = 'muted tg-size';
   s.textContent = detail;
@@ -124,7 +119,7 @@ function card(name: string, detail: string, tip: string, paint: (c: HTMLCanvasEl
 }
 
 function templateCard(t: DesignTemplate, pick: (p: TemplatePick) => void): HTMLButtonElement {
-  return card(t.name, sizeName(t), t.blurb, (c) => thumb(c, t), () => pick(t), t.blurb);
+  return card(t.name, sizeName(t), t.blurb, (c) => thumb(c, t), () => pick(t));
 }
 
 function blankCards(pick: (p: TemplatePick) => void): HTMLButtonElement[] {
