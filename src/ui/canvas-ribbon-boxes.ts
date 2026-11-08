@@ -146,8 +146,9 @@ export class AnalysisBox extends DropBox {
     pop.title = this.popOut.title;
     pop.setAttribute('aria-label', 'Pop out the analysis');
     pop.addEventListener('click', (e) => { e.stopPropagation(); this.detach(); });
-    name.append('Analysis', more, pop);
-    this.el.append(this.button, name);
+    name.append('Analysis', more);
+    // the pop-out sits in the box's top-right corner, away from the ⌄ beside the name
+    this.el.append(this.button, name, pop);
     // the ⌄ under the box counts as the box: clicking it again closes the list rather than reopening it
     this.inside = (at) => this.el.contains(at);
   }

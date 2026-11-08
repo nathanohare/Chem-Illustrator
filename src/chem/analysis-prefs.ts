@@ -9,17 +9,17 @@ import { newCalc, type LabCalc, type CalcUnit } from './bench';
 export type RowKey =
   | 'name' | 'exact' | 'mw' | 'mz' | 'ea' | 'stereo' | 'cas'
   | 'density' | 'bp' | 'mp' | 'vp' | 'flash' | 'ri'
+  | 'clogp' | 'molref' | 'tpsa' | 'hbd' | 'hba' | 'rotb' | 'heavy' | 'fsp3' | 'logs' | 'pka' | 'pkah'
   | 'iso' | 'electrons' | 'props' | 'pubchem' | 'nmr'
   | `calc:${string}`;
 
 /** The rows that are sections of their own rather than lines of the table. */
 export const SECTION_ROWS: RowKey[] = ['iso', 'electrons', 'props', 'pubchem', 'nmr'];
-/** Bench properties: measured on PubChem when looked up, estimated before. */
-export const BENCH_ROWS: RowKey[] = ['density', 'bp', 'mp', 'vp', 'flash', 'ri'];
 
 export const ROW_NAMES: Record<string, string> = {
   name: 'Systematic name', exact: 'Exact mass', mw: 'Mol. wt.', mz: 'm/z', ea: 'Elemental analysis', stereo: 'Stereo', cas: 'CAS RN',
   density: 'Density', bp: 'Boiling point', mp: 'Melting point', vp: 'Vapor pressure', flash: 'Flash point', ri: 'Refractive index',
+  clogp: 'cLogP', molref: 'Molar refractivity', tpsa: 'tPSA', hbd: 'H-bond donors', hba: 'H-bond acceptors', rotb: 'Rotatable bonds', heavy: 'Heavy atoms', fsp3: 'Fsp3', logs: 'Water solubility (logS)', pka: 'pKa (most acidic)', pkah: 'pKaH (most basic)',
   iso: 'Isotope pattern', electrons: 'Electron count', props: 'Properties', pubchem: 'PubChem', nmr: 'NMR (predicted)',
 };
 
@@ -52,7 +52,9 @@ export const DEFAULT_ROWS: AnalysisPrefs['rows'] = [
   { key: 'name', on: true }, { key: 'exact', on: true }, { key: 'mw', on: true }, { key: 'mz', on: true }, { key: 'ea', on: true },
   { key: 'stereo', on: true }, { key: 'cas', on: true },
   { key: 'density', on: true }, { key: 'bp', on: true }, { key: 'mp', on: true }, { key: 'vp', on: false }, { key: 'flash', on: false }, { key: 'ri', on: false },
-  { key: 'calc:1', on: false },
+  { key: 'clogp', on: false }, { key: 'molref', on: false }, { key: 'tpsa', on: false }, { key: 'hbd', on: false }, { key: 'hba', on: false }, { key: 'rotb', on: false },
+  { key: 'heavy', on: false }, { key: 'fsp3', on: false }, { key: 'logs', on: false }, { key: 'pka', on: false }, { key: 'pkah', on: false },
+  { key: 'calc:1', on: true },
   { key: 'electrons', on: true }, { key: 'iso', on: true }, { key: 'props', on: true }, { key: 'pubchem', on: true }, { key: 'nmr', on: true },
 ];
 

@@ -61,6 +61,12 @@ describe('saved Analysis settings', () => {
     expect(p).toEqual(DEFAULT_ANALYSIS);
     expect(p.rows.find((r) => r.key === 'density')?.on).toBe(true);
     expect(p.rows.find((r) => r.key === 'vp')?.on).toBe(false);
+    // one lab calculation (0.5 mmol) shown, to show what they do
+    expect(p.rows.find((r) => r.key === 'calc:1')?.on).toBe(true);
+    // every property can be a row; the bench ones come first
+    const at = (k: string) => p.rows.findIndex((r) => r.key === k);
+    expect(at('ri')).toBeLessThan(at('clogp'));
+    expect(p.rows.find((r) => r.key === 'tpsa')?.on).toBe(false);
     expect(p.ribbon).toEqual({ lines: ['mw', 'exact', 'mz'], simple: 'mw' });
   });
   it('keeps a saved order and adds rows that came later', () => {
@@ -107,12 +113,15 @@ describe('what the settings show', () => {
     expect(html).not.toContain('Exact mass');
     expect(html.indexOf('Mol. wt.')).toBeLessThan(html.indexOf('m/z') >= 0 ? html.indexOf('data-adduct') : Infinity);
     expect(html).toContain('0.982 g/mL');
+    expect(html).not.toContain('data-row="tpsa"');
     expect(html).toContain('39.6 mg');
     expect(html).toContain('40.3 µL');
     // the HRMS and Anal. buttons sit at the ends of their rows
     expect(html).toMatch(/<td class="an-act-cell"><button[^>]*data-insert="hrms:0"/);
     expect(html).toMatch(/<td class="an-act-cell"><button[^>]*data-insert="ea:0"/);
     // customizing: hidden rows shown dimmed, with grips and boxes
+    prefs.rows[at('hbd')].on = true;
+    expect(analysisHtml(r, 0, '[M+H]+', { prefs, bench, ions: ['[M+H]+'] })).toMatch(/<tr data-row="hbd"><th[^>]*>H-bond donors<\/th><td>0<\/td>/);
     const edit = analysisHtml(r, 0, '[M+H]+', { prefs, bench, ions: ['[M+H]+'], customize: true });
     expect(edit).toMatch(/<tr data-row="exact" class="an-off">/);
     expect(edit).toContain('data-grip');
@@ -126,6 +135,7 @@ describe('what the settings show', () => {
     expect(ribbonRow('bp', r, '[M+H]+', prefs, bench)?.value).toBe('115 °C');
     expect(ribbonRow('calc:1', r, '[M+H]+', prefs, bench)?.value).toBe('39.6 mg · 40.3 µL');
     expect(ribbonRow('vp', r, '[M+H]+', prefs, bench)).toBeNull();
+    expect(ribbonRow('tpsa', r, '[M+H]+', prefs, bench)?.value).toBe('12.9 Å²');
     prefs.dp.mw = 1;
     expect(ribbonRow('mw', r, '[M+H]+', prefs, bench)?.value).toBe('79.1');
 

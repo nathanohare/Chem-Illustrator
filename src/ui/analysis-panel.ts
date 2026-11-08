@@ -253,6 +253,33 @@ function benchText(k: string, x: BenchValue, prefs: AnalysisPrefs): string {
   return tempText(x.v, prefs.units.temp);
 }
 
+/** A property as a row of its own: its value (HTML) and the note behind its name; null when the structure has none. */
+function propertyCell(key: string, r: FragmentResult): { value: string; plain: string; title: string } | null {
+  const p = r.props;
+  if (!p) return null;
+  const num = (v: number, d: number) => { const t = v.toFixed(d).replace('-', '−'); return { value: t, plain: t }; };
+  switch (key) {
+    case 'clogp': return { ...num(p.clogp, 2), title: 'Wildman–Crippen logP' };
+    case 'molref': return { ...num(p.mr, 2), title: 'Wildman–Crippen molar refractivity' };
+    case 'tpsa': return { value: `${p.tpsa.toFixed(1)} Å²`, plain: `${p.tpsa.toFixed(1)} Å²`, title: 'Topological polar surface area (Ertl)' };
+    case 'hbd': return { ...num(p.hbd, 0), title: 'OH and NH hydrogens (Lipinski)' };
+    case 'hba': return { ...num(p.hba, 0), title: 'N and O atoms (Lipinski)' };
+    case 'rotb': return { ...num(p.rotb, 0), title: 'Rotatable bonds' };
+    case 'heavy': return { ...num(p.heavy, 0), title: 'Atoms other than hydrogen' };
+    case 'fsp3': return { ...num(p.fsp3, 2), title: 'Fraction of carbons that are sp3' };
+    case 'logs': {
+      const t = p.logS.toFixed(2).replace('-', '−');
+      return { value: `${t} <span class="muted">(${solubility(p.logS, r.mw)})</span>`, plain: solubility(p.logS, r.mw), title: "Water solubility at 25 °C by Delaney's ESOL equation (J. Chem. Inf. Comput. Sci. 2004, 44, 1000), log mol/L; estimated, typical error 0.8 log units" };
+    }
+    case 'pka': case 'pkah': {
+      const s = p.pka.find((x) => x.kind === (key === 'pka' ? 'acid' : 'base'));
+      if (!s) return null;
+      return { value: `${fmtPka(s.pka)} <span class="muted">(${esc(s.group)})</span>`, plain: fmtPka(s.pka), title: `${key === 'pka' ? 'Most acidic proton' : 'pKa of the conjugate acid of the most basic atom'}. ${PKA_TIP}` };
+    }
+  }
+  return null;
+}
+
 /** A line of the ribbon's Analysis box: its label (HTML), a short label for the Simplified ribbon, and the value. */
 export interface RibbonRow { label: string; short: string; value: string }
 const SHORT: Record<string, string> = { exact: 'Exact', mw: 'MW', mz: 'm/z', density: 'd', bp: 'bp', mp: 'mp', vp: 'vp', flash: 'Flash', ri: 'n' };
@@ -277,6 +304,10 @@ export function ribbonRow(key: string, r: FragmentResult, adductText: string, pr
       // plain text (the box writes values as text): raised exponents as superscript digits
       const v = key === 'vp' ? pressureText(x.v, prefs.units.pressure).replace(/\^([−-]?\d+)/, (_m, e: string) => [...e].map((d) => '⁰¹²³⁴⁵⁶⁷⁸⁹'[Number(d)] ?? '⁻').join('')) : benchText(key, x, prefs);
       return { label: ROW_NAMES[key] + (x.measured ? '' : ' <i class="cr-an-est">est.</i>'), short: SHORT[key], value: v };
+    }
+    case 'clogp': case 'molref': case 'tpsa': case 'hbd': case 'hba': case 'rotb': case 'heavy': case 'fsp3': case 'logs': case 'pka': case 'pkah': {
+      const x = propertyCell(key, r);
+      return x ? { label: esc(ROW_NAMES[key]), short: esc(ROW_NAMES[key].replace(/ \(.*\)$/, '')), value: x.plain } : null;
     }
     default: {
       const c = calcOf(prefs, key);
@@ -356,6 +387,11 @@ export function analysisHtml(r: FragmentResult, i: number, adductText: string, e
         if (!x) return row(name, '<span class="muted">—</span>', '', key === 'flash' || key === 'ri' ? 'Measured values come from PubChem: Look up on PubChem' : '');
         const tag = x.measured ? '<span class="an-src" title="Measured, as PubChem\'s sources report it">PubChem</span>' : `<span class="an-est" title="${esc(BENCH_TIPS[key] ?? 'Estimated')}">est.</span>`;
         return row(key === 'vp' ? `${name} <span class="muted">25 °C</span>` : name, `${benchText(key, x, prefs)}${tag}`);
+      }
+      case 'clogp': case 'molref': case 'tpsa': case 'hbd': case 'hba': case 'rotb': case 'heavy': case 'fsp3': case 'logs': case 'pka': case 'pkah': {
+        if (core) return '';
+        const x = propertyCell(key, r);
+        return row(esc(ROW_NAMES[key]), x ? x.value : '<span class="muted">—</span>', '', x?.title ?? '');
       }
       default: {
         const c = calcOf(prefs, key);

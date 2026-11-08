@@ -10,7 +10,7 @@ import { ask } from './ask';
 import { dragRow, moved } from './row-drag';
 import { CALC_UNITS, calcName, newCalc, type LabCalc, type CalcUnit } from '../chem/bench';
 import {
-  DESC_NAMES, ROW_NAMES, SECTION_ROWS, BENCH_ROWS, calcOf, nextCalcId, parseAnalysisPrefs,
+  DESC_NAMES, ROW_NAMES, SECTION_ROWS, calcOf, nextCalcId, parseAnalysisPrefs,
   type AnalysisPrefs, type RowKey, type DescKey, type TempUnit, type PressureUnit,
 } from '../chem/analysis-prefs';
 import { calcParts, descriptorRuns, formulaHtml, type Bench } from './analysis-panel';
@@ -64,7 +64,7 @@ export function analysisSettingsPage(host: AnalysisSettingsHost): Promise<void> 
     form.innerHTML = `<h2>Analysis</h2>
       <div class="as-cols">
         <div class="as-col">
-          <h3 data-info="Drag rows by their grips to reorder them; untick to hide. The panel's gear does the same in place. Bench values are measured (PubChem) once a structure has been looked up, and estimated (marked est.) before that.">Panel rows</h3>
+          <h3 data-info="Drag rows by their grips to reorder them; untick to hide. The panel's gear does the same in place. Density, boiling and melting points, vapor pressure, flash point and refractive index are PubChem's measured values once a structure has been looked up, and estimates (marked est.) before that.">Panel rows</h3>
           <div class="as-list" data-list="rows">${w.rows.map((r) => rowItem(r.key, r.on)).join('')}</div>
           <div class="as-btns"><button type="button" data-a="add-calc">Add Lab Calculation…</button><button type="button" data-a="reset-rows">Reset</button></div>
           <div class="as-row"><span>Temperatures in</span>${select('temp', w.units.temp, ['°C', '°F', 'K'])}</div>
@@ -99,7 +99,7 @@ export function analysisSettingsPage(host: AnalysisSettingsHost): Promise<void> 
   function rowItem(key: RowKey, on: boolean): string {
     const calc = calcOf(w, key);
     const dp = key === 'exact' || key === 'mw' || key === 'mz' || key === 'ea' ? dpBox(key, w.dp[key]) : '';
-    const tag = calc ? '<span class="as-tag calc">calculation</span>' : BENCH_ROWS.includes(key) ? '<span class="as-tag">bench</span>' : '';
+    const tag = calc ? '<span class="as-tag calc">calculation</span>' : '';
     const tools = calc ? `<button type="button" data-a="edit-calc" data-id="${esc(calc.id)}">Edit…</button><button type="button" data-a="del-calc" data-id="${esc(calc.id)}" title="Delete this calculation">Delete</button>` : '';
     const fixed = key === 'name';
     return `<div class="as-item" data-key="${esc(key)}"><span class="as-grip"${fixed ? ' hidden' : ' data-grip'} title="Drag to move">${GRIP}</span><input type="checkbox" data-on="${esc(key)}"${on ? ' checked' : ''} aria-label="Show ${esc(nameOf(w, key))}"><span class="as-name">${esc(nameOf(w, key))}${fixed ? ' <span class="muted">(after the formula)</span>' : ''}${tag}</span><span class="as-f">${dp}${tools}</span></div>`;

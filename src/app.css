@@ -1795,10 +1795,13 @@ body.mode-window .cr-warnings .cr-ok { color: #7ddc9a; }
 .cr-analysis .cr-an-k sup { font-size: 0.75em; line-height: 0; }
 .cr-analysis .cr-chev { margin-left: auto; }
 .cr-an-label { display: flex; align-items: center; justify-content: center; gap: 2px; }
-.cr-an-label > button { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 14px; padding: 0; border: 0; border-radius: 2px; background: transparent; color: var(--muted); }
-.cr-an-label > button:hover { background: var(--accent-soft); color: var(--accent); }
+.cr-an-label > button, .cr-an-group > .cr-an-pop { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 14px; padding: 0; border: 0; border-radius: 2px; background: transparent; color: var(--muted); }
+.cr-an-label > button:hover, .cr-an-group > .cr-an-pop:hover { background: var(--accent-soft); color: var(--accent); }
 .cr-an-label > .cr-an-more { margin-left: 2px; }
-.cr-an-label > .cr-an-pop svg { width: 11px; height: 11px; }
+.cr-an-group { position: relative; }
+.cr-an-group > .cr-an-pop { position: absolute; top: 3px; right: 6px; z-index: 1; }
+.cr-an-group > .cr-an-pop svg { width: 11px; height: 11px; }
+.canvas-ribbon.cr-simple .cr-an-group > .cr-an-pop { display: none; }
 /* Full-size (Classic): a group of its own at the end of Home, its name under it like the others:
    the formula, then Mol. wt., Exact mass and m/z in two columns */
 .canvas-ribbon.cr-classic .cr-body-end { align-self: stretch; padding: 0 2px 0 0; border-left: 1px solid var(--rb-divider); }
