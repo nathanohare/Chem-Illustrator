@@ -43,13 +43,17 @@ export default {
       return await feedback(request, env);
     } catch (e) {
       console.error(e);
-      return refuse(502, 'The report couldn’t be filed just now. Try again later, or use Copy Text.');
+      // `detail` names the failing step (e.g. "GitHub 401: Bad credentials"); it never holds the token
+      return reply(502, { error: 'The report couldn’t be filed just now. Try again later, or use Copy Text.', detail: String(e?.message ?? e).slice(0, 300) });
     }
   },
 };
 
 async function feedback(request, env) {
   if (env.PAUSED === '1') return refuse(503, 'Sending from the app is turned off for now. Use Copy Text or Open on GitHub instead.');
+  // set-up problems, said plainly so whoever set it up can see what is missing
+  const missing = ['GITHUB_TOKEN', 'PUBLIC_REPO', 'PRIVATE_REPO', 'FEEDBACK_KV'].filter((k) => !env[k]);
+  if (missing.length) return reply(503, { error: 'The feedback service isn’t fully set up yet. Use Copy Text or Open on GitHub for now.', setup: `missing: ${missing.join(', ')}` });
   if (request.headers.get('X-Chemweave') !== '1') return refuse(400, 'Reports can only be sent from Chemweave.');
   const length = Number(request.headers.get('Content-Length') ?? 0);
   if (length > LIMITS.picture * 1.4 + LIMITS.body * 4 + 10_000) return refuse(413, 'This report is too large. Try a smaller picture.');
@@ -136,12 +140,12 @@ function github(token) {
       let r = await call('POST', `/repos/${repo}/issues`, { title, body, labels });
       // labels the token may not create: file it without them rather than lose the report
       if (!r.ok && r.status === 422) r = await call('POST', `/repos/${repo}/issues`, { title, body });
-      if (!r.ok) throw new Error(`GitHub ${r.status}: ${JSON.stringify(r.out).slice(0, 300)}`);
+      if (!r.ok) throw new Error(`GitHub ${r.status} filing an issue in ${repo}: ${r.out?.message ?? ''}`);
       return r.out;
     },
     async put(repo, path, base64, message) {
       const r = await call('PUT', `/repos/${repo}/contents/${path}`, { message, content: base64 });
-      if (!r.ok) throw new Error(`GitHub ${r.status}: ${JSON.stringify(r.out).slice(0, 300)}`);
+      if (!r.ok) throw new Error(`GitHub ${r.status} saving the picture in ${repo}: ${r.out?.message ?? ''}`);
       return r.out;
     },
   };

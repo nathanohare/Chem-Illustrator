@@ -88,3 +88,16 @@ describe('the relay', () => {
     expect(check({ title: 'x', visibility: 'anything' })).toMatchObject({ visibility: 'private', kind: 'comment' });
   });
 });
+
+describe('relay set-up problems', () => {
+  it('says what is missing, and which GitHub step failed', async () => {
+    delete env.FEEDBACK_KV;
+    const a = await (await post({ title: 'x' })).json();
+    expect(a.setup).toBe('missing: FEEDBACK_KV');
+    env.FEEDBACK_KV = new Kv();
+    vi.stubGlobal('fetch', async () => new Response(JSON.stringify({ message: 'Bad credentials' }), { status: 401 }));
+    const res = await post({ title: 'x' });
+    expect(res.status).toBe(502);
+    expect((await res.json()).detail).toBe('GitHub 401 filing an issue in o/private: Bad credentials');
+  });
+});

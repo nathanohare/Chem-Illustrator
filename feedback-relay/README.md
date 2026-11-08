@@ -57,7 +57,7 @@ The relay's address looks like `https://chemweave-feedback.<your-account>.worker
 
 ### 4. Point the app at it
 
-Put the address in `RELAY_URL` in `src/feedback.ts` (and, for the desktop app, it is already allowed by `connect-src` in `src-tauri/tauri.conf.json`, which permits `https://*.workers.dev`).
+The app's relay is `https://chemweave-feedback.npo0001.workers.dev`. A new address goes in `RELAY_URL` in `src/feedback.ts` and in `connect-src` in `src-tauri/tauri.conf.json` (the desktop app may only reach addresses listed there).
 
 ## Tests
 

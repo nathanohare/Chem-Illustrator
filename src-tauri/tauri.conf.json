@@ -31,7 +31,7 @@
         "img-src": "'self' data: blob:",
         "font-src": "'self' data:",
         "media-src": "'self' data: blob:",
-        "connect-src": "'self' ipc: http://ipc.localhost https://api.crossref.org https://pubchem.ncbi.nlm.nih.gov https://cactus.nci.nih.gov https://api.datamuse.com https://*.workers.dev"
+        "connect-src": "'self' ipc: http://ipc.localhost https://api.crossref.org https://pubchem.ncbi.nlm.nih.gov https://cactus.nci.nih.gov https://api.datamuse.com https://chemweave-feedback.npo0001.workers.dev"
       },
       "dangerousDisableAssetCspModification": [
         "style-src"

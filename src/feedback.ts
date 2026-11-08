@@ -6,11 +6,11 @@
 
 export const REPO_URL = 'https://github.com/nathanohare/Chem-Illustrator';
 /**
- * The feedback relay's address (a Cloudflare Worker, see feedback-relay/README.md). Empty until it
- * is set up: the window then offers Open on GitHub as its main button, as before. A build can set it
- * with VITE_FEEDBACK_RELAY (for trying a relay before it is written in here).
+ * The feedback relay's address (a Cloudflare Worker, see feedback-relay/README.md). Empty turns
+ * Send off: the window then offers Open on GitHub as its main button, as before. A build can point
+ * it elsewhere with VITE_FEEDBACK_RELAY.
  */
-export const RELAY_URL: string = (import.meta.env?.VITE_FEEDBACK_RELAY as string | undefined) ?? '';
+export const RELAY_URL: string = (import.meta.env?.VITE_FEEDBACK_RELAY as string | undefined) ?? 'https://chemweave-feedback.npo0001.workers.dev';
 /** Where Email… addresses the message; empty leaves the To line for the person to fill in. */
 export const FEEDBACK_EMAIL = '';
 export const GUIDE_URL = `${REPO_URL}/blob/main/docs/README.md`;
