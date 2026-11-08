@@ -40,7 +40,7 @@ import { shownSize } from '../document/doc-layout';
 import { coveringCell, layoutTable } from '../table';
 import { chemdrawCdx, isChemDraw, readEmbedded } from './ole-object';
 import { cmtIds, cmtString, type CommentNote, type CommentThread } from '../document/comments';
-import { BIB_MARK, CHART_NAME, CITE_FIELD, WORD_HIGHLIGHTS, DOCX_REL, W14_NS, W15_NS, W16CID_NS, W16CEX_NS, fromWordDate, DRAWING_NAME, FORMULA_STYLE, MODEL_NS, TABLE_MARK, TABLE_NAME, W_NS, type DocxModel } from './docx-base';
+import { BIB_MARK, CHART_NAME, CITE_FIELD, WORD_HIGHLIGHTS, DOCX_REL, W14_FX, W14_NS, W15_NS, W16CID_NS, W16CEX_NS, fromWordDate, w14Look, DRAWING_NAME, FORMULA_STYLE, MODEL_NS, TABLE_MARK, TABLE_NAME, W_NS, type DocxModel } from './docx-base';
 import { wordTablePrint } from './native-print';
 import { citationNumbers, cleanRef, type Piece as BibPiece, type Reference } from '../document/references';
 import { bibFieldApp, placeRef, readCiteField, readMendeleyTag, styleFromCsl, zoteroStyleOf, MANAGERS, type CiteLive, type CiteManager, type ManagerCite } from '../document/live-cites';
@@ -140,7 +140,7 @@ const WARN = {
 
 type Pos = 'base' | 'sub' | 'sup';
 /** Text formatting as a file gives it (only what it gives). `color` null is "automatic". */
-interface RProps { lang?: string; noProof?: boolean; raise?: number; font?: string; size?: number; bold?: boolean; italic?: boolean; underline?: boolean; color?: string | null; highlight?: string | null; pos?: Pos; hidden?: boolean; formula?: boolean; strike?: boolean; smallCaps?: boolean; allCaps?: boolean; cstyle?: string; spacing?: number; noKern?: boolean; noFill?: boolean; transparency?: number; outline?: string; outlineW?: number; shadow?: boolean }
+interface RProps { /** Word 2010's text effects as written (see TextRun.wfx). */ wfx?: string; lang?: string; noProof?: boolean; raise?: number; font?: string; size?: number; bold?: boolean; italic?: boolean; underline?: boolean; color?: string | null; highlight?: string | null; pos?: Pos; hidden?: boolean; formula?: boolean; strike?: boolean; smallCaps?: boolean; allCaps?: boolean; cstyle?: string; spacing?: number; noKern?: boolean; noFill?: boolean; transparency?: number; outline?: string; outlineW?: number; shadow?: boolean }
 /** Paragraph formatting as a file gives it, in points. */
 interface PProps {
   align?: Justify; before?: number; after?: number; line?: { v: number; rule: string };
@@ -452,7 +452,15 @@ class DocxReader {
 
   private readRPr(el: Element | null, direct = true): RProps {
     const out: RProps = {};
+    const fx: string[] = [];
     for (const c of kids(el)) {
+      // Word 2010's text effects (glow, reflection, 3-D...) set on the text itself, kept as Word
+      // wrote them, with what is drawn here read from them (a style's, such as ligatures for
+      // the whole document, aren't put on every run)
+      if (direct && c.namespaceURI === W14_NS && c.prefix === 'w14' && (W14_FX as readonly string[]).includes(c.localName)) {
+        fx.push(elementXml(c).replaceAll(` xmlns:w14="${W14_NS}"`, ''));
+        continue;
+      }
       switch (c.localName) {
         case 'rFonts': {
           const th = this.a(c, 'asciiTheme') ?? this.a(c, 'hAnsiTheme');
@@ -518,6 +526,10 @@ class DocxReader {
           break;
         }
       }
+    }
+    if (fx.length) {
+      out.wfx = fx.join('');
+      Object.assign(out, w14Look(out.wfx));
     }
     return out;
   }
@@ -1377,7 +1389,7 @@ class DocxReader {
     return rt.cleanStyle({
       font: r.font ?? WORD_FONT, size: r.size ?? WORD_SIZE, bold: r.bold, italic: r.italic, underline: r.underline,
       strike: r.strike, smallCaps: r.smallCaps, allCaps: r.allCaps, cstyle: r.cstyle,
-      spacing: r.spacing, noKern: r.noKern, noFill: r.noFill, transparency: r.transparency, outline: r.outline, outlineW: r.outlineW, shadow: r.shadow,
+      spacing: r.spacing, noKern: r.noKern, noFill: r.noFill, transparency: r.transparency, outline: r.outline, outlineW: r.outlineW, shadow: r.shadow, wfx: r.wfx,
       lang: r.lang && r.lang.toLowerCase() !== (this.docDefaults.r.lang ?? 'en-US').toLowerCase() ? r.lang : undefined, noProof: r.noProof, raise: r.raise || undefined,
       color: r.color ?? undefined, highlight: r.highlight ?? undefined, formula: formula || undefined,
       sub: (!formula && r.pos === 'sub') || undefined, sup: (!formula && r.pos === 'sup') || undefined,

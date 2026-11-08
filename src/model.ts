@@ -389,6 +389,12 @@ export interface TextRun {
   outlineW?: number;
   /** Text effects: a soft drop shadow, down and to the right. */
   shadow?: boolean;
+  /**
+   * Documents: Word 2010's text effects as a Word file had them (its w14 elements: glow,
+   * reflection, 3-D, and the exact shadow, outline and fill), written back as they were; the
+   * shadow, outline and fill only while they still match the run's own above.
+   */
+  wfx?: string;
   /** Documents: not spell- or grammar-checked (Word's Do not check spelling or grammar: chemical names, citations). */
   noProof?: boolean;
   /** Documents: the text raised (less than 0: lowered) from the line by this many points, at its own size (Word's Font > Advanced > Position). */

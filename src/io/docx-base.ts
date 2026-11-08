@@ -77,6 +77,43 @@ export const W16CID_NS = 'http://schemas.microsoft.com/office/word/2016/wordml/c
 export const W16CEX_NS = 'http://schemas.microsoft.com/office/word/2018/wordml/cex';
 
 /**
+ * Word 2010's text effects on a run (w14 elements, last in its properties), in the order Word
+ * writes them ([MS-DOCX] 2.6): glow, shadow, reflection, outline, fill, 3-D, and OpenType features.
+ */
+export const W14_FX = ['glow', 'shadow', 'reflection', 'textOutline', 'textFill', 'scene3d', 'props3d', 'ligatures', 'numForm', 'numSpacing', 'stylisticSets', 'cntxtAlts'] as const;
+
+/** A run's text effects as Word wrote them (its w14 elements one after another), each by its name. */
+export function w14Parts(xml: string): Map<string, string> {
+  const out = new Map<string, string>();
+  for (const m of xml.matchAll(/<w14:(\w+)\b[^>]*?(?:\/>|>[^]*?<\/w14:\1>)/g)) out.set(m[1], m[0]);
+  return out;
+}
+
+/**
+ * What of a run's Word 2010 text effects is drawn here: a shadow, an outline's colour and width
+ * (in points; 0.75 left out), no fill or a see-through one (0 to 1).
+ */
+export function w14Look(xml: string): { shadow?: boolean; outline?: string; outlineW?: number; noFill?: boolean; transparency?: number } {
+  const parts = w14Parts(xml);
+  const out: ReturnType<typeof w14Look> = {};
+  if (parts.has('shadow')) out.shadow = true;
+  const line = parts.get('textOutline');
+  const clr = line ? /<w14:srgbClr\b[^>]*?\bw14:val="([0-9a-fA-F]{6})"/.exec(line)?.[1] : undefined;
+  if (line && clr && !/<w14:noFill\b/.test(line)) {
+    out.outline = `#${clr.toLowerCase()}`;
+    const w = Number(/^<w14:textOutline\b[^>]*?\bw14:w="(\d+)"/.exec(line)?.[1] ?? 0);
+    if (w && Math.abs(w / 12700 - 0.75) > 0.01) out.outlineW = Math.round((w / 12700) * 100) / 100;
+  }
+  const fill = parts.get('textFill');
+  if (fill && /<w14:noFill\b/.test(fill)) out.noFill = true;
+  else if (fill) {
+    const a = Number(/<w14:alpha\b[^>]*?\bw14:val="(\d+)"/.exec(fill)?.[1] ?? 0);
+    if (a > 0) out.transparency = Math.round((a / 100000) * 100) / 100;
+  }
+  return out;
+}
+
+/**
  * Word's w:date is the writer's local clock time, though it ends in Z (the real UTC time, when
  * there is one, is in commentsExtensible.xml). These convert between that and an ISO date.
  */
