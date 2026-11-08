@@ -20,7 +20,7 @@ import { readFileSync, writeFileSync, copyFileSync, mkdirSync, readdirSync, exis
 import { join } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
-const REPO = 'nathanohare/Chem-Illustrator';
+const REPO = 'nathanohare/Chemweave';
 const CONF = 'src-tauri/tauri.conf.json';
 
 /** What each platform's build leaves, and the plain name it is published under. */

@@ -172,7 +172,7 @@ fn portable_info() -> serde_json::Value {
 /// The Stable channel's list of installers: a copy of the latest.json of a build that has been
 /// tried on a real computer, put on the "stable" release by the Mark Stable workflow
 /// (.github/workflows/stable.yml). The Latest channel reads the endpoint in tauri.conf.json.
-const STABLE_FEED: &str = "https://github.com/nathanohare/Chem-Illustrator/releases/download/stable/stable.json";
+const STABLE_FEED: &str = "https://github.com/nathanohare/Chemweave/releases/download/stable/stable.json";
 
 #[cfg(desktop)]
 /// An updater that reads the chosen channel ("stable" or "latest").

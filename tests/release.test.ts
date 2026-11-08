@@ -16,7 +16,7 @@ describe('releases', () => {
     const m = manifest('0.1.90', ' Presenter view \n', sigs, new Date('2026-10-14T20:00:00Z'));
     expect(m.notes).toBe('Presenter view');
     expect(m.pub_date).toBe('2026-10-14T20:00:00.000Z');
-    expect(m.platforms['windows-x86_64']).toEqual({ signature: 'WIN', url: 'https://github.com/nathanohare/Chem-Illustrator/releases/download/v0.1.90/Chemweave_0.1.90_x64-setup.exe' });
+    expect(m.platforms['windows-x86_64']).toEqual({ signature: 'WIN', url: 'https://github.com/nathanohare/Chemweave/releases/download/v0.1.90/Chemweave_0.1.90_x64-setup.exe' });
     expect(m.platforms['darwin-aarch64'].url).toMatch(/Chemweave_0\.1\.90_universal\.app\.tar\.gz$/);
     expect(m.platforms['darwin-x86_64'].signature).toBe('MAC');
     expect(m.platforms['linux-x86_64'].url).toMatch(/Chemweave_0\.1\.90_amd64\.AppImage$/);
@@ -25,7 +25,7 @@ describe('releases', () => {
   it('points portable Windows copies at the bare app', () => {
     const all = installers('0.1.92');
     const m = manifest('0.1.92', '', { [all.windows.files[0].as]: 'WIN', [all.windows.portable.update]: 'PORTABLE' });
-    expect(m.platforms['windows-x86_64-portable']).toEqual({ signature: 'PORTABLE', url: 'https://github.com/nathanohare/Chem-Illustrator/releases/download/v0.1.92/Chemweave_0.1.92_x64-portable.exe' });
+    expect(m.platforms['windows-x86_64-portable']).toEqual({ signature: 'PORTABLE', url: 'https://github.com/nathanohare/Chemweave/releases/download/v0.1.92/Chemweave_0.1.92_x64-portable.exe' });
     expect(m.platforms['windows-x86_64'].signature).toBe('WIN');
   });
 

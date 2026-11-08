@@ -71,7 +71,7 @@
     "updater": {
       "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDNFQkQwODY3OTYxRTlFRjAKUldUd25oNldad2k5UHFxS1B6T3VMbHlmR29MdEhjd2ZOeERiZXlKWU1HOVphbytwbVFuVGVSMXIK",
       "endpoints": [
-        "https://github.com/nathanohare/Chem-Illustrator/releases/latest/download/latest.json"
+        "https://github.com/nathanohare/Chemweave/releases/latest/download/latest.json"
       ],
       "windows": {
         "installMode": "passive"

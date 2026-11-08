@@ -2,7 +2,7 @@
 // issue on the project's GitHub page (the person's own browser opens it, filled in, for them to
 // check and submit), or copied as plain text for anyone without a GitHub account.
 
-export const REPO_URL = 'https://github.com/nathanohare/Chem-Illustrator';
+export const REPO_URL = 'https://github.com/nathanohare/Chemweave';
 export const GUIDE_URL = `${REPO_URL}/blob/main/docs/README.md`;
 
 export type FeedbackKind = 'idea' | 'problem' | 'comment';
