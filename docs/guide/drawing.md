@@ -1,4 +1,4 @@
-# Canvas (chemistry)
+# Canvas (Chemistry)
 
 This page covers Canvas mode in depth: the tools, hotkeys on atoms and bonds, text, arrows and shapes, the Chemistry and Format menus, drawing styles, Reading Mode, the Analysis panel and the other chemistry tools.
 

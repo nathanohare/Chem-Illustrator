@@ -11,11 +11,11 @@ Chem Illustrator is a free program for drawing chemical structures and putting t
 
 | | Mode | What it is for | Saves as |
 |---|---|---|---|
-| <img src="images/drawing.png" width="220" alt=""> | **[Canvas](guide/drawing.md)** (chemistry) | Structures and reaction schemes, drawn with ChemDraw's tools and hotkeys, with formula, masses and stereo worked out as you draw | `.cdxml` (ChemDraw) |
-| <img src="images/slides.png" width="220" alt=""> | **[Presentation](guide/slides.md)** (slideshow) | Talks and group meetings: layouts, templates, transitions, animations, presenter view | `.pptx` (PowerPoint) |
-| <img src="images/sheet.png" width="220" alt=""> | **[Spreadsheet](guide/sheets.md)** (tables, charts, dashboards) | Tables of compounds: structures in cells, formula and mass columns, charts, isotope patterns, dashboards | `.xlsx` (Excel) |
-| <img src="images/document.png" width="220" alt=""> | **[Document](guide/documents.md)** (text) | Reports, theses and experimentals: styles, structures in the text, captions, references, tracked changes, equations | `.docx` (Word) |
-| <img src="images/design.png" width="220" alt=""> | **[Design](guide/design.md)** (TOC graphic, abstract, poster, figure) | TOC graphics, graphical abstracts, posters and flowcharts, with a shape library that includes lab glassware, and about 7,000 icons with lab and hazard signs | `.pptx` (one page) |
+| <img src="images/drawing.png" width="220" alt=""> | **[Canvas](guide/drawing.md)** (Chemistry) | Structures and reaction schemes, drawn with ChemDraw's tools and hotkeys, with formula, masses and stereo worked out as you draw | `.cdxml` (ChemDraw) |
+| <img src="images/slides.png" width="220" alt=""> | **[Presentation](guide/slides.md)** (Slideshow) | Talks and group meetings: layouts, templates, transitions, animations, presenter view | `.pptx` (PowerPoint) |
+| <img src="images/sheet.png" width="220" alt=""> | **[Spreadsheet](guide/sheets.md)** (Tables, Charts, and Dashboards) | Tables of compounds: structures in cells, formula and mass columns, charts, isotope patterns, dashboards | `.xlsx` (Excel) |
+| <img src="images/document.png" width="220" alt=""> | **[Document](guide/documents.md)** (Text document) | Reports, theses and experimentals: styles, structures in the text, captions, references, tracked changes, equations | `.docx` (Word) |
+| <img src="images/design.png" width="220" alt=""> | **[Design](guide/design.md)** (Posters, Graphical abstracts, Figures) | TOC graphics, graphical abstracts, posters and flowcharts, with a shape library that includes lab glassware, and about 7,000 icons with lab and hazard signs | `.pptx` (one page) |
 
 Structures stay editable in every kind of file: double-click one on a slide, in a cell or in a document to change it with the drawing tools.
 

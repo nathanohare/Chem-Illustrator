@@ -2,7 +2,7 @@
 
 This page covers installing Chem Illustrator, finding your way around the window, opening your first ChemDraw file, saving, and the Settings window.
 
-Chem Illustrator is free. It draws structures the way ChemDraw does (the same hotkeys, the same ACS Document 1996 look) and opens and saves ChemDraw's `.cdxml` and `.cdx` files. Besides the chemistry **Canvas**, it has four more modes, each in its own tab: **Presentation** (slideshows), **Spreadsheet** (tables, charts, dashboards), **Document** (text) and **Design** (TOC graphics, abstracts, posters, figures).
+Chem Illustrator is free. It draws structures the way ChemDraw does (the same hotkeys, the same ACS Document 1996 look) and opens and saves ChemDraw's `.cdxml` and `.cdx` files. Besides the chemistry **Canvas**, it has four more modes, each in its own tab: **Presentation** (Slideshow), **Spreadsheet** (Tables, Charts, and Dashboards), **Document** (Text document) and **Design** (Posters, Graphical abstracts, Figures).
 
 A note on keys: this guide writes Ctrl, as on Windows and Linux. On a Mac, use Cmd wherever it says Ctrl, and Option wherever it says Alt.
 
@@ -107,11 +107,11 @@ New files are called **Canvas 1**, **Presentation 1**, **Spreadsheet 1** and so 
 
 | Choice | Opens | Like |
 |---|---|---|
-| **Canvas (chemistry)** | A new canvas for structures and schemes (Ctrl+N) | ChemDraw |
-| **Presentation (slideshow)** | A new slide deck | PowerPoint |
-| **Spreadsheet (tables, charts, dashboards)** | A new spreadsheet, with chemistry functions | Excel |
-| **Document (text)** | A new document with pages, styles and references | Word |
-| **Design (TOC graphic, abstract, poster, figure)** | A TOC graphic, graphical abstract, poster or flowchart | a graphics program |
+| **Canvas (Chemistry)** | A new canvas for structures and schemes (Ctrl+N) | ChemDraw |
+| **Presentation (Slideshow)** | A new slide deck | PowerPoint |
+| **Spreadsheet (Tables, Charts, and Dashboards)** | A new spreadsheet, with chemistry functions | Excel |
+| **Document (Text document)** | A new document with pages, styles and references | Word |
+| **Design (Posters, Graphical abstracts, Figures)** | A TOC graphic, graphical abstract, poster or flowchart | a graphics program |
 
 The same commands are in the **File** menu (**New Canvas**, and **Presentation**, **Spreadsheet**, **Document** and **Design…** under **File ▸ New**). To change the tab colors, use **View ▸ Window and Colors ▸ Mode Colors…**.
 

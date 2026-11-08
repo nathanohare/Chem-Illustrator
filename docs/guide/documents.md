@@ -1,4 +1,4 @@
-# Document (text)
+# Document (Text document)
 
 This page covers Document mode: writing and formatting text, putting structures, tables and equations in it, captions, compound numbers, references, page layout, tracked changes, and saving as Word or PDF.
 
@@ -6,7 +6,7 @@ This page covers Document mode: writing and formatting text, putting structures,
 
 ## Starting a document
 
-Click **+** at the end of the tab strip and choose **Document (text)**, or choose **File ▸ New ▸ Document**. While a document is showing, Ctrl+N starts another one.
+Click **+** at the end of the tab strip and choose **Document (Text document)**, or choose **File ▸ New ▸ Document**. While a document is showing, Ctrl+N starts another one.
 
 **File ▸ New ▸ New from Template…** starts from one of our own templates: a **Lab report** (aim, scheme, reagent table, procedure, observations, results, safety), **Supporting Information** (title block, contents, general information, procedures with a characterization line to fill in, spectra) or a **Thesis chapter** (numbered sections, a wide binding margin and 1.5 line spacing). Text in [brackets] says what goes there; type over it. The headings are in the Heading styles, so the Navigation pane and Table of Contents pick them up.
 
