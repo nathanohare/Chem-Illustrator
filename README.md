@@ -153,6 +153,10 @@ The **[user guide](docs/README.md)** covers each mode, every hotkey, and the fil
 
 Ideas, problems and questions are welcome. In the program, use **Help ▸ Send Feedback**: it fills in a new [issue](https://github.com/nathanohare/Chem-Illustrator/issues) on this page for you, or copies the text to send another way. See [Feedback, problems and ideas](docs/guide/feedback.md).
 
+## Support Chemweave
+
+Chemweave is free and always will be. If it saves you time, you can help keep it going by **[sponsoring its development on GitHub](https://github.com/sponsors/nathanohare)**, monthly or once. In the program, it's **Help ▸ Support Chemweave**.
+
 ## Try it
 
 **[▶ Try Chemweave in your browser](https://nathanohare.github.io/Chem-Illustrator/)**, or **[download the desktop app](https://github.com/nathanohare/Chem-Illustrator/releases/latest)** for Windows, macOS or Linux, or **[join the iPad test](https://testflight.apple.com/join/hMdcFJBH)**.
