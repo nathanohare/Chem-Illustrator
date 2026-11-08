@@ -153,7 +153,7 @@ export function dashboardStandIn(book: Workbook, s: Sheet): { sheet: Sheet; data
       }
     }
     for (const f of later) f();
-    if (!d.tiles.length) put(0, 0, 'An empty dashboard (made in Chem Illustrator).');
+    if (!d.tiles.length) put(0, 0, 'An empty dashboard (made in Chemweave).');
     out.setCharts(charts);
     // merged blocks that would overlap an earlier one are left out
     const kept: Range[] = [];

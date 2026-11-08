@@ -1,8 +1,8 @@
 # For developers
 
-How to run Chem Illustrator from its source code, how releases are made, where things are in the code, and how to check changes. To use the program, download it instead: see [Getting started](guide/getting-started.md).
+How to run Chemweave from its source code, how releases are made, where things are in the code, and how to check changes. To use the program, download it instead: see [Getting started](guide/getting-started.md).
 
-Chem Illustrator is written in TypeScript. The drawing runs in a web page; the desktop app wraps that page with [Tauri](https://tauri.app). The chemistry (stereo, clean-up, properties) uses [RDKit](https://www.rdkit.org) compiled to WebAssembly, and names are read by [OPSIN](https://github.com/dan2097/opsin). [TECH-DECISION.md](../TECH-DECISION.md) explains why it is built this way.
+Chemweave is written in TypeScript. The drawing runs in a web page; the desktop app wraps that page with [Tauri](https://tauri.app). The chemistry (stereo, clean-up, properties) uses [RDKit](https://www.rdkit.org) compiled to WebAssembly, and names are read by [OPSIN](https://github.com/dan2097/opsin). [TECH-DECISION.md](../TECH-DECISION.md) explains why it is built this way.
 
 ## Run it from the source code
 

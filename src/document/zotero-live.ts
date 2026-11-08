@@ -509,7 +509,7 @@ class Transaction {
     const id = () => String(a1 ?? '');
     switch (command) {
       case 'Application.getActiveDocument':
-        return { documentID: s.docId, outputFormat: 'html', supportedNotes: s.notes, supportsImportExport: false, supportsTextInsertion: false, supportsCitationMerging: false, processorName: 'Chem Illustrator' };
+        return { documentID: s.docId, outputFormat: 'html', supportedNotes: s.notes, supportsImportExport: false, supportsTextInsertion: false, supportsCitationMerging: false, processorName: 'Chemweave' };
       case 'Document.activate': s.activate(); return null;
       case 'Document.canInsertField': return s.canInsert();
       case 'Document.displayAlert': return this.alert(String(a1 ?? ''), Number(a3 ?? 0));
@@ -530,7 +530,7 @@ class Transaction {
         if (!f) throw new Error(`The citation or bibliography ${id()} is no longer there.`);
         return command === 'Field.getText' ? f.text : f.code;
       }
-      default: throw new Error(`Chem Illustrator can't do ${command} yet.`);
+      default: throw new Error(`Chemweave can't do ${command} yet.`);
     }
   }
 
@@ -579,7 +579,7 @@ async function answerZotero(tx: Transaction, store: ZoteroStore, res: { status: 
       answer = await tx.do(req.command, Array.isArray(req.arguments) ? req.arguments : []);
     } catch (e) {
       const err = e instanceof Error ? e : new Error(String(e));
-      answer = { error: 'Chem Illustrator Error', message: err.message, stack: err.stack ?? '' };
+      answer = { error: 'Chemweave Error', message: err.message, stack: err.stack ?? '' };
     }
     if (req.command === 'Document.complete') { store.finish(); return 'done'; }
     res = await post('respond', answer === undefined ? 'null' : JSON.stringify(answer));

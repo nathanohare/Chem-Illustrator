@@ -64,7 +64,7 @@ function expectKept(core: string, app: string): void {
   expect(el(app, 'Company')).toBe('Some University');
   expect(el(app, 'HyperlinkBase')).toBe('https://example.org/');
   expect(el(app, 'Template')).toBe('Normal.dotm');
-  expect(el(app, 'Application')).toBe('Chem Illustrator');
+  expect(el(app, 'Application')).toBe('Chemweave');
   expect(app).not.toContain('<Words>');
   expect(app).not.toContain('<TotalTime>');
   expect(app).not.toContain('AppVersion');

@@ -137,7 +137,7 @@ export function muxMp4(w: number, h: number, fps: number, avcC: Uint8Array, samp
   );
   const mdia = box('mdia',
     full('mdhd', 0, 0, u32(0), u32(0), u32(TIMESCALE), u32(total), u16(0x55c4), u16(0)), // language "und"
-    full('hdlr', 0, 0, u32(0), ascii('vide'), zeros(12), ascii('Chem Illustrator animation\0')),
+    full('hdlr', 0, 0, u32(0), ascii('vide'), zeros(12), ascii('Chemweave animation\0')),
     minf,
   );
   const trak = box('trak',

@@ -15,6 +15,7 @@ import { writeCdxml } from '../src/io/cdxml-write';
 import { labelPieces } from '../src/chem/labels';
 import { toSymbolPieces } from '../src/richtext';
 import { Doc } from '../src/model';
+import { CHEMDRAW_DIR, noChemDraw } from './chemdraw-private';
 
 const table = '<fonttable><font id="3" name="Arial"/></fonttable><colortable><color r="1" g="1" b="1"/><color r="0" g="0" b="0"/><color r="0.18" g="0.306" b="0.78"/><color r="0.6" g="0.2" b="0.6"/></colortable>';
 const fresh = (body: string) => {
@@ -237,11 +238,11 @@ describe('a filled circle recolored in ChemDraw', () => {
 });
 
 describe('pictures ChemDraw packs in a CDX', () => {
-  const emf = () => new Uint8Array(readFileSync(join(__dirname, 'fixtures', 'chemdraw-clipboard', 'from-powerpoint', 'picture.emf')));
+  const emf = () => new Uint8Array(readFileSync(join(CHEMDRAW_DIR, 'from-powerpoint', 'picture.emf')));
   const hex = (b: Uint8Array) => Buffer.from(b).toString('hex').toUpperCase();
   const page = (attrs: string) => `<?xml version="1.0" encoding="UTF-8" ?><CDXML><page id="1"><embeddedobject id="9" BoundingBox="10 10 110 60" ${attrs}/></page></CDXML>`;
   const shown = (xml: string) => [...readCdxml(xml).doc.shapes.values()][0];
-  it('shows a compressed enhanced metafile, and carries it through CDX unchanged', () => {
+  it.skipIf(noChemDraw)('shows a compressed enhanced metafile, and carries it through CDX unchanged', () => {
     const packed = zlibSync(emf());
     const xml = page(`CompressedEnhancedMetafile="${hex(packed)}" UncompressedEnhancedMetafileSize="${emf().length}"`);
     const pic = shown(xml);
@@ -252,7 +253,7 @@ describe('pictures ChemDraw packs in a CDX', () => {
     expect(back).toContain(`UncompressedEnhancedMetafileSize="${emf().length}"`);
     expect(shown(back).src).toBe(pic.src);
   });
-  it('finds the enhanced metafile Windows keeps inside a metafile', () => {
+  it.skipIf(noChemDraw)('finds the enhanced metafile Windows keeps inside a metafile', () => {
     const e = emf();
     // [MS-WMF]: the 18-byte header, the EMF cut into two escape records, and the closing record
     const piece = (data: Uint8Array) => {

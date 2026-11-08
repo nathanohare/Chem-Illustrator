@@ -67,7 +67,7 @@ With steps 1 to 4 done, the next Mac build is signed and notarised.
 ## 5. The iPad app
 
 1. **The app's ID**: developer.apple.com > Account > **Identifiers** > **+** > App IDs > App.
-   Description "Chem Illustrator", Bundle ID **Explicit**: `io.github.nathanohare.chemillustrator`.
+   Description "Chemweave", Bundle ID **Explicit**: `io.github.nathanohare.chemillustrator`.
 2. **The distribution certificate**: Certificates > **+** > **Apple Distribution**. Upload the same
    `apple.csr`, download `distribution.cer`, then in Git Bash:
 
@@ -78,7 +78,7 @@ base64 -w0 distribution.p12 > distribution.p12.txt
 ```
 
 3. **The provisioning profile**: Profiles > **+** > **App Store Connect** (under Distribution).
-   Pick the Chem Illustrator App ID and the Apple Distribution certificate, name it "Chem
+   Pick the Chemweave App ID and the Apple Distribution certificate, name it "Chem
    Illustrator App Store", download it, then:
 
 ```bash
@@ -92,7 +92,7 @@ base64 -w0 Chem_Illustrator_App_Store.mobileprovision > profile.txt
 | `IOS_MOBILE_PROVISION` | everything in `profile.txt` |
 
 4. **The app in App Store Connect**: appstoreconnect.apple.com > **Apps** > **+** > New App.
-   Platform iOS, name "Chem Illustrator", language English, Bundle ID the one from step 1, SKU
+   Platform iOS, name "Chemweave", language English, Bundle ID the one from step 1, SKU
    `chem-illustrator`.
 
 Then add a repository **variable** (Settings > Secrets and variables > Actions > **Variables** tab)

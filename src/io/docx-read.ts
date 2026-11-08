@@ -68,7 +68,7 @@ export interface DocxReadDeps {
    * become drawings only when opened to be changed.
    */
   convertChemDraw?: boolean;
-  /** A drawing saved as CDXML (from inside a picture copied out of Chem Illustrator) in the document's style. */
+  /** A drawing saved as CDXML (from inside a picture copied out of Chemweave) in the document's style. */
   cdxml?(text: string, style: DocStyle): Contents | null;
   /** A Chem4Word structure (its CML) as a drawing in the document's style; null when it can't be read. */
   cml?(text: string, style: DocStyle): Contents | null;
@@ -2261,7 +2261,7 @@ class DocxReader {
     const mime = EXT_MIME[ext] ?? pictureMime(path ?? '', bytes);
     if (!mime) return;
     if (mime === 'image/x-wmf') this.warn('wmf');
-    // a picture pasted into Word from Chem Illustrator: the drawing rides inside it
+    // a picture pasted into Word from Chemweave: the drawing rides inside it
     const inside = mime === 'image/x-emf' && !more.embed ? drawingInEmf(bytes) : null;
     if (inside && this.drawingAt(this.deps.cdxml?.(inside, this.drawingStyle) ?? null, shown, r, ctx, look, float)) return;
     const px = imageSize(bytes, mime) ?? undefined;

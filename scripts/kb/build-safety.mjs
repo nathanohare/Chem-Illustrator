@@ -18,7 +18,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { createRequire } from 'node:module';
-import { casOf, compactRecord, hasHazardData, safetyRecordFrom } from '../../src/kb/pubchem-safety.ts';
+import { compactRecord, hasHazardData, safetyRecordFrom } from '../../src/kb/pubchem-safety.ts';
 
 const here = new URL('.', import.meta.url).pathname.replace(/^\/([A-Z]:)/, '$1');
 const root = join(here, '..', '..');
@@ -40,10 +40,27 @@ async function get(url, file) {
   throw new Error(`PubChem didn't answer: ${url}`);
 }
 
+/**
+ * CAS Registry Numbers need a licence from CAS to publish or search by, so the bundled tables are
+ * keyed by PubChem CID and hold none: the app looks a compound's CAS RN up live when asked. Source
+ * texts sometimes quote one ("Streptomycin sulfate; 3810-74-0"); those are taken out too.
+ */
+const CAS_IN_TEXT = /\s*[;,(]?\s*\b(?:CAS(?: RN| No\.?)?:?\s*)?(\d{2,7})-(\d{2})-(\d)\b\)?/g;
+function casCheckOk(a, b, d) {
+  const digits = (a + b).split('').reverse();
+  return digits.reduce((s, x, i) => s + Number(x) * (i + 1), 0) % 10 === Number(d);
+}
+export function withoutCas(value) {
+  if (typeof value === 'string') return value.replace(CAS_IN_TEXT, (m, a, b, d) => (casCheckOk(a, b, d) ? '' : m));
+  if (Array.isArray(value)) return value.map(withoutCas);
+  if (value && typeof value === 'object') return Object.fromEntries(Object.entries(value).filter(([k]) => k !== 'cas').map(([k, v]) => [k, withoutCas(v)]));
+  return value;
+}
+
 function readList() {
   return readFileSync(join(here, 'safety-compounds.txt'), 'utf8').split('\n')
     .map((l) => l.trim()).filter((l) => l && !l.startsWith('#'))
-    .map((l) => { const [name, ask, cas] = l.split('|').map((s) => s.trim()); return { name, ask: ask || name, cas: cas || null }; });
+    .map((l) => { const [name, ask] = l.split('|').map((s) => s.trim()); return { name, ask: ask || name }; });
 }
 
 async function main() {
@@ -64,15 +81,15 @@ async function main() {
     const xlogp = xl?.PropertyTable?.Properties?.[0]?.XLogP;
     const view = await get(`https://pubchem.ncbi.nlm.nih.gov/rest/pug_view/data/compound/${cid}/JSON`, `view-${cid}.json`);
     const rec = view?.Record ?? {};
-    out.push(safetyRecordFrom({ name: c.name, cid, cas: c.cas ?? casOf(rec), formula: p.MolecularFormula, mw: p.MolecularWeight, smiles: p.SMILES, xlogp, view: rec }));
+    out.push(safetyRecordFrom({ name: c.name, cid, cas: null, formula: p.MolecularFormula, mw: p.MolecularWeight, smiles: p.SMILES, xlogp, view: rec }));
     process.stdout.write(`\r${n + 1}/${list.length} ${c.name.padEnd(50)}`);
   }
   process.stdout.write('\n');
   const file = join(root, 'src', 'kb', 'safety-data.json');
   writeFileSync(file, JSON.stringify({
     built: new Date().toISOString().slice(0, 10),
-    note: 'Built by scripts/kb/build-safety.mjs from PubChem records of HSDB, NIOSH, NOAA CAMEO, OSHA, DOE PAC and EU Regulation 1272/2008 Annex VI. US government data is public domain; EU legislation may be reused with acknowledgement.',
-    compounds: out,
+    note: 'Built by scripts/kb/build-safety.mjs from PubChem records of HSDB, NIOSH, NOAA CAMEO, OSHA, DOE PAC and EU Regulation 1272/2008 Annex VI. US government data is public domain; EU legislation may be reused with acknowledgement. Keyed by PubChem CID; no CAS numbers.',
+    compounds: withoutCas(out),
   }, null, 0).replace(/\},\{"name"/g, '},\n{"name"') + '\n');
   console.log(`Wrote ${out.length} compounds to ${file}`);
 }
@@ -125,7 +142,7 @@ async function extra() {
   writeFileSync(file, JSON.stringify({
     built: new Date().toISOString().slice(0, 10),
     note: 'Built by scripts/kb/build-safety.mjs --extra from PubChem records of HSDB, NIOSH, NOAA CAMEO, OSHA, DOE PAC and EU Regulation 1272/2008 Annex VI. Keyed by PubChem CID; no CAS numbers.',
-    compounds: lean,
+    compounds: withoutCas(lean),
   }).replace(/\},\{"name"/g, '},\n{"name"') + '\n');
   console.log(`Wrote ${out.length} compounds to ${file}`);
 }

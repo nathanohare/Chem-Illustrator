@@ -98,7 +98,7 @@ export const TABLE_NAME = 'Chem Illustrator table';
 /**
  * The hidden bookmark (its name starts with an underscore, so Word doesn't list it) at the start of
  * one of our tables' first cell, `_ChemTable_3` for table 3 in our part: which of ours it is. Older
- * files said so in the table's alt-text title (w:tblCaption "Chem Illustrator table 3"), which Word
+ * files said so in the table's alt-text title (w:tblCaption "Chemweave table 3"), which Word
  * shows and reads out, and LibreOffice drops.
  */
 export const TABLE_MARK = '_ChemTable_';
@@ -148,7 +148,7 @@ export interface DocxModel {
   /**
    * Floating figures' groups and Selection Pane names, by their wp:docPr id. A named figure's
    * wp:docPr carries its name (Word's Selection Pane shows it); `was` is the name it would have
-   * had ("Chem Illustrator drawing 3"), which says which of ours it is.
+   * had ("Chemweave drawing 3"), which says which of ours it is.
    */
   floats?: Record<number, { group?: number; name?: string; was?: string }>;
   /** Don't Ask for This File on the Make Figures offer (see DocText.noFigureOffer). */

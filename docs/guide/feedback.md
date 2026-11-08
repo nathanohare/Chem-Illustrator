@@ -1,6 +1,6 @@
 # Feedback, problems and ideas
 
-This page explains how to tell the people who build Chem Illustrator what you think: ideas for new features, things that don't work, and questions.
+This page explains how to tell the people who build Chemweave what you think: ideas for new features, things that don't work, and questions.
 
 ## From inside the program
 
@@ -13,7 +13,7 @@ Open **Help ▸ Send Feedback…** (or **Help ▸ Report a Problem…** if somet
 3. Leave **Include the program's version and computer** checked, unless you'd rather not share them. It adds the version number, the kind of computer (Windows, macOS or Linux) and which mode you were in. Nothing else about you or your files is included.
 4. Then choose how to send it:
    - **Open on GitHub** opens a new issue on the project's GitHub page in your web browser, already filled in. Check it, add a screenshot if it helps (drag the picture into the text box), and click **Create** or **Submit new issue**. You need a free GitHub account for this.
-   - **Copy Text** copies the same text so you can paste it into an email or a message, for example to whoever looks after Chem Illustrator in your lab.
+   - **Copy Text** copies the same text so you can paste it into an email or a message, for example to whoever looks after Chemweave in your lab.
 
 Nothing is sent by the program itself: you always see the text first, in your browser or wherever you paste it. If you close the window by mistake, what you wrote is still there the next time you open it (until you quit the program).
 
