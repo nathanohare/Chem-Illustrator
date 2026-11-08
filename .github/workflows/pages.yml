@@ -1,7 +1,7 @@
 name: Web version
 
 # Publishes the browser version of the app to GitHub Pages
-# (https://nathanohare.github.io/Chem-Illustrator/) when something is merged into main, or on
+# (https://nathanohare.github.io/Chemweave/) when something is merged into main, or on
 # request (Actions > Web version > Run workflow). Free while the repository is public.
 #
 # One-time setup: Settings > Pages > Build and deployment > Source: "GitHub Actions".

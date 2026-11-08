@@ -151,10 +151,10 @@ export function notesSince(releases: readonly PublishedRelease[], before: string
 
 /** The project's releases on GitHub (the newest 30), for What's New. Throws when GitHub can't be reached. */
 export async function publishedReleases(): Promise<PublishedRelease[]> {
-  const r = await fetch('https://api.github.com/repos/nathanohare/Chem-Illustrator/releases?per_page=30', { headers: { Accept: 'application/vnd.github+json' } });
+  const r = await fetch('https://api.github.com/repos/nathanohare/Chemweave/releases?per_page=30', { headers: { Accept: 'application/vnd.github+json' } });
   if (!r.ok) throw new Error(`GitHub said ${r.status}`);
   return r.json();
 }
 
 /** Where every release's notes are. */
-export const RELEASES_PAGE = 'https://github.com/nathanohare/Chem-Illustrator/releases';
+export const RELEASES_PAGE = 'https://github.com/nathanohare/Chemweave/releases';

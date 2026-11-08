@@ -2392,7 +2392,7 @@ async function editTorsion(id: number): Promise<void> {
 
 const names = new NameReader(new URL('opsin/opsin-data.dat', document.baseURI).href);
 const nmrPanel = new NmrPanel({
-  unavailable: nmrHere ? undefined : `Predicted NMR spectra are in the desktop app for Windows, Mac and Linux. <a href="https://github.com/nathanohare/Chem-Illustrator/releases/latest" target="_blank" rel="noopener">Download it</a>.`,
+  unavailable: nmrHere ? undefined : `Predicted NMR spectra are in the desktop app for Windows, Mac and Linux. <a href="https://github.com/nathanohare/Chemweave/releases/latest" target="_blank" rel="noopener">Download it</a>.`,
   url: new URL('nmr/nmr-hose.dat', document.baseURI).href, measuredUrl: new URL('nmr/nmr-measured.dat', document.baseURI).href, netUrl: new URL('nmr/nmr-net.dat', document.baseURI).href, splitUrl: new URL('nmr/nmr-ch2split.json', document.baseURI).href, fpUrl: new URL('nmr/nmr-fp.dat', document.baseURI).href,
   graph: (molblock) => chem.namerGraph(molblock),
   conformers: (molblock) => model3d.build(molblock, 30),
@@ -9005,7 +9005,7 @@ const COMMANDS: Record<string, () => unknown> = {
   about: () => void appVersion().then((v) => ask('About Chemweave', [], {
     noCancel: true,
     note: `${STAGE_NOTE} Version ${v === 'web' ? 'for the browser' : v} (${STAGE.toLowerCase()}). Free software under the GNU General Public License, version 3: `
-      + 'see the license and the source on GitHub (github.com/nathanohare/Chem-Illustrator). ChemDraw is a trademark of Revvity Signals Software, Inc. '
+      + 'see the license and the source on GitHub (github.com/nathanohare/Chemweave). ChemDraw is a trademark of Revvity Signals Software, Inc. '
       + 'Microsoft, Word, Excel, PowerPoint and Office are trademarks of the Microsoft group of companies. '
       + 'Chemweave was formerly called Chem Illustrator, and is not made by, connected with or endorsed by Revvity or Microsoft.',
   })),
@@ -10159,6 +10159,27 @@ const feedback = new FeedbackDialog({
     Computer: computerName(navigator.userAgent),
     Mode: ws.active.mode,
   }),
+  pagePicture: () => {
+    // the drawing on screen, small enough to send (a PNG at screen size, at most 2000 px a side)
+    try {
+      const p = recordPicture(doc, 4);
+      if (!p) return null;
+      const side = Math.max(p.box.x2 - p.box.x1, p.box.y2 - p.box.y1);
+      const dpi = side > 0 ? Math.min(144, Math.max(48, (2000 / side) * 72)) : 96;
+      const c = pictureCanvas(doc, p, dpi).canvas;
+      // on white, so it reads on GitHub's dark pages too
+      const out = document.createElement('canvas');
+      out.width = c.width;
+      out.height = c.height;
+      const g = out.getContext('2d')!;
+      g.fillStyle = '#fff';
+      g.fillRect(0, 0, out.width, out.height);
+      g.drawImage(c, 0, 0);
+      return out.toDataURL('image/png');
+    } catch {
+      return null;
+    }
+  },
 });
 
 /** An error nothing caught: say so, with a button that fills in a problem report about it. */
