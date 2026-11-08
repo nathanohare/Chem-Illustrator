@@ -7,7 +7,8 @@
 // the way the still drawing draws them.
 
 import type { Rect, Vec } from '../geom';
-import { exitParam } from '../geom';
+import { exitParam, perp } from '../geom';
+import { joinWideEnds, type EndJoin, type WideEnd } from '../render/bond-joins';
 import { circleIn } from '../chem/aromatic';
 import { frame, type FrameData, type FrameOptions, type Stroke } from './frame';
 import type { MScene, MStyle, RGB } from './scene';
@@ -184,7 +185,7 @@ export function paintFrame(ctx: Ctx, F: FrameData, style: MStyle, t: number, swa
   const margin = style.marginWidth;
   const gap = style.gap;
   // ---- trim at the labels
-  interface Raw extends Stroke { trimmed: [Vec, Vec]; labelled: [boolean, boolean] }
+  interface Raw extends Stroke { trimmed: [Vec, Vec]; labelled: [boolean, boolean]; atoms: [Vec, Vec] }
   const raw: Raw[] = [];
   for (const ln of F.lines) {
     let [p0, p1] = ln.base ?? [ln.p0, ln.p1];
@@ -230,7 +231,7 @@ export function paintFrame(ctx: Ctx, F: FrameData, style: MStyle, t: number, swa
       }
     }
     if (Math.hypot(q1.x - q0.x, q1.y - q0.y) < 1e-6) continue;
-    raw.push({ ...ln, p0: q0, p1: q1, trimmed: [p0, p1], labelled });
+    raw.push({ ...ln, p0: q0, p1: q1, trimmed: [p0, p1], labelled, atoms: [at0, at1] });
   }
 
   // ---- crossing gaps: the bond in front cuts the one behind
@@ -252,6 +253,9 @@ export function paintFrame(ctx: Ctx, F: FrameData, style: MStyle, t: number, swa
     cuts[bi].push([c.t * L - h, c.t * L + h]);
   }
 
+  // ---- bold bonds' ends mitred into the other bonds at a bare atom (as the still drawing joins them)
+  const joins = boldJoins(raw);
+
   // ---- draw, back to front
   const order = raw.map((_, i) => i).sort((a, b) => raw[a].z - raw[b].z);
   ctx.lineJoin = 'round';
@@ -261,6 +265,7 @@ export function paintFrame(ctx: Ctx, F: FrameData, style: MStyle, t: number, swa
     const whole = !st || st.display !== 'dash';
     const segs = punchSurviving(r.p0, r.p1, cuts[i], r.w, r.labelled, whole);
     if (!segs.length) continue;
+    if (st?.display === 'bold' && !r.dashed) { fillBold(ctx, r, segs, joins[i]); continue; }
     if (st && st.display !== 'bold') { drawStereo(ctx, r, segs, style); continue; }
     ctx.lineCap = st?.display === 'bold' ? 'butt' : 'round';
     ctx.lineWidth = r.w;
@@ -301,6 +306,76 @@ export function paintFrame(ctx: Ctx, F: FrameData, style: MStyle, t: number, swa
     if (f !== font) { ctx.font = f; font = f; }
     ctx.fillStyle = rgba(tx.color, tx.alpha);
     ctx.fillText(tx.text, tx.x, tx.y);
+  }
+}
+
+/** Two points the same (an atom shared by two bonds sits at one place in a frame). */
+const same = (a: Vec, b: Vec) => Math.abs(a.x - b.x) < 1e-6 && Math.abs(a.y - b.y) < 1e-6;
+
+/**
+ * How each bold bond's two ends join the bonds that meet it at a bare atom (no label shown):
+ * mitred into the bold bonds and the plain lines there, as the still drawing does, so a bold
+ * bond's square corner doesn't stick out past the bond it meets. Null where an end stays square.
+ */
+export function boldJoins(raw: (Stroke & { labelled: [boolean, boolean]; atoms: [Vec, Vec] })[]): [EndJoin | null, EndJoin | null][] {
+  const out: [EndJoin | null, EndJoin | null][] = raw.map(() => [null, null]);
+  // the ends meeting at each atom: bold bands, and plain lines (round-capped, so they join each other already)
+  const at = new Map<string, { i: number; e: 0 | 1; end: WideEnd }[]>();
+  let anyBold = false;
+  raw.forEach((r, i) => {
+    if (r.inner || r.dashed || r.alpha <= 0.01) return;
+    const bold = r.stereo?.display === 'bold';
+    if (r.stereo && !bold) return;
+    anyBold ||= bold;
+    const L = Math.hypot(r.p1.x - r.p0.x, r.p1.y - r.p0.y);
+    if (L < 1e-9) return;
+    for (const e of [0, 1] as const) {
+      const key = r.ends[e];
+      if (key === undefined || r.labelled[e]) continue;
+      const here = e ? r.p1 : r.p0, far = e ? r.p0 : r.p1;
+      // an end cut back from its atom (a label fading) has nothing to join
+      if (!same(here, r.atoms[e])) continue;
+      const u = { x: (far.x - here.x) / L, y: (far.y - here.y) / L }, n = perp(u), h = r.w / 2;
+      const end: WideEnd = { id: i, at: here, u, h, farPlus: { x: far.x + n.x * h, y: far.y + n.y * h }, farMinus: { x: far.x - n.x * h, y: far.y - n.y * h }, line: !bold };
+      const list = at.get(key);
+      if (list) list.push({ i, e, end }); else at.set(key, [{ i, e, end }]);
+    }
+  });
+  if (!anyBold) return out;
+  for (const list of at.values()) {
+    if (list.length < 2 || !list.some((x) => !x.end.line)) continue;
+    // bonds whose ends sit apart (a bond still moving in) don't join
+    const ends = list.filter((x) => same(x.end.at, list[0].end.at));
+    if (ends.length < 2) continue;
+    const j = joinWideEnds(ends.map((x) => x.end));
+    for (const x of ends) if (!x.end.line) out[x.i][x.e] = j.get(x.i) ?? null;
+  }
+  return out;
+}
+
+/** A bold bond's surviving pieces as filled bands, the pieces at its ends joined as `joins` says. */
+function fillBold(ctx: Ctx, r: Stroke, segs: Piece[], joins: [EndJoin | null, EndJoin | null]): void {
+  const L = Math.hypot(r.p1.x - r.p0.x, r.p1.y - r.p0.y);
+  if (L < 1e-9) return;
+  const h = r.w / 2, nrm = perp({ x: (r.p1.x - r.p0.x) / L, y: (r.p1.y - r.p0.y) / L });
+  const poly = (pts: Vec[]) => {
+    // all one way round, so a band and its corner fillers fill once where they overlap
+    let area = 0;
+    pts.forEach((v, k) => { const w = pts[(k + 1) % pts.length]; area += v.x * w.y - w.x * v.y; });
+    const ring = area < 0 ? [...pts].reverse() : pts;
+    ctx.moveTo(ring[0].x, ring[0].y);
+    for (const v of ring.slice(1)) ctx.lineTo(v.x, v.y);
+    ctx.closePath();
+  };
+  for (const [a, b, wt] of segs) {
+    // at a's end "plus" is the +nrm side; at b's (looking back along the bond) it is the -nrm side
+    const js = same(a, r.p0) ? joins[0] : null, je = same(b, r.p1) ? joins[1] : null;
+    const off = (p: Vec, k: number) => ({ x: p.x + nrm.x * k, y: p.y + nrm.y * k });
+    ctx.fillStyle = rgba(r.color, r.alpha * wt);
+    ctx.beginPath();
+    poly([js?.plus ?? off(a, h), je?.minus ?? off(b, h), ...(je ? [b] : []), je?.plus ?? off(b, -h), js?.minus ?? off(a, -h), ...(js ? [a] : [])]);
+    for (const f of [...(js?.fill ?? []), ...(je?.fill ?? [])]) poly(f);
+    ctx.fill();
   }
 }
 
