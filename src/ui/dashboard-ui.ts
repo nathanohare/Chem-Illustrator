@@ -114,7 +114,8 @@ export class DashboardUi {
         ] }], { ok: 'Next' });
         if (!got) return;
         if (got.from !== 'new') {
-          const { c } = existing[Number(got.from)];
+          // (without the part an Excel file had for it, which is the sheet's chart's)
+          const { file: _file, ...c } = existing[Number(got.from)].c;
           this.add({ id: newTileId(), kind: 'chart', ...this.place('chart'), chart: { ...c, id: newTileId() } });
           return;
         }
