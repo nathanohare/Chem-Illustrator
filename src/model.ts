@@ -1059,6 +1059,12 @@ export interface Shape {
   zoom?: { back?: boolean; to?: string; summary?: boolean };
   /** Parts of a picture cut off, as fractions of its width and height from each side. */
   crop?: { l: number; t: number; r: number; b: number };
+  /**
+   * A slide's picture put in one of its layout's picture placeholders (PowerPoint's picture button
+   * in Picture with Caption), by the placeholder's place in the layout's list (LayoutDef.pics):
+   * saved as that placeholder's picture.
+   */
+  phPic?: number;
   /** A picture's frame, corners and shadow (PowerPoint's Picture Styles). */
   look?: PictureLook;
   /** A picture's corrections, colour, see-through amount, background taken out and the shape it is cut to (Picture Format). */

@@ -97,15 +97,29 @@ export const LAYOUTS: { id: BuiltinLayout; name: string }[] = [
 
 export const isBuiltinLayout = (id: string): id is BuiltinLayout => LAYOUTS.some((l) => l.id === id);
 
-/** A placeholder's box on a layout, as fractions of the slide (so it suits any slide size). */
-export interface PlaceholderBox { ph: Placeholder; x: number; y: number; w: number; h: number; justify: Caption['justify'] }
+/**
+ * A placeholder's box on a layout, as fractions of the slide (so it suits any slide size). From a
+ * PowerPoint layout, also its kind there when it is a text placeholder rather than a content one
+ * (`pptType` 'body': a caption) and its text styles as the layout had them (`lst`: its lstStyle's
+ * levels as XML), so its text, and its prompt while empty, look as they did in PowerPoint.
+ */
+export interface PlaceholderBox { ph: Placeholder; x: number; y: number; w: number; h: number; justify: Caption['justify']; pptType?: 'body'; lst?: string }
+
+/** A picture placeholder on a layout (Picture with Caption's picture), as fractions of the slide, with its text styles as the layout had them. */
+export interface PicturePlaceholder { x: number; y: number; w: number; h: number; lst?: string }
 
 /**
  * A layout as the slide master has it: its name and placeholders. The built-in layouts can be
  * renamed and their placeholders moved; layouts made here can be anything. `titleLook` gives
  * slides with it the title slide's own colours and background (always so on Title Slide).
  */
-export interface LayoutDef { id: LayoutId; name: string; boxes: PlaceholderBox[]; titleLook?: boolean }
+export interface LayoutDef {
+  id: LayoutId; name: string; boxes: PlaceholderBox[]; titleLook?: boolean;
+  /** From a PowerPoint layout of a kind of its own (picTx: Picture with Caption): that kind, saved again. */
+  pptType?: string;
+  /** Its picture placeholders (see Shape.phPic). */
+  pics?: PicturePlaceholder[];
+}
 
 export type Corner = 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
 

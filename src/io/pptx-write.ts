@@ -512,18 +512,22 @@ function romanValue(m: string): number {
  * How a layout's placeholders are named in PowerPoint: its title (a centred title on Title
  * Slide), then its other boxes by number (subtitles as subtitles; halves on Two Content).
  */
-function layoutPh(def: LayoutDef): { title: string | null; bodies: string[] } {
+function layoutPh(def: LayoutDef): { title: string | null; bodies: string[]; pics: string[] } {
   const others = def.boxes.filter((b) => b.ph !== 'title');
   const half = def.id === 'two-content' && others.length === 2;
+  // picture placeholders after the text ones (10 to 12 are the date's, footer's and slide number's)
+  const picIdx = (j: number) => { const n = others.length + j + 1; return n >= 10 ? n + 3 : n; };
   return {
     title: def.boxes.some((b) => b.ph === 'title') ? (def.id === 'title' ? '<p:ph type="ctrTitle"/>' : '<p:ph type="title"/>') : null,
-    bodies: others.map((b, i) => (b.ph === 'subtitle' ? `<p:ph type="subTitle" idx="${i + 1}"/>` : `<p:ph${half ? ' sz="half"' : ''} idx="${i + 1}"/>`)),
+    // (a text placeholder from a PowerPoint layout, a caption, as its kind there)
+    bodies: others.map((b, i) => (b.ph === 'subtitle' ? `<p:ph type="subTitle" idx="${i + 1}"/>` : `<p:ph${b.pptType === 'body' ? ' type="body"' : ''}${half ? ' sz="half"' : ''} idx="${i + 1}"/>`)),
+    pics: (def.pics ?? []).map((_, j) => `<p:ph type="pic" idx="${picIdx(j)}"/>`),
   };
 }
 
-/** PowerPoint's kind of layout for each built-in one; layouts made here are its custom ones. */
+/** PowerPoint's kind of layout for each built-in one; layouts made here are its custom ones (a PowerPoint layout read in keeps its kind). */
 const LAYOUT_TYPE: Record<string, string> = { title: 'title', 'title-content': 'obj', 'two-content': 'twoObj', 'title-only': 'titleOnly', blank: 'blank' };
-const layoutType = (id: LayoutId) => (isBuiltinLayout(id) ? LAYOUT_TYPE[id] : 'cust');
+const layoutType = (def: LayoutDef) => (isBuiltinLayout(def.id) ? LAYOUT_TYPE[def.id] : def.pptType && /^[A-Za-z]+$/.test(def.pptType) ? def.pptType : 'cust');
 
 /** The id PowerPoint 2010 gives its sections' list in presentation.xml. */
 const SECTIONS_EXT = '{521415D9-36F7-43E2-AB2F-B90AF26B5E84}';
@@ -568,6 +572,18 @@ class Writer {
   private measure: Measure;
   /** The slide being written (links are related from it). */
   private curPath = '';
+  /** The picture placeholders of the slide being written's layout (their p:ph), and which have a picture in them. */
+  private curPics: string[] = [];
+  private picsUsed = new Set<number>();
+
+  /** The picture placeholder a slide's picture is in (Shape.phPic), when its layout has it and no other picture is in it; not in a group. */
+  private picPlaceholder(pic: Shape | undefined): string | undefined {
+    const k = pic?.phPic;
+    if (k === undefined || pic?.grp !== undefined || this.picsUsed.has(k) || !this.curPics[k]) return undefined;
+    this.picsUsed.add(k);
+    return this.curPics[k];
+  }
+
   /** How the slide being written writes its colors (see themeColours). */
   private clr: ColourXml = srgbXml;
   /** themeColours' answers, by color map. */
@@ -844,16 +860,20 @@ class Writer {
     shapes.push(...frames.map((f, i) => {
       const prompt = f.ph === 'title' ? 'Click to edit Master title style' : f.ph === 'subtitle' ? 'Click to edit Master subtitle style' : 'Click to edit Master text styles';
       const algn = f.justify === 'center' ? 'ctr' : 'l';
-      const lst = f.ph === 'subtitle'
+      // (a PowerPoint layout's own text styles for the placeholder, as it had them)
+      const lst = def.boxes[i]?.lst ?? (f.ph === 'subtitle'
         ? `<a:lvl1pPr marL="0" indent="0" algn="ctr"><a:buNone/><a:defRPr sz="${Math.round(m.subtitleSize * 100)}">${fill(c.textColor)}</a:defRPr></a:lvl1pPr>`
-        : f.ph === 'title' ? `<a:lvl1pPr algn="${algn}"><a:defRPr>${fill(c.titleColor)}</a:defRPr></a:lvl1pPr>` : '';
-      return phShape(i + 2, `${f.ph === 'title' ? 'Title' : f.ph === 'subtitle' ? 'Subtitle' : 'Content Placeholder'} ${i + 1}`, f.ph === 'title' ? phs.title! : phs.bodies[other++],
+        : f.ph === 'title' ? `<a:lvl1pPr algn="${algn}"><a:defRPr>${fill(c.titleColor)}</a:defRPr></a:lvl1pPr>` : '');
+      return phShape(i + 2, `${f.ph === 'title' ? 'Title' : f.ph === 'subtitle' ? 'Subtitle' : def.boxes[i]?.pptType === 'body' ? 'Text Placeholder' : 'Content Placeholder'} ${i + 1}`, f.ph === 'title' ? phs.title! : phs.bodies[other++],
         f, prompt, 'anchor="t"', lst);
     }));
     const fm = { ...m, footerColor: c.footerColor };
     shapes.push(footerShape(frames.length + 2, `Footer Placeholder ${frames.length + 1}`, '<p:ph type="ftr" sz="quarter" idx="11"/>', d.footer, fm, ''));
     shapes.push(footerShape(frames.length + 3, `Slide Number Placeholder ${frames.length + 2}`, '<p:ph type="sldNum" sz="quarter" idx="12"/>', d.number, fm, '‹#›'));
     shapes.push(footerShape(first + decor.length, `Date Placeholder ${frames.length + 3}`, '<p:ph type="dt" sz="half" idx="10"/>', d.date, fm, dateText(m)));
+    // its picture placeholders (Picture with Caption's picture)
+    (def.pics ?? []).forEach((p, j) => shapes.push(picPhShape(first + decor.length + 1 + j, `Picture Placeholder ${frames.length + 4 + j}`, phs.pics[j],
+      { x1: p.x * size.w, y1: p.y * size.h, x2: (p.x + p.w) * size.w, y2: (p.y + p.h) * size.h }, p.lst ?? '')));
     // a title slide's own background goes on its layout
     const ownBg = slideBackground(m, id), base: Background = m.fill ?? { kind: 'solid', color: m.background };
     const bg = own && !sameBackground(ownBg, base) ? await this.background(path, ownBg) : '';
@@ -861,7 +881,7 @@ class Writer {
     const layer = m.art?.layouts?.[id];
     const art = layer?.xml.length ? this.artXml(path, layer, ((this.artIds.layouts ??= {})[id] = [])) : '';
     const map = layer?.clrMap ? `<a:overrideClrMapping ${Object.entries({ ...USUAL_CLRMAP, ...(m.art?.clrMap ?? {}), ...layer.clrMap }).map(([k, v]) => `${k}="${xmlAttr(v)}"`).join(' ')}/>` : '<a:masterClrMapping/>';
-    return `${HEAD}<p:sldLayout ${XMLNS} type="${layoutType(id)}" preserve="1"${layer?.hideMaster ? ' showMasterSp="0"' : ''}><p:cSld name="${xml(name)}">${bg}<p:spTree>${GROUP}${art}${shapes.join('')}</p:spTree></p:cSld>` +
+    return `${HEAD}<p:sldLayout ${XMLNS} type="${layoutType(def)}" preserve="1"${layer?.hideMaster ? ' showMasterSp="0"' : ''}><p:cSld name="${xml(name)}">${bg}<p:spTree>${GROUP}${art}${shapes.join('')}</p:spTree></p:cSld>` +
       `<p:clrMapOvr>${map}</p:clrMapOvr></p:sldLayout>`;
   }
 
@@ -947,6 +967,8 @@ class Writer {
     const doc = s.doc;
     this.curPath = path;
     this.clr = this.themeColours(s.layout);
+    this.curPics = layoutPh(layoutDef(this.deck.master, s.layout)).pics;
+    this.picsUsed = new Set();
     const parts = splitSlide(doc, this.measure);
     const out: string[] = [];
     let id = 2;
@@ -1070,6 +1092,13 @@ class Writer {
       k = e;
     }
     out.splice(first, out.length - first, ...wrapped);
+    // the layout's picture placeholders no picture is in, empty, as on PowerPoint's slides of that layout
+    this.curPics.forEach((ph, k) => {
+      if (this.picsUsed.has(k)) return;
+      out.push(`<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="Picture Placeholder ${id - 1}"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr>${ph}</p:nvPr></p:nvSpPr><p:spPr/></p:sp>`);
+      id++;
+    });
+    this.curPics = [];
     // slide number and footer, when the master shows them
     const m = this.deck.master;
     const d = decorFrames(this.deck.size, m);
@@ -1489,7 +1518,7 @@ class Writer {
     const ext = MIME_EXT[mime];
     if (!ext) return '';
     const fx = tidyFx(pic?.fx);
-    const more: PicMore = { rot: pic?.rot, hidden: pic?.hidden };
+    const more: PicMore = { rot: pic?.rot, hidden: pic?.hidden, ph: this.picPlaceholder(pic) };
     const descr = alt?.trim() || undefined;
     // what Office can't show live goes in worked in. PowerPoint keeps the original as the blip's
     // layer only as an HD Photo (.wdp) and refuses a PNG there, so the original goes in a tag with
@@ -1866,7 +1895,7 @@ function decorXml(sh: DecorShape, id: number): string {
 }
 
 /** A picture's turn and whether it is hidden (Selection Pane). */
-interface PicMore { rot?: number; hidden?: boolean }
+interface PicMore { rot?: number; hidden?: boolean; /** The picture placeholder it is in (its p:ph). */ ph?: string }
 
 /**
  * A picture element: PNG (or another bitmap), optionally with an SVG PowerPoint shows instead,
@@ -1877,8 +1906,9 @@ function picXml(id: number, name: string, blipId: string, svgId: string | null, 
   const ext = exts ? `<a:extLst>${exts}</a:extLst>` : '';
   const src = crop && (crop.l || crop.t || crop.r || crop.b)
     ? `<a:srcRect l="${Math.round(crop.l * 100000)}" t="${Math.round(crop.t * 100000)}" r="${Math.round(crop.r * 100000)}" b="${Math.round(crop.b * 100000)}"/>` : '';
-  const nvPr = tagsId ? `<p:nvPr><p:custDataLst><p:tags r:id="${tagsId}"/></p:custDataLst></p:nvPr>` : '<p:nvPr/>';
-  return `<p:pic><p:nvPicPr><p:cNvPr id="${id}"${nameAttrs(name, more.hidden)}${descr ? ` descr="${xmlAttr(descr)}"` : ''}/><p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr>${nvPr}</p:nvPicPr>` +
+  const ph = more.ph ?? '';
+  const nvPr = tagsId ? `<p:nvPr>${ph}<p:custDataLst><p:tags r:id="${tagsId}"/></p:custDataLst></p:nvPr>` : ph ? `<p:nvPr>${ph}</p:nvPr>` : '<p:nvPr/>';
+  return `<p:pic><p:nvPicPr><p:cNvPr id="${id}"${nameAttrs(name, more.hidden)}${descr ? ` descr="${xmlAttr(descr)}"` : ''}/><p:cNvPicPr><a:picLocks${ph ? ' noGrp="1"' : ''} noChangeAspect="1"/></p:cNvPicPr>${nvPr}</p:nvPicPr>` +
     `<p:blipFill><a:blip r:embed="${blipId}">${blipEffectsXml(fx)}${ext}</a:blip>${src}<a:stretch><a:fillRect/></a:stretch></p:blipFill>` +
     `<p:spPr>${xfrm(box, rotAttr(more.rot))}${pictureLookXml(look, fx)}</p:spPr></p:pic>`;
 }
@@ -1981,6 +2011,12 @@ function shapeXml(s: Shape, id: number, lw: number, clr: ColourXml = srgbXml): s
   const shadow = s.shadow ? `<a:effectLst><a:outerShdw dist="${emu(s.shadowSize ?? 4 * lw)}" dir="2700000" algn="tl" rotWithShape="0"><a:srgbClr val="C0C0C0"/></a:outerShdw></a:effectLst>` : '';
   return `<p:sp><p:nvSpPr><p:cNvPr id="${id}"${nameAttrs(s.name?.trim() || `${s.kind === 'oval' ? 'Oval' : 'Rectangle'} ${id - 1}`, s.hidden)}/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>` +
     `<p:spPr>${xfrm(box, rotAttr(s.rot))}${geom}${fill}${ln}${shadow}</p:spPr></p:sp>`;
+}
+
+/** A picture placeholder in a layout, as PowerPoint writes one (its prompt is PowerPoint's own). */
+function picPhShape(id: number, name: string, ph: string, box: Rect, lst: string): string {
+  return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${xml(name)}"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr>${ph}</p:nvPr></p:nvSpPr>` +
+    `<p:spPr>${xfrm(box)}</p:spPr><p:txBody><a:bodyPr/><a:lstStyle>${lst}</a:lstStyle><a:p><a:endParaRPr ${lang} dirty="0"/></a:p></p:txBody></p:sp>`;
 }
 
 /** A placeholder in a master or layout, with the prompt PowerPoint shows. */
