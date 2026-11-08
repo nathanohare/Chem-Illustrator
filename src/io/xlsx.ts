@@ -17,7 +17,9 @@
 
 import { MAX_CELL_TEXT } from './sheet-sniff';
 import { Package, PackageReader, xml, xmlAttr, hex6, REL, kids, kid, rAttr, PackageError } from './ooxml';
-import { appPropsXml, corePropsXml, readKeptParts, writeKeptParts, readTree, writeTree, type KeptTree } from './kept-parts';
+import { appPropsXml, corePropsXml, readKeptParts, writeKeptParts, readTree, writeTree, relativeTarget, type KeptTree } from './kept-parts';
+import { printOf } from './native-print';
+import { fromDataUrl } from '../render/images';
 import { GRID_NAME, gridOf, gridNameXml, readGridName, restoreSheet, moveFilter, STILL, type Grid } from './xlsx-relocate';
 import { officeTarget, linkFromTarget } from '../links';
 import { Workbook, Sheet, Structure, CellStyle, ColumnDef, Filter, Condition, CompareOp, Border, BorderStyle, Side } from '../sheet/workbook';
@@ -37,8 +39,8 @@ import type { Contents } from '../model';
 import type { ExcelStyles, ExcelLook, NamedCellStyle } from '../sheet/workbook';
 import type { DocStyle } from '../style';
 import { applyTint } from '../colours';
-import { chartXml, chartAnchorXml, readChartXml, CT_CHART, REL_CHART, C_NS, CX_NS, CT_CHARTEX, REL_CHARTEX, addChartExStyle } from './xlsx-chart';
-import { Chart, chartData, seenChartId, newChartId, sameChartData, isChartEx } from '../sheet/chart';
+import { chartXml, chartAnchorXml, readChartXml, CT_CHART, REL_CHART, C_NS, CX_NS, CT_CHARTEX, REL_CHARTEX, addChartExStyle, refreshChartCaches } from './xlsx-chart';
+import { Chart, chartData, seenChartId, newChartId, sameChartData, isChartEx, readRef } from '../sheet/chart';
 import { dashboardStandIn } from './xlsx-dashboard';
 import { Dashboard, seenTileId } from '../sheet/dashboard';
 import { condFormatsXml, dxfXml, tableXml, readDxfs, readCondFormats, readTable, sameRules, queryHolds } from './xlsx-format';
@@ -636,7 +638,8 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
     if (s.condFormats.length) ms.condFormats = s.condFormats;
     // (a query table's part is in the file already)
     if (s.tables.length) ms.tables = s.tables.map(({ query: _query, ...t }) => t);
-    if (s.charts.length && !own.dashboard) ms.charts = s.charts;
+    // (an Excel chart's own part is in the file already)
+    if (s.charts.length && !own.dashboard) ms.charts = s.charts.map(({ file: _file, ...c }) => c);
     if (own.dashboard) ms.dashboard = own.dashboard;
     if (s.dataTables.length) ms.dataTables = s.dataTables;
     if (s.pivots.length && !own.dashboard) ms.pivots = s.pivots;
@@ -917,8 +920,12 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
       // histograms and box charts go in Excel 2016's newer chart part
       const ex = isChartEx(ch.kind);
       const cname = `${ex ? 'chartEx' : 'chart'}${chartNo}.xml`;
-      pkg.add(`xl/charts/${cname}`, HEAD + chartXml(ch, standIn?.data.get(ch.id) ?? chartData(book, s, ch)), ex ? CT_CHARTEX : CT_CHART);
-      if (ex) addChartExStyle(pkg, `xl/charts/${cname}`, chartNo);
+      // the chart's part as the Excel file had it, while nothing about the chart changed here
+      if (!ex && !standIn && ch.file && ch.file.print === keptChartPrint(ch)) writeKeptChart(pkg, ch.file, `xl/charts/${cname}`, chartNo, (f, text) => cacheValues(book, s, f, text, saved));
+      else {
+        pkg.add(`xl/charts/${cname}`, HEAD + chartXml(ch, standIn?.data.get(ch.id) ?? chartData(book, s, ch)), ex ? CT_CHARTEX : CT_CHART);
+        if (ex) addChartExStyle(pkg, `xl/charts/${cname}`, chartNo);
+      }
       const rid = pkg.relate(drawingPath, ex ? REL_CHARTEX : REL_CHART, `../charts/${cname}`);
       const x = cols.start(ch.at.col) + ch.at.dx, y = rows.start(ch.at.row) + ch.at.dy;
       const end = cols.at(x + ch.w, ch.at.col), endR = rows.at(y + ch.h, ch.at.row);
@@ -1862,9 +1869,12 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
           // its alt text, as set here or in Excel
           const descr = kid(gf, 'nvGraphicFramePr', 'cNvPr')?.getAttribute('descr')?.trim();
           const alt = descr ? { alt: descr } : {};
-          if (mine && sameChartData(mine, got.chart)) { seenChartId(mine.id); const { alt: _was, placement: _had, ...kept } = mine; charts.push({ ...kept, at, ...alt, ...placement }); continue; }
+          // the file's own chart part, kept to write back while the chart isn't changed here (not a PivotChart's, which follows its PivotTable)
+          const tree = cref?.namespaceURI === C_NS && !kid(cdoc.documentElement, 'pivotSource') ? readTree(pkg, target!) : null;
+          const withFile = (c: Chart): Chart => (tree ? { ...c, file: { print: keptChartPrint(c), path: target!, ...tree } } : c);
+          if (mine && sameChartData(mine, got.chart)) { seenChartId(mine.id); const { alt: _was, placement: _had, ...kept } = mine; charts.push(withFile({ ...kept, at, ...alt, ...placement })); continue; }
           if (got.partial) notKept.add('parts of combined charts');
-          charts.push({ ...got.chart, ...alt, ...placement });
+          charts.push(withFile({ ...got.chart, ...alt, ...placement }));
         }
         if (charts.length) s.setCharts(charts);
       }
@@ -1961,6 +1971,75 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
   if (restored.changed) warnings.push(`${restored.changed} structure or calculated cell${restored.changed > 1 ? 's were' : ' was'} changed in another program: ${restored.changed > 1 ? 'they show' : 'it shows'} what that program saved.`);
   if (notKept.size) warnings.push(`Not shown here, and left out if you save over this file: ${[...notKept].join(', ')}.`);
   return { book, warnings };
+}
+
+/** A value or a list of them as text, with the keys of objects in order (for prints). */
+const stableText = (v: unknown): string => {
+  if (Array.isArray(v)) return `[${v.map(stableText).join(',')}]`;
+  if (v && typeof v === 'object') {
+    const o = v as Record<string, unknown>;
+    return `{${Object.keys(o).filter((k) => o[k] !== undefined).sort().map((k) => `${JSON.stringify(k)}:${stableText(o[k])}`).join(',')}}`;
+  }
+  return JSON.stringify(v) ?? 'null';
+};
+
+/** A chart's print, to tell whether it was changed here: all of it but where it sits, its size and its alt text (which its part doesn't hold). */
+function keptChartPrint(c: Chart): string {
+  const { id: _id, at: _at, w: _w, h: _h, alt: _alt, placement: _placement, file: _file, ...rest } = c;
+  return printOf([stableText(rest)]);
+}
+
+/**
+ * What a chart's reference holds now, for its part's caches: numbers, or for `text` the cells as
+ * they show; null for an empty cell. `saved` gives Excel's values for formulas worked out here as
+ * errors. Null when it can't be read here (more than one block of cells, another workbook's, a
+ * name) or holds an error: the file's cache is the better guess.
+ */
+function cacheValues(book: Workbook, home: Sheet, ref: string, text: boolean, saved: (s: Sheet, k: number) => Value | undefined): (number | string | null)[] | null {
+  if (/[,(]/.test(ref)) return null;
+  const got = readRef(book, `=${ref}`, home);
+  if (!got) return null;
+  const { sheet, range: R } = got;
+  // (a whole column, down to the sheet's last row)
+  const r2 = R.r2 - R.r1 > 100000 ? Math.max(R.r1, sheet.lastRow) : R.r2;
+  const out: (number | string | null)[] = [];
+  for (let r = R.r1; r <= r2; r++) for (let c = R.c1; c <= R.c2; c++) {
+    const k = keyOf(r, c);
+    const had = saved(sheet, k);
+    const v = had ?? sheet.values.get(k) ?? null;
+    if (isError(v)) return null;
+    out.push(v === null ? null : !text ? (typeof v === 'number' ? v : null) : had !== undefined ? String(v) : sheet.shownText(r, c));
+  }
+  return out;
+}
+
+/**
+ * Write a chart's part kept from an Excel file at `path` (the `n`th chart), with the parts it
+ * leads to: its style and colours beside it numbered as it is (style2.xml for chart2.xml), any
+ * other part under a name of its own, and its caches brought up to date.
+ */
+function writeKeptChart(pkg: Package, file: NonNullable<Chart['file']>, path: string, n: number, valuesOf: (ref: string, text: boolean) => (number | string | null)[] | null): void {
+  const dir = path.slice(0, path.lastIndexOf('/') + 1);
+  const at = new Map<string, string>([[file.path, path]]);
+  for (const p of file.parts) {
+    if (at.has(p.path)) continue;
+    const home = p.path.slice(0, p.path.lastIndexOf('/') + 1);
+    const [, stem, digits, ext] = /^(.*?)(\d*)(\.[^.]*)?$/.exec(p.path.slice(home.length))!;
+    const want = home === dir ? `${home}${stem}${n}${ext ?? ''}` : `${home}${stem}${digits}_c${n}${ext ?? ''}`;
+    let to = want;
+    for (let k = 2; pkg.has(to) || [...at.values()].includes(to); k++) to = want.replace(/(\.[^./]*)?$/, (e) => `_${k}${e}`);
+    at.set(p.path, to);
+  }
+  for (const p of file.parts) {
+    const text = p.path === file.path && p.xml !== undefined ? refreshChartCaches(p.xml, valuesOf) : p.xml;
+    pkg.add(at.get(p.path)!, text ?? fromDataUrl(p.data ?? 'data:application/octet-stream,').bytes, p.type);
+  }
+  for (const r of file.rels) {
+    const from = at.get(r.from);
+    if (!from) continue;
+    if (r.external) pkg.relate(from, r.type, r.target, true, r.id);
+    else if (at.has(r.target)) pkg.relate(from, r.type, relativeTarget(from, at.get(r.target)!), false, r.id);
+  }
 }
 
 /** Does every formula have the value the file saved for it (worked out here, or kept from the file)? */

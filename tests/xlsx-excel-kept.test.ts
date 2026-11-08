@@ -2,9 +2,12 @@
 //
 // Excel files saved here as real Excel showed them (Office file audit, laptop checks in Excel 365):
 // a table Power Query fills keeps its link to the query (the workbook's data connections, the
-// table's query table and its columns' ids), so Excel can still refresh it; row heights written back as the file gave them, without asking Excel to work every formula out
-// again when nothing has changed them (after which Excel fits rows again); and Excel 365's #SPILL!
-// and #CALC! cells, which it writes as rich values, not counted as pictures placed in cells.
+// table's query table and its columns' ids), so Excel can still refresh it; a chart made in Excel
+// is kept as Excel had it while it isn't changed here, and keeps its automatic title and theme
+// colours when it is; row heights are written back as the file gave them, without asking Excel
+// to work every formula out again when nothing has changed them (after which Excel fits rows
+// again); and Excel 365's #SPILL! and #CALC! cells, which it writes as rich values, are not
+// counted as pictures placed in cells.
 
 import { describe, it, expect } from 'vitest';
 import { unzipSync, strFromU8 } from 'fflate';
@@ -189,5 +192,91 @@ describe('a table Power Query fills (P3, X16)', () => {
     const saved = await writeXlsx(book, pictures);
     expect(unzipSync(saved)['xl/connections.xml']).toBeUndefined();
     expect(tableOut(saved)).not.toContain('queryTable');
+  });
+});
+
+describe('a chart made in Excel (laptop check 28)', () => {
+  const SHEET = 'xl/worksheets/sheet1.xml';
+  const C = 'http://schemas.openxmlformats.org/drawingml/2006/chart';
+  const A = 'http://schemas.openxmlformats.org/drawingml/2006/main';
+  const XDR = 'http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing';
+  const cache = (vals: (string | number)[], num: boolean) => (num ? '<c:numCache><c:formatCode>General</c:formatCode>' : '<c:strCache>') +
+    `<c:ptCount val="${vals.length}"/>${vals.map((v, i) => `<c:pt idx="${i}"><c:v>${v}</c:v></c:pt>`).join('')}${num ? '</c:numCache>' : '</c:strCache>'}`;
+  const ser = (i: number, col: string, name: string, vals: number[]) => `<c:ser><c:idx val="${i}"/><c:order val="${i}"/>` +
+    `<c:tx><c:strRef><c:f>Data!$${col}$1</c:f>${cache([name], false)}</c:strRef></c:tx>` +
+    `<c:spPr><a:solidFill><a:schemeClr val="accent${i + 1}"/></a:solidFill><a:ln><a:noFill/></a:ln><a:effectLst/></c:spPr><c:invertIfNegative val="0"/>` +
+    `<c:cat><c:strRef><c:f>Data!$A$2:$A$4</c:f>${cache(['2a', '2b', '2c'], false)}</c:strRef></c:cat>` +
+    `<c:val><c:numRef><c:f>Data!$${col}$2:$${col}$4</c:f>${cache(vals, true)}</c:numRef></c:val>` +
+    `<c:extLst><c:ext uri="{C3380CC4-5D6E-409C-BE32-E72D297353CC}" xmlns:c16="http://schemas.microsoft.com/office/drawing/2014/chart"><c16:uniqueId val="{0000000${i}-0001-0000-0000-000000000000}"/></c:ext></c:extLst></c:ser>`;
+  const axis = (tag: string, id: number, cross: number, pos: string) => `<c:${tag}><c:axId val="${id}"/><c:scaling><c:orientation val="minMax"/></c:scaling><c:delete val="0"/><c:axPos val="${pos}"/>` +
+    `${tag === 'valAx' ? '<c:majorGridlines><c:spPr><a:ln w="9525"><a:solidFill><a:schemeClr val="tx1"><a:lumMod val="15000"/><a:lumOff val="85000"/></a:schemeClr></a:solidFill></a:ln></c:spPr></c:majorGridlines>' : ''}` +
+    `<c:numFmt formatCode="General" sourceLinked="1"/><c:majorTickMark val="none"/><c:minorTickMark val="none"/><c:tickLblPos val="nextTo"/><c:crossAx val="${cross}"/><c:crosses val="autoZero"/>` +
+    `${tag === 'valAx' ? '<c:crossBetween val="between"/>' : '<c:auto val="1"/><c:lblAlgn val="ctr"/><c:lblOffset val="100"/><c:noMultiLvlLbl val="0"/>'}</c:${tag}>`;
+  // as Excel 365 writes a new clustered column chart of two series: "Chart Title", the theme's accents
+  const CHART = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n<c:chartSpace xmlns:c="${C}" xmlns:a="${A}" xmlns:r="${R}" xmlns:c16r2="http://schemas.microsoft.com/office/drawing/2015/06/chart">` +
+    '<c:date1904 val="0"/><c:lang val="en-US"/><c:roundedCorners val="0"/>' +
+    '<mc:AlternateContent xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"><mc:Choice Requires="c14" xmlns:c14="http://schemas.microsoft.com/office/drawing/2007/8/2/chart"><c14:style val="102"/></mc:Choice><mc:Fallback><c:style val="2"/></mc:Fallback></mc:AlternateContent>' +
+    '<c:chart><c:title><c:overlay val="0"/><c:spPr><a:noFill/><a:ln><a:noFill/></a:ln><a:effectLst/></c:spPr><c:txPr><a:bodyPr rot="0" spcFirstLastPara="1" vertOverflow="ellipsis" vert="horz" wrap="square" anchor="ctr" anchorCtr="1"/><a:lstStyle/>' +
+    '<a:p><a:pPr><a:defRPr sz="1400" b="0" i="0" u="none" strike="noStrike" kern="1200" spc="0" baseline="0"><a:solidFill><a:schemeClr val="tx1"><a:lumMod val="65000"/><a:lumOff val="35000"/></a:schemeClr></a:solidFill><a:latin typeface="+mn-lt"/></a:defRPr></a:pPr><a:endParaRPr lang="en-US"/></a:p></c:txPr></c:title>' +
+    '<c:autoTitleDeleted val="0"/><c:plotArea><c:layout/><c:barChart><c:barDir val="col"/><c:grouping val="clustered"/><c:varyColors val="0"/>' +
+    ser(0, 'B', 'Yield', [81, 64, 72]) + ser(1, 'C', 'Purity', [97, 92, 99]) +
+    '<c:dLbls><c:showLegendKey val="0"/><c:showVal val="0"/><c:showCatName val="0"/><c:showSerName val="0"/><c:showPercent val="0"/><c:showBubbleSize val="0"/></c:dLbls><c:gapWidth val="219"/><c:overlap val="-27"/><c:axId val="1"/><c:axId val="2"/></c:barChart>' +
+    axis('catAx', 1, 2, 'b') + axis('valAx', 2, 1, 'l') + '</c:plotArea><c:legend><c:legendPos val="b"/><c:overlay val="0"/></c:legend><c:plotVisOnly val="1"/><c:dispBlanksAs val="gap"/></c:chart>' +
+    '<c:spPr><a:solidFill><a:schemeClr val="bg1"/></a:solidFill><a:ln w="9525" cap="flat" cmpd="sng" algn="ctr"><a:solidFill><a:schemeClr val="tx1"><a:lumMod val="15000"/><a:lumOff val="85000"/></a:schemeClr></a:solidFill><a:round/></a:ln><a:effectLst/></c:spPr>' +
+    '<c:printSettings><c:headerFooter/><c:pageMargins b="0.75" l="0.7" r="0.7" t="0.75" header="0.3" footer="0.3"/><c:pageSetup/></c:printSettings></c:chartSpace>';
+  const STYLE = '<cs:chartStyle xmlns:cs="http://schemas.microsoft.com/office/drawing/2012/chartStyle" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" id="201"/>';
+  const COLORS = '<cs:colorStyle xmlns:cs="http://schemas.microsoft.com/office/drawing/2012/chartStyle" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" meth="cycle" id="10"><a:schemeClr val="accent1"/></cs:colorStyle>';
+  const DRAWING = `<xdr:wsDr xmlns:xdr="${XDR}" xmlns:a="${A}"><xdr:twoCellAnchor><xdr:from><xdr:col>4</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>1</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:from>` +
+    '<xdr:to><xdr:col>11</xdr:col><xdr:colOff>0</xdr:colOff><xdr:row>16</xdr:row><xdr:rowOff>0</xdr:rowOff></xdr:to><xdr:graphicFrame macro=""><xdr:nvGraphicFramePr><xdr:cNvPr id="2" name="Chart 1"/><xdr:cNvGraphicFramePr/></xdr:nvGraphicFramePr>' +
+    `<xdr:xfrm><a:off x="0" y="0"/><a:ext cx="0" cy="0"/></xdr:xfrm><a:graphic><a:graphicData uri="${C}"><c:chart xmlns:c="${C}" xmlns:r="${R}" r:id="rId1"/></a:graphicData></a:graphic></xdr:graphicFrame><xdr:clientData/></xdr:twoCellAnchor></xdr:wsDr>`;
+  const row = (r: number, a: string, b: number | string, c: number | string) => `<row r="${r}"><c r="A${r}" t="inlineStr"><is><t>${a}</t></is></c>` +
+    (typeof b === 'number' ? `<c r="B${r}"><v>${b}</v></c><c r="C${r}"><v>${c}</v></c>` : `<c r="B${r}" t="inlineStr"><is><t>${b}</t></is></c><c r="C${r}" t="inlineStr"><is><t>${c}</t></is></c>`) + '</row>';
+  const file = () => excelBook([['Data', `<sheetData>${row(1, 'Compound', 'Yield', 'Purity')}${row(2, '2a', 81, 97)}${row(3, '2b', 64, 92)}${row(4, '2c', 72, 99)}</sheetData><drawing r:id="rId1"/>`]], {
+    parts: [
+      { path: 'xl/drawings/drawing1.xml', from: SHEET, rel: `${R}/drawing`, target: '../drawings/drawing1.xml', xml: DRAWING, type: 'application/vnd.openxmlformats-officedocument.drawing+xml' },
+      { path: 'xl/charts/chart1.xml', from: 'xl/drawings/drawing1.xml', rel: `${R}/chart`, target: '../charts/chart1.xml', xml: CHART, type: 'application/vnd.openxmlformats-officedocument.drawingml.chart+xml' },
+      { path: 'xl/charts/style1.xml', from: 'xl/charts/chart1.xml', rel: 'http://schemas.microsoft.com/office/2011/relationships/chartStyle', target: 'style1.xml', xml: STYLE, type: 'application/vnd.ms-office.chartstyle+xml' },
+      { path: 'xl/charts/colors1.xml', from: 'xl/charts/chart1.xml', rel: 'http://schemas.microsoft.com/office/2011/relationships/chartColorStyle', target: 'colors1.xml', xml: COLORS, type: 'application/vnd.ms-office.chartcolorstyle+xml' },
+    ],
+  });
+  const chartOut = (bytes: Uint8Array) => part(bytes, 'xl/charts/chart1.xml');
+
+  it('is saved as Excel had it while it isn\'t changed here', async () => {
+    const { book } = await readXlsx(file());
+    // (moved here: where it sits is the drawing's)
+    book.edit('move', () => book.sheets[0].setCharts([{ ...book.sheets[0].charts[0], at: { row: 6, col: 5, dx: 0, dy: 0 } }]));
+    const saved = await writeXlsx(book, pictures);
+    expect(chartOut(saved)).toBe(CHART);
+    expect(part(saved, 'xl/charts/_rels/chart1.xml.rels')).toMatch(/chartStyle" Target="style1.xml".*chartColorStyle" Target="colors1.xml"/);
+    expect(part(saved, 'xl/charts/style1.xml')).toBe(STYLE);
+    expect(part(saved, 'xl/charts/colors1.xml')).toBe(COLORS);
+    expect(part(saved, 'xl/drawings/drawing1.xml')).toContain('<xdr:from><xdr:col>5</xdr:col>');
+    expect(part(saved, 'customXml/item1.xml')).not.toContain('chartSpace');
+    // and again from this program's own file
+    const again = await writeXlsx((await readXlsx(saved)).book, pictures);
+    expect(chartOut(again)).toBe(CHART);
+  });
+
+  it('brings its numbers up to date when the cells it charts change', async () => {
+    const { book } = await readXlsx(file());
+    book.edit('type', () => book.sheets[0].setInput(2, 1, '66'));
+    const xml = chartOut(await writeXlsx(book, pictures));
+    expect(xml).toContain('<c:f>Data!$B$2:$B$4</c:f><c:numCache><c:formatCode>General</c:formatCode><c:ptCount val="3"/><c:pt idx="0"><c:v>81</c:v></c:pt><c:pt idx="1"><c:v>66</c:v></c:pt><c:pt idx="2"><c:v>72</c:v></c:pt></c:numCache>');
+    expect(xml.replace(/<c:ser>.*<\/c:ser>/, '')).toBe(CHART.replace(/<c:ser>.*<\/c:ser>/, ''));
+    expect(new DOMParser().parseFromString(xml, 'application/xml').getElementsByTagName('parsererror').length).toBe(0);
+    // (a cell that is an error here, such as a function this program lacks: the file's numbers stay)
+    book.edit('type', () => book.sheets[0].setInput(2, 2, '=NOSUCHFUNCTION(1)'));
+    expect(chartOut(await writeXlsx(book, pictures))).toContain('<c:f>Data!$C$2:$C$4</c:f><c:numCache><c:formatCode>General</c:formatCode><c:ptCount val="3"/><c:pt idx="0"><c:v>97</c:v></c:pt><c:pt idx="1"><c:v>92</c:v></c:pt>');
+  });
+
+  it('keeps its automatic title and theme colours when it is changed here', async () => {
+    const { book } = await readXlsx(file());
+    book.edit('legend', () => book.sheets[0].setCharts([{ ...book.sheets[0].charts[0], legend: 'right' }]));
+    const xml = chartOut(await writeXlsx(book, pictures));
+    expect(xml).toContain('<c:legendPos val="r"/>');
+    expect(xml).toContain('<c:title><c:overlay val="0"/></c:title><c:autoTitleDeleted val="0"/>');
+    expect(xml).toContain('<c:spPr><a:solidFill><a:schemeClr val="accent1"/></a:solidFill></c:spPr>');
+    expect(xml).toContain('<c:spPr><a:solidFill><a:schemeClr val="accent2"/></a:solidFill></c:spPr>');
+    expect(xml).not.toMatch(/4472C4|ED7D31/i);
   });
 });
