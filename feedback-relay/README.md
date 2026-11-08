@@ -25,7 +25,7 @@ GitHub ▸ your picture ▸ **Settings ▸ Developer settings ▸ Personal acces
 
 - **Token name**: Chemweave feedback relay
 - **Expiration**: the longest offered (when it runs out, Send says it can't send and people can still use Copy Text; make a new token and put it in as in step 3)
-- **Repository access**: Only select repositories: `Chem-Illustrator` and `Chemweave-feedback`
+- **Repository access**: Only select repositories: `Chemweave` and `Chemweave-feedback`
 - **Permissions ▸ Repository permissions**: **Issues**: Read and write; **Contents**: Read and write (used only on the private repo, for pictures)
 
 Click **Generate token** and copy it (it is shown only once). Don't send it to anyone.
@@ -51,7 +51,7 @@ npx wrangler deploy                              # prints the relay's address
 2. **Compute ▸ Workers & Pages ▸ Create ▸ Start with Hello World**, named `chemweave-feedback`, then **Deploy**.
 3. **Edit code**: replace everything with the contents of `worker.js`, then **Deploy**.
 4. The worker's **Settings ▸ Bindings ▸ Add ▸ KV namespace**: variable name `FEEDBACK_KV`, the namespace from step 1.
-5. **Settings ▸ Variables and Secrets ▸ Add**: text `PUBLIC_REPO` = `nathanohare/Chem-Illustrator`, text `PRIVATE_REPO` = `nathanohare/Chemweave-feedback`, text `PER_HOUR` = `5`, and secret `GITHUB_TOKEN` = the token from step 1.
+5. **Settings ▸ Variables and Secrets ▸ Add**: text `PUBLIC_REPO` = `nathanohare/Chemweave`, text `PRIVATE_REPO` = `nathanohare/Chemweave-feedback`, text `PER_HOUR` = `5`, and secret `GITHUB_TOKEN` = the token from step 1.
 
 The relay's address looks like `https://chemweave-feedback.<your-account>.workers.dev`. Opening it in a browser shows `{"ok":true,"paused":false}`.
 

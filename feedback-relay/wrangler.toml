@@ -4,7 +4,7 @@ main = "worker.js"
 compatibility_date = "2025-09-01"
 
 [vars]
-PUBLIC_REPO = "nathanohare/Chem-Illustrator"
+PUBLIC_REPO = "nathanohare/Chemweave"
 PRIVATE_REPO = "nathanohare/Chemweave-feedback"
 PAUSED = "0"
 PER_HOUR = "5"

@@ -10,7 +10,7 @@
 //
 // Settings (wrangler.toml / Cloudflare dashboard):
 //   GITHUB_TOKEN  secret: fine-grained token, both repos, Issues + Contents read and write
-//   PUBLIC_REPO   e.g. nathanohare/Chem-Illustrator
+//   PUBLIC_REPO   e.g. nathanohare/Chemweave
 //   PRIVATE_REPO  e.g. nathanohare/Chemweave-feedback
 //   PAUSED        "1" turns sending off (the app then offers Copy Text and GitHub instead)
 //   PER_HOUR      most reports one computer may send in an hour (default 5)
