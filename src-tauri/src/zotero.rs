@@ -31,7 +31,7 @@ pub async fn zotero_post(endpoint: String, body: String) -> Result<ZoteroReply, 
         let _ = rustls::crypto::ring::default_provider().install_default();
     }
     let client = reqwest::Client::builder()
-        .user_agent(concat!("ChemIllustrator/", env!("CARGO_PKG_VERSION")))
+        .user_agent(concat!("Chemweave/", env!("CARGO_PKG_VERSION")))
         // Zotero is on this computer: never through a proxy
         .no_proxy()
         .connect_timeout(Duration::from_secs(3))

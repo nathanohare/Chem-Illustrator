@@ -40,7 +40,7 @@ export function feedbackIssue(f: Feedback): Issue {
   if (f.extra?.trim()) parts.push('', '**Error details**', '', '```', f.extra.trim().replace(/```/g, '``\u200b`'), '```');
   const about = Object.entries(f.about ?? {}).filter(([, v]) => v);
   if (about.length) parts.push('', '**About the program**', '', ...about.map(([k, v]) => `- ${k}: ${v}`));
-  parts.push('', '_Sent from Chem Illustrator (Help ▸ Send Feedback)._');
+  parts.push('', '_Sent from Chemweave (Help ▸ Send Feedback)._');
   return { title, body: parts.join('\n') };
 }
 

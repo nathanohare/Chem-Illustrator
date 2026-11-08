@@ -1,4 +1,4 @@
-# Chem Illustrator's own list for the spell check: surnames in named reactions, reagents and rules, and everyday words of organic chemistry the other lists lack. Capitals don't matter.
+# Chemweave's own list for the spell check: surnames in named reactions, reagents and rules, and everyday words of organic chemistry the other lists lack. Capitals don't matter.
 abramov
 achmatowicz
 adkins

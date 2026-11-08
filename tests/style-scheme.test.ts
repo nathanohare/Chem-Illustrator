@@ -10,11 +10,11 @@ import { afterEach, describe, expect, it } from 'vitest';
 import { Doc, type Arrow } from '../src/model';
 import { arrowFrame, inFrame, plainMeasure } from '../src/chem/reaction';
 import { arrowTexts, setSideText } from '../src/chem/arrow-text';
-import { applySchemePlan, DEFAULT_SCHEME_PREFS, fittedLength, planCleanUp, prefsOf, schemePrefs, setSchemePrefs, spacing } from '../src/chem/scheme-layout';
+import { applySchemePlan, DEFAULT_SCHEME_PREFS, fittedLength, lineStart, parseSchemePrefs, planCleanUp, prefsOf, schemePrefs, setSchemePrefs, spacing } from '../src/chem/scheme-layout';
 import { cleanScheme, cleanStyle, sameLook, scaleStyle } from '../src/drawing-styles';
 import { writeCdxml } from '../src/io/cdxml-write';
 import { readCdxml } from '../src/io/cdxml';
-import { ACS_1996 } from '../src/style';
+import { ACS_1996, SCHEME_LIMITS } from '../src/style';
 
 afterEach(() => setSchemePrefs(DEFAULT_SCHEME_PREFS));
 
@@ -80,7 +80,7 @@ describe('a style\'s own scheme settings', () => {
 
 describe('the values travel with the style', () => {
   it('are cleaned, compared and scaled with it', () => {
-    expect(cleanScheme({ lead: 3, headGap: -1, textGap: 'x', textAlign: 'middle', fit: false, structGap: 1e6 })).toEqual({ lead: 3, fit: false, structGap: 500 });
+    expect(cleanScheme({ lead: 3, headGap: -1, textGap: 'x', textAlign: 'middle', fit: false, structGap: 1e6 })).toEqual({ lead: 3, fit: false, structGap: 50 });
     expect(cleanScheme({ textAlign: 'nowhere' })).toBeUndefined();
     const st = cleanStyle({ ...ACS_1996, scheme: { textAlign: 'left', lead: 4 } })!;
     expect(st.scheme).toEqual({ textAlign: 'left', lead: 4 });
@@ -96,5 +96,46 @@ describe('the values travel with the style', () => {
     const text = writeCdxml(doc);
     expect(text).toMatch(/<objecttag[^>]*Name="Chem Illustrator arrows"/);
     expect(readCdxml(text).doc.style.scheme).toEqual({ structGap: 12, textAlign: 'right', fit: false, headGap: 3 });
+  });
+});
+
+// Nate, 2026-11-08: the text under a reaction arrow gets its own gap and alignment, and every
+// scheme distance stays in a sensible range (none below 0, text no more than 30 pt off the line).
+describe('text below the arrow', () => {
+  it('follows the text above unless given its own gap and alignment', () => {
+    const p = { ...DEFAULT_SCHEME_PREFS, textGap: 4 };
+    expect(spacing(14.4, p).conditionsBelow).toBe(4);
+    expect(spacing(14.4, { ...p, textGapBelow: 9 }).conditionsBelow).toBe(9);
+    expect(spacing(14.4, { ...p, textGapBelow: 9 }).conditions).toBe(4);
+    // a 10 pt line in a 30 pt block: centred above, to the right below
+    const q = { ...p, fit: true, lead: 0, textAlignBelow: 'right' as const };
+    expect(lineStart(10, 30, 60, 6, 14.4, q, 'above')).toBeCloseTo(10, 6);
+    expect(lineStart(10, 30, 60, 6, 14.4, q, 'below')).toBeCloseTo(20, 6);
+  });
+  it('is laid out by Clean Up Reaction with its own gap', () => {
+    const doc = new Doc();
+    doc.style = { ...doc.style, scheme: { textGap: 3, textGapBelow: 12 } };
+    const L = doc.style.bondLength;
+    const ids = doc.edit('b', () => {
+      const a = [doc.addAtom(0, 0).id, doc.addAtom(L, 0).id];
+      doc.addBond(a[0], a[1], 1);
+      doc.addArrow({ tail: { x: 2 * L, y: 0 }, head: { x: 5 * L, y: 0 }, sweep: 0, headStyle: 'full', tailStyle: 'none', headType: 'solid', line: 'solid', noGo: false, equilibrium: false, headLength: 6, headWidth: 1.5 });
+      const top = doc.addCaption({ x: 2.3 * L, y: -6, runs: [{ text: 'TFA' }], justify: 'left' }).id;
+      const low = doc.addCaption({ x: 2.3 * L, y: 14, runs: [{ text: 'CH2Cl2' }], justify: 'left' }).id;
+      const p = [doc.addAtom(6 * L, 0).id, doc.addAtom(7 * L, 0).id];
+      doc.addBond(p[0], p[1], 1);
+      return { top, low };
+    });
+    const m = plainMeasure(doc);
+    applySchemePlan(doc, m, planCleanUp(doc, m)!);
+    const y = [...doc.arrows.values()][0].tail.y;
+    expect(y - m.captionBox(doc.captions.get(ids.top)!).y2).toBeCloseTo(3, 1);
+    expect(m.captionBox(doc.captions.get(ids.low)!).y1 - y).toBeCloseTo(12, 1);
+  });
+  it('keeps its settings with the style and in saved settings, in range', () => {
+    expect(cleanScheme({ textGapBelow: 12, textAlignBelow: 'left' })).toEqual({ textGapBelow: 12, textAlignBelow: 'left' });
+    expect(cleanScheme({ textGap: 80, textGapBelow: 31 })).toEqual({ textGap: SCHEME_LIMITS.textGap, textGapBelow: 30 });
+    const saved = parseSchemePrefs({ textGapBelow: 45, textAlignBelow: 'right', lead: -2 });
+    expect([saved.textGapBelow, saved.textAlignBelow, saved.lead]).toEqual([30, 'right', null]);
   });
 });

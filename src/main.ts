@@ -44,7 +44,11 @@ import { reviewAuthor, setReviewAuthor } from './document/revisions';
 import { NMR_SOLVENTS, NmrPanel } from './ui/nmr-panel';
 import { compareMode, nmrQuality, nmrSpectrumMhz, setCompareMode, setNmrQuality, setNmrSpectrumMhz } from './ui/nmr-spectrum';
 import { nmrAutoPredict, nmrRange, peakLabels, setNmrAutoPredict, setNmrRange, setPeakLabels } from './ui/nmr-settings';
-import { analysisHtml, adductHtml, ionInfo, formulaHtml, electronsHtml, analysisRuns, withRepeats, polymerHtml, descriptorRuns, DEFAULT_DESCRIPTORS, nameHtml, type RepeatUnit, type NameState } from './ui/analysis-panel';
+import { analysisPrefs, setAnalysisPrefs, onAnalysisPrefs, parseAnalysisPrefs, calcOf, nextCalcId, type AnalysisPrefs } from './chem/analysis-prefs';
+import { newCalc } from './chem/bench';
+import { dragRow } from './ui/row-drag';
+import { askLabCalc, analysisSettingsPage, analysisSettingsAt, placeCalc, type AnalysisSettingsHost } from './ui/analysis-settings';
+import { analysisHtml, benchValues, ribbonRow, formulaHtml, electronsHtml, analysisRuns, withRepeats, polymerHtml, descriptorRuns, newDescriptors, nameHtml, type RepeatUnit, type NameState } from './ui/analysis-panel';
 import { attachedAtoms, attachWhereItIs, defaultGap, nearestStructure, placeAttached, structureSig } from './editor/attached';
 import { repeatGroups, lipDirection } from './chem/polymer';
 import { rGroupsOf, substituted, rowNumbers, parseRows, rGroupCells, type RowMass } from './chem/rgroup';
@@ -150,6 +154,7 @@ import { StylePanel, tidyStyle } from './ui/style-panel';
 import { installCombos } from './ui/combo';
 import { installFontList, registerBundledFonts, bundledFaces, pdfFonts } from './fonts';
 import { applyRibbonIcons } from './ui/ribbon-icons';
+import { iconSet, setIconSet } from './ui/icon-swap';
 import { applyIconSet } from './ui/icon-set';
 import { RibbonLive } from './ui/ribbon-live';
 import { installRibbonFlyouts } from './ui/ribbon-flyout';
@@ -173,7 +178,7 @@ import { withoutCharge } from './chem/formula';
 import { ORBITAL_KINDS, ORBITAL_LOOKS, angleOfDir, openDirection, orbitalAtom, orbitalShapes, orbitalsAmong, putOrbital, readAngle, readOrbital, redrawOrbital, takenDirections, type OrbitalKind, type OrbitalLook, type OrbitalSpec } from './chem/orbitals';
 import { BATCH_FORMATS, BATCH_INPUTS, readBatchFile, smilesLine, uniqueName, writeBatchItem, type BatchDeps, type BatchFormat } from './io/batch-convert';
 import { zipSync } from 'fflate';
-import { labelsOf, schemePrefs, setSchemePrefs, SPACING, type SchemePrefs } from './chem/scheme-layout';
+import { clampSchemeDistance, labelsOf, SCHEME_LIMITS, schemePrefs, setSchemePrefs, SPACING, type SchemeDistance, type SchemePrefs } from './chem/scheme-layout';
 import { plainText, savableChar } from './richtext';
 import { buildTextToolbox, type TextToolboxHooks } from './ui/text-toolbox';
 import { buildTextBar } from './ui/text-bar';
@@ -3075,12 +3080,14 @@ async function cleanUpChoices(): Promise<void> {
  */
 /** Scheme settings as typed in Settings ▸ Schemes. */
 function schemeFrom(got: Record<string, string>): Partial<SchemePrefs> {
-  const len = (v: string | undefined) => { const n = Number(v); return !v || v.trim() === '' || !isFinite(n) || n < 0 ? null : Math.min(500, n); };
+  const len = (k: SchemeDistance) => { const v = got[k]; return !v || v.trim() === '' ? null : clampSchemeDistance(k, Number(v)) ?? null; };
+  const align = (v: string | undefined) => (v === 'left' || v === 'center' || v === 'right' ? v : null);
   return {
-    structGap: len(got.structGap), plusGap: len(got.plusGap), textGap: len(got.textGap), lead: len(got.lead), headGap: len(got.headGap),
+    structGap: len('structGap'), plusGap: len('plusGap'), textGap: len('textGap'), textGapBelow: len('textGapBelow'), lead: len('lead'), headGap: len('headGap'),
     // (its size and font are the drawing style's now: Settings > Drawing Style)
     textSize: null,
-    textAlign: got.textAlign === 'left' || got.textAlign === 'right' ? got.textAlign : 'center',
+    textAlign: align(got.textAlign) ?? 'center',
+    textAlignBelow: align(got.textAlignBelow),
     helpers: got.helpers === 'true', fit: got.fit === 'true', sameLength: got.sameLength === 'true',
   };
 }
@@ -3091,16 +3098,21 @@ async function schemeSettings(): Promise<void> {
   const bond = doc.style.bondLength;
   const pt = (v: number | null) => (v === null ? '' : String(v));
   const auto = (frac: number) => `${Math.round(frac * bond * 10) / 10} pt`;
+  const aligns = [{ value: 'left', label: 'Left' }, { value: 'center', label: 'Center' }, { value: 'right', label: 'Right' }];
+  /** A distance box, kept from 0 to its limit. */
+  const dist = (name: SchemeDistance, label: string, placeholder: string): Field => ({ name, label, value: pt(p[name] ?? null), type: 'number', unit: 'pt', placeholder, min: 0, max: SCHEME_LIMITS[name] });
   const got = await ask('Scheme Settings', [
-    { name: 'structGap', label: 'Gap between arrow and structures', value: pt(p.structGap), type: 'number', unit: 'pt', placeholder: auto(SPACING.gap) },
-    { name: 'plusGap', label: 'Space either side of +', value: pt(p.plusGap), type: 'number', unit: 'pt', placeholder: auto(SPACING.plus) },
+    dist('structGap', 'Gap between arrow and structures', auto(SPACING.gap)),
+    dist('plusGap', 'Space either side of +', auto(SPACING.plus)),
     { name: 'helpers', label: 'Show + boxes above and below new arrows', value: String(p.helpers), type: 'checkbox' },
-    { name: 'textAlign', label: 'Text alignment', value: p.textAlign, options: [{ value: 'left', label: 'Left' }, { value: 'center', label: 'Center' }, { value: 'right', label: 'Right' }] },
-    { name: 'textGap', label: 'Gap between arrow and text', value: pt(p.textGap), type: 'number', unit: 'pt', placeholder: auto(SPACING.conditions) },
+    { name: 'textAlign', label: 'Text alignment above the arrow', value: p.textAlign, options: aligns },
+    dist('textGap', 'Gap between arrow and text above', auto(SPACING.conditions)),
+    { name: 'textAlignBelow', label: 'Text alignment below the arrow', value: p.textAlignBelow ?? '', options: [{ value: '', label: 'Same as above' }, ...aligns] },
+    dist('textGapBelow', 'Gap between arrow and text below', 'Same as above'),
     { name: 'fit', label: 'Fit arrow length to its text (moves the products)', value: String(p.fit), type: 'checkbox' },
     { name: 'sameLength', label: 'Clean Up Reaction makes arrows the same length', value: String(p.sameLength), type: 'checkbox' },
-    { name: 'lead', label: 'Arrow before the text starts', value: pt(p.lead), type: 'number', unit: 'pt', placeholder: auto(SPACING.overhang) },
-    { name: 'headGap', label: 'Space between text and arrowhead', value: pt(p.headGap), type: 'number', unit: 'pt', placeholder: auto(SPACING.overhang) },
+    dist('lead', 'Arrow before the text starts', auto(SPACING.overhang)),
+    dist('headGap', 'Space between text and arrowhead', auto(SPACING.overhang)),
   ], { ok: 'Save', note: 'Used when you type text beside an arrow, and by Clean Up Reaction and Arrange Scheme. These are the usual values for every file; a drawing style can have its own (Drawing Style ▸ Reaction arrows, with a preview), and those win. The text\'s size and font are in Drawing Style too. Leave a distance blank to scale it with the bond length. Existing schemes change when you next clean them up.',
     preview: { title: 'Preview', below: true, draw: (v, focus) => schemePreview(doc.style, schemeFrom(v), undefined, focus) } });
   if (!got) return;
@@ -5584,7 +5596,7 @@ function dragTab(e: PointerEvent, el: HTMLElement, t: Tab): void {
 
 let lastTitle = '';
 function updateTitle(): void {
-  const t = `${ws.active.dirty ? '• ' : ''}${ws.active.name} – Chem Illustrator`;
+  const t = `${ws.active.dirty ? '• ' : ''}${ws.active.name} – Chemweave`;
   if (t === lastTitle) return;
   lastTitle = t;
   document.title = t;
@@ -8045,7 +8057,7 @@ function modeLoaded(mode: 'sheet' | 'document'): void {
 
 /** Sheet or document mode's code didn't load (a broken install, or the web version gone offline). */
 function modeFailed(err: unknown): void {
-  void showError(`This part of Chem Illustrator could not be loaded: ${String(err)}. Restart it and try again.`);
+  void showError(`This part of Chemweave could not be loaded: ${String(err)}. Restart it and try again.`);
 }
 
 // both load in idle time soon after start-up, so the first sheet or document opens at once
@@ -8210,7 +8222,7 @@ window.addEventListener('keydown', (e) => {
 /** Menu commands that work the same whatever shows. */
 const ANY_TAB = new Set(['references', 'compound-library', 'knowledge-base', 'ligand-library', 'toolbox-text', 'toolbox-guides', 'insert-compound', 'add-to-compound-library', 'library-location', 'find-structure-files', 'new-from-template', 'check-accessibility', 'format-painter', 'insert-symbol', 'edit-palettes', 'preferences', 'export-settings', 'import-settings', 'customize-ribbon', 'toolbox-main', 'toolbox-structure', 'toolbox-arrange', 'toolbox-templates', 'toolbox-colours', 'toolbox-highlight', 'toolbox-custom', 'toolbox-schemes', 'toolbox-diagrams', 'toolbox-tables', 'toolbox-biopolymers', 'toolbox-perspective', 'fold-side', 'customize-toolbox', 'customize-quick-bar', 'lock-toolboxes', 'reset-toolboxes', 'new', 'new-slides', 'new-design', 'new-sheet', 'new-document', 'open', 'save', 'save-as', 'autosave', 'version-history', 'recover-work', 'keep-options', 'close-tab', 'next-tab', 'prev-tab', 'undo', 'redo',
   'drawing-style', 'navigation-settings', 'dark-page', 'dark-colours', 'hotkeys', 'typing-spelling', 'mode-colours', 'dev-tools', ...STRESS_SIZES.map((n) => `stress-${n}`), 'scroll-bars', 'title-bar-in-menu', 'collapse-ribbon', 'ui-scale-in', 'ui-scale-out', 'ui-scale-reset', ...UI_SCALES.map((v) => `ui-scale-${Math.round(v * 100)}`), 'text-bar-docked', 'text-bar-floating', 'text-bar-hidden', 'theme-system', 'theme-light', 'theme-dark', 'theme-darkgray', 'density-snug', 'density-cozy', 'density-normal', 'density-standard', 'density-large', 'shadows-light', 'shadows-strong', 'shadows-off', 'icons-mode', 'icons-kind', 'shape-ink-accent', 'focus-view', 'one-column-tools', 'group-tips', 'tool-tips', 'touch-mode-auto', 'touch-mode-on', 'touch-mode-off', 'atom-keypad', 'pen-sketch', 'show-stereo', 'clipboard-formats', 'split-view', 'command-search', 'next-region', 'prev-region', 'print',
-  'assistant', 'help', 'about', 'user-guide', 'help-here', 'send-feedback', 'report-problem', 'copy-diagnostics', 'open-log-folder', 'open-inspector', 'check-updates']);
+  'assistant', 'help', 'about', 'user-guide', 'help-here', 'send-feedback', 'report-problem', 'support-project', 'copy-diagnostics', 'open-log-folder', 'open-inspector', 'check-updates']);
 
 // ---------------------------------------------------------------- accessibility (Review > Check Accessibility, Alt Text…)
 
@@ -8979,11 +8991,13 @@ const COMMANDS: Record<string, () => unknown> = {
   'user-guide': () => void guide.open(),
   'help-here': () => { const at = guideSpot(menuMode(), editor.tool.kind); void guide.open(at.page, at.anchor); },
   'send-feedback': () => feedback.open(),
-  about: () => void appVersion().then((v) => ask('About Chem Illustrator', [], {
+  'support-project': () => openWebPage(SPONSOR_PAGE),
+  about: () => void appVersion().then((v) => ask('About Chemweave', [], {
     noCancel: true,
     note: `${STAGE_NOTE} Version ${v === 'web' ? 'for the browser' : v} (${STAGE.toLowerCase()}). Free software under the GNU General Public License, version 3: `
-      + 'see the license and the source on GitHub (github.com/nathanohare/Chem-Illustrator). ChemDraw is a trademark of Revvity Signals; '
-      + 'Chem Illustrator is not made by or affiliated with Revvity Signals.',
+      + 'see the license and the source on GitHub (github.com/nathanohare/Chem-Illustrator). ChemDraw is a trademark of Revvity Signals Software, Inc. '
+      + 'Microsoft, Word, Excel, PowerPoint and Office are trademarks of the Microsoft group of companies. '
+      + 'Chemweave was formerly called Chem Illustrator, and is not made by, connected with or endorsed by Revvity or Microsoft.',
   })),
   'report-problem': () => feedback.open('problem'),
   'copy-diagnostics': () => copyText(diagnosticsText(), 'Copied the diagnostics: paste them into a bug report or message.'),
@@ -10121,7 +10135,7 @@ let versionText = canUpdate ? '' : 'Web version';
 void Promise.all([appVersion(), portableInfo()]).then(([v, portable]) => {
   versionText = canUpdate ? `Version ${v} ${STAGE.toLowerCase()}${portable ? ' (portable)' : ''}` : `Web version (${STAGE.toLowerCase()})`;
   diagnostics.version = versionText;
-  if (portable && !portable.writable) flash(`This portable copy can’t write to its “Chem Illustrator Data” folder (a locked or read-only drive), so settings are kept on this computer instead.`, 8000);
+  if (portable && !portable.writable) flash(`This portable copy can’t write to its “Chemweave Data” folder (a locked or read-only drive), so settings are kept on this computer instead.`, 8000);
   const el = document.querySelector('#app-version');
   if (el) el.textContent = versionText;
 });
@@ -10150,7 +10164,7 @@ function errorNotice(e: LogEntry): void {
  */
 function unexpectedCloseNotice(c: UnexpectedClose): void {
   const when = `${stamp(c.beat).slice(11, 16)} on ${stamp(c.beat).slice(0, 10)}`;
-  notice('unexpected-close', 'Chem Illustrator closed unexpectedly last time',
+  notice('unexpected-close', 'Chemweave closed unexpectedly last time',
     `It stopped without closing (last running at ${when}). Reporting it, with the log of what it was doing, helps find the cause.`, [
       { label: 'Report It…', main: true, run: () => feedback.open('problem', errorReport(diagnostics, { closed: c })) },
       { label: 'Dismiss', run: () => {} },
@@ -10161,7 +10175,7 @@ function unexpectedCloseNotice(c: UnexpectedClose): void {
 function diagnosticsText(): string {
   const about = Object.entries(feedback.about()).map(([k, v]) => `${k}: ${v}`).join('\n');
   const log = diagnostics.logText();
-  return `Chem Illustrator diagnostics\n${about}\n\n${log.length > 20_000 ? `…\n${log.slice(-20_000)}` : log}`;
+  return `Chemweave diagnostics\n${about}\n\n${log.length > 20_000 ? `…\n${log.slice(-20_000)}` : log}`;
 }
 
 async function openLogFolder(): Promise<void> {
@@ -10296,7 +10310,9 @@ async function openOutsideFiles(): Promise<void> {
 }
 
 /** A mechanism arrow gap typed in Settings ▸ Drawing, in points: null (the usual gap) when blank or not a number. */
-const arrowGap = (v: string | undefined): number | null => { const n = Number(v); return !v || v.trim() === '' || !isFinite(n) || n < 0 ? null : Math.min(50, n); };
+/** The most a mechanism arrow's gap at either end may be, in points. */
+const ARROW_GAP_MAX = 20;
+const arrowGap = (v: string | undefined): number | null => { const n = Number(v); return !v || v.trim() === '' || !isFinite(n) ? null : Math.min(ARROW_GAP_MAX, Math.max(0, n)); };
 
 /** Settings ▸ Drawing: how structures are written and drawn, set once rather than per structure. */
 async function drawingPreferences(): Promise<void> {
@@ -10318,8 +10334,8 @@ async function drawingPreferences(): Promise<void> {
       help: 'Arrows you bent by hand stay as they are.' },
     { name: 'arrowProducts', label: 'Offer Draw Next Intermediate and Check Arrows (Chemistry ▸ Mechanism Arrows)', type: 'checkbox', value: String(editor.options.arrowProducts),
       help: 'Both read the curved arrows as electrons moving: Check Arrows checks them, and Draw Next Intermediate draws the structure they make. Off takes both commands out of the menus; the arrows themselves are drawn as before.' },
-    { name: 'startGap', label: 'Gap between tail of an arrow and its origin', value: arrowGaps.start === null ? '' : String(arrowGaps.start), type: 'number', unit: 'pt', placeholder: 'Automatic' },
-    { name: 'endGap', label: 'Gap between head of an arrow and its target', value: arrowGaps.end === null ? '' : String(arrowGaps.end), type: 'number', unit: 'pt', placeholder: 'Automatic',
+    { name: 'startGap', label: 'Gap between tail of an arrow and its origin', value: arrowGaps.start === null ? '' : String(arrowGaps.start), type: 'number', unit: 'pt', placeholder: 'Automatic', min: 0, max: ARROW_GAP_MAX },
+    { name: 'endGap', label: 'Gap between head of an arrow and its target', value: arrowGaps.end === null ? '' : String(arrowGaps.end), type: 'number', unit: 'pt', placeholder: 'Automatic', min: 0, max: ARROW_GAP_MAX,
       help: 'Both gaps are measured from the atom\'s label (or a bare carbon\'s corner) or the lone pair\'s dots. Leave blank for the usual gap, which grows with the bond length. New arrows, and arrows stuck to a structure, use them when they are next drawn; Clean Up Arrow redraws the selected ones now.' },
   ], { ok: 'Save', preview: { title: 'Mechanism arrows', draw: (v, focus) => mechanismPreview({ start: arrowGap(v.startGap), end: arrowGap(v.endGap) }, doc.style, undefined, focus) } });
   if (!r) return;
@@ -10400,7 +10416,7 @@ function convertDeckChemdraw(deck: Deck): void {
 
 /** Settings ▸ General: how structures are saved in Word and PowerPoint files. */
 const STRUCTURES_AS = [{ value: 'pictures', label: 'Pictures (SVG and PNG)' }, { value: 'chemdraw', label: 'ChemDraw objects' }];
-const STRUCTURES_AS_HELP = 'ChemDraw objects open in ChemDraw when double-clicked in Word or PowerPoint, on computers that have ChemDraw; elsewhere they show as pictures. Pictures (SVG and PNG) look the same in every program, including Google Docs, LibreOffice and Keynote. Either way, Chem Illustrator opens them again as editable drawings. ChemDraw objects that came in with a file stay ChemDraw objects.';
+const STRUCTURES_AS_HELP = 'ChemDraw objects open in ChemDraw when double-clicked in Word or PowerPoint, on computers that have ChemDraw; elsewhere they show as pictures. Pictures (SVG and PNG) look the same in every program, including Google Docs, LibreOffice and Keynote. Either way, Chemweave opens them again as editable drawings. ChemDraw objects that came in with a file stay ChemDraw objects.';
 
 /** Settings ▸ General: selecting, groups, linked text, and your name on tracked changes. */
 async function generalPreferences(): Promise<void> {
@@ -10561,6 +10577,11 @@ async function personalPreferences(): Promise<void> {
       help: 'Off, a counterion typed without its charge is still read as that ion, and flagged until the charge is added.' },
     { name: 'saltGroups', label: 'Group each with the structure or ion of opposite charge next to it, as one salt', type: 'checkbox', value: String(chemText.saltGroups), inline: (v) => saltSwatch(v === 'true', doc.style),
       help: 'Grouped, the two count as one salt: one formula and mass, and a SMILES with both parts.' },
+    { name: 'iconsHeading', label: 'Icons', type: 'heading', value: '' },
+    { name: 'iconSet', label: 'Icon set', value: iconSet(), short: true, options: [
+      { value: 'new', label: 'New: one style in every mode' },
+      { value: 'classic', label: 'Classic: the simple line icons, closest to ChemDraw' }],
+      help: 'Classic brings back the icons the toolboxes and ribbons had before the redesign. Buttons that had only words keep their new pictures either way.' },
   ], { ok: 'Save' });
   if (!r) return;
   enterFinishesText = r.enterFinishes === 'enter';
@@ -10568,6 +10589,7 @@ async function personalPreferences(): Promise<void> {
   chemText.ionCharges = r.ionCharges === 'true';
   chemText.saltGroups = r.saltGroups === 'true';
   templatesOnNew = { document: r.tplDocument === 'true', sheet: r.tplSheet === 'true', slides: r.tplSlides === 'true' };
+  setIconSet(r.iconSet === 'classic' ? 'classic' : 'new');
   editor.aids = { ...editor.aids, angle: r.aidAngle === 'true', length: r.aidLength === 'true', hints: r.aidHints === 'true', look: r.aidLook === 'box' || r.aidLook === 'solid' ? r.aidLook : 'plain', units: r.aidUnits === 'px' || r.aidUnits === 'mm' ? r.aidUnits : 'in' };
   const look = parseAlkylLook(r.alkylLook);
   const changed = look !== alkylPrefs.look;
@@ -10658,6 +10680,7 @@ function currentSettings(): Settings {
     density,
     shadows,
     iconLook,
+    iconSet: iconSet(),
     shapeInk: shapeInkNow,
     oneColumnTools,
     toolCells,
@@ -10750,6 +10773,7 @@ function currentSettings(): Settings {
     recentFiles,
     recentSymbols,
     scheme: { ...schemePrefs },
+    analysis: structuredClone(analysisPrefs()),
     newman: structuredClone(newmanPrefs),
     keep: keepPrefs,
     highlightLooks: ownLooks,
@@ -10763,7 +10787,7 @@ function currentSettings(): Settings {
 
 /** Save every setting in one file, to keep or to use on another computer. */
 async function exportSettings(say: (text: string) => void = flash): Promise<void> {
-  const target = await saveFileDialog('Chem Illustrator settings.json', SETTINGS_FILE).catch((e) => { say(String(e)); return null; });
+  const target = await saveFileDialog('Chemweave settings.json', SETTINGS_FILE).catch((e) => { say(String(e)); return null; });
   if (!target) return;
   await writeFile(target.ref, target.name, exportText(currentSettings()), SETTINGS_FILE).then(
     () => say(`Saved every setting in ${target.name}. Import it on another computer (Edit > Settings File > Import Settings) to set that one up the same.`),
@@ -10776,7 +10800,7 @@ async function importSettingsFile(say: (text: string) => void = flash): Promise<
   const got = await openFileDialog([SETTINGS_FILE]).catch((e) => { say(String(e)); return null; });
   if (!got) return;
   const read = importSettings(got.text, currentSettings());
-  if (!read) { say(`${got.name} isn't a Chem Illustrator settings file (use one saved with Export Settings).`); return; }
+  if (!read) { say(`${got.name} isn't a Chemweave settings file (use one saved with Export Settings).`); return; }
   applySettings(read.settings);
   storeSettings();
   say(read.only === 'hotkeys' ? `Using the keys from ${got.name}.` : `Now using the settings from ${got.name}: shortcuts, toolboxes, preferences, templates, abbreviations, styles and palettes. Recent files are unchanged.`);
@@ -10847,7 +10871,7 @@ const hotkeysDialog = new HotkeysDialog({
     set: (v) => { editor.options.stickyHotspot = v; storeSettings(); },
   },
   exportKeys: async () => {
-    const target = await saveFileDialog('Chem Illustrator hotkeys.json', KEYMAP_FILE).catch((e) => { hotkeysDialog.say(String(e)); return null; });
+    const target = await saveFileDialog('Chemweave hotkeys.json', KEYMAP_FILE).catch((e) => { hotkeysDialog.say(String(e)); return null; });
     if (!target) return;
     const text = JSON.stringify({ app: 'Chem Illustrator', kind: 'hotkeys', version: 1, hotkeys: keymap.overrides() }, null, 2) + '\n';
     await writeFile(target.ref, target.name, text, KEYMAP_FILE).then(
@@ -10877,6 +10901,7 @@ function applySettings(s: Settings): void {
   editor.options.fixedAngles = s.fixedAngles;
   editor.showRoles = s.showRoles;
   setSchemePrefs(s.scheme);
+  setAnalysisPrefs(s.analysis);
   newmanPrefs = structuredClone(s.newman);
   $('[data-cmd="show-roles"]')?.setAttribute('aria-checked', String(s.showRoles));
   showDevTools(s.devTools);
@@ -10899,6 +10924,7 @@ function applySettings(s: Settings): void {
   setDensity(s.density);
   setShadows(s.shadows);
   setIconLook(s.iconLook);
+  setIconSet(s.iconSet);
   setShapesInk(s.shapeInk);
   setOneColumnTools(s.oneColumnTools);
   setToolCells(s.toolCells);
@@ -11223,6 +11249,89 @@ $('#analysis-body').addEventListener('change', (e) => {
   adductSel.value = t.value;
   scheduleAnalysis(true);
 });
+/** A structure's bench values: PubChem's measured ones if it has been looked up, else estimates. */
+function benchOf(r: FragmentResult) {
+  const st = r.smiles ? pubchemStates.get(r.smiles) : undefined;
+  return benchValues(r, st?.kind === 'found' ? st.c : null);
+}
+
+/** The panel's customize mode (its gear): a check box and grip on every row, for quick changes. */
+let analysisCustomize = false;
+const CUSTOMIZE_BAR = `<div class="an-editbar"><b>Customize</b><span class="info-icon" tabindex="0" role="img" title="Drag rows by their grips to reorder them; untick to hide. Settings ▸ Analysis has the rest: decimal places, units, lab calculations, the ribbon box and attached descriptors." aria-label="About customizing">i</span><span class="sp"></span><button type="button" data-analysis-settings="rows">More Settings…</button><button type="button" data-analysis-reset title="Put the rows back as they first were">Reset</button><button type="button" class="primary" data-analysis-done>Done</button></div>`;
+
+function setAnalysisCustomize(on: boolean): void {
+  analysisCustomize = on;
+  document.querySelector('#analysis-gear')?.classList.toggle('on', on);
+  document.querySelector('#analysis-gear')?.setAttribute('aria-pressed', String(on));
+  scheduleAnalysis(true);
+}
+
+/** Change the Analysis settings (from the panel or Settings ▸ Analysis) and keep them. */
+function changeAnalysisPrefs(edit: (p: AnalysisPrefs) => void): void {
+  const p = structuredClone(analysisPrefs());
+  edit(p);
+  setAnalysisPrefs(p);
+  storeSettings();
+}
+// whatever changes them, the panel and the ribbon box show them
+onAnalysisPrefs(() => scheduleAnalysis(true));
+
+$('#analysis-gear').addEventListener('click', () => setAnalysisCustomize(!analysisCustomize));
+$('#analysis-body').addEventListener('change', (e) => {
+  const t = e.target as HTMLElement;
+  if (!(t instanceof HTMLInputElement) || !t.dataset.show) return;
+  const key = t.dataset.show;
+  changeAnalysisPrefs((p) => { const r = p.rows.find((x) => x.key === key); if (r) r.on = t.checked; });
+});
+$('#analysis-body').addEventListener('pointerdown', (e) => {
+  const grip = (e.target as HTMLElement).closest<HTMLElement>('[data-grip]');
+  const row = grip?.closest<HTMLElement>('[data-row]');
+  const frag = row?.closest<HTMLElement>('.frag');
+  if (!grip || !row || !frag) return;
+  const rows = () => [...frag.querySelectorAll<HTMLElement>('[data-row]')];
+  dragRow(e as PointerEvent, row, rows, (from, to) => {
+    const keys = rows().map((x) => x.dataset.row!);
+    const moving = keys[from];
+    changeAnalysisPrefs((p) => {
+      const item = p.rows.find((x) => x.key === moving);
+      if (!item) return;
+      p.rows = p.rows.filter((x) => x !== item);
+      // before the row it was dropped above, or after the last one shown
+      const before = to < keys.length ? p.rows.findIndex((x) => x.key === keys[to]) : p.rows.findIndex((x) => x.key === keys[keys.length - 1]) + 1;
+      p.rows.splice(before < 0 ? p.rows.length : before, 0, item);
+    });
+  });
+});
+$('#analysis-body').addEventListener('click', (e) => {
+  const t = e.target as HTMLElement;
+  if (t.closest('[data-analysis-done]')) { setAnalysisCustomize(false); return; }
+  if (t.closest('[data-analysis-reset]')) { changeAnalysisPrefs((p) => { p.rows = parseAnalysisPrefs({ calcs: p.calcs }).rows; }); return; }
+  const settings = t.closest<HTMLElement>('[data-analysis-settings]');
+  if (settings) { analysisSettingsAt(settings.dataset.analysisSettings === 'descriptors' ? 'descriptors' : 'rows'); settingsWindow.open('analysis'); return; }
+  const calc = t.closest<HTMLElement>('[data-analysis-calc]');
+  if (calc) { void editLabCalc(calc.dataset.analysisCalc === 'new' ? null : calc.dataset.analysisCalc!); }
+});
+
+/** Add Lab Calculation… (or edit one): its amount and what to show, then it is a row of the panel. */
+async function editLabCalc(id: string | null): Promise<void> {
+  const p = analysisPrefs();
+  const was = id ? calcOf(p, `calc:${id}`) : undefined;
+  const got = await askLabCalc(was ?? newCalc(nextCalcId(p)), analysisSample(), (r) => benchOf(r), p);
+  if (!got) return;
+  changeAnalysisPrefs((q) => placeCalc(q, got));
+}
+/** The structure last analysed, for previews of lab calculations and descriptors. */
+const analysisSample = () => lastAnalysis?.results.find((r) => !r.error && r.mw > 0) ?? null;
+/** Settings ▸ Analysis works on the same settings as the panel's Customize, so the two always agree. */
+const analysisHost: AnalysisSettingsHost = {
+  prefs: analysisPrefs,
+  apply: (p) => { setAnalysisPrefs(p); storeSettings(); },
+  sample: analysisSample,
+  bench: (r) => benchOf(r),
+  adduct: () => adductSel.value,
+  name: (r) => { const s = nameStates.get(r.smiles); return s?.kind === 'found' ? s.name : null; },
+};
+
 /** Starts the offline namer a few seconds after the first structure is analysed, so names come without asking. */
 let namerTimer = 0;
 function startNamerSoon(): void {
@@ -11347,6 +11456,9 @@ async function lookUpChosen(): Promise<void> {
   $('#analysis-body .pubchem')?.scrollIntoView({ block: 'nearest' });
 }
 
+/** Where Help ▸ Support Chemweave goes: the GitHub Sponsors page. */
+const SPONSOR_PAGE = 'https://github.com/sponsors/nathanohare';
+
 /** A web page, in the computer's browser. */
 function openWebPage(url: string): void {
   if (isTauri()) void import('@tauri-apps/plugin-opener').then(({ openUrl }) => openUrl(url)).catch((e) => flash(`Couldn't open the browser: ${e}`));
@@ -11378,15 +11490,14 @@ $('#analysis-body').addEventListener('click', (e) => {
     flash('Added the CAS RN under the structure; it follows it. Double-click to edit.');
     return;
   }
-  if (kind === 'pcname' || kind === 'pccas' || kind === 'pchaz' || kind === 'name') {
+  if (kind === 'pcname' || kind === 'pccas' || kind === 'pchaz') {
     const st = r && pubchemStates.get(r.smiles);
-    const named = kind === 'name' && r ? nameStates.get(r.smiles) : undefined;
-    const runs = kind === 'name' ? (named?.kind === 'found' ? nameRuns(named.name) : null) : st?.kind === 'found' ? pubchemRuns(kind, st.c) : null;
+    const runs = st?.kind === 'found' ? pubchemRuns(kind, st.c) : null;
     if (!runs || !frag) return;
     // tied to the structure like Add Caption's, so it follows it; edit or retype it like any text
     // (the structure stays selected, so the panel stays open for the other buttons)
     const m = editor.measure();
-    doc.edit(kind === 'pcname' || kind === 'name' ? 'Name caption' : kind === 'pccas' ? 'CAS caption' : 'Hazards caption', () => {
+    doc.edit(kind === 'pcname' ? 'Name caption' : kind === 'pccas' ? 'CAS caption' : 'Hazards caption', () => {
       const c = doc.addCaption({ x: 0, y: 0, runs, justify: 'center', attach: { atoms: [...frag], side: 'below', gap: defaultGap(doc), shift: 0, role: 'caption' } });
       placeAttached(doc, c, m);
     });
@@ -11436,6 +11547,16 @@ async function weigh(atoms: Set<number>): Promise<FragmentResult | null> {
   return r && !r.error ? r : null;
 }
 
+/** A structure's checked systematic name for its descriptors (the namer starts if need be), or null when it has none. */
+async function descriptorName(atoms: Set<number>, r: FragmentResult | null): Promise<string | null> {
+  if (!r?.smiles) return null;
+  const ex = toMolfile(doc, atoms, '');
+  if (ex.generic.length) return null;
+  if (!namer.ready) flash('Loading the namer for the Name line (first time only)…', 15000);
+  const s = await nameOf(r.smiles, ex.molblock).catch(() => null);
+  return s?.kind === 'found' ? s.name : null;
+}
+
 /**
  * Chemistry > Attach Descriptors (and the Analysis panel's button): the formula and masses under
  * each structure, tied to it. They follow it, and are worked out again when it changes; the Style
@@ -11446,13 +11567,15 @@ async function attachDescriptors(frags = chosenStructures()): Promise<void> {
   if (!chem.ready) { flash('The chemistry engine is still loading. Try again in a moment.'); return; }
   const made: number[] = [];
   const weighed = await Promise.all(frags.map((f) => weigh(f)));
+  const show = newDescriptors();
+  const names = show.includes('name') ? await Promise.all(frags.map((f, i) => descriptorName(f, weighed[i]))) : [];
   doc.edit('Attach descriptors', () => {
     frags.forEach((f, i) => {
       const r = weighed[i];
       if (!r) return;
       const adduct = adductSel.value;
-      const runs = descriptorRuns(r, DEFAULT_DESCRIPTORS, adduct);
-      const attach: Attachment = { atoms: [...f], side: 'below', gap: defaultGap(doc), shift: 0, role: 'descriptors', show: [...DEFAULT_DESCRIPTORS], adduct, sig: structureSig(doc, f) };
+      const runs = descriptorRuns(r, show, adduct, analysisPrefs(), benchOf(r), names[i]);
+      const attach: Attachment = { atoms: [...f], side: 'below', gap: defaultGap(doc), shift: 0, role: 'descriptors', show, adduct, sig: structureSig(doc, f) };
       const c = doc.addCaption({ x: 0, y: 0, runs, justify: 'center', attach });
       placeAttached(doc, c, editor.measure());
       made.push(c.id);
@@ -11481,11 +11604,12 @@ async function refreshDescriptors(): Promise<void> {
         if (!atoms.size || sig === a.sig) continue;
         const version = doc.version;
         const r = await weigh(atoms);
+        const name = (a.show ?? newDescriptors()).includes('name') ? await descriptorName(atoms, r) : null;
         // something else changed meanwhile: look again from the start
         if (doc.version !== version) { descriptorAgain = true; break; }
         const now = doc.captions.get(c.id);
         if (!r || !now?.attach) continue;
-        doc.amend('Descriptors', () => doc.updateCaption(c.id, { runs: descriptorRuns(r, now.attach!.show ?? DEFAULT_DESCRIPTORS, now.attach!.adduct ?? adductSel.value), attach: { ...now.attach!, sig } }));
+        doc.amend('Descriptors', () => doc.updateCaption(c.id, { runs: descriptorRuns(r, now.attach!.show ?? newDescriptors(), now.attach!.adduct ?? adductSel.value, analysisPrefs(), benchOf(r), name), attach: { ...now.attach!, sig } }));
         editor.changed();
       }
     } while (descriptorAgain);
@@ -11601,21 +11725,34 @@ async function runAnalysis(force: boolean): Promise<void> {
   if (seq !== analysisSeq) return;
   lastAnalysis = { results, frags, molblocks: exports.map((e) => e.molblock) };
   // once the namer is running, every structure analysed gets its name without asking
-  if (results.some((r) => !r.error && r.smiles)) startNamerSoon();
-  if (namer.ready) results.forEach((r, i) => { if (!r.error && r.smiles && !polymers[i] && !rGroupNames(frags[i]).length && !nameStates.has(r.smiles)) void nameForPanel(r.smiles, exports[i].molblock); });
+  const prefs = analysisPrefs();
+  const nameShown = prefs.autoName && prefs.rows.some((x) => x.key === 'name' && x.on);
+  if (nameShown && results.some((r) => !r.error && r.smiles)) startNamerSoon();
+  // measured bench values: looked up by themselves only when Settings ▸ Analysis says so (it sends the SMILES)
+  if (prefs.autoPubchem) results.forEach((r, i) => { if (!r.error && r.smiles && !polymers[i] && !rGroupNames(frags[i]).length && !pubchemStates.has(r.smiles)) void lookUpOnPubChem(r.smiles); });
+  if (namer.ready && nameShown) results.forEach((r, i) => { if (!r.error && r.smiles && !polymers[i] && !rGroupNames(frags[i]).length && !nameStates.has(r.smiles)) void nameForPanel(r.smiles, exports[i].molblock); });
   saySelection(results);
   // the ribbon's Analysis box: the first structure's formula (and how many more), weight, exact mass and m/z
   const firstAt = results.findIndex((r) => !r.error && r.formula);
   const first = firstAt >= 0 ? results[firstAt] : null;
-  const firstIon = first && !polymers[firstAt] && !rGroupNames(frags[firstAt]).length ? ionInfo(first, adductSel.value) : null;
+  // its lines are the ones Settings ▸ Analysis (or the box's own settings) chose; a structure with R groups or repeat units has only its formula
+  const plain = first && !polymers[firstAt] && !rGroupNames(frags[firstAt]).length;
+  const firstBench = first && plain ? benchOf(first) : {};
+  const boxRow = (key: string) => (first && plain ? ribbonRow(key, first, adductSel.value, prefs, firstBench) : null);
   analysisBox.set(first ? {
     formula: formulaHtml(first.formula) + (results.length > 1 ? ` <span class="muted">+${results.length - 1}</span>` : ''),
-    mw: first.mw.toFixed(2),
-    exact: first.exact.toFixed(4),
-    ion: firstIon ? { label: adductHtml(firstIon.adduct.label), mz: firstIon.mz.toFixed(4) } : null,
+    rows: prefs.ribbon.lines.map(boxRow),
+    simple: boxRow(prefs.ribbon.simple),
   } : null);
-  panel.innerHTML = results.map((r, i) => polymers[i] ? polymerHtml(polymers[i]!) : analysisHtml(r, i, adductSel.value, { ions: COMMON_ADDUCTS, stereo: r.error ? '' : stereoSummary(frags[i]), unknown: exports[i].unknownLabels, electrons: frags[i].size ? electronsHtml(countElectrons(doc, frags[i].values().next().value!)) : '', rGroups: rGroupNames(frags[i]), name: r.error || !r.smiles || rGroupNames(frags[i]).length ? '' : nameHtml(nameStates.get(r.smiles) ?? { kind: 'idle' }, i), pubchem: r.error || !r.smiles ? '' : pubchemHtml(pubchemStates.get(r.smiles) ?? { kind: 'idle' }, i), cas: r.error || !r.smiles ? undefined : casHtml(casStateOf(r.smiles), i) })).join('');
-  nmrPanel.attach(panel, results.map((r, i) => (r.error || !r.smiles || polymers[i] || rGroupNames(frags[i]).length ? null : { molblock: exports[i].molblock, map: exports[i].map })));
+  panel.innerHTML = results.map((r, i) => polymers[i] ? polymerHtml(polymers[i]!) : analysisHtml(r, i, adductSel.value, { prefs, bench: benchOf(r), customize: analysisCustomize, ions: COMMON_ADDUCTS, stereo: r.error ? '' : stereoSummary(frags[i]), unknown: exports[i].unknownLabels, electrons: frags[i].size ? electronsHtml(countElectrons(doc, frags[i].values().next().value!)) : '', rGroups: rGroupNames(frags[i]), name: r.error || !r.smiles || rGroupNames(frags[i]).length ? '' : nameHtml(nameStates.get(r.smiles) ?? { kind: 'idle' }), pubchem: r.error || !r.smiles ? '' : pubchemHtml(pubchemStates.get(r.smiles) ?? { kind: 'idle' }, i), cas: r.error || !r.smiles ? undefined : casHtml(casStateOf(r.smiles), i) })).join('');
+  if (analysisCustomize) panel.insertAdjacentHTML('afterbegin', CUSTOMIZE_BAR);
+  const nmrOn = prefs.rows.some((x) => x.key === 'nmr' && x.on);
+  nmrPanel.attach(panel, results.map((r, i) => (!nmrOn || r.error || !r.smiles || polymers[i] || rGroupNames(frags[i]).length ? null : { molblock: exports[i].molblock, map: exports[i].map })));
+  // the NMR section goes where its row is in the order
+  for (const frag of panel.querySelectorAll<HTMLElement>(':scope > .frag')) {
+    const slot = frag.querySelector('.an-nmr-slot'), nmr = frag.querySelector(':scope > details.nmr');
+    if (slot && nmr) slot.replaceWith(nmr);
+  }
   updatePanels();
 }
 
@@ -12028,6 +12165,8 @@ buildSelectGalleries();
 buildColourGalleries();
 applyRibbonIcons();
 applyIconSet();
+// the new icon set until the settings say otherwise (Settings ▸ Preferences ▸ Icon set)
+setIconSet('new');
 installRibbonFlyouts();
 
 const stylePanel = new StylePanel($('#style-section'), $('#style-body'), doc, () => editor.sel, () => editor.changed());
@@ -12385,7 +12524,7 @@ function drawingMenu(): MenuItem[] {
       ...metalMenu(),
       { label: 'Structure', items: [
         { cmd: 'clean-up-options' }, null,
-        { cmd: 'stereo-labels' }, { cmd: 'aromatic-circles' }, { cmd: 'chain-ends' }, { cmd: 'explicit-h' }, null,
+        { cmd: 'stereo-labels' }, { cmd: 'aromatic-circles' }, { cmd: 'explicit-h' }, null,
         { cmd: 'contract-label' }, { cmd: 'expand-label' }, { cmd: 'expand-label-full' }, { cmd: 'join' }, null,
         { cmd: 'hapto-bond' }, { cmd: 'split-hapto' }, { cmd: 'hapto-kekule' }, null,
         { cmd: 'enhanced-stereo' }, { cmd: 'chiral-flag' }, { cmd: 'repeat-group' }, { cmd: 'rgroup-table' }, null,
@@ -13005,7 +13144,7 @@ const BOX_TITLES: Record<string, string> = {
 const cmds = (list: (string | null)[]) => list.map((c) => (c ? `cmd:${c}` : 'sep'));
 const BOX_ITEMS: Record<string, readonly string[]> = {
   main: MAIN_ITEMS,
-  structure: cmds(['clean-up', 'clean-up-options', 'add-frame', 'fill-rings', 'highlight', 'remove-highlight', null, 'chain-ends', 'explicit-h', 'aromatic-circles', 'stereo-labels', null, 'add-id-label', 'add-caption', 'attach-descriptors', 'number-compounds', null, 'contract-label', 'expand-label', 'expand-label-full', 'hapto-bond', 'name-to-structure']),
+  structure: cmds(['clean-up', 'clean-up-options', 'add-frame', 'fill-rings', 'highlight', 'remove-highlight', null, 'aromatic-circles', 'stereo-labels', null, 'add-id-label', 'add-caption', 'attach-descriptors', 'number-compounds', null, 'contract-label', 'expand-label', 'expand-label-full', 'hapto-bond', 'name-to-structure']),
   arrange: cmds(['align-left', 'align-hcenter', 'align-right', 'align-top', 'align-vcenter', 'align-bottom', null, 'distribute-h', 'distribute-v', 'arrange-row', 'arrange-column', 'arrange-grid', null, 'flip-h', 'flip-v', 'rotate-cw', 'rotate-ccw', null, 'shape-front', 'shape-back']),
   highlight: [...cmds(['highlight', 'remove-highlight', null, 'smooth-highlight', 'centre-highlight', 'soft-highlight', 'outline-highlight', 'shadow-highlight', 'glow-highlight', null, 'save-highlight-look']), 'w:looks'],
   custom: defaultToolboxes().custom,
@@ -13721,8 +13860,9 @@ watchRibbons((on) => { ribbonChosen = on; storeSettings(); });
 addLookToggle(canvasRibbon.el, { simple: () => ribbonLook === 'simple', toggle: () => { setRibbonLook(ribbonLook === 'simple' ? 'classic' : 'simple'); storeSettings(); } });
 const SETTINGS_PAGES: SettingsPage[] = [
   { id: 'general', title: 'General', words: 'backup back up copy move settings file new computer install reinstall export import groups selecting click outline linked text above below ask whole page tracked changes reviewer name start view recent files chemdraw objects ole word powerpoint docx pptx save structures pictures svg png compatibility', open: generalPreferences },
+  { id: 'analysis', title: 'Analysis', words: 'analysis panel rows reorder hide show bench properties density boiling melting point vapor pressure flash refractive index lab calculation calculations mmol mass volume solution molarity ribbon box attached descriptors decimal places units celsius fahrenheit kelvin pubchem name hrms elemental', open: () => analysisSettingsPage(analysisHost) },
   ...nmrHere ? [{ id: 'nmr', title: 'NMR Prediction', words: 'nmr prediction predict spectrum spectra proton carbon 1h 13c ppm range width solvent cdcl3 spectrometer frequency mhz quality fast balanced accurate automatic selection', open: nmrSettings }] : [],
-  { id: 'preferences', title: 'Preferences', words: 'personal personalize new files templates template window show templates habits enter return key finish text tool box new line alt option escape esc taste alkyl isomer prefix prefixes italic dash hyphen raised superscript tbu t-bu ipr i-pr nbu sbu ibu tert-butyl isopropyl problems warnings marks red box circle pointer cursor angle length units pixels px millimeters mm inches readout hints modifier shift alt ctrl keys counterions ions salt bf4 nbu4 charges group', open: personalPreferences },
+  { id: 'preferences', title: 'Preferences', words: 'personal personalize new files templates template window show templates habits enter return key finish text tool box new line alt option escape esc taste alkyl isomer prefix prefixes italic dash hyphen raised superscript tbu t-bu ipr i-pr nbu sbu ibu tert-butyl isopropyl problems warnings marks red box circle pointer cursor angle length units pixels px millimeters mm inches readout hints modifier shift alt ctrl keys counterions ions salt bf4 nbu4 charges group icon icons icon set classic chemdraw new pictures toolbox', open: personalPreferences },
   { id: 'drawing', title: 'Drawing', words: 'bond ends round rounded square caps mitre corners methyl me ch3 axial chirality ra sa helicity charges circled ammonium nh4 r groups numbers superscript regular text eta hapto delocalized mechanism arrows reroute wrap around block path gap tail head origin target intermediate check arrows', open: drawingPreferences },
   { id: 'style', perFile: true, title: 'Drawing Style', words: 'bond length line width font journal acs rsc wiley elsevier thieme hash spacing margin arrow text reagents conditions above below size smaller reaction arrows gap fit alignment line up structures plus scheme', open: drawingStyleDialog },
   { id: 'hotkeys', title: 'Keyboard Shortcuts', words: 'keys keyboard shortcuts import export reset', open: () => hotkeysDialog.open() },

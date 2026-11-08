@@ -1,6 +1,6 @@
-# Chem Illustrator user guide
+# Chemweave user guide
 
-Chem Illustrator is a free program for drawing chemical structures and putting them to work: in reaction schemes, presentations, spreadsheets, documents and graphics. These pages explain how to use it. They are written for chemists, not programmers.
+Chemweave is a free program for drawing chemical structures and putting them to work: in reaction schemes, presentations, spreadsheets, documents and graphics. These pages explain how to use it. They are written for chemists, not programmers.
 
 ## Start here
 

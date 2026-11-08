@@ -3,7 +3,7 @@
 // equations: F = 1.297σm − 0.385σp + 0.033 (eq 8) and R = σp − F (eq 2) hold for every row to
 // within rounding, apart from the three misprints listed in CORRECTED.
 // The values are the measurements of the papers cited for each row; the names, SMILES ([*] where
-// the group joins the ring) and the order are Chem Illustrator's.
+// the group joins the ring) and the order are Chemweave's.
 
 /**
  * Table I, one group a line: Table I no. | group | name | σm | σp | F | R | the paper's reference

@@ -119,7 +119,7 @@ jobs:
           # Tauri merges tauri.windows.conf.json into tauri.conf.json on Windows builds; %1 is
           # the file to sign, and the description is the name Windows shows when the .msi asks
           # for permission
-          node -e 'const [e, a, c] = process.argv.slice(1); require("fs").writeFileSync("src-tauri/tauri.windows.conf.json", JSON.stringify({ bundle: { windows: { signCommand: { cmd: "artifact-signing-cli", args: ["-e", e, "-a", a, "-c", c, "-d", "Chem Illustrator", "%1"] } } } }, null, 2))' "$ENDPOINT" "$ACCOUNT" "$PROFILE"
+          node -e 'const [e, a, c] = process.argv.slice(1); require("fs").writeFileSync("src-tauri/tauri.windows.conf.json", JSON.stringify({ bundle: { windows: { signCommand: { cmd: "artifact-signing-cli", args: ["-e", e, "-a", a, "-c", c, "-d", "Chemweave", "%1"] } } } }, null, 2))' "$ENDPOINT" "$ACCOUNT" "$PROFILE"
           cat src-tauri/tauri.windows.conf.json
       - run: npm ci
       - name: Number this version
@@ -218,7 +218,7 @@ jobs:
           # the signatures are inside latest.json; the release lists the installers
           # not marked "latest" yet: builds can finish out of order, and an older one must not
           # take "latest" (and so the updater's latest.json) from a newer one
-          gh release create "v$VERSION" $(ls out/* | grep -v '\.sig$') --title "Chem Illustrator $VERSION (beta)" --notes-file "$RUNNER_TEMP/notes.txt" --target "$GITHUB_SHA" --latest=false
+          gh release create "v$VERSION" $(ls out/* | grep -v '\.sig$') --title "Chemweave $VERSION (beta)" --notes-file "$RUNNER_TEMP/notes.txt" --target "$GITHUB_SHA" --latest=false
       - name: Mark the highest version as latest
         env:
           GH_TOKEN: ${{ github.token }}

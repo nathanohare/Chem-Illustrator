@@ -9,7 +9,7 @@ import { fullStyle, tidyStyle } from '../render/highlight';
 import type { HighlightLookPreset } from './highlight-looks';
 
 export { tidyStyle };
-import { DESCRIPTORS } from './analysis-panel';
+import { descriptorChoices } from './analysis-panel';
 import { captionReading, speciesSummary } from '../chem/species';
 import { COMMON_ADDUCTS } from '../chem/hrms';
 import { DOT_DENSITY, PATTERN_CHOICES, PATTERNS, RING_FILL_COLOUR, patternSwatch, RING_PATTERN_COLOUR, patternSpacing, ringShadowSize, shadowLook } from '../render/fills';
@@ -1025,13 +1025,14 @@ export class StylePanel {
     const desc = tied.filter((x) => x.attach!.role === 'descriptors');
     if (desc.length) {
       const show = new Set<DescriptorKey>(desc[0].attach!.show ?? []);
-      for (const d of DESCRIPTORS) {
+      const choices = descriptorChoices();
+      for (const d of choices) {
         this.check(d.label, show.has(d.key), (v) => setA(`Show ${d.label.toLowerCase()}`, (x) => {
           if (x.role !== 'descriptors') return {};
           const now = new Set(x.show ?? []);
           if (v) now.add(d.key); else now.delete(d.key);
           // keep the usual order; the text is worked out again
-          return { show: DESCRIPTORS.map((y) => y.key).filter((k) => now.has(k)), sig: undefined, keepText: undefined };
+          return { show: choices.map((y) => y.key).filter((k) => now.has(k)), sig: undefined, keepText: undefined };
         }));
       }
       const ions: Opt<string>[] = COMMON_ADDUCTS.map((x) => [x, x]);

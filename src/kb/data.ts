@@ -24,7 +24,7 @@ export const GLOSSARY_TABLE: KbTable = {
     { key: 'kind', label: 'Kind', filter: true, narrow: true },
   ],
   rows: GLOSSARY.map((g) => ({ term: g.term, full: g.full, meaning: g.meaning || null, kind: g.kind })),
-  sources: [{ label: 'Written for Chem Illustrator' }],
+  sources: [{ label: 'Written for Chemweave' }],
 };
 
 /** The tables built in, in the order the window lists them. */

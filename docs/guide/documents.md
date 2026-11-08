@@ -206,7 +206,7 @@ A Word file with citations made by Zotero, Mendeley (Desktop or Cite) or EndNote
 
 Saving writes the citations back as that program's own, with its item ids, so in Word its **Refresh** (Zotero, Mendeley) or **Update Citations and Bibliography** (EndNote) still works on them. References added here go out with their details: Zotero and Mendeley keep them as items in the document, EndNote adds them to the document's traveling library.
 
-To choose the program for a document made here, use **Save citations for** in **Manage References…**. **Chem Illustrator only** saves the numbers as text that Word shows as they are.
+To choose the program for a document made here, use **Save citations for** in **Manage References…**. **Chemweave only** saves the numbers as text that Word shows as they are.
 
 ### Citing with Zotero
 

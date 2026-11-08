@@ -17,7 +17,7 @@ pub async fn web_get(url: String) -> Result<tauri::ipc::Response, String> {
         let _ = rustls::crypto::ring::default_provider().install_default();
     }
     let client = reqwest::Client::builder()
-        .user_agent(concat!("ChemIllustrator/", env!("CARGO_PKG_VERSION")))
+        .user_agent(concat!("Chemweave/", env!("CARGO_PKG_VERSION")))
         .timeout(Duration::from_secs(30))
         .build()
         .map_err(|e| format!("Could not get ready to read the address: {e}"))?;

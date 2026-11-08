@@ -2,7 +2,7 @@
 
 This page covers Presentation mode: building a deck, the slide master and templates, chemistry on slides, pictures, transitions and animations, presenting, printing handouts and saving for PowerPoint.
 
-![A slide deck in Chem Illustrator](../images/slides.png)
+![A slide deck in Chemweave](../images/slides.png)
 
 ## Starting a deck
 

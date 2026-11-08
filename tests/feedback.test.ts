@@ -54,7 +54,7 @@ describe('copied text', () => {
     const t = feedbackText(feedbackIssue({ kind: 'idea', title: 'X', details: 'Y' }));
     expect(t).toMatch(/^\[Feature\] X\n\nFeature request\n\nY\n/);
     expect(t).not.toContain('**');
-    expect(t).toContain('Sent from Chem Illustrator');
+    expect(t).toContain('Sent from Chemweave');
   });
 });
 

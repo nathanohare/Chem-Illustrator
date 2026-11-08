@@ -141,8 +141,8 @@ export function recoverDialog(sessions: Session[], atStart: boolean): Promise<Re
   return new Promise((resolve) => {
     const { d, form, buttons } = dialog('keep-recover', 'Recover Unsaved Work');
     form.append(para(atStart
-      ? 'Chem Illustrator closed before these were saved. These are the copies made last; pick the ones to reopen. Reopened files aren’t saved until you save them.'
-      : 'Copies of unsaved work left when Chem Illustrator closed unexpectedly. Pick the ones to reopen.'));
+      ? 'Chemweave closed before these were saved. These are the copies made last; pick the ones to reopen. Reopened files aren’t saved until you save them.'
+      : 'Copies of unsaved work left when Chemweave closed unexpectedly. Pick the ones to reopen.'));
     const list = document.createElement('div');
     list.className = 'keep-list';
     const boxes: { input: HTMLInputElement; session: Session; tab: CopiedTab }[] = [];
@@ -294,7 +294,7 @@ export async function optionsDialog(p: KeepPrefs, where: string, desktop: boolea
     { name: 'versionsKeep', label: 'Version History: versions kept of each file (0: none)', type: 'number', value: String(p.versionsKeep) },
     { name: 'versionsDays', label: 'Delete versions older than (0: never)', type: 'number', value: String(p.versionsDays), unit: 'days' },
     { name: 'versionMinutes', label: 'While AutoSave is on, add a version at most every', type: 'number', value: String(p.versionMinutes), unit: 'minutes' },
-    { name: 'changedOnDisk', label: 'When a file changes outside Chem Illustrator', value: p.changedOnDisk, options: [
+    { name: 'changedOnDisk', label: 'When a file changes outside Chemweave', value: p.changedOnDisk, options: [
       { value: 'ask', label: 'Ask what to do' },
       { value: 'reload', label: 'Reload it, unless it has unsaved changes here' },
       { value: 'ignore', label: 'Do nothing' },

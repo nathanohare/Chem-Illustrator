@@ -1,4 +1,4 @@
-# Chem Illustrator: technology decision (step 2)
+# Chemweave: technology decision (step 2)
 
 *Written 2026-10-12 after building and measuring the speed prototype.*
 

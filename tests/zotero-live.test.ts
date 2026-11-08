@@ -122,7 +122,7 @@ describe('Zotero HTTP citing', () => {
     expect(z.posts.at(-1)!.endpoint).toBe('respond');
     expect(z.posts.filter((p) => p.endpoint === 'respond')).toHaveLength(11);
     const [doc, data, , canInsert, inField, inserted, , fields] = z.answers;
-    expect(doc).toMatchObject({ documentID: 'test-doc', outputFormat: 'html', supportedNotes: ['footnotes', 'endnotes'], supportsImportExport: false, processorName: 'Chem Illustrator' });
+    expect(doc).toMatchObject({ documentID: 'test-doc', outputFormat: 'html', supportedNotes: ['footnotes', 'endnotes'], supportsImportExport: false, processorName: 'Chemweave' });
     // a new document has no Zotero preferences yet (Zotero asks for a style)
     expect(data).toBe('');
     expect(canInsert).toBe(true);
@@ -297,8 +297,8 @@ describe('Zotero HTTP citing', () => {
       () => ['Document.complete', [D]],
     ]);
     expect(await runZotero('refresh', host, z.post)).toBe('done');
-    expect(z.answers[1]).toMatchObject({ error: 'Chem Illustrator Error', message: expect.stringContaining('no longer in the document') });
-    expect(z.answers[2]).toMatchObject({ error: 'Chem Illustrator Error' });
+    expect(z.answers[1]).toMatchObject({ error: 'Chemweave Error', message: expect.stringContaining('no longer in the document') });
+    expect(z.answers[2]).toMatchObject({ error: 'Chemweave Error' });
   });
 
   it('leaves no empty {Citation} behind when Zotero goes away part way (found in the 2026-11-03 review)', async () => {

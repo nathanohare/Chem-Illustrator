@@ -1,6 +1,6 @@
 ---
 name: Feature request
-about: An idea for something Chem Illustrator could do, or do better
+about: An idea for something Chemweave could do, or do better
 title: "[Feature] "
 ---
 

@@ -144,7 +144,7 @@ export async function itemsToEps(items: Item[], box: EmfBox, image: (src: string
     `%%BoundingBox: 0 0 ${bb(W, true)} ${bb(H, true)}`,
     `%%HiResBoundingBox: 0 0 ${num(W)} ${num(H)}`,
     `%%Title: ${safeTitle}`,
-    '%%Creator: Chem Illustrator',
+    '%%Creator: Chemweave',
     '%%LanguageLevel: 2',
     ...(fonts.size ? [...fonts.keys()].map((f, i) => `${i ? '%%+' : '%%DocumentNeededResources:'} font ${f}`) : []),
     '%%Pages: 1',

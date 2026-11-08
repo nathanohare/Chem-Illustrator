@@ -2,7 +2,7 @@ Open Source Chemistry Dictionary (a chemistry spell-check dictionary for word pr
 Version 3.0
 Created by Adam M. Azman
 
-Bundled with Chem Illustrator as public/dict/chemistry.txt (taken from Chem SI
+Bundled with Chemweave as public/dict/chemistry.txt (taken from Chem SI
 Assistant, where it is azman_chemistry_dictionary.txt) and used by its spelling check.
 
 Source:   https://www.sciencebase.com/chem-dic.zip (file chemistry.dic)

@@ -19,7 +19,7 @@ Settings (hotkeys, your abbreviations and templates, styles, palettes and every 
 - **Windows:** `%APPDATA%\io.github.nathanohare.chemillustrator`
 - **macOS:** `~/Library/Application Support/io.github.nathanohare.chemillustrator`
 - **Linux:** `~/.config/io.github.nathanohare.chemillustrator`
-- **Portable copy:** the **Chem Illustrator Data** folder next to the app.
+- **Portable copy:** the **Chemweave Data** folder next to the app.
 - **Web version:** the browser's storage for the page.
 
 **Keeping a copy.** **Edit ▸ Settings File ▸ Export Settings…** saves every setting in one file, to keep or to set up another computer. **Import Settings…** reads it back.

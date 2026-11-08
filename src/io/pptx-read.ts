@@ -406,8 +406,8 @@ class Reader {
     const kept = readKeptParts(this.r, { main });
     if (!ours && this.tagsLost()) {
       this.warnings.add(this.recovered
-        ? 'This file was saved by a program that leaves out Chem Illustrator\'s own data (LibreOffice, for one): its structures were read from their pictures, and some text and shapes may look a little different.'
-        : 'This file was saved by a program that leaves out Chem Illustrator\'s own data (LibreOffice, for one): its structures came in as pictures, and some text and shapes may look a little different.');
+        ? 'This file was saved by a program that leaves out Chemweave\'s own data (LibreOffice, for one): its structures were read from their pictures, and some text and shapes may look a little different.'
+        : 'This file was saved by a program that leaves out Chemweave\'s own data (LibreOffice, for one): its structures came in as pictures, and some text and shapes may look a little different.');
     }
     const settings: DeckSettings = { ...(show ? { show } : {}), ...(customShows.length ? { customShows } : {}), ...(view ? { view } : {}), ...(this.refs?.list.length ? { refs: this.refs } : {}) };
     return {
@@ -1358,7 +1358,7 @@ class Reader {
     return { src: dataUrl(bytes, mime), px: imageSize(bytes, mime) ?? { w: 100, h: 100 }, crop: crop && (crop.l || crop.t || crop.r || crop.b) ? crop : null, mime, ...(inset ? { inset } : {}) };
   }
 
-  /** The drawing inside a picture (a metafile) copied from Chem Illustrator, with the area it covered. */
+  /** The drawing inside a picture (a metafile) copied from Chemweave, with the area it covered. */
   private emfDrawing(from: string, pic: Element): { cdxml: string; box: string } | null {
     const target = this.r.rels(from).get(rAttr(kid(pic, 'blipFill', 'blip'), 'embed') ?? '')?.target;
     if (!target || !/\.emf$/i.test(target)) return null;
@@ -1415,7 +1415,7 @@ class Reader {
         return;
       }
     }
-    // a picture pasted into PowerPoint from Chem Illustrator: the drawing rides inside it
+    // a picture pasted into PowerPoint from Chemweave: the drawing rides inside it
     const inside = this.emfDrawing(s.path, el);
     if (inside && this.drawing(inside.cdxml, inside.box, box, doc)) return;
     const img = this.image(s.path, el);
