@@ -130,6 +130,20 @@ describe('one drawing order for every object (#406)', () => {
     expect(xml.lastIndexOf('<fragment')).toBeGreaterThan(xml.lastIndexOf('<graphic'));
   });
 
+  it('gives atoms and bonds their Z when an older file left them out, even saved unchanged', () => {
+    const { doc, a, b, box } = scene();
+    doc.edit('front', () => restack(doc, sel({ atoms: new Set([a, b]) }), 'front'));
+    doc.edit('back', () => restack(doc, sel({ shapes: new Set([box]) }), 'back'));
+    // as the writer before #461 saved it: Z on the fragment and the box only
+    const old = writeCdxml(doc).replace(/<(n|b) ([^>]*?) Z="\d+"/g, '<$1 $2');
+    expect(old).not.toMatch(/<(n|b) [^>]*Z="/);
+    const xml = writeCdxml(readCdxml(old).doc);
+    const boxZ = Number(xml.match(/<graphic [^>]*Z="(\d+)"/)![1]);
+    const parts = [...xml.matchAll(/<(n|b) [^>]*>/g)].map((m) => Number(m[0].match(/ Z="(\d+)"/)?.[1] ?? NaN));
+    expect(parts.length).toBe(3);
+    for (const z of parts) expect(z).toBeGreaterThan(boxZ);
+  });
+
   it('a drawing never reordered saves no order', () => {
     const { doc } = scene();
     const xml = writeCdxml(doc);
