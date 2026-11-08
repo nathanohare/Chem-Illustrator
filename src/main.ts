@@ -44,7 +44,11 @@ import { reviewAuthor, setReviewAuthor } from './document/revisions';
 import { NMR_SOLVENTS, NmrPanel } from './ui/nmr-panel';
 import { compareMode, nmrQuality, nmrSpectrumMhz, setCompareMode, setNmrQuality, setNmrSpectrumMhz } from './ui/nmr-spectrum';
 import { nmrAutoPredict, nmrRange, peakLabels, setNmrAutoPredict, setNmrRange, setPeakLabels } from './ui/nmr-settings';
-import { analysisHtml, adductHtml, ionInfo, formulaHtml, electronsHtml, analysisRuns, withRepeats, polymerHtml, descriptorRuns, DEFAULT_DESCRIPTORS, nameHtml, type RepeatUnit, type NameState } from './ui/analysis-panel';
+import { analysisPrefs, setAnalysisPrefs, onAnalysisPrefs, parseAnalysisPrefs, calcOf, nextCalcId, type AnalysisPrefs } from './chem/analysis-prefs';
+import { newCalc } from './chem/bench';
+import { dragRow } from './ui/row-drag';
+import { askLabCalc, analysisSettingsPage, analysisSettingsAt, placeCalc, type AnalysisSettingsHost } from './ui/analysis-settings';
+import { analysisHtml, benchValues, ribbonRow, formulaHtml, electronsHtml, analysisRuns, withRepeats, polymerHtml, descriptorRuns, newDescriptors, nameHtml, type RepeatUnit, type NameState } from './ui/analysis-panel';
 import { attachedAtoms, attachWhereItIs, defaultGap, nearestStructure, placeAttached, structureSig } from './editor/attached';
 import { repeatGroups, lipDirection } from './chem/polymer';
 import { rGroupsOf, substituted, rowNumbers, parseRows, rGroupCells, type RowMass } from './chem/rgroup';
@@ -10700,6 +10704,7 @@ function currentSettings(): Settings {
     recentFiles,
     recentSymbols,
     scheme: { ...schemePrefs },
+    analysis: structuredClone(analysisPrefs()),
     newman: structuredClone(newmanPrefs),
     keep: keepPrefs,
     highlightLooks: ownLooks,
@@ -10827,6 +10832,7 @@ function applySettings(s: Settings): void {
   editor.options.fixedAngles = s.fixedAngles;
   editor.showRoles = s.showRoles;
   setSchemePrefs(s.scheme);
+  setAnalysisPrefs(s.analysis);
   newmanPrefs = structuredClone(s.newman);
   $('[data-cmd="show-roles"]')?.setAttribute('aria-checked', String(s.showRoles));
   showDevTools(s.devTools);
@@ -11172,6 +11178,88 @@ $('#analysis-body').addEventListener('change', (e) => {
   adductSel.value = t.value;
   scheduleAnalysis(true);
 });
+/** A structure's bench values: PubChem's measured ones if it has been looked up, else estimates. */
+function benchOf(r: FragmentResult) {
+  const st = r.smiles ? pubchemStates.get(r.smiles) : undefined;
+  return benchValues(r, st?.kind === 'found' ? st.c : null);
+}
+
+/** The panel's customize mode (its gear): a check box and grip on every row, for quick changes. */
+let analysisCustomize = false;
+const CUSTOMIZE_BAR = `<div class="an-editbar"><b>Customize</b><span class="info-icon" tabindex="0" role="img" title="Drag rows by their grips to reorder them; untick to hide. Settings ▸ Analysis has the rest: decimal places, units, lab calculations, the ribbon box and attached descriptors." aria-label="About customizing">i</span><span class="sp"></span><button type="button" data-analysis-settings="rows">More Settings…</button><button type="button" data-analysis-reset title="Put the rows back as they first were">Reset</button><button type="button" class="primary" data-analysis-done>Done</button></div>`;
+
+function setAnalysisCustomize(on: boolean): void {
+  analysisCustomize = on;
+  document.querySelector('#analysis-gear')?.classList.toggle('on', on);
+  document.querySelector('#analysis-gear')?.setAttribute('aria-pressed', String(on));
+  scheduleAnalysis(true);
+}
+
+/** Change the Analysis settings (from the panel or Settings ▸ Analysis) and keep them. */
+function changeAnalysisPrefs(edit: (p: AnalysisPrefs) => void): void {
+  const p = structuredClone(analysisPrefs());
+  edit(p);
+  setAnalysisPrefs(p);
+  storeSettings();
+}
+// whatever changes them, the panel and the ribbon box show them
+onAnalysisPrefs(() => scheduleAnalysis(true));
+
+$('#analysis-gear').addEventListener('click', () => setAnalysisCustomize(!analysisCustomize));
+$('#analysis-body').addEventListener('change', (e) => {
+  const t = e.target as HTMLElement;
+  if (!(t instanceof HTMLInputElement) || !t.dataset.show) return;
+  const key = t.dataset.show;
+  changeAnalysisPrefs((p) => { const r = p.rows.find((x) => x.key === key); if (r) r.on = t.checked; });
+});
+$('#analysis-body').addEventListener('pointerdown', (e) => {
+  const grip = (e.target as HTMLElement).closest<HTMLElement>('[data-grip]');
+  const row = grip?.closest<HTMLElement>('[data-row]');
+  const frag = row?.closest<HTMLElement>('.frag');
+  if (!grip || !row || !frag) return;
+  const rows = () => [...frag.querySelectorAll<HTMLElement>('[data-row]')];
+  dragRow(e as PointerEvent, row, rows, (from, to) => {
+    const keys = rows().map((x) => x.dataset.row!);
+    const moving = keys[from];
+    changeAnalysisPrefs((p) => {
+      const item = p.rows.find((x) => x.key === moving);
+      if (!item) return;
+      p.rows = p.rows.filter((x) => x !== item);
+      // before the row it was dropped above, or after the last one shown
+      const before = to < keys.length ? p.rows.findIndex((x) => x.key === keys[to]) : p.rows.findIndex((x) => x.key === keys[keys.length - 1]) + 1;
+      p.rows.splice(before < 0 ? p.rows.length : before, 0, item);
+    });
+  });
+});
+$('#analysis-body').addEventListener('click', (e) => {
+  const t = e.target as HTMLElement;
+  if (t.closest('[data-analysis-done]')) { setAnalysisCustomize(false); return; }
+  if (t.closest('[data-analysis-reset]')) { changeAnalysisPrefs((p) => { p.rows = parseAnalysisPrefs({ calcs: p.calcs }).rows; }); return; }
+  const settings = t.closest<HTMLElement>('[data-analysis-settings]');
+  if (settings) { analysisSettingsAt(settings.dataset.analysisSettings === 'descriptors' ? 'descriptors' : 'rows'); settingsWindow.open('analysis'); return; }
+  const calc = t.closest<HTMLElement>('[data-analysis-calc]');
+  if (calc) { void editLabCalc(calc.dataset.analysisCalc === 'new' ? null : calc.dataset.analysisCalc!); }
+});
+
+/** Add Lab Calculation… (or edit one): its amount and what to show, then it is a row of the panel. */
+async function editLabCalc(id: string | null): Promise<void> {
+  const p = analysisPrefs();
+  const was = id ? calcOf(p, `calc:${id}`) : undefined;
+  const got = await askLabCalc(was ?? newCalc(nextCalcId(p)), analysisSample(), (r) => benchOf(r), p);
+  if (!got) return;
+  changeAnalysisPrefs((q) => placeCalc(q, got));
+}
+/** The structure last analysed, for previews of lab calculations and descriptors. */
+const analysisSample = () => lastAnalysis?.results.find((r) => !r.error && r.mw > 0) ?? null;
+/** Settings ▸ Analysis works on the same settings as the panel's Customize, so the two always agree. */
+const analysisHost: AnalysisSettingsHost = {
+  prefs: analysisPrefs,
+  apply: (p) => { setAnalysisPrefs(p); storeSettings(); },
+  sample: analysisSample,
+  bench: (r) => benchOf(r),
+  adduct: () => adductSel.value,
+};
+
 /** Starts the offline namer a few seconds after the first structure is analysed, so names come without asking. */
 let namerTimer = 0;
 function startNamerSoon(): void {
@@ -11400,8 +11488,9 @@ async function attachDescriptors(frags = chosenStructures()): Promise<void> {
       const r = weighed[i];
       if (!r) return;
       const adduct = adductSel.value;
-      const runs = descriptorRuns(r, DEFAULT_DESCRIPTORS, adduct);
-      const attach: Attachment = { atoms: [...f], side: 'below', gap: defaultGap(doc), shift: 0, role: 'descriptors', show: [...DEFAULT_DESCRIPTORS], adduct, sig: structureSig(doc, f) };
+      const show = newDescriptors();
+      const runs = descriptorRuns(r, show, adduct, analysisPrefs(), benchOf(r));
+      const attach: Attachment = { atoms: [...f], side: 'below', gap: defaultGap(doc), shift: 0, role: 'descriptors', show, adduct, sig: structureSig(doc, f) };
       const c = doc.addCaption({ x: 0, y: 0, runs, justify: 'center', attach });
       placeAttached(doc, c, editor.measure());
       made.push(c.id);
@@ -11434,7 +11523,7 @@ async function refreshDescriptors(): Promise<void> {
         if (doc.version !== version) { descriptorAgain = true; break; }
         const now = doc.captions.get(c.id);
         if (!r || !now?.attach) continue;
-        doc.amend('Descriptors', () => doc.updateCaption(c.id, { runs: descriptorRuns(r, now.attach!.show ?? DEFAULT_DESCRIPTORS, now.attach!.adduct ?? adductSel.value), attach: { ...now.attach!, sig } }));
+        doc.amend('Descriptors', () => doc.updateCaption(c.id, { runs: descriptorRuns(r, now.attach!.show ?? newDescriptors(), now.attach!.adduct ?? adductSel.value, analysisPrefs(), benchOf(r)), attach: { ...now.attach!, sig } }));
         editor.changed();
       }
     } while (descriptorAgain);
@@ -11550,21 +11639,34 @@ async function runAnalysis(force: boolean): Promise<void> {
   if (seq !== analysisSeq) return;
   lastAnalysis = { results, frags, molblocks: exports.map((e) => e.molblock) };
   // once the namer is running, every structure analysed gets its name without asking
-  if (results.some((r) => !r.error && r.smiles)) startNamerSoon();
-  if (namer.ready) results.forEach((r, i) => { if (!r.error && r.smiles && !polymers[i] && !rGroupNames(frags[i]).length && !nameStates.has(r.smiles)) void nameForPanel(r.smiles, exports[i].molblock); });
+  const prefs = analysisPrefs();
+  const nameShown = prefs.autoName && prefs.rows.some((x) => x.key === 'name' && x.on);
+  if (nameShown && results.some((r) => !r.error && r.smiles)) startNamerSoon();
+  // measured bench values: looked up by themselves only when Settings ▸ Analysis says so (it sends the SMILES)
+  if (prefs.autoPubchem) results.forEach((r, i) => { if (!r.error && r.smiles && !polymers[i] && !rGroupNames(frags[i]).length && !pubchemStates.has(r.smiles)) void lookUpOnPubChem(r.smiles); });
+  if (namer.ready && nameShown) results.forEach((r, i) => { if (!r.error && r.smiles && !polymers[i] && !rGroupNames(frags[i]).length && !nameStates.has(r.smiles)) void nameForPanel(r.smiles, exports[i].molblock); });
   saySelection(results);
   // the ribbon's Analysis box: the first structure's formula (and how many more), weight, exact mass and m/z
   const firstAt = results.findIndex((r) => !r.error && r.formula);
   const first = firstAt >= 0 ? results[firstAt] : null;
-  const firstIon = first && !polymers[firstAt] && !rGroupNames(frags[firstAt]).length ? ionInfo(first, adductSel.value) : null;
+  // its lines are the ones Settings ▸ Analysis (or the box's own settings) chose; a structure with R groups or repeat units has only its formula
+  const plain = first && !polymers[firstAt] && !rGroupNames(frags[firstAt]).length;
+  const firstBench = first && plain ? benchOf(first) : {};
+  const boxRow = (key: string) => (first && plain ? ribbonRow(key, first, adductSel.value, prefs, firstBench) : null);
   analysisBox.set(first ? {
     formula: formulaHtml(first.formula) + (results.length > 1 ? ` <span class="muted">+${results.length - 1}</span>` : ''),
-    mw: first.mw.toFixed(2),
-    exact: first.exact.toFixed(4),
-    ion: firstIon ? { label: adductHtml(firstIon.adduct.label), mz: firstIon.mz.toFixed(4) } : null,
+    rows: prefs.ribbon.lines.map(boxRow),
+    simple: boxRow(prefs.ribbon.simple),
   } : null);
-  panel.innerHTML = results.map((r, i) => polymers[i] ? polymerHtml(polymers[i]!) : analysisHtml(r, i, adductSel.value, { ions: COMMON_ADDUCTS, stereo: r.error ? '' : stereoSummary(frags[i]), unknown: exports[i].unknownLabels, electrons: frags[i].size ? electronsHtml(countElectrons(doc, frags[i].values().next().value!)) : '', rGroups: rGroupNames(frags[i]), name: r.error || !r.smiles || rGroupNames(frags[i]).length ? '' : nameHtml(nameStates.get(r.smiles) ?? { kind: 'idle' }, i), pubchem: r.error || !r.smiles ? '' : pubchemHtml(pubchemStates.get(r.smiles) ?? { kind: 'idle' }, i), cas: r.error || !r.smiles ? undefined : casHtml(casStateOf(r.smiles), i) })).join('');
-  nmrPanel.attach(panel, results.map((r, i) => (r.error || !r.smiles || polymers[i] || rGroupNames(frags[i]).length ? null : { molblock: exports[i].molblock, map: exports[i].map })));
+  panel.innerHTML = results.map((r, i) => polymers[i] ? polymerHtml(polymers[i]!) : analysisHtml(r, i, adductSel.value, { prefs, bench: benchOf(r), customize: analysisCustomize, ions: COMMON_ADDUCTS, stereo: r.error ? '' : stereoSummary(frags[i]), unknown: exports[i].unknownLabels, electrons: frags[i].size ? electronsHtml(countElectrons(doc, frags[i].values().next().value!)) : '', rGroups: rGroupNames(frags[i]), name: r.error || !r.smiles || rGroupNames(frags[i]).length ? '' : nameHtml(nameStates.get(r.smiles) ?? { kind: 'idle' }, i), pubchem: r.error || !r.smiles ? '' : pubchemHtml(pubchemStates.get(r.smiles) ?? { kind: 'idle' }, i), cas: r.error || !r.smiles ? undefined : casHtml(casStateOf(r.smiles), i) })).join('');
+  if (analysisCustomize) panel.insertAdjacentHTML('afterbegin', CUSTOMIZE_BAR);
+  const nmrOn = prefs.rows.some((x) => x.key === 'nmr' && x.on);
+  nmrPanel.attach(panel, results.map((r, i) => (!nmrOn || r.error || !r.smiles || polymers[i] || rGroupNames(frags[i]).length ? null : { molblock: exports[i].molblock, map: exports[i].map })));
+  // the NMR section goes where its row is in the order
+  for (const frag of panel.querySelectorAll<HTMLElement>(':scope > .frag')) {
+    const slot = frag.querySelector('.an-nmr-slot'), nmr = frag.querySelector(':scope > details.nmr');
+    if (slot && nmr) slot.replaceWith(nmr);
+  }
   updatePanels();
 }
 
@@ -13670,6 +13772,7 @@ watchRibbons((on) => { ribbonChosen = on; storeSettings(); });
 addLookToggle(canvasRibbon.el, { simple: () => ribbonLook === 'simple', toggle: () => { setRibbonLook(ribbonLook === 'simple' ? 'classic' : 'simple'); storeSettings(); } });
 const SETTINGS_PAGES: SettingsPage[] = [
   { id: 'general', title: 'General', words: 'backup back up copy move settings file new computer install reinstall export import groups selecting click outline linked text above below ask whole page tracked changes reviewer name start view recent files chemdraw objects ole word powerpoint docx pptx save structures pictures svg png compatibility', open: generalPreferences },
+  { id: 'analysis', title: 'Analysis', words: 'analysis panel rows reorder hide show bench properties density boiling melting point vapor pressure flash refractive index lab calculation calculations mmol mass volume solution molarity ribbon box attached descriptors decimal places units celsius fahrenheit kelvin pubchem name hrms elemental', open: () => analysisSettingsPage(analysisHost) },
   ...nmrHere ? [{ id: 'nmr', title: 'NMR Prediction', words: 'nmr prediction predict spectrum spectra proton carbon 1h 13c ppm range width solvent cdcl3 spectrometer frequency mhz quality fast balanced accurate automatic selection', open: nmrSettings }] : [],
   { id: 'preferences', title: 'Preferences', words: 'personal personalize habits enter return key finish text tool box new line alt option escape esc taste alkyl isomer prefix prefixes italic dash hyphen raised superscript tbu t-bu ipr i-pr nbu sbu ibu tert-butyl isopropyl problems warnings marks red box circle pointer cursor angle length units pixels px millimeters mm inches readout hints modifier shift alt ctrl keys counterions ions salt bf4 nbu4 charges group', open: personalPreferences },
   { id: 'drawing', title: 'Drawing', words: 'bond ends round rounded square caps mitre corners methyl me ch3 axial chirality ra sa helicity charges circled ammonium nh4 r groups numbers superscript regular text eta hapto delocalized mechanism arrows reroute wrap around block path gap tail head origin target intermediate check arrows', open: drawingPreferences },

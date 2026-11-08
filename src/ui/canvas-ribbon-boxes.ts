@@ -100,10 +100,10 @@ class DropBox {
 export interface AnalysisLine {
   /** The formula, as HTML with subscripts. */
   formula: string;
-  mw: string;
-  exact?: string | null;
-  /** The ion's label as HTML ("[M+H]<sup>+</sup>") and its m/z, when one can be made. */
-  ion?: { label: string; mz: string } | null;
+  /** The three lines under it (full-size ribbon), as Settings ▸ Analysis chose them; null leaves a line empty. */
+  rows: ({ label: string; short: string; value: string } | null)[];
+  /** The one value beside it on the Simplified ribbon. */
+  simple: { label: string; short: string; value: string } | null;
 }
 
 /**
@@ -120,7 +120,7 @@ export class AnalysisBox extends DropBox {
 
   constructor(section: HTMLElement) {
     super(section, 'cr-analysis', 'Analysis: formula, masses, m/z, elemental analysis, name. Click for all of it');
-    this.button.innerHTML = `<span class="cr-an-f muted">No structure</span><span class="cr-an-row cr-an-mw"></span><span class="cr-an-row cr-an-ex"></span><span class="cr-an-row cr-an-mz"></span><span class="cr-chev">${CHEVRON}</span>`;
+    this.button.innerHTML = `<span class="cr-an-f muted">No structure</span><span class="cr-an-row cr-an-r0"></span><span class="cr-an-row cr-an-r1"></span><span class="cr-an-row cr-an-r2"></span><span class="cr-an-row cr-an-s"></span><span class="cr-chev">${CHEVRON}</span>`;
     this.popOut = document.createElement('button');
     this.popOut.type = 'button';
     this.popOut.className = 'cr-popout';
@@ -187,22 +187,22 @@ export class AnalysisBox extends DropBox {
     const f = this.button.querySelector<HTMLElement>('.cr-an-f')!;
     f.classList.toggle('muted', !line);
     f.innerHTML = line?.formula ?? 'No structure';
-    const row = (cls: string, key: string, short: string, v: string | null | undefined) => {
+    const row = (cls: string, x: AnalysisLine['simple'] | undefined) => {
       const el = this.button.querySelector<HTMLElement>(cls)!;
       el.replaceChildren();
-      if (!v) return;
+      if (!x) return;
       const k = document.createElement('span');
       k.className = 'cr-an-k';
-      k.innerHTML = key;
-      k.dataset.short = short;
+      k.innerHTML = x.label;
+      k.dataset.short = x.short.replace(/<[^>]*>/g, '');
       const n = document.createElement('span');
       n.className = 'cr-an-v';
-      n.textContent = v;
+      n.textContent = x.value;
+      n.title = x.value;
       el.append(k, n);
     };
-    row('.cr-an-mw', 'Mol. wt.', 'MW', line?.mw);
-    row('.cr-an-ex', 'Exact mass', 'Exact', line?.exact);
-    row('.cr-an-mz', line?.ion ? `m/z ${line.ion.label}` : '', 'm/z', line?.ion?.mz);
+    for (let i = 0; i < 3; i++) row(`.cr-an-r${i}`, line?.rows[i]);
+    row('.cr-an-s', line?.simple);
   }
 }
 

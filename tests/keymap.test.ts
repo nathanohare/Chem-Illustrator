@@ -5,6 +5,7 @@ import { parseNewmanPrefs } from '../src/design/newman-prefs';
 import { DEFAULT_KEEP } from '../src/keep/prefs';
 import { defaultToolboxes } from '../src/ui/toolboxes';
 import { DEFAULT_SCHEME_PREFS } from '../src/chem/scheme-layout';
+import { parseAnalysisPrefs } from '../src/chem/analysis-prefs';
 import { describe, it, expect } from 'vitest';
 import {
   chordOf, displayChord, parseAction, Keymap, DEFAULT_KEYS, CONTEXTS, validAction, actionName, actionsFor,
@@ -240,6 +241,7 @@ describe('the settings file', () => {
       quickBar: ['save', 'undo', 'print'],
       myStyles: [], modeStyles: { document: 'RSC' }, darkPage: true, darkPalette: 'Slate', darkPalettes: [], guides: { slides: false, design: true }, orient: { navigator: false, navCorner: 'tl' as const, navSize: 'large' as const, navHideAll: true, edgeArrows: false, arrowsTo: 'everything' as const, dotGrid: true, gridSpacing: 'fine' as const, gridStrength: 'strong' as const, tint: true, tintStrength: 'faint' as const, goButtons: false }, pageLook: { grid: false, lineWidth: 2, lineStyle: 'dotted' as const, lineColour: '#336699', lineOpacity: 0.8, emptyShade: 'strong' as const, outsideShade: 'off' as const, ghost: false, wallStyle: 'line' as const, pasteAtWall: 'wrap' as const, wallWidth: 3, hatchSpacing: 5, hatchLength: 8, hatchWidth: 0.75, hatchAngle: 135, hatchCorner: 'mirror' as const }, highlightLooks: [{ name: 'Mine', colour: '#abcdef', style: { glow: true } }], formatFavorites: [{ name: 'Key box', look: { shape: { filled: true, fillColor: '#ffd966', shadow: true } } }], docPins: ['style', 'hf'], docRuler: true, sheetFormulaBar: false, slideRuler: false, slidePanes: { warnings: true, analysis: false }, slideGrid: false, rulerUnits: 'in', rulerFrom: 'centre', updateCheck: false, updateChannel: 'stable', pubchemNames: false, convertChemDraw: true, officeStructures: { docx: 'chemdraw' as const, pptx: 'pictures' as const }, matchStructure: false, fileTypesOffered: true, wordObjectsOffered: true, reviewName: 'Nate O.', skipVersion: '0.1.80', recentFiles: ['C:\\Work\\a.cdxml'], recentSymbols: ['°', 'Å', '⇌'], quickParts: [{ name: 'Lab address', runs: [{ text: 'Auburn', bold: true }], paras: [{ align: 'center' as const }] }], docDesign: { theme: 'Report', spacing: 'Open' },
       scheme: { ...DEFAULT_SCHEME_PREFS, structGap: 14, textAlign: 'left', fit: false },
+      analysis: { ...parseAnalysisPrefs(null), units: { temp: '°F' as const, pressure: 'mmHg' as const }, autoPubchem: true },
       newman: { ...parseNewmanPrefs(null), kind: 'sawhorse' as const, chart: { ...parseNewmanPrefs(null).chart, unit: 'kJ/mol' as const } },
       keep: { ...DEFAULT_KEEP, autoSave: true, recoveryMinutes: 5, changedOnDisk: 'reload' as const, lockFiles: false },
       ai: { provider: 'anthropic' as const, model: 'claude-sonnet-5-5', base: '', localOnly: true, assistant: true },

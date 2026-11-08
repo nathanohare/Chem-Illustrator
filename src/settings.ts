@@ -26,6 +26,7 @@ import { DEFAULT_BOND_ENDS, DEFAULT_MAP_BOX, MAP_LOOKS, mapBoxStyle, type DocSty
 import { ALKYL_LOOKS, type AlkylLook } from './chem/labels';
 import { parseDarkPalettes, type DarkPalette } from './dark-page';
 import { DEFAULT_SCHEME_PREFS, parseSchemePrefs, type SchemePrefs } from './chem/scheme-layout';
+import { DEFAULT_ANALYSIS, parseAnalysisPrefs, type AnalysisPrefs } from './chem/analysis-prefs';
 import { DEFAULT_NEWMAN_PREFS, parseNewmanPrefs, type NewmanPrefs } from './design/newman-prefs';
 import { CITE_PRESETS, DEFAULT_STYLE, cleanOptions, type CiteFormat } from './document/cite-styles';
 import { DEFAULT_KEEP, parseKeepPrefs, type KeepPrefs } from './keep/prefs';
@@ -271,6 +272,8 @@ export interface Settings {
   docDesign: DocDesign | null;
   /** Spacing in schemes and the text above and below arrows (Chemistry > Reactions and Schemes > Scheme Settings). */
   scheme: SchemePrefs;
+  /** What the Analysis panel, the ribbon's Analysis box and attached descriptors show (Settings ▸ Analysis, or the panel's gear). */
+  analysis: AnalysisPrefs;
   /** How Newman projections and torsion energy charts look (Settings > Newman Projections). */
   newman: NewmanPrefs;
   /** AutoSave, recovery copies, Version History and shared folders (File > Versions and Recovery > AutoSave and Recovery Options). */
@@ -301,6 +304,7 @@ export const DEFAULT_SETTINGS: Settings = {
   rulerUnits: typeof navigator !== 'undefined' && /^[a-z]{2,3}-(US|LR|MM)\b/i.test(navigator.language) ? 'in' : 'cm',
   rulerFrom: 'centre',
   scheme: DEFAULT_SCHEME_PREFS,
+  analysis: DEFAULT_ANALYSIS,
   newman: DEFAULT_NEWMAN_PREFS,
   keep: DEFAULT_KEEP,
   ai: DEFAULT_AI,
@@ -313,7 +317,7 @@ const STORAGE_KEY = 'chem-illustrator.settings';
 
 /** Read settings saved as text, keeping only what makes sense. */
 export function parseSettings(text: string | null | undefined): Settings {
-  const s: Settings = { ...DEFAULT_SETTINGS, hotkeys: {}, replacements: DEFAULT_SETTINGS.replacements.map(([a, b]) => [a, b]), dictionary: [], modeColours: { ...DEFAULT_MODE_COLOURS }, nicknames: {}, templates: [], palettes: [], toolboxes: defaultToolboxes(), ribbons: {}, quickBar: null, myStyles: [], modeStyles: {}, darkPalettes: [], guides: { ...DEFAULT_SETTINGS.guides }, orient: { ...DEFAULT_ORIENT }, pageLook: { ...DEFAULT_PAGE_LOOK }, docPins: [], recentFiles: [], recentSymbols: [], highlightLooks: [], formatFavorites: [], quickParts: [], scheme: { ...DEFAULT_SCHEME_PREFS }, newman: parseNewmanPrefs(null), keep: { ...DEFAULT_KEEP }, ai: { ...DEFAULT_AI }, officeStructures: { ...DEFAULT_SETTINGS.officeStructures } };
+  const s: Settings = { ...DEFAULT_SETTINGS, hotkeys: {}, replacements: DEFAULT_SETTINGS.replacements.map(([a, b]) => [a, b]), dictionary: [], modeColours: { ...DEFAULT_MODE_COLOURS }, nicknames: {}, templates: [], palettes: [], toolboxes: defaultToolboxes(), ribbons: {}, quickBar: null, myStyles: [], modeStyles: {}, darkPalettes: [], guides: { ...DEFAULT_SETTINGS.guides }, orient: { ...DEFAULT_ORIENT }, pageLook: { ...DEFAULT_PAGE_LOOK }, docPins: [], recentFiles: [], recentSymbols: [], highlightLooks: [], formatFavorites: [], quickParts: [], scheme: { ...DEFAULT_SCHEME_PREFS }, analysis: parseAnalysisPrefs(null), newman: parseNewmanPrefs(null), keep: { ...DEFAULT_KEEP }, ai: { ...DEFAULT_AI }, officeStructures: { ...DEFAULT_SETTINGS.officeStructures } };
   if (!text) return s;
   let raw: unknown;
   try { raw = JSON.parse(text); } catch { return s; }
@@ -416,6 +420,7 @@ export function parseSettings(text: string | null | undefined): Settings {
   if (typeof r.skipVersion === 'string' || r.skipVersion === null) s.skipVersion = r.skipVersion as string | null;
   if (typeof r.lastVersion === 'string') s.lastVersion = r.lastVersion;
   s.scheme = parseSchemePrefs(r.scheme);
+  s.analysis = parseAnalysisPrefs(r.analysis);
   s.newman = parseNewmanPrefs(r.newman);
   s.keep = parseKeepPrefs(r.keep);
   s.ai = parseAiPrefs(r.ai);
