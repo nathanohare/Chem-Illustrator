@@ -8,6 +8,8 @@
 // can be collapsed to its row of tabs (Ctrl+F1, a double-click on a tab, or the ▴ at the end of
 // the tabs): then a click on a tab drops that tab's buttons over the work until they're used.
 
+import { GROUP_ICONS } from './icon-picks';
+
 /** The rows of groups: a tabbed ribbon's panels, or a plain ribbon itself. */
 function rows(): HTMLElement[] {
   const out = new Set<HTMLElement>();
@@ -30,7 +32,9 @@ function foldButton(g: HTMLElement): HTMLButtonElement {
   const name = g.querySelector('.rb-label')?.textContent?.trim() || 'More';
   // the group's first picture over its name, like a big button, so a folded group is never a bare word
   const pic = g.querySelector('.rb-icon, button svg');
-  const icon = `<span class="rb-icon">${!pic ? GENERIC_GROUP : pic.classList.contains('rb-icon') ? pic.innerHTML : pic.outerHTML}</span>`;
+  // a group picked a picture of its own on the icon redesign pages (icon-picks.ts) shows that one
+  const own = GROUP_ICONS[name];
+  const icon = `<span class="rb-icon">${own ? `<svg class="ci-ic" viewBox="0 0 24 24" aria-hidden="true">${own}</svg>` : !pic ? GENERIC_GROUP : pic.classList.contains('rb-icon') ? pic.innerHTML : pic.outerHTML}</span>`;
   // (the name shows under the group, as every group's does; the button itself shows it only where
   // groups have no names under them, the Canvas's Simplified ribbon)
   b.innerHTML = `${icon}<span class="rb-fold-name"><span class="rb-fold-text">${name.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!)} </span><span aria-hidden="true">▾</span></span>`;

@@ -1,6 +1,6 @@
 # Files and sharing
 
-This page covers the files Chem Illustrator opens and saves, copying and pasting with ChemDraw and Office, Split View, workspaces, AutoSave and recovery, Version History, shared folders, recent files, printing and fonts.
+This page covers the files Chemweave opens and saves, copying and pasting with ChemDraw and Office, Split View, workspaces, AutoSave and recovery, Version History, shared folders, recent files, printing and fonts.
 
 ## File types
 
@@ -74,11 +74,11 @@ A figure wider than the column is shrunk by the journal, which makes its text an
 
 ### Opening files from Explorer or Finder (desktop app)
 
-Double-click a file, or right-click it and choose **Open with ▸ Chem Illustrator**, and it opens in a new tab. A file opened while the program is already running goes to the open window rather than starting a second copy.
+Double-click a file, or right-click it and choose **Open with ▸ Chemweave**, and it opens in a new tab. A file opened while the program is already running goes to the open window rather than starting a second copy.
 
-- **Windows**: the first time it starts, Chem Illustrator adds itself to the **Open with** list of .cdxml, .cdx, .cds, .mol, .sdf, .rxn, .mrv, .ket and .cml files, for you only. **Edit ▸ Settings ▸ File Types** chooses which kinds of file it is offered for, including .docx, .pptx and .xlsx. It never makes itself the program that opens a file on a double-click: Windows keeps that choice for you. **Choose Defaults in Windows Settings…** on that page opens Windows' Default apps page, where you can pick Chem Illustrator for each kind of file. A portable copy leaves the computer's file types alone until you check them yourself. Uninstalling takes it off the lists again.
-- **macOS**: right-click a file and choose **Open With ▸ Chem Illustrator**. To open a kind of file here every time, select one in Finder, choose **File ▸ Get Info**, pick Chem Illustrator under **Open with** and click **Change All**.
-- **Linux**: Chem Illustrator is in your file manager's **Open With** list for these files; your desktop's Default Applications settings choose the default.
+- **Windows**: the first time it starts, Chemweave adds itself to the **Open with** list of .cdxml, .cdx, .cds, .mol, .sdf, .rxn, .mrv, .ket and .cml files, for you only. **Edit ▸ Settings ▸ Apps and System** chooses which kinds of file it is offered for, including .docx, .pptx and .xlsx. It never makes itself the program that opens a file on a double-click: Windows keeps that choice for you. **Choose Defaults in Windows Settings…** on that page opens Windows' Default apps page, where you can pick Chemweave for each kind of file. A portable copy leaves the computer's file types alone until you check them yourself. Uninstalling takes it off the lists again.
+- **macOS**: right-click a file and choose **Open With ▸ Chemweave**. To open a kind of file here every time, select one in Finder, choose **File ▸ Get Info**, pick Chemweave under **Open with** and click **Change All**.
+- **Linux**: Chemweave is in your file manager's **Open With** list for these files; your desktop's Default Applications settings choose the default.
 
 ## Copy and paste
 
@@ -86,21 +86,21 @@ Double-click a file, or right-click it and choose **Open with ▸ Chem Illustrat
 
 | Where you paste | What arrives |
 |---|---|
-| Chem Illustrator | Everything, fully editable |
+| Chemweave | Everything, fully editable |
 | ChemDraw (Windows app) | Editable structures, through the CDX format |
-| Word, PowerPoint or Excel (Windows app) | A Chem Illustrator drawing object: a sharp picture you can double-click to edit here (see below) |
+| Word, PowerPoint or Excel (Windows app) | A Chemweave drawing object: a sharp picture you can double-click to edit here (see below) |
 | Other programs, or from the browser version or on macOS and Linux | A high-resolution picture |
 
 In the Windows app, **Paste** (Ctrl+V) takes drawings copied in ChemDraw, and ChemDraw objects copied in PowerPoint or Word, as editable structures, and spectra copied in MestReNova as sharp lines and text. **Edit ▸ Paste Special ▸ Show Clipboard Formats** lists what is on the clipboard, which helps when a paste doesn't come out as expected.
 
 ### Editing drawings inside Word, PowerPoint and Excel (Windows)
 
-A drawing copied here and pasted into Word, PowerPoint or Excel is a Chem Illustrator object, as ChemDraw's drawings are. Double-click it (or right-click ▸ **Chem Illustrator Object ▸ Edit**) and it opens here in a tab of its own, named after the document. Change it, press **Save** (Ctrl+S) and the drawing in the document changes too; close the tab when you're done. Word's **Insert ▸ Object ▸ Chem Illustrator Drawing** starts a new one.
+A drawing copied here and pasted into Word, PowerPoint or Excel is a Chemweave object, as ChemDraw's drawings are. Double-click it (or right-click ▸ **Chemweave Object ▸ Edit**) and it opens here in a tab of its own, named after the document. Change it, press **Save** (Ctrl+S) and the drawing in the document changes too; close the tab when you're done. Word's **Insert ▸ Object ▸ Chemweave Drawing** starts a new one.
 
-- The document keeps a picture of the drawing, so it looks right on computers without Chem Illustrator, in PDFs and when printed. Only editing needs the app.
+- The document keeps a picture of the drawing, so it looks right on computers without Chemweave, in PDFs and when printed. Only editing needs the app.
 - Copying the object out of Word and pasting it here gives the drawing back, editable.
 - AutoSave doesn't save these tabs: Word gets the drawing when you press Save. If you close the Word document first, the drawing stays here as an unsaved drawing.
-- The installed app sets this up the first time it starts, for you only (no administrator needed). **Edit ▸ Settings ▸ File Types** turns it off, and then drawings paste as pictures (which still hold the drawing, so copying one back here keeps it editable). A portable copy leaves it off unless you check it there. Uninstalling removes it.
+- The installed app sets this up the first time it starts, for you only (no administrator needed). **Edit ▸ Settings ▸ Apps and System** turns it off, and then drawings paste as pictures (which still hold the drawing, so copying one back here keeps it editable). A portable copy leaves it off unless you check it there. Uninstalling removes it.
 
 Tables travel too:
 
@@ -166,11 +166,11 @@ Up to 30 versions of each file are kept, for 60 days; both can be changed (0 ver
 
 For files kept in OneDrive, SharePoint or a shared lab drive:
 
-- **Changed on disk.** If a file you have open is changed outside Chem Illustrator (by another program, by someone else, or by OneDrive bringing in their changes), a notice offers **Reload**, **Keep Mine** (your next save replaces theirs) or **Open Theirs** (their version in a new tab, to compare). AutoSave waits until you choose. Saving over a changed file asks first. You can choose to reload such files automatically when they have no unsaved changes here, or to ignore changes.
-- **Open somewhere else.** While a file is open, a small hidden lock file named `.~lock.<file name>#` sits beside it, in the format LibreOffice uses. When you open a file that someone else has open (in Chem Illustrator, LibreOffice, Word, Excel or PowerPoint), a notice says who and where, and offers **Work on a Copy**. You're told when they close it. The lock file is deleted when you close the file, and can be switched off.
+- **Changed on disk.** If a file you have open is changed outside Chemweave (by another program, by someone else, or by OneDrive bringing in their changes), a notice offers **Reload**, **Keep Mine** (your next save replaces theirs) or **Open Theirs** (their version in a new tab, to compare). AutoSave waits until you choose. Saving over a changed file asks first. You can choose to reload such files automatically when they have no unsaved changes here, or to ignore changes.
+- **Open somewhere else.** While a file is open, a small hidden lock file named `.~lock.<file name>#` sits beside it, in the format LibreOffice uses. When you open a file that someone else has open (in Chemweave, LibreOffice, Word, Excel or PowerPoint), a notice says who and where, and offers **Work on a Copy**. You're told when they close it. The lock file is deleted when you close the file, and can be switched off.
 - **OneDrive conflict copies.** When a file changes in two places at once, OneDrive keeps the clashing changes in a copy named with your computer's name (for example `Scheme 1-LAB-PC.cdxml`). A notice offers to open it, so you can copy across what you need.
 
-Recovery copies and versions are kept in a folder named `Kept` in the app's local data folder (on Windows `%LOCALAPPDATA%\io.github.nathanohare.chemillustrator\Kept`), or in the `Chem Illustrator Data` folder of a portable copy. The browser version keeps them in the browser's storage for the page.
+Recovery copies and versions are kept in a folder named `Kept` in the app's local data folder (on Windows `%LOCALAPPDATA%\io.github.nathanohare.chemillustrator\Kept`), or in the `Chemweave Data` folder of a portable copy. The browser version keeps them in the browser's storage for the page.
 
 ## Recent files
 
@@ -180,7 +180,7 @@ The web version keeps a recent list too in Chrome and Edge, which let a page ope
 
 ## Printing
 
-**File ▸ Print…** (Ctrl+P) asks a question or two, then opens your system's Print window, where you pick the printer and copies, or save a PDF. In the Windows app the printer, copies and pages are picked in Chem Illustrator's own Print window instead, so pages print at their own size and the right way around (pick **Microsoft Print to PDF** to save a PDF).
+**File ▸ Print…** (Ctrl+P) asks a question or two, then opens your system's Print window, where you pick the printer and copies, or save a PDF. In the Windows app the printer, copies and pages are picked in Chemweave's own Print window instead, so pages print at their own size and the right way around (pick **Microsoft Print to PDF** to save a PDF).
 
 | Tab | Choices |
 |---|---|

@@ -713,7 +713,7 @@ export const HIGHLIGHT_DEFAULTS: Required<HighlightStyle> = {
 export type AttachSide = 'below' | 'above' | 'left' | 'right';
 
 /** What an attached caption shows about its structure (Analysis > Attach descriptors). */
-export type DescriptorKey = 'formula' | 'exact' | 'mw' | 'mz' | 'ea' | 'hrms';
+export type DescriptorKey = 'formula' | 'name' | 'exact' | 'mw' | 'mz' | 'ea' | 'hrms' | `calc:${string}`;
 
 /**
  * A caption tied to a structure: an ID label, a caption, or its descriptors (formula, masses…),

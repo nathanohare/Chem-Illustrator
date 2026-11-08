@@ -873,7 +873,10 @@ export function symbolSpot(doc: Doc, m: Measure, id: number, taken: Vec[], size:
     // anything 100° clear is open enough (so a lone pair on an end atom sits off to the side,
     // not straight on from its bond); ties go to the direction nearest straight up, then right
     const open = Math.min(100 * DEG, avoid.length ? Math.min(...avoid.map((b) => angleBetween(d, b))) : Math.PI);
-    if (open > bestOpen + 1e-6) { bestOpen = open; best = d; }
+    // (of directions equally open, the one nearest straight up wins, then the one to the right:
+    // NH₄⁺'s charge goes above, not round past the H₄ to below)
+    const up = angleBetween(d, { x: 0, y: -1 }), bestUp = angleBetween(best, { x: 0, y: -1 });
+    if (open > bestOpen + 1e-6 || (open > bestOpen - 1e-6 && (up < bestUp - 1e-6 || (up < bestUp + 1e-6 && d.x > best.x + 1e-6)))) { bestOpen = open; best = d; }
   }
   return { dir: best, at: symbolAt(doc, m, id, best, size) };
 }

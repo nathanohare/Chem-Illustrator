@@ -1,6 +1,6 @@
 # Compounds in the Knowledge Base's Reagent Safety and Physical Constants tables.
-# One per line: the name shown | the name (or CID:n) PubChem is asked for, when different | the
-# CAS number, when PubChem's record has none.
+# One per line: the name shown | the name (or CID:n) PubChem is asked for, when different.
+# No CAS numbers: they need a licence to publish (see build-safety.mjs).
 # Kept to reagents, solvents and gases a synthetic lab actually uses.
 
 # Solvents
@@ -54,7 +54,7 @@ Propylene carbonate
 Hydrochloric acid | hydrogen chloride
 Hydrobromic acid | hydrogen bromide
 Hydrofluoric acid | hydrogen fluoride
-Hydrogen fluoride pyridine | CID:2724467 | 62778-11-4
+Hydrogen fluoride pyridine | CID:2724467
 Triethylamine trihydrofluoride
 Sulfuric acid
 Nitric acid

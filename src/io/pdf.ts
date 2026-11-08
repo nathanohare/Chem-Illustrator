@@ -387,6 +387,6 @@ export async function writePdf(pages: PdfPage[], opts: PdfOptions): Promise<Uint
   }
   o.put(`<< /Type /Pages /Kids [${kids.map((k) => `${k} 0 R`).join(' ')}] /Count ${kids.length} >>`, pagesId);
   o.put(`<< /Type /Catalog /Pages ${pagesId} 0 R >>`, catalog);
-  const info = o.put(`<< /Producer (Chem Illustrator)${opts.title ? ` /Title ${infoString(opts.title)}` : ''} >>`);
+  const info = o.put(`<< /Producer (Chemweave)${opts.title ? ` /Title ${infoString(opts.title)}` : ''} >>`);
   return o.finish(catalog, info);
 }

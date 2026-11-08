@@ -16,6 +16,8 @@ import { tint } from '../src/colours';
 import { readCdxml } from '../src/io/cdxml';
 import { readFileSync } from 'node:fs';
 import { crossingBonds, crossingGaps, crossingGapsCached } from '../src/chem/crossing';
+import { join } from 'node:path';
+import { CHEMDRAW_DIR, noChemDraw } from './chemdraw-private';
 
 const parse = (t: string) => new DOMParser().parseFromString(t.replace(/<!DOCTYPE[^>]*>/i, ''), 'application/xml').documentElement;
 const all = (e: Element, name: string) => Array.from(e.getElementsByTagName(name));
@@ -130,8 +132,8 @@ describe('copying to ChemDraw', () => {
     }
   });
 
-  it('gives ChemDraw back its own test drawing: ring fills, widths, bold labels, stacking', () => {
-    const text = readFileSync('tests/fixtures/chemdraw-clipboard/clip-props.cd.cdxml', 'utf8');
+  it.skipIf(noChemDraw)('gives ChemDraw back its own test drawing: ring fills, widths, bold labels, stacking', () => {
+    const text = readFileSync(join(CHEMDRAW_DIR, 'clip-props.cd.cdxml'), 'utf8');
     const want = parse(text);
     const { doc } = readCdxml(text);
     const { xml, cdx } = copied(doc);
@@ -153,8 +155,8 @@ describe('copying to ChemDraw', () => {
     expect([...back.shapes.values()].filter((s) => s.kind === 'ring' && s.ring?.length === 6)).toHaveLength(2);
   });
 
-  it('lists the bonds ChemDraw said cross, near misses too, and centres Ru as ChemDraw does', () => {
-    const text = readFileSync('tests/fixtures/chemdraw-clipboard/clip-props.cd.cdxml', 'utf8');
+  it.skipIf(noChemDraw)('lists the bonds ChemDraw said cross, near misses too, and centres Ru as ChemDraw does', () => {
+    const text = readFileSync(join(CHEMDRAW_DIR, 'clip-props.cd.cdxml'), 'utf8');
     const want = parse(text);
     const { doc } = readCdxml(text);
     // a bond named by where its ends are, so lists from two files compare
@@ -181,8 +183,8 @@ describe('copying to ChemDraw', () => {
     expect(pairs(moved).length).toBeLessThan(pairs(want).length);
   });
 
-  it('leaves no gap at a near miss ChemDraw draws straight past, on screen too', () => {
-    const { doc } = readCdxml(readFileSync('tests/fixtures/chemdraw-clipboard/clip-props.cd.cdxml', 'utf8'));
+  it.skipIf(noChemDraw)('leaves no gap at a near miss ChemDraw draws straight past, on screen too', () => {
+    const { doc } = readCdxml(readFileSync(join(CHEMDRAW_DIR, 'clip-props.cd.cdxml'), 'utf8'));
     const reach = doc.style.marginWidth + doc.style.lineWidth / 2;
     // a bond with near misses and nothing crossing it outright (ChemDraw draws this one whole)
     const lone = [...doc.bonds.values()].filter((b) => b.crossing?.length && !crossingBonds(doc, b).length);

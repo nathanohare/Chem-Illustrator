@@ -1,4 +1,4 @@
-# Spreadsheet (tables, charts, dashboards)
+# Spreadsheet (Tables, Charts, and Dashboards)
 
 This page covers Spreadsheet mode: cells and formulas, structures in cells, the chemistry functions, formatting, charts and isotope patterns, dashboards, and saving for Excel.
 
@@ -6,7 +6,7 @@ This page covers Spreadsheet mode: cells and formulas, structures in cells, the 
 
 ## Starting a spreadsheet
 
-Click **+** at the end of the tab strip and pick **Spreadsheet (tables, charts, dashboards)**, or choose **File ▸ New ▸ Spreadsheet**. While a spreadsheet is showing, Ctrl+N starts another one.
+Click **+** at the end of the tab strip and pick **Spreadsheet (Tables, Charts, and Dashboards)**, or choose **File ▸ New ▸ Spreadsheet**. While a spreadsheet is showing, Ctrl+N starts another one.
 
 **File ▸ New ▸ New from Template…** offers a **Reaction table** (one row per entry: catalyst, loading, solvent, temperature, time, conversion, yield, ee and dr, with the best yield and its entry found for you) and a **Reagent sheet** (the reagent table below, and a Yield sheet that works out the percent yield from the product's structure and its isolated mass).
 

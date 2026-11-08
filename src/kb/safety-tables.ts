@@ -80,7 +80,6 @@ export function safetyRow(r: SafetyRecord): Record<string, Cell> {
     incompatible: r.incompatible ? r.incompatible.replace(/\s*\[Note:.*$/, '') : null,
     incident: inc ? inc.what : null,
     ghs: r.ghs?.codes.join(' ') || null,
-    cas: r.cas,
     smiles: r.smiles,
     sources: sources || null,
   };
@@ -99,7 +98,7 @@ export const REAGENT_SAFETY: KbTable = {
   about: 'Bench hazard tier (1 extraordinary, 2 high, 3 standard, 4 low; Not rated when no open source has data) from measured numbers and the harmonized EU classification, with the numbers behind it. Several thousand compounds; one that isn\'t here can be rated live from PubChem. A guide only: read the SDS and follow your institution\'s rules.',
   columns: [
     { key: 'name', label: 'Compound' },
-    { key: 'tier', label: 'Tier', filter: true, narrow: true, numeric: true, info: 'Bench hazard tier, worked out by Chem Illustrator from open data: NIOSH IDLH, LD50 and LC50 values, the harmonized EU hazard statements and named cases (HF, cyanides, phosgene…). 1 extraordinary, 2 high, 3 standard handling, 4 low. Not rated: no open data. It says how careful to be at the bench, not how green a compound is, and it is not a legal classification: read the SDS. The Why column gives the reasons.' },
+    { key: 'tier', label: 'Tier', filter: true, narrow: true, numeric: true, info: 'Bench hazard tier, worked out by Chemweave from open data: NIOSH IDLH, LD50 and LC50 values, the harmonized EU hazard statements and named cases (HF, cyanides, phosgene…). 1 extraordinary, 2 high, 3 standard handling, 4 low. Not rated: no open data. It says how careful to be at the bench, not how green a compound is, and it is not a legal classification: read the SDS. The Why column gives the reasons.' },
     { key: 'why', label: 'Why' },
     { key: 'idlh', label: 'IDLH', numeric: true },
     { key: 'oral', label: 'LD50 oral' },
@@ -114,7 +113,6 @@ export const REAGENT_SAFETY: KbTable = {
     { key: 'incompatible', label: 'Incompatible with' },
     { key: 'incident', label: 'Incident', filter: 'present' },
     { key: 'ghs', label: 'GHS (harmonized)' },
-    { key: 'cas', label: 'CAS' },
     { key: 'sources', label: 'Sources' },
   ],
   rows: sortSafety(SAFETY_RECORDS.map(safetyRow)),
@@ -123,7 +121,7 @@ export const REAGENT_SAFETY: KbTable = {
     { label: 'Hazardous Substances Data Bank (LD50, LC50, vapor pressure), via PubChem', url: 'https://pubchem.ncbi.nlm.nih.gov/source/hsdb' },
     { label: 'NOAA CAMEO Chemicals (reactivity alerts)', url: 'https://cameochemicals.noaa.gov/' },
     { label: 'EU Regulation 1272/2008, Annex VI (harmonized classification)', url: 'https://eur-lex.europa.eu/eli/reg/2008/1272/oj' },
-    { label: 'Tiers, badges, Have ready and incidents written for Chem Illustrator' },
+    { label: 'Tiers, badges, Have ready and incidents written for Chemweave' },
     { label: 'Skin Kp estimated with the Potts–Guy equation, Pharm. Res. 1992, 9, 663 (log Kow from HSDB, else PubChem XLogP3)', url: 'https://doi.org/10.1023/A:1015810312465' },
   ],
   links: rowLinks,
@@ -136,7 +134,7 @@ export function constantsRow(r: SafetyRecord): Record<string, Cell> {
   return {
     cid: r.cid, name: r.name, formula: r.formula, mw: r.mw === null ? null : Number(r.mw.toFixed(2)),
     mp: short(r.mp?.text), bp: short(r.bp?.text), density: short(r.density?.text), flash: short(r.flash?.text),
-    vp: vp === null ? null : vp > 760 ? 'gas' : sig(vp), cas: r.cas, smiles: r.smiles, sources: src || null,
+    vp: vp === null ? null : vp > 760 ? 'gas' : sig(vp), smiles: r.smiles, sources: src || null,
   };
 }
 
@@ -154,7 +152,6 @@ export const PHYSICAL_CONSTANTS: KbTable = {
     { key: 'density', label: 'Density', numeric: true },
     { key: 'flash', label: 'Flash point', numeric: true },
     { key: 'vp', label: 'VP (mmHg, ~25 °C)', numeric: true },
-    { key: 'cas', label: 'CAS' },
     { key: 'sources', label: 'Sources' },
   ],
   rows: SAFETY_RECORDS.map(constantsRow).sort((a, b) => String(a.name).localeCompare(String(b.name))),

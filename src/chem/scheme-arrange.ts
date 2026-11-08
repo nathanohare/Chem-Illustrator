@@ -249,8 +249,8 @@ class Layout {
   private reach(l: Link, u: Vec): { above: number; below: number } {
     const across = (it: Item) => Math.abs(u.y) * width(it.box) + Math.abs(u.x) * height(it.box);
     const sp = spacing(this.bond);
-    const stack = (its: Item[]) => (its.length ? sp.conditions + its.reduce((s, it) => s + across(it), 0) + (its.length - 1) * sp.stack : 0);
-    return { above: stack(l.above), below: stack([...l.inside, ...l.below]) };
+    const stack = (its: Item[], gap: number) => (its.length ? gap + its.reduce((s, it) => s + across(it), 0) + (its.length - 1) * sp.stack : 0);
+    return { above: stack(l.above, sp.conditions), below: stack([...l.inside, ...l.below], sp.conditionsBelow) };
   }
 
   /** A straight arrow from tail to head, with its conditions stacked on it as Clean Up Reaction does. */
@@ -260,7 +260,7 @@ class Layout {
     const f = arrowFrame({ ...(l.arrow ?? DEFAULT_ARROW), tail, head, sweep: 0 } as Arrow);
     const pt = (t: number, s: number) => add(f.tail, add(mul(f.u, t), mul(f.n, s)));
     const stackUp = (its: Item[], sign: 1 | -1) => {
-      let cursor = spacing(this.bond).conditions;
+      let cursor = sign > 0 ? spacing(this.bond).conditions : spacing(this.bond).conditionsBelow;
       for (const it of its) {
         const q = inFrame(f, it.box);
         const d = sign > 0 ? cursor - q.s1 : -cursor - q.s2;

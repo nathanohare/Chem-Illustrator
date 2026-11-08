@@ -111,7 +111,7 @@ export const PKA_VALUES_TABLE: KbTable = {
   structure: pkaPicture,
   canonicalSmiles: true,
   rows: PKA_VALUES.map(rowOf).sort((a, b) => firstNumber(a.pka) - firstNumber(b.pka)),
-  sources: [REICH_SOURCE, WILLIAMS_SOURCE, { label: 'Original papers for each value: the Original source column' }, { label: 'Names, SMILES, drawings, acidic hydrogens, classes and order by Chem Illustrator' }],
+  sources: [REICH_SOURCE, WILLIAMS_SOURCE, { label: 'Original papers for each value: the Original source column' }, { label: 'Names, SMILES, drawings, acidic hydrogens, classes and order by Chemweave' }],
   links: (row) => {
     const out: KbSource[] = row.cid ? [{ label: 'PubChem', url: `https://pubchem.ncbi.nlm.nih.gov/compound/${row.cid}` }] : [];
     for (const cite of String(row.refs ?? '').split('; ')) {

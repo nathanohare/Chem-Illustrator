@@ -10,7 +10,7 @@ import { guidesText } from '../editor/guides';
 import { CdxmlSource, Doc, Atom, Bond, Caption, Arrow, Shape, TextRun, Entity, Kind, StepRoles, enhancedText, CHIRAL_FLAGS, flagTextSize, type HighlightStyle } from '../model';
 import { interpretArrow, isReactionArrow, linkRows, isStep, plainMeasure, schemeItems, type Item } from '../chem/reaction';
 import { SYMBOLS } from '../chem/elements';
-import { labelBonds, labelSpec, layoutLabel, labelDir, labelGraph, tokenize, isGenericLabel, Measure, MiniGraph, kekulize, labelLook } from '../chem/labels';
+import { labelBonds, labelSpec, layoutLabel, labelDir, labelGraph, tokenize, isGenericLabel, Measure, MiniGraph, kekulize, labelLook, labelPieces } from '../chem/labels';
 import { Vec, DEG, arcCenter, norm, sub, Rect, turnedCorners } from '../geom';
 import { arrowEllipse, bezPoints, boxOf, shapeTurn } from '../objects';
 import { kids, descendants, wellFormed, withoutDoctype } from './xml';
@@ -2862,11 +2862,13 @@ function orderAttr(order: number): string | null {
  * raised when the label shows them so and characters raised, lowered or kept on the line by hand.
  */
 export function labelRuns(text: string, look: { supDigits: boolean; marks?: string }): TextRun[] {
-  const digits = look.supDigits ? /\d+$/.exec(text) : null;
+  // the digits the label shows raised: R numbers (R¹, OR¹ by the setting) and, from a file, the rest
+  const raised = new Set<number>();
+  for (const p of labelPieces(text, look.supDigits)) if (p.sup && p.at !== undefined && /^\d+$/.test(p.text)) for (let i = 0; i < p.text.length; i++) raised.add(p.at + i);
   const out: TextRun[] = [];
   [...text].forEach((ch, i) => {
     const m = readMark(look.marks?.[i]);
-    const base: TextRun = m.pos === 'up' ? { text: ch, sup: true } : m.pos === 'down' ? { text: ch, sub: true } : m.pos === 'line' ? { text: ch } : digits && i >= digits.index ? { text: ch, sup: true } : { text: ch, formula: true };
+    const base: TextRun = m.pos === 'up' ? { text: ch, sup: true } : m.pos === 'down' ? { text: ch, sub: true } : m.pos === 'line' ? { text: ch } : raised.has(i) ? { text: ch, sup: true } : { text: ch, formula: true };
     // italics (the t of tBu, by the alkyl look), bold and underline set by hand
     const r: TextRun = { ...base, ...(m.italic ? { italic: true } : {}), ...(m.bold ? { bold: true } : {}), ...(m.underline ? { underline: true } : {}) };
     const last = out[out.length - 1];

@@ -1,56 +1,22 @@
-// Ready-made designs to start from (File > New > New Design): a TOC graphic, a graphical abstract, a
-// poster, a flowchart, a workup scheme and a timeline. Each is ordinary shapes, text and
-// connectors on a page of the right size, so everything in it can be moved, retyped, recoloured
-// or deleted; the dashed boxes mark where structures or pictures go.
+// Ready-made designs to start from (File > New > New Design), in categories: posters, graphical
+// abstracts, TOC graphics, figures, flyers, flowcharts, workup schemes and timelines. Each is
+// ordinary shapes, text and connectors on a page of the right size, so everything in it can be
+// moved, retyped, recolored or deleted; the dashed boxes mark where structures or pictures go.
 
 import type { Doc, Shape, TextRun, Arrow } from '../model';
 import { DESIGN_SIZES, type SlideSize } from '../deck/deck';
 import { gluePoint } from '../objects';
+import { isIconId, loadIcons } from './icons';
+import { type Box, type DesignTemplate, type FreeArrow, GREY, spot, words, glass } from './template-kit';
+import { POSTERS } from './templates-posters';
+import { JOURNAL } from './templates-journal';
+import { FLYERS } from './templates-flyers';
+import { DIAGRAMS } from './templates-diagrams';
 
-/** A shape in a template: where it goes on the page (points) and what it says. */
-interface Box {
-  geo: string;
-  x: number; y: number; w: number; h: number;
-  /** Paragraphs are separated by \n; the first can be set bold. */
-  text?: string;
-  size?: number;
-  bold?: boolean;
-  /** Text colour. */
-  ink?: string;
-  fill?: string | null;
-  line?: string | null;
-  dashed?: boolean;
-  align?: Shape['textAlign'];
-  valign?: Shape['textValign'];
-  name?: string;
-}
-
-/** A connector from one box's side to another's (sides: 0 top, 1 right, 2 bottom, 3 left). */
-interface Link { from: number; fp: number; to: number; tp: number; elbow?: boolean }
-
-export interface DesignTemplate {
-  id: string;
-  name: string;
-  /** What it is for, in a line. */
-  blurb: string;
-  /** The page size it is laid out for (DESIGN_SIZES id). */
-  sizeId: string;
-  boxes: Box[];
-  links: Link[];
-  /** Plain arrows, not stuck to anything: [x1, y1, x2, y2] from tail to head. */
-  arrows?: [number, number, number, number][];
-}
+export { TEMPLATE_CATEGORIES, type DesignTemplate, type TemplateCategory } from './template-kit';
 
 const BLUE = { fill: '#dae3f3', line: '#2f5597' };
 const DARK = '#2f5597';
-const GREY = '#7f7f7f';
-
-/** A dashed box marking where a structure or picture goes. */
-const spot = (x: number, y: number, w: number, h: number, text: string, size: number): Box =>
-  ({ geo: 'rect', x, y, w, h, text, size, ink: GREY, fill: null, line: GREY, dashed: true, name: `Placeholder: ${text}` });
-/** Text with no box around it. */
-const words = (x: number, y: number, w: number, h: number, text: string, size: number, more: Partial<Box> = {}): Box =>
-  ({ geo: 'rect', x, y, w, h, text, size, fill: null, line: null, ...more });
 
 function poster(): Box[] {
   const W = 3456, M = 72, gap = 72, col = (W - 2 * M - 2 * gap) / 3;
@@ -70,9 +36,13 @@ function poster(): Box[] {
   ];
 }
 
-export const DESIGN_TEMPLATES: DesignTemplate[] = [
+/** The workup scheme's glassware line width: in proportion to glassware about 1.5 in tall. */
+export const WORKUP_LW = 1.5;
+
+/** The templates that came first (one per category), kept as they were apart from the glassware. */
+const FIRST: DesignTemplate[] = [
   {
-    id: 'toc', name: 'TOC graphic', blurb: 'Starting material, arrow, product and a one-line message (ACS size).', sizeId: 'toc-acs',
+    id: 'toc', name: 'TOC graphic', category: 'toc', blurb: 'Starting material, arrow, product and a one-line message.', sizeId: 'toc-acs',
     boxes: [
       spot(8, 14, 88, 72, 'Starting material', 8),
       words(98, 34, 36, 18, 'conditions', 7),
@@ -82,7 +52,7 @@ export const DESIGN_TEMPLATES: DesignTemplate[] = [
     links: [{ from: 0, fp: 1, to: 2, tp: 3 }],
   },
   {
-    id: 'abstract', name: 'Graphical abstract', blurb: 'Three panels: the challenge, your approach and the outcome (Elsevier size).', sizeId: 'ga-elsevier',
+    id: 'abstract', name: 'Challenge, approach, outcome', category: 'abstract', blurb: 'Three panels: the challenge, your approach and the outcome.', sizeId: 'ga-elsevier',
     boxes: [
       { geo: 'homePlate', x: 8, y: 8, w: 116, h: 26, text: 'Challenge', size: 10, bold: true, ...BLUE },
       { geo: 'chevron', x: 126, y: 8, w: 118, h: 26, text: 'Approach', size: 10, bold: true, ...BLUE },
@@ -93,9 +63,9 @@ export const DESIGN_TEMPLATES: DesignTemplate[] = [
     ],
     links: [],
   },
-  { id: 'poster', name: 'Conference poster', blurb: 'Title banner with logos and three columns of sections (48 × 36 in).', sizeId: 'poster-48x36', boxes: poster(), links: [] },
+  { id: 'poster', name: 'Classic three columns', category: 'poster', blurb: 'Title banner with logos and three columns of sections.', sizeId: 'poster-48x36', boxes: poster(), links: [] },
   {
-    id: 'flowchart', name: 'Flowchart', blurb: 'A reaction run as steps with a decision and a loop back, joined by connectors.', sizeId: 'letter',
+    id: 'flowchart', name: 'Running a reaction', category: 'flowchart', blurb: 'A reaction run as steps with a decision and a loop back, joined by connectors.', sizeId: 'letter',
     boxes: [
       { geo: 'fcTerminator', x: 226, y: 48, w: 160, h: 44, text: 'Start', size: 12, ...BLUE },
       { geo: 'fcProcess', x: 216, y: 132, w: 180, h: 60, text: 'Set up the reaction', size: 12, ...BLUE },
@@ -114,17 +84,17 @@ export const DESIGN_TEMPLATES: DesignTemplate[] = [
     ],
   },
   {
-    id: 'workup', name: 'Workup scheme', blurb: 'Glassware from reaction to pure product, with a label under each step.', sizeId: 'letter-wide',
+    id: 'workup', name: 'Aqueous workup', category: 'workup', blurb: 'Glassware from reaction to pure product, with a label under each step.', sizeId: 'letter-wide',
     boxes: [
-      { geo: 'labRbf', x: 40, y: 220, w: 81, h: 108, line: '#000000', fill: null },
-      { geo: 'labSepFunnel', x: 170, y: 184, w: 66, h: 144, line: '#000000', fill: null },
-      { geo: 'labErlenmeyer', x: 285, y: 220, w: 81, h: 108, line: '#000000', fill: null },
-      { geo: 'labRbf', x: 415, y: 220, w: 81, h: 108, line: '#000000', fill: null },
-      { geo: 'labColumn', x: 562, y: 166, w: 45, h: 162, line: '#000000', fill: null },
-      { geo: 'labVial', x: 680, y: 232, w: 45, h: 96, line: '#000000', fill: null },
+      glass('labRbf', 40, 220, 81, 108, WORKUP_LW),
+      glass('labSepFunnel', 170, 184, 66, 144, WORKUP_LW),
+      glass('labErlenmeyer', 285, 220, 81, 108, WORKUP_LW),
+      glass('labRbf', 415, 220, 81, 108, WORKUP_LW),
+      glass('labColumn', 562, 166, 45, 162, WORKUP_LW),
+      glass('labVial', 680, 232, 45, 96, WORKUP_LW),
       words(20, 340, 121, 40, 'Reaction', 11),
       words(143, 340, 120, 40, 'Quench and extract', 11),
-      words(265, 340, 121, 40, 'Dry over Na2SO4 and filter', 11),
+      words(265, 340, 121, 40, 'Dry over {f:Na2SO4} and filter', 11),
       words(395, 340, 121, 40, 'Concentrate', 11),
       words(524, 340, 121, 40, 'Column', 11),
       words(642, 340, 121, 40, 'Pure product', 11),
@@ -132,10 +102,10 @@ export const DESIGN_TEMPLATES: DesignTemplate[] = [
     ],
     links: [],
     // level arrows between the glassware (glued ones would slope, the glassware being of different heights)
-    arrows: [[129, 290, 162, 290], [244, 290, 277, 290], [374, 290, 407, 290], [504, 290, 554, 290], [615, 290, 672, 290]],
+    arrows: ([[129, 162], [244, 277], [374, 407], [504, 554], [615, 672]] as const).map(([a, b]): FreeArrow => [a, 290, b, 290, { width: 1 }]),
   },
   {
-    id: 'timeline', name: 'Timeline', blurb: 'A project from route scouting to submission, as five milestones on a line.', sizeId: 'slide-wide',
+    id: 'timeline', name: 'Five milestones', category: 'timeline', blurb: 'A project from route scouting to submission, as five milestones on a line.', sizeId: 'slide-wide',
     boxes: [
       words(60, 40, 840, 50, 'Project timeline', 32, { bold: true }),
       { geo: 'rect', x: 60, y: 287, w: 840, h: 6, fill: GREY, line: null, name: 'Time line' },
@@ -153,28 +123,54 @@ export const DESIGN_TEMPLATES: DesignTemplate[] = [
   },
 ];
 
+const byCategory = (c: DesignTemplate['category']) => FIRST.filter((t) => t.category === c);
+
+/** Every template, grouped by category (the first of each is the one that came first). */
+export const DESIGN_TEMPLATES: DesignTemplate[] = [
+  ...byCategory('poster'), ...POSTERS,
+  ...byCategory('abstract'), ...JOURNAL.filter((t) => t.category === 'abstract'),
+  ...byCategory('toc'), ...JOURNAL.filter((t) => t.category === 'toc'),
+  ...JOURNAL.filter((t) => t.category === 'figure'),
+  ...FLYERS,
+  ...byCategory('flowchart'), ...DIAGRAMS.filter((t) => t.category === 'flowchart'),
+  ...byCategory('workup'), ...DIAGRAMS.filter((t) => t.category === 'workup'),
+  ...byCategory('timeline'), ...DIAGRAMS.filter((t) => t.category === 'timeline'),
+];
+
 export function templateSize(t: DesignTemplate): SlideSize {
   return DESIGN_SIZES.find((s) => s.id === t.sizeId)!.size;
+}
+
+/** Whether a template has icons from the icon library (which load on first use). */
+export const usesIcons = (t: DesignTemplate): boolean => t.boxes.some((b) => isIconId(b.geo));
+
+/** Load what a template needs before it is drawn (the icons). */
+export async function readyTemplate(t: DesignTemplate): Promise<void> {
+  if (usesIcons(t)) await loadIcons().catch(() => undefined);
 }
 
 /** Put a template's shapes and connectors on an empty design page. */
 export function fillTemplate(doc: Doc, t: DesignTemplate): void {
   const ids: number[] = [];
-  t.boxes.forEach((b, i) => {
+  const size = templateSize(t);
+  const boxes: Box[] = t.paper ? [{ geo: 'rect', x: 0, y: 0, w: size.w, h: size.h, fill: t.paper, line: null, name: 'Background' }, ...t.boxes] : t.boxes;
+  const shift = t.paper ? 1 : 0;
+  boxes.forEach((b, i) => {
     const text = b.text ? { runs: runs(b) } : undefined;
     const s: Omit<Shape, 'id'> = {
       kind: 'geo', geo: b.geo, x1: b.x, y1: b.y, x2: b.x + b.w, y2: b.y + b.h,
       filled: !!b.fill, ...(b.fill ? { fillColor: b.fill } : {}),
-      color: b.line ?? '#000000', ...(b.line === null ? { lineWidth: 0 } : {}),
+      color: b.line ?? b.fill ?? '#000000', ...(b.line === null ? { lineWidth: 0 } : b.lw !== undefined ? { lineWidth: b.lw } : {}),
       ...(b.dashed ? { dashed: true } : {}), ...(text ? { text } : {}),
       ...(b.align ? { textAlign: b.align } : {}), ...(b.valign ? { textValign: b.valign } : {}),
+      ...(b.clear ? { transparency: b.clear } : {}), ...(b.rot ? { rot: b.rot } : {}),
       ...(b.name ? { name: b.name } : {}), z: i + 1,
     };
     ids.push(doc.addShape(s).id);
   });
   const lw = doc.style.lineWidth;
   for (const l of t.links) {
-    const a = doc.shapes.get(ids[l.from])!, b = doc.shapes.get(ids[l.to])!;
+    const a = doc.shapes.get(ids[l.from + shift])!, b = doc.shapes.get(ids[l.to + shift])!;
     const arrow: Omit<Arrow, 'id'> = {
       tail: gluePoint(a, l.fp), head: gluePoint(b, l.tp), headStyle: 'full', tailStyle: 'none', headType: 'solid', line: 'solid',
       noGo: false, equilibrium: false, sweep: 0, headLength: lw * 10, headWidth: lw * 2.5,
@@ -182,10 +178,20 @@ export function fillTemplate(doc: Doc, t: DesignTemplate): void {
     };
     doc.addArrow(arrow);
   }
-  for (const [x1, y1, x2, y2] of t.arrows ?? []) {
-    doc.addArrow({ tail: { x: x1, y: y1 }, head: { x: x2, y: y2 }, headStyle: 'full', tailStyle: 'none', headType: 'solid', line: 'solid', noGo: false, equilibrium: false, sweep: 0, headLength: lw * 10, headWidth: lw * 2.5 });
-  }
+  for (const a of t.arrows ?? []) doc.addArrow(freeArrow(a, lw));
 }
+
+function freeArrow([x1, y1, x2, y2, look]: FreeArrow, lw: number): Omit<Arrow, 'id'> {
+  const w = look?.width ?? lw;
+  return {
+    tail: { x: x1, y: y1 }, head: { x: x2, y: y2 }, headStyle: look?.equilibrium ? 'halfLeft' : 'full', tailStyle: look?.both ? 'full' : 'none', headType: 'solid',
+    line: look?.dashed ? 'dashed' : 'solid', noGo: false, equilibrium: !!look?.equilibrium, sweep: look?.sweep ?? 0,
+    headLength: w * 10, headWidth: w * 2.5, ...(look?.color ? { color: look.color } : {}), ...(look?.width ? { lineWidth: look.width } : {}),
+  };
+}
+
+/** {f:…} formula, {b:…} bold, {i:…} italic, {sup:…} superscript, {sub:…} subscript, inside a paragraph. */
+const MARK = /\{(f|b|i|sup|sub):([^}]*)\}/g;
 
 function runs(b: Box): TextRun[] {
   const paras = b.text!.split('\n');
@@ -194,7 +200,16 @@ function runs(b: Box): TextRun[] {
   const sub = b.bold && paras.length > 1;
   return paras.flatMap((p, i): TextRun[] => {
     const size = sub && i > 0 ? Math.round((b.size ?? 12) * 0.55) : b.size;
-    const run: TextRun = { text: p, ...(size ? { size } : {}), ...(b.bold && i === 0 ? { bold: true } : {}), ...ink };
-    return i ? [{ text: '\n', ...(size ? { size } : {}) }, run] : [run];
+    const base: Partial<TextRun> = { ...(size ? { size } : {}), ...(b.bold && i === 0 ? { bold: true } : {}), ...(b.italic ? { italic: true } : {}), ...ink };
+    const out: TextRun[] = [];
+    let at = 0;
+    for (const m of p.matchAll(MARK)) {
+      if (m.index! > at) out.push({ text: p.slice(at, m.index), ...base });
+      const k = m[1];
+      out.push({ text: m[2], ...base, ...(k === 'f' ? { formula: true } : k === 'b' ? { bold: true } : k === 'i' ? { italic: true } : k === 'sub' ? { sub: true } : { sup: true }) });
+      at = m.index! + m[0].length;
+    }
+    if (at < p.length || !out.length) out.push({ text: p.slice(at), ...base });
+    return i ? [{ text: '\n', ...(size ? { size } : {}) }, ...out] : out;
   });
 }

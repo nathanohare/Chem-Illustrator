@@ -3,6 +3,7 @@
 // plain text, with each line break counting as one.
 
 import type { TextRun } from './model';
+import { rNumberDigits, rNumberPrefs } from './chem/r-numbers';
 
 /** The colour Office gives links (kept here too, as links.ts builds on these functions). */
 const LINK_COLOUR = '#0563c1';
@@ -214,6 +215,7 @@ const FORMULA_NO_MARK = /[\s(\[{,.:;]/;
  *   FORMULA_NO_MARK lists or is the start of the text. Before a letter it stays on the line, as a
  *   hyphen does (Red-Al), but a - goes up there when a + comes later in the text (CO2-Na+).
  * - Two or more hyphens are names, not charges, and none goes up (Me-Al-).
+ * - An R group's number goes up when Settings ▸ Drawing says so (R¹, CO₂R¹; not the 2 of NR2).
  * `before` and `after` are the rest of the text, in other runs: ChemDraw reads across them.
  */
 export function formulaParts(text: string, before = '', after = ''): Part[] {
@@ -243,6 +245,8 @@ export function formulaParts(text: string, before = '', after = ''): Part[] {
       else if (prev >= '0' && prev <= '9' ? pos[i - 1] === 'sub' : prev !== undefined && !FORMULA_NO_MARK.test(prev) && prev !== '+' && prev !== '-') pos[i] = 'sub';
     } else raised = false;
   }
+  // R groups' numbers go up by Settings ▸ Drawing (CO₂R¹), not down as counts
+  if (rNumberPrefs.superscriptR) for (const i of rNumberDigits(whole)) pos[i] = 'sup';
   const out: Part[] = [];
   for (let i = before.length; i < before.length + text.length; i++) {
     const last = out[out.length - 1];

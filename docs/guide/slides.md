@@ -1,12 +1,12 @@
-# Presentation (slideshow)
+# Presentation (Slideshow)
 
 This page covers Presentation mode: building a deck, the slide master and templates, chemistry on slides, pictures, transitions and animations, presenting, printing handouts and saving for PowerPoint.
 
-![A slide deck in Chem Illustrator](../images/slides.png)
+![A slide deck in Chemweave](../images/slides.png)
 
 ## Starting a deck
 
-Click **+** at the end of the tab strip and pick **Presentation (slideshow)**, or choose **File ▸ New ▸ Presentation**. While a deck is showing, Ctrl+N starts another one. Each open file has its own tab: Ctrl+Tab moves between tabs and Ctrl+W closes one.
+Click **+** at the end of the tab strip and pick **Presentation (Slideshow)**, or choose **File ▸ New ▸ Presentation**. While a deck is showing, Ctrl+N starts another one. Each open file has its own tab: Ctrl+Tab moves between tabs and Ctrl+W closes one.
 
 The Presentation ribbon has PowerPoint's tabs: **Home** (slides, sections, font, paragraph), **Insert** (pictures, text boxes, tables, shapes), **Design & Transitions** (size, templates, slide master, layouts, drawing style, format background, and the transitions between slides), **Animations**, **Slide Show**, **Review** and **View** (Normal, Slide Sorter, Slide Master, Edit Layouts, Themes). The **Presentation** submenus of the **Edit**, **View**, **Insert** and **Format** menus hold the same commands.
 

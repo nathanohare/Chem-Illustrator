@@ -18,9 +18,10 @@ export interface Picture {
 const noCanvas = { getContext: () => null } as unknown as HTMLCanvasElement;
 
 /** Record a drawing as shapes and text. Null when there is nothing to show. */
-export function recordPicture(doc: Doc, margin = 2): Picture | null {
+export function recordPicture(doc: Doc, margin = 2, /** Change the renderer first (a settings preview that shows warning marks). */ setup?: (r: Renderer) => void): Picture | null {
   const r = new Renderer(noCanvas, noCanvas);
   r.showWarnings = false;
+  setup?.(r);
   r.makePath = () => new VecPath() as unknown as Path2D;
   const ctx = new VectorContext();
   // Word and PowerPoint draw the text in Arial, so lay it out with Arial's widths
@@ -57,7 +58,7 @@ export function bitmapScale(pw: number, ph: number, dpi: number, maxSide = MAX_S
  * The drawing painted on a canvas at `dpi` dots per inch, or fewer for very large drawings
  * (the resolution used is returned with it). Browser only.
  */
-export function pictureCanvas(doc: Doc, p: Picture, dpi = 300): { canvas: HTMLCanvasElement; dpi: number } {
+export function pictureCanvas(doc: Doc, p: Picture, dpi = 300, /** Change the renderer first, as for recordPicture. */ setup?: (r: Renderer) => void): { canvas: HTMLCanvasElement; dpi: number } {
   const pw = p.box.x2 - p.box.x1, ph = p.box.y2 - p.box.y1;
   const k = bitmapScale(pw, ph, dpi);
   const w = Math.max(1, Math.ceil(pw * k)), h = Math.max(1, Math.ceil(ph * k));
@@ -68,6 +69,7 @@ export function pictureCanvas(doc: Doc, p: Picture, dpi = 300): { canvas: HTMLCa
   ctx.setTransform(k, 0, 0, k, -p.box.x1 * k, -p.box.y1 * k);
   const r = new Renderer(noCanvas, noCanvas);
   r.showWarnings = false;
+  setup?.(r);
   withMeasure((t, s, _font, style) => arialWidth(t, s, /bold/.test(style)), () => r.drawDocument(ctx, doc));
   return { canvas, dpi: k * 72 };
 }

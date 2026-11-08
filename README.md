@@ -1,12 +1,14 @@
-# Chem Illustrator
+# Chemweave
+
+*Formerly Chem Illustrator.*
 
 **Free chemical drawing for the lab, with presentations, spreadsheets and documents built in.**
 
-Chem Illustrator draws structures and reaction schemes with the hotkeys and look ChemDraw users already know, and it opens and saves your `.cdxml` files. Around the chemistry canvas it builds in the other programs a synthetic chemist spends the day in: presentations, spreadsheets, documents and a design page for posters and figures. Your structures stay editable in all of them, and the formula, masses, stereochemistry and warnings update as you draw.
+Chemweave draws structures and reaction schemes with the hotkeys ChemDraw users already know, and it opens and saves your `.cdxml` files. Around the chemistry canvas it builds in the other programs a synthetic chemist spends the day in: presentations, spreadsheets, documents and a design page for posters and figures. Your structures stay editable in all of them, and the formula, masses, stereochemistry and warnings update as you draw.
 
 It is free and open source (GPL v3), and runs on Windows, macOS and Linux, with a test version for iPad.
 
-> **Beta.** Chem Illustrator is under active development: new features arrive every few days and some things may not work as they should yet. Save often, and please [report anything that goes wrong](docs/guide/feedback.md). If you would rather update less often, choose **Stable** updates in **Edit ▸ Settings ▸ Online**: those versions are tried out on a real computer before they are offered.
+> **Beta.** Chemweave is under active development: new features arrive every few days and some things may not work as they should yet. Save often, and please [report anything that goes wrong](docs/guide/feedback.md). If you would rather update less often, choose **Stable** updates in **Edit ▸ Settings ▸ Online**: those versions are tried out on a real computer before they are offered.
 
 ### [▶ Try it in your browser](https://nathanohare.github.io/Chem-Illustrator/) · [Download the desktop app](https://github.com/nathanohare/Chem-Illustrator/releases/latest)
 
@@ -97,7 +99,7 @@ Every hotkey can be changed (**Edit ▸ Hotkeys**), and the hotkeys can be expor
 
 ## Presentations, spreadsheets, documents and designs
 
-Chem Illustrator has five modes: **Canvas** (chemistry), **Presentation** (slideshow), **Spreadsheet** (tables, charts, dashboards), **Document** (text) and **Design** (TOC graphic, abstract, poster, figure). Each Office-like mode works like the Office program it matches, and adds what Office can't do for a chemist.
+Chemweave has five modes: **Canvas** (Chemistry), **Presentation** (Slideshow), **Spreadsheet** (Tables, Charts, and Dashboards), **Document** (Text document) and **Design** (Posters, Graphical abstracts, Figures). Document, Spreadsheet and Presentation modes save .docx, .xlsx and .pptx files that open in Microsoft Word, Excel and PowerPoint, and add what those programs can't do for a chemist.
 
 | Presentation | Spreadsheet |
 |---|---|
@@ -130,14 +132,14 @@ Nothing is locked into a format of our own. Each mode saves the file type its pr
 | Document | `.docx` | `.docx` | Word |
 | Spreadsheet | `.xlsx`, `.csv`, `.sdf` | `.xlsx`, `.csv`, `.sdf` | Excel |
 
-In Word, PowerPoint and Excel your structures show as sharp pictures; open the file in Chem Illustrator again and they are editable structures, even after Office has saved it. Drawings also export as PDF, PNG, SVG and Molfile. [Files and sharing](docs/guide/files-and-sharing.md) has the details.
+In Word, PowerPoint and Excel your structures show as sharp pictures; open the file in Chemweave again and they are editable structures, even after Office has saved it. Drawings also export as PDF, PNG, SVG and Molfile. [Files and sharing](docs/guide/files-and-sharing.md) has the details.
 
 ## Install
 
 Download the installer for your computer from the **[latest release](https://github.com/nathanohare/Chem-Illustrator/releases/latest)**:
 
 - **Windows**: the file ending in `x64-setup.exe`. Windows will warn that the installer isn't signed: click **More info**, then **Run anyway**. It installs for you alone, so it doesn't need administrator rights. To run it from a flash drive or a folder without installing anything, take `x64-portable.zip` instead and unzip it ([portable copy](docs/guide/getting-started.md#windows-without-installing-portable-copy)).
-- **macOS** (Apple silicon or Intel, macOS 11 or newer): the file ending in `universal.dmg`. Open it and drag **Chem Illustrator** into **Applications**. The app is signed and notarised by Apple, so it opens without a warning.
+- **macOS** (Apple silicon or Intel, macOS 11 or newer): the file ending in `universal.dmg`. Open it and drag **Chemweave** into **Applications**. The app is signed and notarised by Apple, so it opens without a warning.
 - **Linux**: the `.AppImage` (any distribution), `.deb` (Ubuntu, Debian) or `.rpm` (Fedora).
 - **iPad**: the iPad app is in testing through Apple's TestFlight. Install the free **[TestFlight](https://apps.apple.com/app/testflight/id899247664)** app from the App Store, then open **[this invitation](https://testflight.apple.com/join/hMdcFJBH)** on the iPad and tap **Accept**, then **Install**. TestFlight offers each new test version as it comes out. Draw with an Apple Pencil or your finger; see [Pen and touch](docs/guide/keyboard-and-mouse.md#pen-and-touch-tablets).
 
@@ -151,20 +153,26 @@ The **[user guide](docs/README.md)** covers each mode, every hotkey, and the fil
 
 Ideas, problems and questions are welcome. In the program, use **Help ▸ Send Feedback**: it fills in a new [issue](https://github.com/nathanohare/Chem-Illustrator/issues) on this page for you, or copies the text to send another way. See [Feedback, problems and ideas](docs/guide/feedback.md).
 
+## Support Chemweave
+
+Chemweave is free and always will be. If it saves you time, you can help keep it going by **[sponsoring its development on GitHub](https://github.com/sponsors/nathanohare)**, monthly or once. In the program, it's **Help ▸ Support Chemweave**.
+
 ## Try it
 
-**[▶ Try Chem Illustrator in your browser](https://nathanohare.github.io/Chem-Illustrator/)**, or **[download the desktop app](https://github.com/nathanohare/Chem-Illustrator/releases/latest)** for Windows, macOS or Linux, or **[join the iPad test](https://testflight.apple.com/join/hMdcFJBH)**.
+**[▶ Try Chemweave in your browser](https://nathanohare.github.io/Chem-Illustrator/)**, or **[download the desktop app](https://github.com/nathanohare/Chem-Illustrator/releases/latest)** for Windows, macOS or Linux, or **[join the iPad test](https://testflight.apple.com/join/hMdcFJBH)**.
 
 ## For developers
 
-Chem Illustrator is written in TypeScript and runs as a [Tauri](https://tauri.app) desktop app, with [RDKit](https://www.rdkit.org) for the chemistry. [For developers](docs/developers.md) explains how to run it from the source code, how releases are made, and where things are in the code; [TECH-DECISION.md](TECH-DECISION.md) explains why it is built this way.
+Chemweave is written in TypeScript and runs as a [Tauri](https://tauri.app) desktop app, with [RDKit](https://www.rdkit.org) for the chemistry. [For developers](docs/developers.md) explains how to run it from the source code, how releases are made, and where things are in the code; [TECH-DECISION.md](TECH-DECISION.md) explains why it is built this way.
 
 ## Licence
 
-Chem Illustrator is free software: you can use, share and change it under the terms of the [GNU General Public License](LICENSE), version 3 or (at your option) any later version. It comes with no warranty. An [additional permission](APP-STORE-EXCEPTION.md) allows it to be distributed through Apple's App Store and TestFlight.
+Chemweave is free software: you can use, share and change it under the terms of the [GNU General Public License](LICENSE), version 3 or (at your option) any later version. It comes with no warranty. An [additional permission](APP-STORE-EXCEPTION.md) allows it to be distributed through Apple's App Store and TestFlight.
 
 Everything it uses is free and open source, and keeps its own licence: RDKit (BSD-3-Clause), OPSIN (MIT), cdxmorph (MIT), Tauri (MIT or Apache-2.0), the bundled fonts (SIL Open Font License) and others listed in [THIRD-PARTY-NOTICES.md](THIRD-PARTY-NOTICES.md).
 
 Reaction animation (Chemistry ▸ Animate ▸ Animate Reaction) is based on [cdxmorph](https://github.com/rshenvi/cdxmorph) by Ryan Shenvi (Shenvi Lab), used with permission.
 
-ChemDraw is a trademark of Revvity, Inc. Chem Illustrator is not made by, connected with or endorsed by Revvity; it reads and writes ChemDraw's published CDXML and CDX file formats so that your files work in both.
+ChemDraw is a trademark of Revvity Signals Software, Inc. Chemweave is not made by, connected with or endorsed by Revvity; it reads and writes ChemDraw's published CDXML and CDX file formats so that your files work in both.
+
+Microsoft, Word, Excel, PowerPoint and Office are trademarks of the Microsoft group of companies. Chemweave is not made by, connected with or endorsed by Microsoft.

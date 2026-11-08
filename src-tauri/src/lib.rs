@@ -145,7 +145,7 @@ fn write_bytes(path: &str, bytes: &[u8]) -> Result<(), String> {
 
 /// The person's settings file (key map and preferences): settings.json in the app's
 /// settings folder, e.g. %APPDATA%\io.github.nathanohare.chemillustrator on Windows, or in the
-/// "Chem Illustrator Data" folder next to a portable copy.
+/// "Chemweave Data" folder next to a portable copy.
 pub(crate) fn settings_file(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     use tauri::Manager;
     if let Some(dir) = portable::settings_folder() {
@@ -542,7 +542,7 @@ pub fn run() {
             xtb::xtb_stop
         ])
         .build(tauri::generate_context!())
-        .expect("error while running Chem Illustrator")
+        .expect("error while running Chemweave")
         .run(|_app, _event| {
             // macOS hands over files opened from Finder as an event, not on the command line
             #[cfg(target_os = "macos")]

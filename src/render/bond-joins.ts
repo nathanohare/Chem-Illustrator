@@ -12,6 +12,11 @@ export interface WideEnd {
   h: number;
   farPlus: Vec;
   farMinus: Vec;
+  /**
+   * A stroked line (a plain or dashed bond) rather than a band: the bands beside it are mitred
+   * into its edges, but its own end is left as it is, so any filler the join needs goes to the band.
+   */
+  line?: boolean;
 }
 
 /** Where a joined end's two corners go, and any filler triangles it owns. */
@@ -34,7 +39,10 @@ function meet(p1: Vec, d1: Vec, p2: Vec, d2: Vec): { at: Vec; t1: number; t2: nu
  * neighbouring bands (going round the atom) has its facing edges carried to where they cross,
  * so the outline has no notch on the outside of the turn and no step on the inside (where a
  * wedge's wide end is wider than the bold bond it meets). Where the edges cross too far away
- * (a very sharp turn) the band keeps its square end and a bevel fills the gap instead.
+ * (a very sharp turn) the band keeps its square end and a bevel fills the gap instead. Plain and
+ * dashed lines at the atom (`line` ends) take part too, so a bold bond or a wedge's wide end
+ * meeting a plain bond is mitred into it rather than leaving its square corner sticking out.
+ * Joins between two lines are left to lineMitres.
  */
 export function joinWideEnds(ends: WideEnd[]): Map<number, EndJoin> {
   const out = new Map<number, EndJoin>();
@@ -56,9 +64,16 @@ export function joinWideEnds(ends: WideEnd[]): Map<number, EndJoin> {
     const reflex = turn > Math.PI;
     // (inside a turn the edges cross ahead of the atom, outside it behind; where a wide wedge
     // meets a narrower bold bond one edge is cut short and the other carried on, either side)
+    if (a.line && b.line) continue;
     const ok = m && len(sub(m.at, a.at)) <= MITRE_LIMIT * Math.max(a.h, b.h) && m.t1 < 1 && m.t2 < 1;
-    if (ok) { ja.plus = m!.at; jb.minus = m!.at; continue; }
-    if (reflex) ja.fill.push([a.at, pa, pb]);
+    if (ok) {
+      ja.plus = m!.at; jb.minus = m!.at;
+      // a line's square end stops at the atom: the band fills the corner out to the mitre point
+      if (a.line) jb.fill.push([b.at, pa, m!.at]);
+      if (b.line) ja.fill.push([a.at, pb, m!.at]);
+      continue;
+    }
+    if (reflex) (a.line ? jb : ja).fill.push([a.at, pa, pb]);
   }
   return out;
 }

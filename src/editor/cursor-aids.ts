@@ -8,7 +8,7 @@ import type { Vec } from '../geom';
 export interface CursorAidPrefs {
   /** The angle of a bond, arrow or line being drawn, beside the pointer. */
   angle: boolean;
-  /** Its length too (off unless switched on in Settings ▸ Drawing). */
+  /** Its length too (off unless switched on in Settings ▸ Preferences). */
   length: boolean;
   /** What the modifier keys do, beside the pointer. */
   hints: boolean;
@@ -20,7 +20,7 @@ export interface CursorAidPrefs {
 
 export type LengthUnits = 'px' | 'mm' | 'in';
 
-/** The units the length beside the pointer can be written in (Settings ▸ Drawing). */
+/** The units the length beside the pointer can be written in (Settings ▸ Preferences). */
 export const LENGTH_UNITS: { value: LengthUnits; label: string }[] = [
   { value: 'px', label: 'Pixels' }, { value: 'mm', label: 'Millimeters' }, { value: 'in', label: 'Decimal inches' },
 ];

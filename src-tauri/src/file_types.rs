@@ -139,8 +139,11 @@ pub(crate) mod win {
     };
     use windows_sys::Win32::UI::Shell::{SHChangeNotify, SHCNE_ASSOCCHANGED, SHCNF_IDLIST};
 
+    // The registry names keep the app's first name (Chem Illustrator), so copies registered before the
+    // rename are found and updated; Windows shows ApplicationName, which is the current name.
     const APP: &str = "Chem Illustrator";
     const CAPABILITIES: &str = r"Software\Chem Illustrator\Capabilities";
+    const SHOWN_NAME: &str = "Chemweave";
 
     fn wide(s: &str) -> Vec<u16> {
         s.encode_utf16().chain(std::iter::once(0)).collect()
@@ -228,7 +231,7 @@ pub(crate) mod win {
             }
         }
         if any {
-            set_string(CAPABILITIES, Some("ApplicationName"), APP)?;
+            set_string(CAPABILITIES, Some("ApplicationName"), SHOWN_NAME)?;
             set_string(CAPABILITIES, Some("ApplicationDescription"), "Chemical structures, schemes, presentations, spreadsheets and documents")?;
             set_string(r"Software\RegisteredApplications", Some(APP), CAPABILITIES)?;
         } else {
