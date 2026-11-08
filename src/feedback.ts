@@ -4,7 +4,7 @@
 // It can also be opened as a new issue on GitHub (the person's own browser, to check and submit),
 // put in an email, or copied as plain text.
 
-export const REPO_URL = 'https://github.com/nathanohare/Chem-Illustrator';
+export const REPO_URL = 'https://github.com/nathanohare/Chemweave';
 /**
  * The feedback relay's address (a Cloudflare Worker, see feedback-relay/README.md). Empty turns
  * Send off: the window then offers Open on GitHub as its main button, as before. A build can point

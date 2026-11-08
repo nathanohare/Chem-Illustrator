@@ -42,7 +42,7 @@ Chemweave is free. If you'd like to help pay for its development, **Help ▸ Sup
 
 ## Straight on GitHub
 
-You can also go to <https://github.com/nathanohare/Chem-Illustrator/issues> and click **New issue**. Before you do, it's worth searching the open issues in case someone has already asked for the same thing: a thumbs-up on an existing issue helps decide what gets done first.
+You can also go to <https://github.com/nathanohare/Chemweave/issues> and click **New issue**. Before you do, it's worth searching the open issues in case someone has already asked for the same thing: a thumbs-up on an existing issue helps decide what gets done first.
 
 ## What makes a good report
 

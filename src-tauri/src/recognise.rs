@@ -11,7 +11,7 @@ use std::time::Duration;
 use tauri::Emitter;
 use tokio::sync::Notify;
 
-const RELEASES: &str = "https://github.com/nathanohare/Chem-Illustrator/releases/download";
+const RELEASES: &str = "https://github.com/nathanohare/Chemweave/releases/download";
 
 #[derive(serde::Deserialize)]
 struct PackFile {

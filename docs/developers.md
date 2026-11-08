@@ -9,10 +9,10 @@ Chemweave is written in TypeScript. The drawing runs in a web page; the desktop 
 You need Node.js once. Everything else is installed into this folder.
 
 1. **Install Node.js** (the LTS version, 24 or newer) from [nodejs.org](https://nodejs.org). The Windows installer is fine; keep the default options.
-2. **Get the code.** Either use GitHub Desktop (File > Clone repository > `nathanohare/chem-illustrator`), or in a terminal:
+2. **Get the code.** Either use GitHub Desktop (File > Clone repository > `nathanohare/Chemweave`), or in a terminal:
    ```
-   git clone https://github.com/nathanohare/chem-illustrator.git
-   cd chem-illustrator
+   git clone https://github.com/nathanohare/Chemweave.git
+   cd Chemweave
    ```
 3. **Install the parts it needs** (about 60 MB, once):
    ```
