@@ -67,6 +67,13 @@ describe('setIconSet', () => {
       expect(s.getAttribute('stroke')).toBe('currentColor');
     }
   });
+  it('puts back only markup it kept itself, never markup read from the page', () => {
+    document.body.innerHTML = '<button title="Add Bend"><svg data-ic-new=\'{"html":"<image href=x onerror=alert(1)>","key":"nope","attrs":[["onload","alert(1)"]]}\'><path d="M0 0"></path></svg></button>';
+    setIconSet('classic');
+    const svg = document.querySelector('svg')!;
+    expect(svg.innerHTML).toBe('<path d="M0 0"></path>');
+    expect(svg.hasAttribute('onload')).toBe(false);
+  });
   it('leaves drawings it doesn\'t know alone', () => {
     document.body.innerHTML = '<svg viewBox="0 0 24 24"><path d="M1 1h2"></path></svg>';
     expect(swapIcons(document.body)).toBe(0);

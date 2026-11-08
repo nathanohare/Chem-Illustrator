@@ -201,7 +201,7 @@ export class AnalysisBox extends DropBox {
       const k = document.createElement('span');
       k.className = 'cr-an-k';
       k.innerHTML = x.label;
-      k.dataset.short = x.short.replace(/<[^>]*>/g, '');
+      k.dataset.short = x.short.replace(/<[^>]*>/g, '').replace(/[<>]/g, '');
       const n = document.createElement('span');
       n.className = 'cr-an-v';
       n.textContent = x.value;
