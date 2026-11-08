@@ -252,9 +252,12 @@ class DocxWriter {
     pkg.relate(main, DOCX_REL.numbering, 'numbering.xml');
     pkg.add('word/numbering.xml', this.numbering(), DOCX_CT.numbering);
     pkg.relate(main, DOCX_REL.settings, 'settings.xml');
-    const settings = (embed: boolean) => `${HEAD}<w:settings xmlns:w="${W_NS}"><w:zoom w:percent="100"/>${this.t.pageColor ? '<w:displayBackgroundShape/>' : ''}${embed ? '<w:embedTrueTypeFonts/><w:saveSubsetFonts/>' : ''}${this.t.track ? '<w:trackRevisions/>' : ''}${protectionXml(this.t.protect)}<w:defaultTabStop w:val="720"/>${hyphenXml(this.t.hyphen)}${allHf(this.t).some((h) => h.oddEven) ? '<w:evenAndOddHeaders/>' : ''}` +
+    // Word's ids for the document, kept from the file or made afresh: without them Word 365 shows
+    // a comment's replies as comments of their own (laptop check 57)
+    const docIds = `<w14:docId w14:val="${this.t.kept?.docIds?.w14 ?? newDocId()}"/><w15:docId w15:val="${this.t.kept?.docIds?.w15 ?? newDocGuid()}"/>`;
+    const settings = (embed: boolean) => `${HEAD}<w:settings xmlns:w="${W_NS}" xmlns:mc="${MC_NS}" xmlns:w14="${W14_NS}" xmlns:w15="${W15_NS}" mc:Ignorable="w14 w15"><w:zoom w:percent="100"/>${this.t.pageColor ? '<w:displayBackgroundShape/>' : ''}${embed ? '<w:embedTrueTypeFonts/><w:saveSubsetFonts/>' : ''}${this.t.track ? '<w:trackRevisions/>' : ''}${protectionXml(this.t.protect)}<w:defaultTabStop w:val="720"/>${hyphenXml(this.t.hyphen)}${allHf(this.t).some((h) => h.oddEven) ? '<w:evenAndOddHeaders/>' : ''}` +
       `<w:characterSpacingControl w:val="doNotCompress"/>${notes}` +
-      `<w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/></w:compat>${this.t.kept?.vars ?? ''}</w:settings>`;
+      `<w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/></w:compat>${this.t.kept?.vars ?? ''}${docIds}</w:settings>`;
     pkg.add('word/settings.xml', settings(false), DOCX_CT.settings);
     // our own part: each structure's drawing, and each table as made here
     pkg.relate(main, DOCX_REL.customXml, '../customXml/item1.xml');
@@ -2003,4 +2006,14 @@ function changedCml(t: DocText): Map<number, string> {
     out.set(i, writeCml(o.contents, o.c4w.guid, parts[i].xml));
   }
   return out;
+}
+
+/** A new id for a Word document (settings' w14:docId): eight hex digits, below 80000000 as Word's are. */
+function newDocId(): string {
+  return (1 + Math.floor(Math.random() * 0x7ffffffe)).toString(16).toUpperCase().padStart(8, '0');
+}
+/** A new GUID for a Word document (settings' w15:docId), in braces as Word writes it. */
+function newDocGuid(): string {
+  const hex = (n: number) => Array.from({ length: n }, () => Math.floor(Math.random() * 16).toString(16).toUpperCase()).join('');
+  return `{${hex(8)}-${hex(4)}-4${hex(3)}-${'89AB'[Math.floor(Math.random() * 4)]}${hex(3)}-${hex(12)}}`;
 }
