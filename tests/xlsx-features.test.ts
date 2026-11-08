@@ -335,7 +335,7 @@ describe('sheet views and settings (X20)', () => {
     expect(plan).toMatch(/<autoFilter ref="A1:B2"><\/autoFilter><sortState ref="A2:B2"><sortCondition descending="1" ref="B2"\/><\/sortState>/);
     expect(plan).toMatch(/<pageSetup [^>]*firstPageNumber="5"[^>]* useFirstPageNumber="1"\/>.*<ignoredErrors><ignoredError sqref="A1:B2" numberStoredAsText="1"\/><\/ignoredErrors><\/worksheet>/);
     expect(part(saved, 'xl/worksheets/sheet2.xml')).toContain('<pageSetup firstPageNumber="1" useFirstPageNumber="1"/>');
-    expect(part(saved, 'xl/workbook.xml')).toContain('<calcPr calcId="191029" calcMode="manual" iterate="1" iterateCount="50" fullPrecision="0" fullCalcOnLoad="1"/>');
+    expect(part(saved, 'xl/workbook.xml')).toContain('<calcPr calcId="191029" calcMode="manual" iterate="1" iterateCount="50" fullPrecision="0"/>');
     // panes changed here: this program's own selection
     book.edit('freeze', () => book.sheets[1].setFrozen(2, 0));
     const again = part(await writeXlsx(book, pictures), 'xl/worksheets/sheet2.xml');

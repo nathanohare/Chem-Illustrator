@@ -279,6 +279,11 @@ export interface ExcelSheetKept {
   /** The sort Excel remembers for the sheet (18.3.1.92), and the error checks turned off for cells (18.3.1.51), as the elements. */
   sortState?: string;
   ignoredErrors?: string;
+  /**
+   * Row heights in points as the file gave them, by their size in pixels here, written back as
+   * they were (40 pt shows as 53 px, which is 39.75 pt; Excel on a 120 dpi screen writes 14.4).
+   */
+  rowPts?: Map<number, number>;
 }
 
 /** What a workbook says that only Excel uses: Protect Workbook (18.2.29) and a password to modify or read-only recommended (18.2.12). */
@@ -289,6 +294,12 @@ export interface ExcelBookKept {
   calcAttrs?: string;
   /** Pictures placed in cells and other rich values: their parts and value metadata (see xlsx-rich.ts). */
   richValues?: RichValues;
+  /**
+   * Every formula has the value Excel saved for it (worked out here, or kept): while nothing is
+   * changed, Excel is not asked to work them all out again on opening (fullCalcOnLoad, after
+   * which Excel can fit again the rows it fitted to what they held).
+   */
+  calculated?: true;
 }
 
 /**

@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 //
 // Excel files saved here as real Excel showed them (Office file audit, laptop checks in Excel 365):
-// Excel 365's #SPILL! and #CALC! cells, which it writes as rich values, are not counted as
-// pictures placed in cells.
+// row heights written back as the file gave them, without asking Excel to work every formula out
+// again when nothing has changed them (after which Excel fits rows again); and Excel 365's #SPILL!
+// and #CALC! cells, which it writes as rich values, not counted as pictures placed in cells.
 
 import { describe, it, expect } from 'vitest';
 import { unzipSync, strFromU8 } from 'fflate';
@@ -77,5 +78,41 @@ describe('#SPILL! and #CALC! cells are not pictures', () => {
   it('counts only the picture beside them', async () => {
     const { warnings } = await readXlsx(file(true));
     expect(warnings).toContain('1 cell holds a picture placed in it in Excel: shown as #VALUE! here, and kept for Excel unless the cell is changed.');
+  });
+});
+
+describe('row heights as Excel showed them (X21)', () => {
+  const sheet = (formulas: string) => '<sheetFormatPr defaultRowHeight="15"/><sheetData>' +
+    '<row r="1"><c r="A1"><v>2</v></c>' + formulas + '</row>' +
+    '<row r="2" ht="40"><c r="A2" t="inlineStr"><is><t>fitted by Excel</t></is></c></row>' +
+    '<row r="3" ht="14.4" customHeight="1"><c r="A3"><v>3</v></c></row></sheetData>';
+  const calcPr = (bytes: Uint8Array) => /<calcPr[^>]*\/>/.exec(part(bytes, 'xl/workbook.xml'))?.[0];
+
+  it('writes the heights back in the points the file gave', async () => {
+    const { book } = await readXlsx(excelBook([['Data', sheet('')]]));
+    const xml = part(await writeXlsx(book, pictures), 'xl/worksheets/sheet1.xml');
+    expect(xml).toContain('<row r="2" ht="40">');
+    expect(xml).toContain('<row r="3" ht="14.4" customHeight="1">');
+  });
+
+  it('asks Excel to work formulas out again only when there are some it needs to', async () => {
+    // no formulas
+    let book = (await readXlsx(excelBook([['Data', sheet('')]]))).book;
+    expect(calcPr(await writeXlsx(book, pictures))).toBe('<calcPr calcId="191029"/>');
+    // formulas with the values Excel saved, until something changes
+    book = (await readXlsx(excelBook([['Data', sheet('<c r="B1"><f>A1*2</f><v>4</v></c><c r="C1" t="str"><f>"n"&amp;A1</f><v>n2</v></c>')]]))).book;
+    expect(calcPr(await writeXlsx(book, pictures))).toBe('<calcPr calcId="191029"/>');
+    book.edit('type', () => book.sheets[0].setInput(0, 0, '5'));
+    expect(calcPr(await writeXlsx(book, pictures))).toBe('<calcPr calcId="191029" fullCalcOnLoad="1"/>');
+    // a value that differs from the one worked out here, or none
+    for (const f of ['<c r="B1"><f>A1*2</f><v>5</v></c>', '<c r="B1"><f>A1*2</f></c>']) {
+      book = (await readXlsx(excelBook([['Data', sheet(f)]]))).book;
+      expect(calcPr(await writeXlsx(book, pictures))).toBe('<calcPr calcId="191029" fullCalcOnLoad="1"/>');
+    }
+    // a file that asks for it itself
+    book = (await readXlsx(excelBook([['Data', sheet('<c r="B1"><f>A1*2</f><v>4</v></c>')]], {
+      workbook: (list) => `<workbook xmlns="${MAIN}" xmlns:r="${R}"><sheets>${list}</sheets><calcPr calcId="191029" fullCalcOnLoad="1"/></workbook>`,
+    }))).book;
+    expect(calcPr(await writeXlsx(book, pictures))).toBe('<calcPr calcId="191029" fullCalcOnLoad="1"/>');
   });
 });

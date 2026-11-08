@@ -600,6 +600,8 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
   let imageNo = 0, drawingNo = 0, tableNo = 0, chartNo = 0, notesNo = 0, pivotNo = 0;
   const pivotCaches: string[] = [];
   let anyDynamic = false;
+  // formulas, which Excel is asked to work out again on opening (unless they have the values Excel saved)
+  let anyFormula = false;
   // calls to defined names (LAMBDA ones) are dynamic array formulas in Excel
   const lambdaNames = new Set(book.names.map((n) => n.name.toUpperCase()));
   const nameCase = book.nameCase();
@@ -743,6 +745,7 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
         const dt = dataTableAt.get(k);
         const blockRef = arrayRef ?? legacyRef;
         const f = dt ? dataTableXml(dt) : formula === null ? '' : blockRef ? `<f t="array" ref="${blockRef}">${xml(formula)}</f>` : `<f>${xml(formula)}</f>`;
+        if (f) anyFormula = true;
         // a dynamic array formula's cell points at the metadata that says so
         // a picture placed in the cell (a rich value), while the cell is as it was read
         const vm = book.excel?.richValues ? pointerOf(cell) : undefined;
@@ -815,7 +818,7 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
       const custom = s.rowHeights.get(r) ?? auto.get(r);
       const fixed = s.rowHeights.has(r) || pictureRows.has(r);
       // (a shown row of a zeroHeight sheet says its height, to be sure Excel shows it)
-      const attrs = `${custom !== undefined ? ` ht="${ptFromPx(custom)}"${fixed ? ' customHeight="1"' : ''}` : zero && !s.hiddenRows.has(r) ? ` ht="${own.fileRowHeight!.pt}"` : ''}${s.hiddenRows.has(r) ? ' hidden="1"' : ''}${outlineAttrs(s.rowLevels, s.hiddenRows, r, !!s.outline?.summaryAbove)}`;
+      const attrs = `${custom !== undefined ? ` ht="${own.excel?.rowPts?.get(custom) ?? ptFromPx(custom)}"${fixed ? ' customHeight="1"' : ''}` : zero && !s.hiddenRows.has(r) ? ` ht="${own.fileRowHeight!.pt}"` : ''}${s.hiddenRows.has(r) ? ' hidden="1"' : ''}${outlineAttrs(s.rowLevels, s.hiddenRows, r, !!s.outline?.summaryAbove)}`;
       if (cells.length || attrs || zero) rowXml.push(`<row r="${r + 1}"${attrs}>${cells.join('')}</row>`);
     }
 
@@ -1054,8 +1057,8 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
     `<sheets>${sheetEntries.join('')}</sheets>` +
     (linkIds.length ? `<externalReferences>${linkIds.map((id) => `<externalReference r:id="${id}"/>`).join('')}</externalReferences>` : '') +
     (allNames.length ? `<definedNames>${allNames.join('')}</definedNames>` : '') +
-    // formulas are worked out again when Excel opens the file
-    `<calcPr calcId="191029"${book.excel?.calcAttrs ?? ''} fullCalcOnLoad="1"/>` + customWorkbookViewsXml(book) +
+    // formulas are worked out again when Excel opens the file (unless nothing has changed them since Excel saved it)
+    `<calcPr calcId="191029"${book.excel?.calcAttrs ?? ''}${anyFormula && !(book.excel?.calculated && !book.edits) ? ' fullCalcOnLoad="1"' : ''}/>` + customWorkbookViewsXml(book) +
     (pivotCaches.length ? `<pivotCaches>${pivotCaches.join('')}</pivotCaches>` : '') + '</workbook>',
     opts.macros ? CT.workbookMacros : CT.workbook);
   if (vba) {
@@ -1496,6 +1499,8 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
   let foreignPictures = 0;
   // the values formulas had in the file, for those this program can't work out
   const formulaValues = new Map<Sheet, Map<number, FileValue>>();
+  /** Formulas the file saved no value for. */
+  let unvalued = 0;
   const restored = { structures: 0, changed: 0 };
   book.build(() => {
     sheetEls.forEach((el, si) => {
@@ -1526,6 +1531,7 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
       const rowPt = s.fileRowHeight?.pt ?? 15;
       const listed = new Set<number>();
       const fitted = new Map<number, number>();
+      const rowPts = new Map<number, number>();
       let defW = fmtPr?.getAttribute('defaultColWidth') ? pxFromWidth(Number(fmtPr.getAttribute('defaultColWidth')))
         // a base width in digits, with padding and gridline, rounded up to 8 pixels (18.3.1.81)
         : fmtPr?.getAttribute('baseColWidth') ? Math.ceil((Number(fmtPr.getAttribute('baseColWidth')) * 7 + 5) / 8) * 8 : DEFAULT_COL_W;
@@ -1570,6 +1576,8 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
           if (isOn(row.getAttribute('customHeight'))) s.setRowHeight(r, pxFromPt(ht));
           // a height Excel fitted the row to (wrapped text, a bigger font): shown as Excel shows it
           else if (Number.isFinite(ht) && ht >= 0 && Math.abs(ht - rowPt) > 0.01) fitted.set(r, pxFromPt(ht));
+          // (the height in points as written, to write back)
+          if (Number.isFinite(ht) && ht >= 0 && !rowPts.has(pxFromPt(ht))) rowPts.set(pxFromPt(ht), ht);
         }
         listed.add(r);
         if (isOn(row.getAttribute('hidden'))) s.setRowHidden(r, true);
@@ -1648,7 +1656,7 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
                 let list = formulaValues.get(s);
                 if (!list) formulaValues.set(s, (list = new Map()));
                 list.set(keyOf(r, col), { v: value, ...(t === 'e' ? { error: true } : {}) });
-              }
+              } else unvalued++;
             }
           } else if (arrays.some((a) => inRange(a.R, r, col) && !(a.r === r && a.c === col))) {
             // spilled there: the formula fills it again (the file's value is kept for one this program can't work out)
@@ -1677,6 +1685,7 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
       if (defW !== DEFAULT_COL_W) for (let c = 0; c <= maxCol; c++) if (!widthSet.has(c)) s.setColWidth(c, defW);
       // (after the cells, which would otherwise take Excel's fit off)
       for (const [r, px] of fitted) s.setFittedRow(r, px);
+      if ([...rowPts].some(([px, pt]) => ptFromPx(px) !== pt)) s.excel = { ...s.excel, rowPts };
       // rows hidden unless listed: those up to the last listed are hidden here too (the rest of the sheet stays hidden in Excel)
       if (s.fileRowHeight?.zero) {
         let last = -1;
@@ -1907,6 +1916,9 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
   book.active = Math.min(Math.max(0, activeTab), book.sheets.length - 1);
   book.excel = richValues ? { ...bookKept, richValues } : bookKept;
   keepFileValues(book, formulaValues);
+  if (!unvalued && !date1904 && !isOn(kid(root, 'calcPr')?.getAttribute('fullCalcOnLoad')) && book.sheets.every((s) => !s.dataTables.length) && asSaved(book, formulaValues)) {
+    book.excel = { ...book.excel, calculated: true };
+  }
   if (richValues) keepPointers(book, pointers);
 
   // (only pictures, unless some are data types or the like)
@@ -1926,6 +1938,18 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
   if (restored.changed) warnings.push(`${restored.changed} structure or calculated cell${restored.changed > 1 ? 's were' : ' was'} changed in another program: ${restored.changed > 1 ? 'they show' : 'it shows'} what that program saved.`);
   if (notKept.size) warnings.push(`Not shown here, and left out if you save over this file: ${[...notKept].join(', ')}.`);
   return { book, warnings };
+}
+
+/** Does every formula have the value the file saved for it (worked out here, or kept from the file)? */
+function asSaved(book: Workbook, values: Map<Sheet, Map<number, FileValue>>): boolean {
+  const saved = fileValues(book);
+  for (const [s, list] of values) {
+    for (const [k, fv] of list) {
+      const now = saved(s, k) ?? s.values.get(k) ?? null;
+      if (fv.error ? !(isError(now) && now.code === fv.v) : !sameWrote(isError(now) ? null : now as Wrote, fv.v)) return false;
+    }
+  }
+  return true;
 }
 
 /** The cell each structure's picture (named "Structure A2" by the cell it was saved over) is over now. */
