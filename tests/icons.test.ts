@@ -137,7 +137,7 @@ describe('icons as shapes', () => {
     expect(xml).toContain('<a:custGeom>');
     expect(xml).toContain('name="Beaker');
     // filled red, no line
-    expect(xml).toContain('<a:solidFill><a:srgbClr val="C00000">');
+    expect(xml).toMatch(/<a:solidFill><a:srgbClr val="C00000"\/?>/);
     expect(xml).toContain('<a:ln><a:noFill/></a:ln>');
     const back = readPptx(bytes).slides[0].contents.shapes.find((s) => s.kind === 'geo')!;
     expect(back.geo).toBe('icon:beaker');
