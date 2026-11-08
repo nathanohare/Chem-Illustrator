@@ -484,6 +484,12 @@ const SHAPES: PaletteDef = {
     { name: 'shape-freeform', title: 'Freeform: click each point (drag to curve through it); click the first point to close, double-click to end open' },
   ],
 };
+// The Freeform pen stays in the desktop app only for now: in a browser it is left out of the
+// toolbox and can't be picked at all, until it works better there (kept in `npm run dev` to work on it)
+if (!isTauri() && !import.meta.env.DEV) {
+  SHAPES.items = SHAPES.items.filter((t) => t.name !== 'shape-freeform');
+  delete TOOLS['shape-freeform'];
+}
 
 const BRACKETS: PaletteDef = {
   palette: 'brackets',
