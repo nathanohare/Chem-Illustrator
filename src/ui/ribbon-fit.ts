@@ -5,7 +5,7 @@
 // many groups fold as need to: any that fit again afterwards open back up.
 //
 // A ribbon keeps one height whichever of its tabs is open (the height of its tallest tab), and
-// can be collapsed to its row of tabs (Ctrl+F1, a double-click on a tab, or the ˄ at the end of
+// can be collapsed to its row of tabs (Ctrl+F1, a double-click on a tab, or the ▴ at the end of
 // the tabs): then a click on a tab drops that tab's buttons over the work until they're used.
 
 /** The rows of groups: a tabbed ribbon's panels, or a plain ribbon itself. */
@@ -81,12 +81,13 @@ const canShrink = (g: HTMLElement) => {
  * Fit one row of groups to its width, as Office does: fewer gallery choices; then the Format
  * Favorites gallery folds; then, from the right, large buttons become small ones with their words;
  * then words off (icons only); then groups folded into one button each; the first group (Clipboard)
- * last of all.
+ * last of all; and last, the folded groups' names (pictures only).
  */
 export function fitRow(row: HTMLElement): void {
   if (!row.clientWidth) return;
   const groups = groupsOf(row);
-  for (const g of groups) g.classList.remove('rb-small', 'rb-compact', 'rb-folded', 'rb-popped');
+  row.classList.remove('rb-squeeze');
+  for (const g of groups) g.classList.remove('rb-small', 'rb-compact', 'rb-folded', 'rb-popped', 'rb-bare');
   const fold = (g: HTMLElement) => { foldButton(g); g.classList.add('rb-folded'); };
   // a group with nothing in it yet (Format Favorites before the first is saved) is only its button
   for (const g of groups) if (g.classList.contains('rb-fold-always')) fold(g);
@@ -127,6 +128,11 @@ export function fitRow(row: HTMLElement): void {
     g.classList.remove('rb-small');
     if (overflows(row)) g.classList.add('rb-small');
   }
+  // still too wide (the Simplified ribbon's folded groups keep their names, Font ▾): the names come
+  // off too, from the right, so the row never needs a scroll bar
+  for (let i = groups.length - 1; i >= 0 && overflows(row); i--) groups[i].classList.add('rb-bare');
+  // and what sits at the row's end (the Canvas's Analysis box) gives up width last of all
+  if (overflows(row)) row.classList.add('rb-squeeze');
 }
 
 /** Give a tabbed ribbon the height of its tallest tab, so it keeps one height whichever tab is open. */
@@ -185,11 +191,11 @@ function paintArrow(b: HTMLElement): void {
   const look = lookToggles.get(b.closest('.ribbon') as Element);
   if (look && !collapsed) {
     const simple = look.simple();
-    b.textContent = simple ? '˅' : '˄';
+    b.textContent = simple ? '▾' : '▴';
     b.title = simple ? 'Classic ribbon: two rows of buttons' : 'Simplified ribbon: one row of buttons, for more room';
     b.title += '. Double-click a tab (or Ctrl+F1) to fold the ribbon to its tabs';
   } else {
-    b.textContent = collapsed ? '˅' : '˄';
+    b.textContent = collapsed ? '▾' : '▴';
     b.title = collapsed ? 'Pin the ribbon open (Ctrl+F1)' : 'Collapse the ribbon to its tabs, for more room (Ctrl+F1). Click a tab to use its buttons';
   }
   b.setAttribute('aria-label', b.title);
@@ -200,7 +206,7 @@ function toggleCollapsed(): void {
   onCollapse(collapsed);
 }
 
-/** The ˄ button at the right end of each ribbon's row of tabs. */
+/** The ▴ button at the right end of each ribbon's row of tabs. */
 function addCollapseButtons(): void {
   for (const tabs of document.querySelectorAll<HTMLElement>('.ribbon .rb-tabs')) {
     if (tabs.querySelector(':scope > .rb-collapse')) continue;
@@ -289,5 +295,12 @@ export function watchRibbons(collapseChanged: (on: boolean) => void = () => {}):
   });
   document.addEventListener('dblclick', (e) => { if ((e.target as HTMLElement).closest?.('.rb-tabs [role="tab"]')) toggleCollapsed(); });
   window.addEventListener('resize', () => closePopped());
+  // a row still wider than the window (with no scroll bar) turns with the mouse wheel
+  document.addEventListener('wheel', (e) => {
+    const row = (e.target as HTMLElement).closest?.<HTMLElement>('.rb-panel');
+    if (!row || !overflows(row) || Math.abs(e.deltaY) <= Math.abs(e.deltaX)) return;
+    row.scrollLeft += e.deltaY;
+    e.preventDefault();
+  }, { passive: false });
   fitRibbons();
 }

@@ -245,6 +245,8 @@ import { preferredStyle, setPreferredStyle } from './document/cite-styles';
 import { layoutTable } from './table';
 import { SheetChem } from './sheet/sheet-chem';
 import { structureDoc, structureMolfile } from './sheet/structure-doc';
+import { cellName, colOf, rowOf } from './sheet/refs';
+import { checkDrawings, type PlacedDrawing } from './ui/mode-problems';
 import { StructurePictures } from './ui/structure-pictures';
 import { LabelTooltip } from './ui/label-tooltip';
 import { ToolTip } from './ui/tool-tip';
@@ -4133,6 +4135,8 @@ function enterTab(tab: Tab, opened: boolean): void {
   applyModeColours(tab.mode, modeColours);
   for (const el of document.querySelectorAll<HTMLElement>('.slides-only')) el.hidden = !slides;
   canvasRibbon.show(!deck && !sheet && !words && !design);
+  fileChecksKey = '';
+  placeProblemsBox();
   // another tab: back to Normal view
   if (sorterOn) {
     sorterOn = false;
@@ -11793,7 +11797,7 @@ function updateWarnings(): void {
   }
   const ignored = checks.ignoredCount() + [...doc.captions.values()].filter((c) => c.ignoreWarnings).length;
   $('#warnings-count').textContent = list.length ? String(list.length) : '';
-  warningsBox.set(list.length);
+  warningsBox.set(list.length, doc.atoms.size > 0);
   const MAX = 100;
   // the same problem in many places is one row, with how many
   const groups = groupWarnings(list);
@@ -11838,6 +11842,58 @@ function updateWarnings(): void {
     editor.changed();
   });
 }
+
+/** The Problems box's ribbon in each mode (the Canvas's is canvasRibbon's row of tabs). */
+const PROBLEMS_RIBBON: Partial<Record<Tab['mode'], string>> = { slides: '#ribbon', design: '#design-ribbon', sheet: '#sheet-ribbon', document: '#doc-ribbon' };
+/** A drawing made from a document's or a cell's structure, kept while that structure is (they are never changed in place). */
+const checkedDocs = new WeakMap<object, Doc>();
+
+/** Every drawing in a file that is not a Canvas, with where it is, for the Problems box. */
+function placedDrawings(tab: Tab): PlacedDrawing[] {
+  const t = ws.mainOf(tab);
+  const out: PlacedDrawing[] = [];
+  const docFor = (c: Contents, style: DocStyle) => {
+    let d = checkedDocs.get(c);
+    if (!d) checkedDocs.set(c, (d = structureDoc(c, style)));
+    return d;
+  };
+  if (t.deck) t.deck.slides.forEach((_, i) => out.push({ where: t.mode === 'design' ? 'Design' : `Slide ${i + 1}`, doc: t.deck!.docOf(i) }));
+  else if (t.document) {
+    let n = 0;
+    for (const id of usedObjects(t.document.t)) {
+      const o = t.document.t.objects[id];
+      if (o?.kind === 'drawing' && o.contents.atoms.length) out.push({ where: `Drawing ${++n}`, doc: docFor(o.contents, t.document.t.drawingStyle) });
+    }
+  } else if (t.book) {
+    for (const sh of t.book.sheets) for (const [key, c] of sh.cells) if (c.structure) out.push({ where: `${sh.name}!${cellName(rowOf(key), colOf(key))}`, doc: docFor(c.structure.contents, t.book.drawingStyle) });
+  }
+  return out;
+}
+
+/** The Problems box goes on the ribbon showing, in every mode; outside the Canvas it checks the file's structures (grayed out when it has none). */
+function placeProblemsBox(): void {
+  const tab = ws.active;
+  const sel = PROBLEMS_RIBBON[tab.mode];
+  const gear = sel ? document.querySelector(`${sel} > .rb-tabs > .rb-gear`) : null;
+  if (!gear) { canvasRibbon.tabEnd.append(warningsBox.button); warningsBox.setFile(null); return; }
+  if (warningsBox.button.nextElementSibling !== gear) gear.before(warningsBox.button);
+  checkFileProblems();
+}
+
+let fileChecksKey = '';
+/** Outside the Canvas: check the file's structures again (each slide's, cell's or drawing's checks are kept, so only what changed is redone). */
+function checkFileProblems(): void {
+  const tab = ws.active;
+  if (!PROBLEMS_RIBBON[tab.mode]) return;
+  const list = placedDrawings(tab);
+  // (nothing to redo while the same drawings are there unchanged)
+  const key = list.map((d) => `${d.where}:${d.doc.version}:${d.doc.atoms.size}`).join('|');
+  if (key === fileChecksKey && warningsBox.button.isConnected) return;
+  fileChecksKey = key;
+  warningsBox.setFile(checkDrawings(list), tab.mode === 'document' || tab.mode === 'sheet' ? 'Double-click a structure to open it in the drawing tools, where each problem is marked.' : 'Each problem is marked on its slide.');
+}
+// (a few seconds after a change is soon enough: a slide, cell or document gives no word of its own)
+setInterval(() => { if (!document.hidden && PROBLEMS_RIBBON[ws.active.mode]) checkFileProblems(); }, 2500);
 
 /** Chemistry > Check Structure: go to the next problem after the one selected. */
 /** Draw Next Intermediate and Check Arrows in the menus, or not (Settings ▸ Drawing). */
@@ -14413,7 +14469,6 @@ for (const id of ['#ribbon', '#design-ribbon']) {
   });
 }
 // the Beta mark beside the program's name says what beta means here
-$('#stage-badge').addEventListener('click', () => command('about'));
 
 renderTabs();
 updateTitle();
