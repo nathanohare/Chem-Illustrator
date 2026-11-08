@@ -2564,7 +2564,9 @@ class CdxmlWriter {
   private writeStack(): boolean {
     const doc = this.doc;
     // (the order was read from the file's own Z, so it says so already)
-    if (this.unchangedSinceRead()) return false;
+    // (unless a file written before #461 left a structure's atoms and bonds without a Z, which
+    // ChemDraw takes as the very back whatever the fragment's says)
+    if (this.unchangedSinceRead() && !this.bareFragments()) return false;
     const on = usesStacking(doc);
     let changed = this.pageTag(STACK_TAG, on ? '1' : null);
     if (!on) return changed;
@@ -2605,6 +2607,16 @@ class CdxmlWriter {
       changed = true;
     }
     return changed;
+  }
+
+  /** True when a fragment on the page has a Z of its own but an atom or bond in it has none. */
+  private bareFragments(): boolean {
+    if (!usesStacking(this.doc)) return false;
+    for (const f of Array.from(this.page.getElementsByTagName('fragment'))) {
+      if (!f.hasAttribute('Z')) continue;
+      if (kids(f).some((k) => (k.nodeName === 'n' || k.nodeName === 'b') && !k.hasAttribute('Z'))) return true;
+    }
+    return false;
   }
 
   /**
