@@ -2901,9 +2901,11 @@ dialog.settings-window { max-width: none; }
    button that is only a picture (Bullets, Align Left), one whose words are off (Cut, Copy, Format
    Painter with no words), and a folded group's picture beside its name (the Simplified ribbon) */
 .ribbon .cb-btn > svg:only-child { display: block; margin: auto; }
-:is(.rb-group.rb-compact, .canvas-ribbon.cr-simple .cr-clipboard) .rb-col > button:has(> .rb-lead) { display: inline-flex; align-items: center; justify-content: center; }
-:is(.rb-group.rb-compact, .canvas-ribbon.cr-simple .cr-clipboard) .rb-col > button > .rb-lead { display: inline-flex; }
-:is(.rb-group.rb-compact, .canvas-ribbon.cr-simple .cr-clipboard) .rb-col > button > .rb-lead :is(svg, .ci-ic) { vertical-align: 0; }
+/* (only Cut, Copy and Format Painter, which drop their words: a button that keeps its words keeps
+   the ribbon's usual line-up with the buttons above and below it) */
+:is(.rb-group.rb-compact, .canvas-ribbon.cr-simple .cr-clipboard) .rb-col > button:is([data-cmd='cut'], [data-cmd='copy'], [data-cmd='format-painter'], [data-sh='cut'], [data-sh='copy'], [data-sh='format-painter'], [data-doc='cut'], [data-doc='copy'], [data-doc='format-painter']):has(> .rb-lead) { display: inline-flex; align-items: center; justify-content: center; }
+:is(.rb-group.rb-compact, .canvas-ribbon.cr-simple .cr-clipboard) .rb-col > button:is([data-cmd='cut'], [data-cmd='copy'], [data-cmd='format-painter'], [data-sh='cut'], [data-sh='copy'], [data-sh='format-painter'], [data-doc='cut'], [data-doc='copy'], [data-doc='format-painter']) > .rb-lead { display: inline-flex; }
+:is(.rb-group.rb-compact, .canvas-ribbon.cr-simple .cr-clipboard) .rb-col > button:is([data-cmd='cut'], [data-cmd='copy'], [data-cmd='format-painter'], [data-sh='cut'], [data-sh='copy'], [data-sh='format-painter'], [data-doc='cut'], [data-doc='copy'], [data-doc='format-painter']) > .rb-lead :is(svg, .ci-ic) { vertical-align: 0; }
 .canvas-ribbon.cr-simple .rb-fold-btn > .rb-icon { display: inline-flex; align-items: center; line-height: 1; }
 .rb-fold-btn { display: none; }
 .rb-group.rb-folded > .rb-fold-btn { display: inline-flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 2px; align-self: stretch; padding: 3px 8px; font-size: var(--fs-sm); line-height: 1.15; white-space: nowrap; }
