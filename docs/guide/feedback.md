@@ -29,6 +29,10 @@ The program keeps a small error log **on your computer only**, and never sends i
 - **Help ▸ Open Log Folder** (desktop app) opens the folder that holds the log file, `log.txt`, in the app's data folder.
 - **View ▸ Developer Tools** adds an **Error Console** to the side panel, listing this session's errors and warnings (click one for where it happened). On Windows and Linux its **Inspector** button opens the web inspector (Ctrl+Shift+I also opens it). The Mac and iPad apps don't have the inspector, because the App Store doesn't allow it.
 
+## Supporting the project
+
+Chemweave is free. If you'd like to help pay for its development, **Help ▸ Support Chemweave** opens its [GitHub Sponsors page](https://github.com/sponsors/nathanohare) in your browser, where you can give monthly or once. Feedback and good bug reports help just as much.
+
 ## Straight on GitHub
 
 You can also go to <https://github.com/nathanohare/Chem-Illustrator/issues> and click **New issue**. Before you do, it's worth searching the open issues in case someone has already asked for the same thing: a thumbs-up on an existing issue helps decide what gets done first.
