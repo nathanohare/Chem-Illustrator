@@ -83,7 +83,7 @@ pub fn ole_close(id: u32) -> Result<(), String> {
 #[tauri::command]
 pub fn ole_object_folder() -> Result<String, String> {
     let stamp = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).map(|d| d.as_nanos()).unwrap_or(0);
-    let dir = std::env::temp_dir().join("Chem Illustrator objects").join(format!("{stamp:x}"));
+    let dir = std::env::temp_dir().join("Chemweave objects").join(format!("{stamp:x}"));
     std::fs::create_dir_all(&dir).map_err(|e| format!("Could not make a folder for the object: {e}"))?;
     Ok(dir.to_string_lossy().into_owned())
 }
@@ -188,7 +188,7 @@ pub(crate) mod win {
     pub const CLSID: GUID = GUID::from_u128(0x171931c4_e8b6_4d52_a649_5d43133b5231);
     const CLSID_TEXT: &str = "{171931C4-E8B6-4D52-A649-5D43133B5231}";
     const PROG_ID: &str = "ChemIllustrator.Drawing";
-    const NAME: &str = "Chem Illustrator Drawing";
+    const NAME: &str = "Chemweave Drawing";
     /// The clipboard format (and stream) the drawing travels in.
     const CDXML_FORMAT: &str = "Chem Illustrator CDXML";
     const STREAM: PCWSTR = w!("CDXML");
@@ -220,8 +220,8 @@ pub(crate) mod win {
         set_string(&format!(r"{c}\VersionIndependentProgID"), None, PROG_ID)?;
         set_string(&format!(r"{c}\Insertable"), None, "")?;
         set_string(&format!(r"{c}\DefaultIcon"), None, &format!("\"{exe}\",0"))?;
-        set_string(&format!(r"{c}\AuxUserType\2"), None, "Chem Illustrator")?;
-        set_string(&format!(r"{c}\AuxUserType\3"), None, "Chem Illustrator")?;
+        set_string(&format!(r"{c}\AuxUserType\2"), None, "Chemweave")?;
+        set_string(&format!(r"{c}\AuxUserType\3"), None, "Chemweave")?;
         // 16: no links into part of a drawing; 512: draws the same on any printer or screen
         set_string(&format!(r"{c}\MiscStatus"), None, "528")?;
         // menu text, menu flags, verb flags (2: shown on the container's menu)
@@ -767,7 +767,7 @@ pub(crate) mod win {
     /// "Object Descriptor": what the object is and how big (`size`: hundredths of a millimetre).
     pub fn object_descriptor(size: SIZE) -> Vec<u8> {
         let name: Vec<u16> = NAME.encode_utf16().chain(std::iter::once(0)).collect();
-        let source: Vec<u16> = "Chem Illustrator".encode_utf16().chain(std::iter::once(0)).collect();
+        let source: Vec<u16> = "Chemweave".encode_utf16().chain(std::iter::once(0)).collect();
         let head = std::mem::size_of::<OBJECTDESCRIPTOR>();
         let d = OBJECTDESCRIPTOR {
             cbSize: (head + 2 * (name.len() + source.len())) as u32,

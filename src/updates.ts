@@ -31,13 +31,13 @@ export const UPDATE_CHANNELS: { value: UpdateChannel; label: string }[] = [
 
 /** How far along the program is, shown beside its name and version. */
 export const STAGE = 'Beta';
-export const STAGE_NOTE = 'Chem Illustrator is in beta: it is still being built, new features arrive often, and some things may not work as they should yet. '
+export const STAGE_NOTE = 'Chemweave is in beta: it is still being built, new features arrive often, and some things may not work as they should yet. '
   + 'Save your work often, and please report anything that goes wrong with Help ▸ Report a Problem.';
 
 /** Updates only exist for the desktop app; the web version is always the newest. */
 export const canUpdate = isTauri();
 
-/** A portable copy: one with a "Chem Illustrator Data" folder next to it, which holds its settings. */
+/** A portable copy: one with a "Chemweave Data" folder next to it, which holds its settings. */
 export interface PortableInfo {
   folder: string;
   /** False on a locked or read-only drive: settings are then kept on the computer. */

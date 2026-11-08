@@ -1,10 +1,10 @@
 # Your libraries and Find Structure in Files
 
-This page covers the two libraries Chem Illustrator keeps for you between sessions, shared by every file and every mode: your **reference library** and your **compound library**. It also covers **File ▸ Find Structure in Files…**, which searches a folder of your files for a structure.
+This page covers the two libraries Chemweave keeps for you between sessions, shared by every file and every mode: your **reference library** and your **compound library**. It also covers **File ▸ Find Structure in Files…**, which searches a folder of your files for a structure.
 
 ## Where the libraries are kept
 
-Both libraries live in one file. By default it is in the program's own data folder (in the web version, the browser's storage for the page). In the desktop app, **Chemistry ▸ Compound Library ▸ Library Location…** (also **Library Location…** in the reference window) lets you keep it in a folder you pick instead, such as one in OneDrive or on a group drive. The folder then holds `Chem Illustrator Library.json` and a `Chem Illustrator Library PDFs` folder for attached PDFs.
+Both libraries live in one file. By default it is in the program's own data folder (in the web version, the browser's storage for the page). In the desktop app, **Chemistry ▸ Compound Library ▸ Library Location…** (also **Library Location…** in the reference window) lets you keep it in a folder you pick instead, such as one in OneDrive or on a group drive. The folder then holds `Chemweave Library.json` and a `Chemweave Library PDFs` folder for attached PDFs.
 
 Each save reads what is in the file first and merges it in, so two computers (or two people) using the same folder keep each other's changes. If both change the same reference or compound, the later change wins. Moving the library to a new folder merges what is already there with what you have.
 

@@ -81,8 +81,8 @@ export async function fileTypesPage(host: FileTypesHost): Promise<void> {
     note(host.platform === 'web'
       ? 'The web version opens files from File ▸ Open, or dropped on the window. The desktop app can be opened from your files directly.'
       : host.platform === 'mac'
-        ? 'Chem Illustrator is offered for .cdxml, .cdx, .cds, .mol, .sdf, .rxn, .mrv, .ket, .cml, .docx, .pptx and .xlsx files: right-click a file in Finder and choose Open With. To always open a kind of file here, choose File ▸ Get Info in Finder, pick Chem Illustrator under Open with, and click Change All.'
-        : 'Chem Illustrator is offered for .cdxml, .cdx, .cds, .mol, .sdf, .rxn, .mrv, .ket, .cml, .docx, .pptx and .xlsx files in your file manager\'s Open With menu. Your desktop\'s settings (Default Applications) choose which program opens each kind of file.');
+        ? 'Chemweave is offered for .cdxml, .cdx, .cds, .mol, .sdf, .rxn, .mrv, .ket, .cml, .docx, .pptx and .xlsx files: right-click a file in Finder and choose Open With. To always open a kind of file here, choose File ▸ Get Info in Finder, pick Chemweave under Open with, and click Change All.'
+        : 'Chemweave is offered for .cdxml, .cdx, .cds, .mol, .sdf, .rxn, .mrv, .ket, .cml, .docx, .pptx and .xlsx files in your file manager\'s Open With menu. Your desktop\'s settings (Default Applications) choose which program opens each kind of file.');
     subhead('Documents from Other Programs');
     form.append(figRow);
     const cancel = document.createElement('button');
@@ -97,7 +97,7 @@ export async function fileTypesPage(host: FileTypesHost): Promise<void> {
     form.append(buttons);
     form.addEventListener('submit', (e) => { e.preventDefault(); saveFigures(); done(); });
   } else {
-    subhead('File Types', 'Checked file types list Chem Illustrator under Open With in Explorer. Your default programs (ChemDraw, Word, PowerPoint, Excel) don\'t change.');
+    subhead('File Types', 'Checked file types list Chemweave under Open With in Explorer. Your default programs (ChemDraw, Word, PowerPoint, Excel) don\'t change.');
     const now = new Set(await host.get().catch(() => [] as string[]));
     const boxes = new Map<string, HTMLInputElement>();
     for (const t of FILE_TYPES) {
@@ -114,7 +114,7 @@ export async function fileTypesPage(host: FileTypesHost): Promise<void> {
     }
     const defaults = document.createElement('p');
     defaults.className = 'ask-help muted';
-    defaults.textContent = 'To open a kind of file here when you double-click it, make Chem Illustrator its default in Windows Settings. Windows asks you to choose there itself; no program is allowed to make itself the default.';
+    defaults.textContent = 'To open a kind of file here when you double-click it, make Chemweave its default in Windows Settings. Windows asks you to choose there itself; no program is allowed to make itself the default.';
     const open = document.createElement('button');
     open.type = 'button';
     open.textContent = 'Choose Defaults in Windows Settings…';
@@ -132,7 +132,7 @@ export async function fileTypesPage(host: FileTypesHost): Promise<void> {
     objRow.append(objBox, objName);
     const objHelp = document.createElement('p');
     objHelp.className = 'ask-help muted';
-    objHelp.textContent = 'Pasted drawings become Chem Illustrator objects: double-click one in Word to edit it here, and Save updates it. Otherwise they paste as pictures (still editable when copied back here). Also in Word under Insert ▸ Object.';
+    objHelp.textContent = 'Pasted drawings become Chemweave objects: double-click one in Word to edit it here, and Save updates it. Otherwise they paste as pictures (still editable when copied back here). Also in Word under Insert ▸ Object.';
     foldIntoInfo(objHelp, objName);
     subhead('Word, PowerPoint and Excel');
     form.append(objRow, objHelp, figRow);
@@ -155,7 +155,7 @@ export async function fileTypesPage(host: FileTypesHost): Promise<void> {
         // (said only when the list changed)
         if (types.length !== now.size || types.some((t) => !now.has(t))) {
           await host.set(types);
-          host.flash(types.length ? `Chem Illustrator is now under "Open with" for ${types.map((t) => `.${t}`).join(', ')}.` : 'Chem Illustrator is off every "Open with" list.');
+          host.flash(types.length ? `Chemweave is now under "Open with" for ${types.map((t) => `.${t}`).join(', ')}.` : 'Chemweave is off every "Open with" list.');
         }
       } catch (err) {
         host.flash(String(err));

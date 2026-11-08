@@ -8,7 +8,7 @@ use std::path::{Path, PathBuf};
 
 /// The folder recovery copies and versions go in: "Kept" in the app's local data folder
 /// (on Windows %LOCALAPPDATA%\io.github.nathanohare.chemillustrator\Kept), or in the
-/// "Chem Illustrator Data" folder of a portable copy.
+/// "Chemweave Data" folder of a portable copy.
 pub(crate) fn root(app: &tauri::AppHandle) -> Result<PathBuf, String> {
     use tauri::Manager;
     if let Some(dir) = crate::portable::settings_folder() {

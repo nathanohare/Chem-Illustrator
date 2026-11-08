@@ -99,7 +99,7 @@ export const REAGENT_SAFETY: KbTable = {
   about: 'Bench hazard tier (1 extraordinary, 2 high, 3 standard, 4 low; Not rated when no open source has data) from measured numbers and the harmonized EU classification, with the numbers behind it. Several thousand compounds; one that isn\'t here can be rated live from PubChem. A guide only: read the SDS and follow your institution\'s rules.',
   columns: [
     { key: 'name', label: 'Compound' },
-    { key: 'tier', label: 'Tier', filter: true, narrow: true, numeric: true, info: 'Bench hazard tier, worked out by Chem Illustrator from open data: NIOSH IDLH, LD50 and LC50 values, the harmonized EU hazard statements and named cases (HF, cyanides, phosgene…). 1 extraordinary, 2 high, 3 standard handling, 4 low. Not rated: no open data. It says how careful to be at the bench, not how green a compound is, and it is not a legal classification: read the SDS. The Why column gives the reasons.' },
+    { key: 'tier', label: 'Tier', filter: true, narrow: true, numeric: true, info: 'Bench hazard tier, worked out by Chemweave from open data: NIOSH IDLH, LD50 and LC50 values, the harmonized EU hazard statements and named cases (HF, cyanides, phosgene…). 1 extraordinary, 2 high, 3 standard handling, 4 low. Not rated: no open data. It says how careful to be at the bench, not how green a compound is, and it is not a legal classification: read the SDS. The Why column gives the reasons.' },
     { key: 'why', label: 'Why' },
     { key: 'idlh', label: 'IDLH', numeric: true },
     { key: 'oral', label: 'LD50 oral' },
@@ -123,7 +123,7 @@ export const REAGENT_SAFETY: KbTable = {
     { label: 'Hazardous Substances Data Bank (LD50, LC50, vapor pressure), via PubChem', url: 'https://pubchem.ncbi.nlm.nih.gov/source/hsdb' },
     { label: 'NOAA CAMEO Chemicals (reactivity alerts)', url: 'https://cameochemicals.noaa.gov/' },
     { label: 'EU Regulation 1272/2008, Annex VI (harmonized classification)', url: 'https://eur-lex.europa.eu/eli/reg/2008/1272/oj' },
-    { label: 'Tiers, badges, Have ready and incidents written for Chem Illustrator' },
+    { label: 'Tiers, badges, Have ready and incidents written for Chemweave' },
     { label: 'Skin Kp estimated with the Potts–Guy equation, Pharm. Res. 1992, 9, 663 (log Kow from HSDB, else PubChem XLogP3)', url: 'https://doi.org/10.1023/A:1015810312465' },
   ],
   links: rowLinks,

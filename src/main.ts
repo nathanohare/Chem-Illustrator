@@ -5592,7 +5592,7 @@ function dragTab(e: PointerEvent, el: HTMLElement, t: Tab): void {
 
 let lastTitle = '';
 function updateTitle(): void {
-  const t = `${ws.active.dirty ? '• ' : ''}${ws.active.name} – Chem Illustrator`;
+  const t = `${ws.active.dirty ? '• ' : ''}${ws.active.name} – Chemweave`;
   if (t === lastTitle) return;
   lastTitle = t;
   document.title = t;
@@ -8053,7 +8053,7 @@ function modeLoaded(mode: 'sheet' | 'document'): void {
 
 /** Sheet or document mode's code didn't load (a broken install, or the web version gone offline). */
 function modeFailed(err: unknown): void {
-  void showError(`This part of Chem Illustrator could not be loaded: ${String(err)}. Restart it and try again.`);
+  void showError(`This part of Chemweave could not be loaded: ${String(err)}. Restart it and try again.`);
 }
 
 // both load in idle time soon after start-up, so the first sheet or document opens at once
@@ -8947,11 +8947,12 @@ const COMMANDS: Record<string, () => unknown> = {
   'user-guide': () => void guide.open(),
   'help-here': () => { const at = guideSpot(menuMode(), editor.tool.kind); void guide.open(at.page, at.anchor); },
   'send-feedback': () => feedback.open(),
-  about: () => void appVersion().then((v) => ask('About Chem Illustrator', [], {
+  about: () => void appVersion().then((v) => ask('About Chemweave', [], {
     noCancel: true,
     note: `${STAGE_NOTE} Version ${v === 'web' ? 'for the browser' : v} (${STAGE.toLowerCase()}). Free software under the GNU General Public License, version 3: `
-      + 'see the license and the source on GitHub (github.com/nathanohare/Chem-Illustrator). ChemDraw is a trademark of Revvity Signals; '
-      + 'Chem Illustrator is not made by or affiliated with Revvity Signals.',
+      + 'see the license and the source on GitHub (github.com/nathanohare/Chem-Illustrator). ChemDraw is a trademark of Revvity Signals Software, Inc. '
+      + 'Microsoft, Word, Excel, PowerPoint and Office are trademarks of the Microsoft group of companies. '
+      + 'Chemweave was formerly called Chem Illustrator, and is not made by, connected with or endorsed by Revvity or Microsoft.',
   })),
   'report-problem': () => feedback.open('problem'),
   'copy-diagnostics': () => copyText(diagnosticsText(), 'Copied the diagnostics: paste them into a bug report or message.'),
@@ -10089,7 +10090,7 @@ let versionText = canUpdate ? '' : 'Web version';
 void Promise.all([appVersion(), portableInfo()]).then(([v, portable]) => {
   versionText = canUpdate ? `Version ${v} ${STAGE.toLowerCase()}${portable ? ' (portable)' : ''}` : `Web version (${STAGE.toLowerCase()})`;
   diagnostics.version = versionText;
-  if (portable && !portable.writable) flash(`This portable copy can’t write to its “Chem Illustrator Data” folder (a locked or read-only drive), so settings are kept on this computer instead.`, 8000);
+  if (portable && !portable.writable) flash(`This portable copy can’t write to its “Chemweave Data” folder (a locked or read-only drive), so settings are kept on this computer instead.`, 8000);
   const el = document.querySelector('#app-version');
   if (el) el.textContent = versionText;
 });
@@ -10118,7 +10119,7 @@ function errorNotice(e: LogEntry): void {
  */
 function unexpectedCloseNotice(c: UnexpectedClose): void {
   const when = `${stamp(c.beat).slice(11, 16)} on ${stamp(c.beat).slice(0, 10)}`;
-  notice('unexpected-close', 'Chem Illustrator closed unexpectedly last time',
+  notice('unexpected-close', 'Chemweave closed unexpectedly last time',
     `It stopped without closing (last running at ${when}). Reporting it, with the log of what it was doing, helps find the cause.`, [
       { label: 'Report It…', main: true, run: () => feedback.open('problem', errorReport(diagnostics, { closed: c })) },
       { label: 'Dismiss', run: () => {} },
@@ -10129,7 +10130,7 @@ function unexpectedCloseNotice(c: UnexpectedClose): void {
 function diagnosticsText(): string {
   const about = Object.entries(feedback.about()).map(([k, v]) => `${k}: ${v}`).join('\n');
   const log = diagnostics.logText();
-  return `Chem Illustrator diagnostics\n${about}\n\n${log.length > 20_000 ? `…\n${log.slice(-20_000)}` : log}`;
+  return `Chemweave diagnostics\n${about}\n\n${log.length > 20_000 ? `…\n${log.slice(-20_000)}` : log}`;
 }
 
 async function openLogFolder(): Promise<void> {
@@ -10370,7 +10371,7 @@ function convertDeckChemdraw(deck: Deck): void {
 
 /** Settings ▸ General: how structures are saved in Word and PowerPoint files. */
 const STRUCTURES_AS = [{ value: 'pictures', label: 'Pictures (SVG and PNG)' }, { value: 'chemdraw', label: 'ChemDraw objects' }];
-const STRUCTURES_AS_HELP = 'ChemDraw objects open in ChemDraw when double-clicked in Word or PowerPoint, on computers that have ChemDraw; elsewhere they show as pictures. Pictures (SVG and PNG) look the same in every program, including Google Docs, LibreOffice and Keynote. Either way, Chem Illustrator opens them again as editable drawings. ChemDraw objects that came in with a file stay ChemDraw objects.';
+const STRUCTURES_AS_HELP = 'ChemDraw objects open in ChemDraw when double-clicked in Word or PowerPoint, on computers that have ChemDraw; elsewhere they show as pictures. Pictures (SVG and PNG) look the same in every program, including Google Docs, LibreOffice and Keynote. Either way, Chemweave opens them again as editable drawings. ChemDraw objects that came in with a file stay ChemDraw objects.';
 
 /** Settings ▸ General: selecting, groups, linked text, and your name on tracked changes. */
 async function generalPreferences(): Promise<void> {
@@ -10735,7 +10736,7 @@ function currentSettings(): Settings {
 
 /** Save every setting in one file, to keep or to use on another computer. */
 async function exportSettings(say: (text: string) => void = flash): Promise<void> {
-  const target = await saveFileDialog('Chem Illustrator settings.json', SETTINGS_FILE).catch((e) => { say(String(e)); return null; });
+  const target = await saveFileDialog('Chemweave settings.json', SETTINGS_FILE).catch((e) => { say(String(e)); return null; });
   if (!target) return;
   await writeFile(target.ref, target.name, exportText(currentSettings()), SETTINGS_FILE).then(
     () => say(`Saved every setting in ${target.name}. Import it on another computer (Edit > Settings File > Import Settings) to set that one up the same.`),
@@ -10748,7 +10749,7 @@ async function importSettingsFile(say: (text: string) => void = flash): Promise<
   const got = await openFileDialog([SETTINGS_FILE]).catch((e) => { say(String(e)); return null; });
   if (!got) return;
   const read = importSettings(got.text, currentSettings());
-  if (!read) { say(`${got.name} isn't a Chem Illustrator settings file (use one saved with Export Settings).`); return; }
+  if (!read) { say(`${got.name} isn't a Chemweave settings file (use one saved with Export Settings).`); return; }
   applySettings(read.settings);
   storeSettings();
   say(read.only === 'hotkeys' ? `Using the keys from ${got.name}.` : `Now using the settings from ${got.name}: shortcuts, toolboxes, preferences, templates, abbreviations, styles and palettes. Recent files are unchanged.`);
@@ -10819,7 +10820,7 @@ const hotkeysDialog = new HotkeysDialog({
     set: (v) => { editor.options.stickyHotspot = v; storeSettings(); },
   },
   exportKeys: async () => {
-    const target = await saveFileDialog('Chem Illustrator hotkeys.json', KEYMAP_FILE).catch((e) => { hotkeysDialog.say(String(e)); return null; });
+    const target = await saveFileDialog('Chemweave hotkeys.json', KEYMAP_FILE).catch((e) => { hotkeysDialog.say(String(e)); return null; });
     if (!target) return;
     const text = JSON.stringify({ app: 'Chem Illustrator', kind: 'hotkeys', version: 1, hotkeys: keymap.overrides() }, null, 2) + '\n';
     await writeFile(target.ref, target.name, text, KEYMAP_FILE).then(

@@ -1,6 +1,6 @@
 # Third-party notices
 
-Chem Illustrator is licensed under the GNU General Public License, version 3 or later (see `LICENSE`). It ships the following open-source software, each part under its own licence, all of which allow it to be shipped with a GPL-3.0 program. (Apache-2.0 parts need GPL version 3, which is why the app uses version 3 or later rather than version 2.)
+Chemweave is licensed under the GNU General Public License, version 3 or later (see `LICENSE`). It ships the following open-source software, each part under its own licence, all of which allow it to be shipped with a GPL-3.0 program. (Apache-2.0 parts need GPL version 3, which is why the app uses version 3 or later rather than version 2.)
 
 | Package | Used for | Licence |
 |---|---|---|
@@ -271,7 +271,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 The Apache License 2.0, which covers TeaVM, the StAX API and PDF.js, is in `opsin-js/licences/Apache-2.0.txt`.
 
-Chem Illustrator replaces two of OPSIN's classes (`ResourceGetter` and `AutomatonInitialiser`, which load OPSIN's data files) and stands in for the Log4j logging calls; see `opsin-js/README.md`. The rest of OPSIN is unchanged.
+Chemweave replaces two of OPSIN's classes (`ResourceGetter` and `AutomatonInitialiser`, which load OPSIN's data files) and stands in for the Log4j logging calls; see `opsin-js/README.md`. The rest of OPSIN is unchanged.
 
 ## dk.brics.automaton licence
 
@@ -342,7 +342,7 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-The files in `src/morph/` keep this notice (they carry `SPDX-License-Identifier: MIT`); the rest of Chem Illustrator is GPL-3.0-or-later.
+The files in `src/morph/` keep this notice (they carry `SPDX-License-Identifier: MIT`); the rest of Chemweave is GPL-3.0-or-later.
 
 ## fflate licence
 

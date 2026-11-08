@@ -577,7 +577,7 @@ class Writer {
     const masterRel = pkg.relate(P, REL.slideMaster, 'slideMasters/slideMaster1.xml');
     // a PowerPoint template's own theme (its artwork's colors and styles refer to it), else ours
     const keptTheme = deck.master.art?.theme ? this.keptTheme(deck.master) : null;
-    pkg.add('ppt/theme/theme1.xml', keptTheme ?? theme(deck.master, deck.master.template || 'Chem Illustrator'), CT.theme);
+    pkg.add('ppt/theme/theme1.xml', keptTheme ?? theme(deck.master, deck.master.template || 'Chemweave'), CT.theme);
     if (keptTheme) this.artIds.theme = true;
     pkg.relate('ppt/slideMasters/slideMaster1.xml', REL.theme, '../theme/theme1.xml');
     // layouts first, so the master can list them
@@ -2008,13 +2008,13 @@ function theme(m: Master, name: string): string {
   const fmt = (inner: string) => `<a:solidFill><a:schemeClr val="phClr">${inner}</a:schemeClr></a:solidFill>`;
   const ln = (w: number) => `<a:ln w="${w}" cap="flat" cmpd="sng" algn="ctr"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:prstDash val="solid"/><a:miter lim="800000"/></a:ln>`;
   return `${HEAD}<a:theme xmlns:a="${NS.a}" name="${xml(name)}"><a:themeElements>` +
-    `<a:clrScheme name="Chem Illustrator"><a:dk1><a:srgbClr val="${hex6(m.textColor)}"/></a:dk1><a:lt1><a:srgbClr val="FFFFFF"/></a:lt1>` +
+    `<a:clrScheme name="Chemweave"><a:dk1><a:srgbClr val="${hex6(m.textColor)}"/></a:dk1><a:lt1><a:srgbClr val="FFFFFF"/></a:lt1>` +
     `<a:dk2><a:srgbClr val="1D2330"/></a:dk2><a:lt2><a:srgbClr val="EEF0F3"/></a:lt2>` +
     accents.map((c, i) => `<a:accent${i + 1}><a:srgbClr val="${c}"/></a:accent${i + 1}>`).join('') +
     `<a:hlink><a:srgbClr val="${hex6(HLINK_COLOUR)}"/></a:hlink><a:folHlink><a:srgbClr val="954F72"/></a:folHlink></a:clrScheme>` +
-    `<a:fontScheme name="Chem Illustrator"><a:majorFont><a:latin typeface="${xml(m.titleFont)}"/><a:ea typeface=""/><a:cs typeface=""/></a:majorFont>` +
+    `<a:fontScheme name="Chemweave"><a:majorFont><a:latin typeface="${xml(m.titleFont)}"/><a:ea typeface=""/><a:cs typeface=""/></a:majorFont>` +
     `<a:minorFont><a:latin typeface="${xml(m.bodyFont)}"/><a:ea typeface=""/><a:cs typeface=""/></a:minorFont></a:fontScheme>` +
-    `<a:fmtScheme name="Chem Illustrator"><a:fillStyleLst>${fmt('')}${fmt('<a:tint val="50000"/>')}${fmt('<a:shade val="80000"/>')}</a:fillStyleLst>` +
+    `<a:fmtScheme name="Chemweave"><a:fillStyleLst>${fmt('')}${fmt('<a:tint val="50000"/>')}${fmt('<a:shade val="80000"/>')}</a:fillStyleLst>` +
     `<a:lnStyleLst>${ln(6350)}${ln(12700)}${ln(19050)}</a:lnStyleLst>` +
     `<a:effectStyleLst><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle></a:effectStyleLst>` +
     `<a:bgFillStyleLst>${fmt('')}${fmt('<a:tint val="95000"/>')}${fmt('<a:shade val="90000"/>')}</a:bgFillStyleLst></a:fmtScheme>` +

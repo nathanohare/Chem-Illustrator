@@ -598,7 +598,7 @@ export async function writeOdt(t: DocText, deps: OdtDeps = {}): Promise<Uint8Arr
   const manifest = `<?xml version="1.0" encoding="UTF-8"?><manifest:manifest xmlns:manifest="${NS.manifest}" manifest:version="1.3"><manifest:file-entry manifest:full-path="/" manifest:version="1.3" manifest:media-type="${MIME}"/>` +
     ['content.xml', 'styles.xml', 'meta.xml'].map((p) => `<manifest:file-entry manifest:full-path="${p}" manifest:media-type="text/xml"/>`).join('') +
     Object.keys(pics).map((p) => `<manifest:file-entry manifest:full-path="${p}" manifest:media-type="image/${p.endsWith('.png') ? 'png' : p.endsWith('.svg') ? 'svg+xml' : p.endsWith('.gif') ? 'gif' : 'jpeg'}"/>`).join('') + '</manifest:manifest>';
-  const meta = `<?xml version="1.0" encoding="UTF-8"?><office:document-meta xmlns:office="${NS.office}" xmlns:meta="${NS.meta}" xmlns:dc="http://purl.org/dc/elements/1.1/" office:version="1.3"><office:meta><meta:generator>Chem Illustrator</meta:generator>${t.props?.title ? `<dc:title>${esc(t.props.title)}</dc:title>` : ''}</office:meta></office:document-meta>`;
+  const meta = `<?xml version="1.0" encoding="UTF-8"?><office:document-meta xmlns:office="${NS.office}" xmlns:meta="${NS.meta}" xmlns:dc="http://purl.org/dc/elements/1.1/" office:version="1.3"><office:meta><meta:generator>Chemweave</meta:generator>${t.props?.title ? `<dc:title>${esc(t.props.title)}</dc:title>` : ''}</office:meta></office:document-meta>`;
   // the mimetype first and uncompressed, as the standard asks
   return zipFiles([
     ['mimetype', strToU8(MIME), false],

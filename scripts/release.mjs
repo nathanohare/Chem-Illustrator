@@ -29,32 +29,32 @@ export function installers(version) {
     windows: {
       bundle: 'src-tauri/target/release/bundle',
       files: [
-        { dir: 'nsis', end: '-setup.exe', as: `Chem-Illustrator_${version}_x64-setup.exe`, signed: true },
-        { dir: 'msi', end: '.msi', as: `Chem-Illustrator_${version}_x64.msi` },
+        { dir: 'nsis', end: '-setup.exe', as: `Chemweave_${version}_x64-setup.exe`, signed: true },
+        { dir: 'msi', end: '.msi', as: `Chemweave_${version}_x64.msi` },
       ],
       // the app on its own, for portable copies: the zip to download (the app and its
-      // "Chem Illustrator Data" folder), and the bare app that portable copies update from
+      // "Chemweave Data" folder), and the bare app that portable copies update from
       portable: {
         exe: 'src-tauri/target/release/chem-illustrator.exe',
-        zip: `Chem-Illustrator_${version}_x64-portable.zip`,
-        update: `Chem-Illustrator_${version}_x64-portable.exe`,
+        zip: `Chemweave_${version}_x64-portable.zip`,
+        update: `Chemweave_${version}_x64-portable.exe`,
       },
     },
     macos: {
       // one app for both Apple silicon and Intel Macs
       bundle: 'src-tauri/target/universal-apple-darwin/release/bundle',
       files: [
-        { dir: 'dmg', end: '.dmg', as: `Chem-Illustrator_${version}_universal.dmg` },
+        { dir: 'dmg', end: '.dmg', as: `Chemweave_${version}_universal.dmg` },
         // made only when the updater's signing key is there
-        { dir: 'macos', end: '.app.tar.gz', as: `Chem-Illustrator_${version}_universal.app.tar.gz`, signed: true, anyVersion: true, updaterOnly: true },
+        { dir: 'macos', end: '.app.tar.gz', as: `Chemweave_${version}_universal.app.tar.gz`, signed: true, anyVersion: true, updaterOnly: true },
       ],
     },
     linux: {
       bundle: 'src-tauri/target/release/bundle',
       files: [
-        { dir: 'appimage', end: '.AppImage', as: `Chem-Illustrator_${version}_amd64.AppImage`, signed: true },
-        { dir: 'deb', end: '.deb', as: `Chem-Illustrator_${version}_amd64.deb` },
-        { dir: 'rpm', end: '.rpm', as: `Chem-Illustrator-${version}.x86_64.rpm` },
+        { dir: 'appimage', end: '.AppImage', as: `Chemweave_${version}_amd64.AppImage`, signed: true },
+        { dir: 'deb', end: '.deb', as: `Chemweave_${version}_amd64.deb` },
+        { dir: 'rpm', end: '.rpm', as: `Chemweave-${version}.x86_64.rpm` },
       ],
     },
   };
@@ -65,20 +65,20 @@ export async function portableZip(exe) {
   // loaded here, not at the top: the publish job runs this script without installing packages
   const { zipSync, strToU8 } = await import('fflate');
   return zipSync({
-    'Chem Illustrator/Chem Illustrator.exe': [exe, { level: 6 }],
-    'Chem Illustrator/Chem Illustrator Data/About this folder.txt': strToU8(PORTABLE_NOTE.replace(/\n/g, '\r\n')),
+    'Chemweave/Chemweave.exe': [exe, { level: 6 }],
+    'Chemweave/Chemweave Data/About this folder.txt': strToU8(PORTABLE_NOTE.replace(/\n/g, '\r\n')),
   });
 }
 
-const PORTABLE_NOTE = `This folder makes Chem Illustrator a portable copy. While it sits next to
-Chem Illustrator.exe, the app keeps your settings (hotkeys, preferences, styles, templates,
+const PORTABLE_NOTE = `This folder makes Chemweave a portable copy. While it sits next to
+Chemweave.exe, the app keeps your settings (hotkeys, preferences, styles, templates,
 recent files) here instead of on the computer, so you can run it from a flash drive or any
 folder without installing it.
 
 Keep this folder and the app together. Copy both to move your copy, settings and all.
 Delete this folder and the app keeps its settings on the computer, as an installed copy does.
 
-Help > Check for Updates replaces Chem Illustrator.exe with the newer version in place.
+Help > Check for Updates replaces Chemweave.exe with the newer version in place.
 
 Windows needs the Microsoft Edge WebView2 Runtime, which Windows 10 and 11 already have.
 `;
