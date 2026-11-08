@@ -34,11 +34,13 @@ export function iconHash(markup: string): string {
 const OLD_ATTRS = ['fill', 'stroke', 'stroke-width', 'stroke-linecap', 'stroke-linejoin', 'stroke-opacity', 'opacity'];
 
 /**
- * A swapped <svg> keeps its old markup and attributes in data-ic-new, to put back for Classic. It
- * is kept on the element itself (not in a table) so a copy of the button, such as a folded group
- * showing its first picture, can be put back too.
+ * A swapped <svg> keeps which old drawing it had (its hash) and its old attributes in data-ic-new,
+ * to put back for Classic. It is kept on the element itself (not in a table) so a copy of the
+ * button, such as a folded group showing its first picture, can be put back too. The old markup
+ * itself stays here in memory, keyed by that hash, so putting it back never reads markup from the page.
  */
-interface Before { html: string; attrs: [string, string][] }
+interface Before { key: string; attrs: [string, string][] }
+const OLD_MARKUP = new Map<string, string>();
 
 /** The words of the button or menu item an icon sits on (its tooltip, name and text). */
 function labelOf(svg: Element): string {
@@ -52,7 +54,8 @@ export function swapIcon(svg: SVGElement): boolean {
   if (svg.hasAttribute('data-ic-new')) return false;
   const html = svg.innerHTML;
   if (!html || html.length > 6000) return false;
-  const list = ICON_SWAPS[iconHash(html)];
+  const key = iconHash(html);
+  const list = ICON_SWAPS[key];
   if (!list) return false;
   let pick = list.find((s) => !s.only);
   if (list.some((s) => s.only)) {
@@ -60,7 +63,8 @@ export function swapIcon(svg: SVGElement): boolean {
     pick = list.find((s) => s.only && words.includes(s.only)) ?? pick;
   }
   if (!pick) return false;
-  const old: Before = { html, attrs: [...svg.attributes].map((a) => [a.name, a.value]) };
+  OLD_MARKUP.set(key, html);
+  const old: Before = { key, attrs: [...svg.attributes].map((a) => [a.name, a.value]) };
   for (const a of OLD_ATTRS) svg.removeAttribute(a);
   svg.setAttribute('viewBox', '0 0 24 24');
   svg.classList.add('ci-ic');
@@ -73,10 +77,12 @@ export function swapIcon(svg: SVGElement): boolean {
 function restoreIcon(svg: SVGElement): void {
   let old: Before;
   try { old = JSON.parse(svg.getAttribute('data-ic-new') ?? ''); } catch { return; }
-  if (!old || typeof old.html !== 'string' || !Array.isArray(old.attrs)) return;
+  if (!old || typeof old.key !== 'string' || !Array.isArray(old.attrs)) return;
+  const html = OLD_MARKUP.get(old.key);
+  if (html === undefined) return;
   for (const a of [...svg.attributes]) svg.removeAttribute(a.name);
-  for (const [n, v] of old.attrs) svg.setAttribute(n, v);
-  svg.innerHTML = old.html;
+  for (const [n, v] of old.attrs) if (typeof n === 'string' && !/^on/i.test(n)) svg.setAttribute(n, String(v));
+  svg.innerHTML = html;
 }
 
 /** Swap every drawing under `root` (and root itself). */
