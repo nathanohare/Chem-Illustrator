@@ -368,7 +368,7 @@ export function polymerFormulaHtml(ends: string, units: { text: string; formula:
 }
 
 /** The panel for a structure holding a polymer's repeat unit: its formula and the masses of the parts. */
-export function polymerHtml(r: FragmentResult, p: NonNullable<ReturnType<typeof withRepeats>['polymer']>): string {
+export function polymerHtml(p: NonNullable<ReturnType<typeof withRepeats>['polymer']>): string {
   const rows = p.units.map((u) => `<tr><th>Unit (${formulaHtml(u.formula)})<sub><i>${esc(u.text)}</i></sub></th><td>${u.exact.toFixed(4)}<br>${u.mw.toFixed(2)} g/mol</td></tr>`);
   if (p.ends) rows.push(`<tr><th>End groups ${formulaHtml(p.ends)}</th><td>${p.endExact.toFixed(4)}<br>${p.endMw.toFixed(2)} g/mol</td></tr>`);
   return `<div class="frag">
