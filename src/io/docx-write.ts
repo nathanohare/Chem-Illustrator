@@ -64,7 +64,7 @@ import {
 export interface DocxDeps {
   /** A drawing's picture for Word: PNG bytes, an SVG Word shows instead when it can, and its own size in points. */
   /** A drawing's picture: just round what is drawn, or a figure's whole area (`frame`, never cut short of what is drawn). */
-  picture(contents: Contents, style: DocStyle, frame?: FigureFrame): Promise<{ png: Uint8Array; svg?: string; w: number; h: number; x?: number; y?: number } | null>;
+  picture(contents: Contents, style: DocStyle, frame?: FigureFrame): Promise<{ png: Uint8Array; svg?: string; w: number; h: number; x?: number; y?: number; /** The same picture as an EMF, for a ChemDraw object to show until it is opened. */ emf?: Uint8Array } | null>;
   /** A PNG of an SVG picture, for Word versions that can't show SVG (w × h pixels). */
   svgToPng?(svg: string, w: number, h: number): Promise<Uint8Array>;
   /**
@@ -1112,7 +1112,7 @@ class DocxWriter {
     this.model.drawings[id] = { contents: o.contents, w: pic.w, h: pic.h, png: bytesHash(pic.png), cdx: bytesHash(cdx), alt, ...(o.ole ? { ole: o.ole } : {}) };
     const size = shownSize({ w: pic.w, h: pic.h }, o.scale ?? 1, this.textW);
     const img = this.media(main, pic.png, 'png');
-    return this.objectXml(main, { bytes: chemdrawObject(cdx, prog), type: OLE_TYPE, rel: OLE_REL, path: 'oleObject{n}.bin' }, prog, img, { w: pic.w, h: pic.h }, size, rPr, false, alt);
+    return this.objectXml(main, { bytes: chemdrawObject(cdx, prog, pic.emf ? { emf: pic.emf, w: pic.w, h: pic.h } : null), type: OLE_TYPE, rel: OLE_REL, path: 'oleObject{n}.bin' }, prog, img, { w: pic.w, h: pic.h }, size, rPr, false, alt);
   }
 
   private oleCount = 0;

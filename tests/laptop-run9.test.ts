@@ -6,6 +6,7 @@
 
 import { describe, expect, it } from 'vitest';
 import { chemdrawObject, chemdrawProg, progIdOf, setInstalledChemdrawProg } from '../src/io/ole-object';
+import { cfbStreams } from '../src/io/cfb';
 import { reactionOrder } from '../src/ui/energy-dialog';
 import { Doc } from '../src/model';
 import { plainMeasure } from '../src/chem/reaction';
@@ -26,6 +27,20 @@ describe('ChemDraw objects saved into Office files', () => {
     } finally {
       setInstalledChemdrawProg(null);
     }
+  });
+});
+
+describe('a ChemDraw object\'s picture', () => {
+  it('goes in an OlePres000 stream as ChemDraw writes it: an EMF and its size in HIMETRIC', () => {
+    const emf = new Uint8Array([1, 0, 0, 0, 9, 9, 9, 9]);
+    const streams = cfbStreams(chemdrawObject(new Uint8Array([86, 106, 67, 68]), 'ChemDraw_x64.Document.6.0', { emf, w: 72, h: 36 }));
+    const pres = streams.get('\u0002OlePres000')!;
+    expect(pres).toBeTruthy();
+    const v = new DataView(pres.buffer, pres.byteOffset, pres.byteLength);
+    expect([0, 1, 2, 3, 4, 5, 6, 7, 8, 9].map((i) => v.getUint32(4 * i, true))).toEqual([0xffffffff, 14, 4, 1, 0xffffffff, 2, 0, 2540, 1270, 8]);
+    expect([...pres.slice(40)]).toEqual([...emf]);
+    // without a picture there is none
+    expect(cfbStreams(chemdrawObject(new Uint8Array([86, 106, 67, 68]))).has('\u0002OlePres000')).toBe(false);
   });
 });
 
