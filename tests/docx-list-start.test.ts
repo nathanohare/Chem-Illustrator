@@ -63,6 +63,24 @@ describe('Word list numbers', () => {
     expect(listMarkers(again.doc.paras)).toEqual(want);
   });
 
+  it('keeps a deeper level\'s own start in a list numbered 5. then c) d)', async () => {
+    // one Word list whose levels are written differently (1. at the first, a) at the second), each with its own start
+    const nb = `<w:abstractNum w:abstractNumId="0"><w:multiLevelType w:val="multilevel"/>${lvl(0, 5)}${lvl(1, 3, 'lowerLetter', '%2)')}</w:abstractNum><w:num w:numId="1"><w:abstractNumId w:val="0"/></w:num>`;
+    const body = item('Five', 1) + item('C', 1, 1) + item('D', 1, 1) + item('Six', 1) + item('C again', 1, 1);
+    const { doc } = await readDocx(wordFile(body, nb));
+    const want = ['5.', 'c)', 'd)', '6.', 'c)'];
+    expect(listMarkers(doc.paras)).toEqual(want);
+    const out = await writeDocx(doc, deps);
+    const files = unzipSync(out);
+    // saved as one Word list: every item's list has the same levels, the second written a)
+    const numbering = strFromU8(files['word/numbering.xml']);
+    const absOf = (numId: string) => new RegExp(`<w:num w:numId="${numId}"><w:abstractNumId w:val="(\\d+)"/>`).exec(numbering)?.[1];
+    const used = [...strFromU8(files['word/document.xml']).matchAll(/<w:numId w:val="(\d+)"\/>/g)].map((m) => absOf(m[1]));
+    expect(new Set(used).size).toBe(1);
+    expect(numbering).toMatch(/<w:lvl w:ilvl="1"><w:start w:val="1"\/><w:numFmt w:val="lowerLetter"\/><w:lvlText w:val="%2\)"\/>/);
+    expect(listMarkers((await readDocx(out)).doc.paras)).toEqual(want);
+  });
+
   it('a new item made with Enter counts on from a number set on the item before', () => {
     const paras = editParas([{ list: 'number', startAt: 5 }], 'Five', 4, 4, '\n');
     expect(listMarkers(paras)).toEqual(['5.', '6.']);

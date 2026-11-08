@@ -31,7 +31,7 @@ import { themeXml } from './xlsx-view';
 import { facesToEmbed, newGuid, obfuscate, type FontSource } from './font-embed';
 import { fromDataUrl } from '../render/images';
 import { CHEMDRAW_PROG, chemdrawObject, embeddedPart, OLE_REL, OLE_TYPE } from './ole-object';
-import { BULLETS, fitParas, listInfo, paraCount, samePara, schemeOf, splitParagraphs } from '../text/paragraphs';
+import { BULLETS, fitParas, listInfo, paraCount, samePara, schemeOf, splitParagraphs, type ListInfo } from '../text/paragraphs';
 import { BOX_PAD, COL_GAP, COMPOUND, END_FORMAT, FOOT_FORMAT, columnsOf, contentsPrint, OBJECT_CHAR, SHADOWS, charStylesOf, watermarkPlace, fieldTexts, floatOf, floatGaps, lookExtent, lookOf, noteStyle, objectsInText, pruneObjects, EMPTY_FORM, styleOf, runStyleOf, type CharStyle, type DocObject, type DocText, type Embedded, type FigureFrame, type FigureLook, type HeaderFooter, type HfBody, type HfKey, type NamedStyle, type PageBorder, type PageSetup, type Watermark } from '../document/document';
 import { ACS_LINE, GRID_LINE, bibHang, docCellAlign, shownSize } from '../document/doc-layout';
 import { sectionsOf, type Section } from '../document/sections';
@@ -306,9 +306,11 @@ class DocxWriter {
   private async body(main: string): Promise<string> {
     const t = this.t;
     const n = paraCount(rt.plainText(t.runs));
-    const paras = fitParas(t.paras, n);
+    const fitted = fitParas(t.paras, n);
     const runsOf = this.splitParas(t.runs);
-    const lists = listInfo(paras);
+    const lists = listInfo(fitted);
+    // (a list whose levels are written in different schemes goes to Word as one list)
+    const paras = oneWordList(fitted, lists);
     // tracked changes on the paragraph marks (a line break typed or deleted while tracking)
     const markRev: (string | undefined)[] = [];
     for (const r of t.runs) for (const ch of r.text) if (ch === '\n') markRev.push(r.rev);
@@ -1531,7 +1533,8 @@ class DocxWriter {
     const lvls = (key: string) => Array.from({ length: 9 }, (_, i) => {
       const bullet = key.startsWith('b');
       const { left, hang } = listIndent({ list: bullet ? 'bullet' : 'number', level: i }, em);
-      const sc = schemeOf(key.slice(1));
+      // (a list of mixed levels: each level's own scheme)
+      const sc = key.startsWith('n*') ? schemeOf(key.slice(2).split('|')[i]) : schemeOf(key.slice(1));
       const fmt = bullet ? 'bullet' : sc.levels[i].fmt;
       const text = bullet ? key.slice(1) || BULLETS[i % BULLETS.length] : sc.levels[i].text;
       // bullets that ordinary fonts may lack come from a symbol font
@@ -1552,6 +1555,33 @@ class DocxWriter {
 }
 
 // ---------------------------------------------------------------- pieces
+
+/**
+ * Numbered items of one list whose levels are written in different schemes (a Word list
+ * numbered 1. at its first level and a) at its second): all given one scheme id that names
+ * each level's ('*' and the levels' ids joined by |), so they are saved as one Word list, whose
+ * deeper levels start again under each item and keep their own start numbers as Word's do.
+ * A list runs from where its numbers start again to the next paragraph that is in no list.
+ */
+function oneWordList(paras: ParaStyle[], lists: ListInfo[]): ParaStyle[] {
+  const out = [...paras];
+  const numbered = (ps: ParaStyle | undefined) => ps?.list === 'number' && !ps.cont;
+  let from = 0;
+  const close = (to: number) => {
+    const levels: (string | undefined)[] = [];
+    for (let p = from; p < to; p++) if (numbered(paras[p])) levels[Math.max(0, Math.min(8, paras[p].level ?? 0))] ??= paras[p].scheme ?? '';
+    const used = levels.filter((x) => x !== undefined);
+    if (new Set(used).size < 2) return;
+    const id = '*' + Array.from({ length: 9 }, (_, i) => levels[i] ?? used[0]).join('|');
+    for (let p = from; p < to; p++) if (paras[p].list === 'number') out[p] = { ...paras[p], scheme: id };
+  };
+  for (let p = 0; p <= paras.length; p++) {
+    if (p < paras.length && paras[p].list && !(numbered(paras[p]) && lists[p].start)) continue;
+    close(p);
+    from = p;
+  }
+  return out;
+}
 
 /** A table drawing's table, when the drawing is just one table. */
 export function soleTable(c: Contents): TableData | null {
