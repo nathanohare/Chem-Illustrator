@@ -264,7 +264,8 @@ import { AccessibilityPane, askAltText } from './ui/accessibility-pane';
 import type { PreflightPane } from './ui/preflight-pane';
 import { shapeBox } from './objects';
 import { SlideComparePane } from './ui/slide-compare';
-import { pickFileTemplate } from './ui/file-templates';
+import { documentCategories, sheetCategories, slideCategories } from './ui/file-templates';
+import { showTemplateWindow, closeTemplateWindow } from './ui/template-window';
 import type { PastedRows } from './io/table-clip';
 import { Keeper } from './keep/keeper';
 import { choose as chooseButtons, notice } from './ui/keep-ui';
@@ -2588,6 +2589,8 @@ function addNamed(got: { mb: string; attach: number[] }, x: number, y: number, t
 let structuresLocked = false;
 /** The start view shows on the empty drawing the program opens with (Settings > General). */
 let startView = true;
+/** Settings ▸ Preferences ▸ New Files: the template window opens over a new document, spreadsheet or presentation. */
+let templatesOnNew: Settings['templatesOnNew'] = { document: true, sheet: true, slides: true };
 /** Settings ▸ Preferences: Enter finishes text typed with the Text tool, Alt+Enter starts a new line. */
 let enterFinishesText = false;
 /** Settings ▸ Preferences: a document whose structures aren't figures offers to make them figures on opening. */
@@ -3968,6 +3971,8 @@ const ws: Workspace = new Workspace(doc, {
   remember: (path) => rememberFile(path),
   rememberHandle: (handle) => { if (canKeepHandles()) void keepHandle(handle, recentFiles).then(rememberFile, () => {}); },
   leave: (tab) => {
+    // the template window belongs to the new file it opened over
+    closeTemplateWindow();
     // letters still being written with the pen go into this tab's drawing
     editor.sketcher.flush();
     finishTab();
@@ -5478,7 +5483,6 @@ tabAdd.addEventListener('click', () => {
   showContextMenu(x, y, [
     { cmd: 'new', label: 'Canvas (Chemistry)' }, { cmd: 'new-slides', label: 'Presentation (Slideshow)' },
     { cmd: 'new-sheet', label: 'Spreadsheet (Tables, Charts, and Dashboards)' }, { cmd: 'new-document', label: 'Document (Text document)' }, { cmd: 'new-design', label: 'Design (Posters, Graphical abstracts, Figures)' },
-    { cmd: 'new-from-template', label: 'Document or Spreadsheet from Template…' },
   ], { run: (cmd) => void command(cmd), key: commandKey });
 });
 tabsEl.replaceChildren(tabLeft, tabStrip, tabRight, tabList, tabAdd);
@@ -8365,15 +8369,54 @@ const slideCompare = new SlideComparePane({
 });
 deckWatchers.push((d) => slideCompare.deckChanged(d));
 
-/** File > New > New from Template: a document or sheet started from one of our templates. */
-async function newFromTemplate(): Promise<void> {
-  finishTab();
-  const got = await pickFileTemplate(sheetActive() ? 'sheet' : 'document');
-  if (!got) return;
-  if (got.kind === 'sheet') {
-    ws.newSheet(got.template?.make());
-  } else ws.newDocument(got.template?.make());
-  if (got.template) flash(`New ${got.template.name.toLowerCase()}: type over the text in [brackets].`);
+const NEW_KIND_WORDS = { document: 'documents', sheet: 'spreadsheets', slides: 'presentations' } as const;
+
+/**
+ * The template window over the new, blank file just opened (File > New, the + tab menu, the start
+ * view). Picking a template puts it in the blank file's place; a click outside keeps the blank file.
+ */
+function offerTemplates(kind: 'document' | 'sheet' | 'slides', always = false): void {
+  if (!always && !templatesOnNew[kind]) return;
+  const blank = ws.active;
+  if (blank.mode !== kind) return;
+  const showPref = {
+    label: `Show templates when creating new ${NEW_KIND_WORDS[kind]}`,
+    get: () => templatesOnNew[kind],
+    set: (on: boolean) => { templatesOnNew = { ...templatesOnNew, [kind]: on }; storeSettings(); },
+  };
+  const note = 'The new file is open behind this window. Pick a template to start from it, or click anywhere outside the window to keep the blank file. Text in [brackets] says what goes there; type over it.';
+  if (kind === 'document') {
+    showTemplateWindow({ mode: 'document', title: 'New Document', note, remember: 'newDocCategory', showPref, categories: documentCategories((t) => {
+      ws.newDocument(t.make(), blank);
+      flash(`Started from the ${t.name} template: type over the text in [brackets].`);
+    }) });
+  } else if (kind === 'sheet') {
+    showTemplateWindow({ mode: 'sheet', title: 'New Spreadsheet', note, remember: 'newSheetCategory', showPref, categories: sheetCategories((t) => {
+      ws.newSheet(t.make(), blank);
+      flash(`Started from the ${t.name} template: type over the text in [brackets].`);
+    }) });
+  } else {
+    const d = blank.deck;
+    if (!d) return;
+    const fresh = () => ws.active === blank && d.edits === 0;
+    showTemplateWindow({ mode: 'slides', title: 'New Presentation', note: 'The new presentation is open behind this window. Pick a theme or a starter deck, or click anywhere outside the window to keep it as it is. Design ▸ Templates changes the theme later.', remember: 'newSlidesCategory', showPref, categories: slideCategories({
+      master: d.master, size: d.size, mine: slideThemes,
+      paint: (c, m, size, w, h, stacked) => { void import('./ui/slide-templates').then((x) => x.paintTemplate(c, m, size, w, h, stacked)); },
+      useTheme: (t) => {
+        if (!fresh()) { finishTab(); ws.newSlides(); }
+        const deck = deckNow();
+        if (!deck) return;
+        deck.useMaster(applyTemplate(deck.master, t));
+        deck.onSwitch();
+        deck.onChange();
+      },
+      useStarter: (s) => {
+        if (!fresh()) { finishTab(); ws.newSlides(); }
+        deckNow()?.startWith(s.slides);
+        flash(`Started from the ${s.name} deck: type over the text in [brackets].`);
+      },
+    }) });
+  }
 }
 
 /** Review > Compare (slides): another version of this deck, from an open tab or a PowerPoint file, to review slide by slide. */
@@ -8585,7 +8628,7 @@ const COMMANDS: Record<string, () => unknown> = {
   },
   'check-accessibility': () => { finishTyping(); if (accessibility.open) accessibility.refresh(); else accessibility.show(document.querySelector<HTMLElement>('[data-cmd="check-accessibility"]:not([hidden])')); },
   'alt-text': () => { finishTyping(); void drawingAltText(); },
-  'new-slides': () => { finishTab(); ws.newSlides(); },
+  'new-slides': () => { finishTab(); ws.newSlides(); offerTemplates('slides'); },
   'new-design': () => newDesign(),
   'design-size': () => designSize(),
   'connector-tool': () => { finishTyping(); editor.setTool('connector'); },
@@ -8621,9 +8664,10 @@ const COMMANDS: Record<string, () => unknown> = {
   'shape-back': () => restack('back'),
   'shape-forward': () => restack('forward'),
   'shape-backward': () => restack('backward'),
-  'new-sheet': () => { finishTab(); ws.newSheet(); },
-  'new-document': () => { finishTab(); ws.newDocument(); },
-  'new-from-template': () => { void newFromTemplate(); },
+  'new-sheet': () => { finishTab(); ws.newSheet(); offerTemplates('sheet'); },
+  'new-document': () => { finishTab(); ws.newDocument(); offerTemplates('document'); },
+  // (no longer in the menus: kept for buttons people put on their ribbon or quick bar)
+  'new-from-template': () => { const k = sheetActive() ? 'sheet' : 'document'; finishTab(); if (k === 'sheet') ws.newSheet(); else ws.newDocument(); offerTemplates(k, true); },
   open: () => ws.open(),
   save: () => { finishTab(); return ws.save(focusTab()); },
   'save-as': () => { finishTab(); return ws.saveAs(focusTab()); },
@@ -10506,6 +10550,10 @@ async function personalPreferences(): Promise<void> {
     { name: 'aidLook', label: 'How the angle and hints look', value: editor.aids.look, short: true, options: [{ value: 'plain', label: 'Plain blue words' }, { value: 'box', label: 'Blue words on a pale box' }, { value: 'solid', label: 'White words on a blue box' }], inline: (v) => cursorAidSwatch(v === 'box' || v === 'solid' ? v : 'plain') },
     { name: 'aidHints', label: 'Show what Shift, Alt and Ctrl do beside the pointer', type: 'checkbox', value: String(editor.aids.hints),
       help: 'While dragging, the keys that change what the tool does are listed in blue (the one held in bold). With the button up they show as a key is held.' },
+    { name: 'newFiles', label: 'New Files', type: 'heading', value: '', help: 'A window of templates opens over the new, blank file. Click outside it to keep the blank file; the checkbox at its bottom turns it off too.' },
+    { name: 'tplDocument', label: 'Show templates when creating new documents', type: 'checkbox', value: String(templatesOnNew.document) },
+    { name: 'tplSheet', label: 'Show templates when creating new spreadsheets', type: 'checkbox', value: String(templatesOnNew.sheet) },
+    { name: 'tplSlides', label: 'Show templates when creating new presentations', type: 'checkbox', value: String(templatesOnNew.slides) },
     { name: 'counterions', label: 'Counterions Typed as Text', type: 'heading', value: '' },
     { name: 'ionCharges', label: 'Add their charges (BF₄ becomes BF₄⁻, NBu₄ becomes NBu₄⁺)', type: 'checkbox', value: String(chemText.ionCharges), inline: (v) => counterionSwatch(v === 'true', doc.style),
       help: 'Off, a counterion typed without its charge is still read as that ion, and flagged until the charge is added.' },
@@ -10517,6 +10565,7 @@ async function personalPreferences(): Promise<void> {
   setWarnLook(r.warnLook as Settings['warnLook']);
   chemText.ionCharges = r.ionCharges === 'true';
   chemText.saltGroups = r.saltGroups === 'true';
+  templatesOnNew = { document: r.tplDocument === 'true', sheet: r.tplSheet === 'true', slides: r.tplSlides === 'true' };
   editor.aids = { ...editor.aids, angle: r.aidAngle === 'true', length: r.aidLength === 'true', hints: r.aidHints === 'true', look: r.aidLook === 'box' || r.aidLook === 'solid' ? r.aidLook : 'plain', units: r.aidUnits === 'px' || r.aidUnits === 'mm' ? r.aidUnits : 'in' };
   const look = parseAlkylLook(r.alkylLook);
   const changed = look !== alkylPrefs.look;
@@ -10614,6 +10663,7 @@ function currentSettings(): Settings {
     startView,
     enterFinishesText,
     offerFigures,
+    templatesOnNew: { ...templatesOnNew },
     page: defaultPage,
     welcomed,
     groupTips: labelTips.enabled,
@@ -10852,6 +10902,7 @@ function applySettings(s: Settings): void {
   setToolCells(s.toolCells);
   setRibbonLook(s.canvasRibbon);
   startView = s.startView;
+  templatesOnNew = { ...s.templatesOnNew };
   enterFinishesText = s.enterFinishesText;
   offerFigures = s.offerFigures;
   showGroupTips(s.groupTips);
@@ -13669,7 +13720,7 @@ addLookToggle(canvasRibbon.el, { simple: () => ribbonLook === 'simple', toggle: 
 const SETTINGS_PAGES: SettingsPage[] = [
   { id: 'general', title: 'General', words: 'backup back up copy move settings file new computer install reinstall export import groups selecting click outline linked text above below ask whole page tracked changes reviewer name start view recent files chemdraw objects ole word powerpoint docx pptx save structures pictures svg png compatibility', open: generalPreferences },
   ...nmrHere ? [{ id: 'nmr', title: 'NMR Prediction', words: 'nmr prediction predict spectrum spectra proton carbon 1h 13c ppm range width solvent cdcl3 spectrometer frequency mhz quality fast balanced accurate automatic selection', open: nmrSettings }] : [],
-  { id: 'preferences', title: 'Preferences', words: 'personal personalize habits enter return key finish text tool box new line alt option escape esc taste alkyl isomer prefix prefixes italic dash hyphen raised superscript tbu t-bu ipr i-pr nbu sbu ibu tert-butyl isopropyl problems warnings marks red box circle pointer cursor angle length units pixels px millimeters mm inches readout hints modifier shift alt ctrl keys counterions ions salt bf4 nbu4 charges group', open: personalPreferences },
+  { id: 'preferences', title: 'Preferences', words: 'personal personalize new files templates template window show templates habits enter return key finish text tool box new line alt option escape esc taste alkyl isomer prefix prefixes italic dash hyphen raised superscript tbu t-bu ipr i-pr nbu sbu ibu tert-butyl isopropyl problems warnings marks red box circle pointer cursor angle length units pixels px millimeters mm inches readout hints modifier shift alt ctrl keys counterions ions salt bf4 nbu4 charges group', open: personalPreferences },
   { id: 'drawing', title: 'Drawing', words: 'bond ends round rounded square caps mitre corners methyl me ch3 axial chirality ra sa helicity charges circled ammonium nh4 r groups numbers superscript regular text eta hapto delocalized mechanism arrows reroute wrap around block path gap tail head origin target intermediate check arrows', open: drawingPreferences },
   { id: 'style', perFile: true, title: 'Drawing Style', words: 'bond length line width font journal acs rsc wiley elsevier thieme hash spacing margin arrow text reagents conditions above below size smaller reaction arrows gap fit alignment line up structures plus scheme', open: drawingStyleDialog },
   { id: 'hotkeys', title: 'Keyboard Shortcuts', words: 'keys keyboard shortcuts import export reset', open: () => hotkeysDialog.open() },

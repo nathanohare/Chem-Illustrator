@@ -1598,6 +1598,32 @@ export class Deck {
     this.restyleAll();
   }
 
+  /**
+   * Start a new deck as these slides (a starter deck picked in New's template window), their
+   * placeholders filled in frame order; a body's lines are bullets. Not undoable: the deck starts here.
+   */
+  startWith(pages: { layout: LayoutId; text: string[]; notes?: string }[]): void {
+    if (!pages.length) return;
+    const slides: Slide[] = pages.map((p) => {
+      const d = new Doc();
+      this.styleDoc(d, p.layout);
+      const styles = textStyles(this.master, p.layout);
+      d.bulk(() => {
+        layoutFrames(p.layout, this.size, this.master).forEach((f, i) => {
+          const t = p.text[i] ?? '';
+          const paras = f.ph === 'body' && t ? t.split('\n').map(() => ({ list: 'bullet' as const })) : emptyParas(f.ph);
+          d.addCaption({ ...frameFields(f, styles), runs: t ? [{ text: t }] : [], paras });
+        });
+      });
+      return { id: this.nextSlideId++, layout: p.layout, doc: d, notes: p.notes ?? '' };
+    });
+    const was = this.attached;
+    this.load(slides, this.size, this.master, undefined, this.settings);
+    if (was) this.attach();
+    this.onSwitch();
+    this.onChange();
+  }
+
   /** Start a new deck in a style (your default for new slides or designs). Not undoable. */
   useDrawingStyle(st: DocStyle): void {
     this.master = { ...this.master, drawing: { ...st } };
