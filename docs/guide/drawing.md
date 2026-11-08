@@ -515,6 +515,38 @@ With nothing selected, the panel shows the structure you last drew on. Clearing 
 
 **Look up on PubChem** (needs the internet) sends the structure to PubChem, the free NIH database, and shows its common and IUPAC names, CAS number(s), its CID (click it to open the PubChem page), GHS hazards (signal word, pictograms and H statements) and measured physical data. **Name caption**, **CAS caption** and **Hazards caption** put that information under the structure. A structure is only sent when you click the button; nothing is looked up on its own.
 
+### Predicted NMR
+
+**NMR (predicted)** in the Analysis panel lists the predicted shifts for the structure, one nucleus at a time (pick ¹H or ¹³C, and the solvent; ¹⁹F and ³¹P appear too when the structure has fluorine or phosphorus). Each row gives the shift with its expected error (±), the number of hydrogens or carbons, and the atoms (numbered as on the drawing with **Show on Drawing ▸ Atom Numbers**). For ¹H, the **Mult., J (Hz)** column gives the predicted multiplicity and coupling constants, and **Peak Report** and **Copy as SI Text** write them the way an SI does: δ 6.31 (dt, *J* = 15.5, 6.8 Hz, 1H). ¹⁹F and ³¹P shifts come from atoms with the same surroundings in NMRShiftDB2 and published lists (NMRexp); Peak Report and Copy as SI Text add their lines (¹⁹F at 376 MHz and ³¹P at 162 MHz for a 400 MHz instrument), as proton-decoupled shifts without couplings. When the two protons of a CH2 differ (next to a stereocentre, or on a ring), they are listed as two rows, downfield first, on every quality; which proton is which is not predicted. OH, NH and SH protons are not predicted, since their shifts move with concentration, water and temperature; they are left out of the list, the spectrum and the SI text (the **i** by **δ (ppm)** says so). Check Data still matches a measured OH or NH peak to its group.
+
+On the Canvas ribbon, **Home ▸ NMR** opens a menu (Predict NMR, Spectrum Window, Show on Drawing, Check Data…, NMR Settings…), and **Chemistry ▸ NMR** has the same commands as buttons, with ¹H, ¹³C and Solvent… as well.
+
+The NMR section stays closed until you open it, so selecting things stays quick; check **Predict NMR as soon as a structure is selected** in **Settings ▸ NMR Prediction** to have it predict with every selection. The same page sets the default quality, solvent and spectrometer frequency, and the ppm range the spectra are drawn over: ¹H from −0.5 to 10 ppm and ¹³C from −5 to 200 ppm unless you change them. A peak outside the range widens it. NMR prediction is in the desktop app only.
+
+Above the list is the predicted spectrum. Hover a row to see its peaks, or a peak to find its row and atoms. **⤢** opens it in a window you can move and resize: scroll to zoom, double-click to show everything, and pick the spectrometer frequency (300–800 MHz) and the quality (**Settings ▸ NMR Prediction** sets it too):
+
+- **Fast**: first-order multiplets;
+- **Balanced** (default): coupled protons simulated exactly in groups of up to 8, so roofing and second-order patterns such as AA′XX′ look as they would measured;
+- **Accurate**: groups of up to 10 and couplings from the 3-D conformers. The H on one carbon are simulated together, so a CH3 counts for less than three separate protons, and a large group runs in the background: the first-order spectrum shows at once and the exact one replaces it when ready (usually within a second; up to about two seconds for long chains and cage compounds such as adamantanes).
+
+In a crowded group (long alkyl chains, cages), the weakest long-range couplings to protons outside the group are left out so the spectrum stays quick to draw; the visible splittings are kept.
+
+**Copy as Picture** copies the spectrum; **Put on Canvas** adds it to the drawing as a picture.
+
+Peaks on the predicted spectrum carry labels. In **Settings ▸ NMR Prediction**, pick any of the atoms, the shift (a range for a multiplet), the multiplicity, the number of H and the *J* values, the label size, and where the labels go: above each peak one part per line, all on one line along the top, or upright. With **show only the first part** checked, each peak shows just its first part until you hover it.
+
+**Check Data** compares your measured peak list with the prediction. Paste the list as an SI writes it, for example `1H NMR (400 MHz, CDCl3) δ 7.30 (d, J = 8.7 Hz, 2H), …` (a ¹H and a ¹³C list in one paragraph both count) and click **Check**. Each measured peak is matched to the atoms it most likely belongs to, and the panel lists what needs a look:
+
+- how many predicted signals were found, and whether the integrals add up to the structure's hydrogens;
+- peaks with no match in the structure, named when they sit on the solvent's residual or water peak, or a shift in a table you imported into the Knowledge Base (such as your copy of a published impurity table);
+- peaks further from their prediction than the expected error allows;
+- predicted signals with no peak (OH and NH are only noted, since they exchange);
+- multiplicities or coupling constants that differ from the prediction.
+
+Hover a line to see its atoms. The **⤢** window then shows the measured list against the prediction, with matched peaks joined and the problem peaks labeled. A pasted multiplet given as a range (7.56 – 7.48, m) is drawn as a smooth flat-topped hump. Pick how the two are drawn in the window or in Settings: **Inverted** (measured above, prediction mirrored below), **Stacked** (both upright) or **Overlay** (one baseline, in two colors). The slider sets the measured trace's height, **◀ ▶** (or the arrow keys) zoom to each signal in turn, **−**, **+** and **Fit** (or −, + and 0) zoom, and dragging pans; a line under the pointer reads out the ppm.
+
+**Save to Library** keeps the predicted peak report, and the measured one you pasted into Check Data, with the compound in the Compound Library (it adds the compound if needed). **From Library** in the Check Data box fills in the saved measured report. The library's **Edit…** dialog lists a compound's saved spectra, to copy or remove. **Edit** changes the list; **×** clears the check. Coupling constants come from the 2D structure on Fast and Balanced, so protons on rings use averaged values there; Accurate takes them from the 3-D shape.
+
 ## Mass fragmentation
 
 Pick the mass fragmentation tool (the dashed line through a bond) and drag a line across one or more bonds, or click a single bond. A dashed line is drawn and each piece gets a caption with its formula and exact mass, placed clear of the structure. They are ordinary captions, so you can move or retype them.

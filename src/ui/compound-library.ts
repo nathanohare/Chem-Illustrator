@@ -8,7 +8,7 @@
 import { withInfo } from './info-tip';
 import {
   compoundBySmiles, compoundText, compoundTitle, newId, parseTags, tagsOf,
-  type LibCompound, type LibraryData,
+  type LibCompound, type LibraryData, type LibSpectrum,
 } from '../library/library';
 import type { Library } from '../library/library-store';
 import type { Contents } from '../model';
@@ -250,7 +250,7 @@ export class CompoundLibraryWindow {
         el('td', { textContent: c.mw ? c.mw.toFixed(2) : '' }),
         el('td', { textContent: files }));
       tr.dataset.id = c.id;
-      tr.title = [compoundTitle(c), c.smiles, c.notes, ...c.files.slice(0, 8).map((f) => `• ${fileOf(f.path)}${f.label ? ` (as ${f.label})` : ''}`)].filter(Boolean).join('\n');
+      tr.title = [compoundTitle(c), c.smiles, c.notes, c.spectra?.length ? `${c.spectra.length} NMR spectr${c.spectra.length === 1 ? 'um' : 'a'} saved` : '', ...c.files.slice(0, 8).map((f) => `• ${fileOf(f.path)}${f.label ? ` (as ${f.label})` : ''}`)].filter(Boolean).join('\n');
       if (this.selected.has(c.id)) tr.classList.add('picked');
       return tr;
     });
@@ -438,10 +438,24 @@ export class CompoundLibraryWindow {
         files.append(el('li', {}, el('span', { textContent: `${fileOf(f.path)}${f.label ? ` (as ${f.label})` : ''}`, title: `${f.path}\nseen ${new Date(f.seen).toLocaleString()}` }), open));
       }
       form.append(files);
+      // the NMR spectra saved with it
+      let spectra: LibSpectrum[] = c.spectra ?? [];
+      if (spectra.length) {
+        form.append(withInfo(el('h3', { textContent: 'NMR spectra' }), 'Saved with Save to Library in the NMR section of the Analysis panel. Check Data offers the measured ones again when this compound is analyzed.'));
+        const list = el('ul', { className: 'compound-files compound-spectra' });
+        for (const sp of spectra) {
+          const li = el('li', {},
+            el('span', { textContent: `${sp.kind === 'measured' ? 'Measured' : `Predicted${sp.quality ? ` (${sp.quality})` : ''}`}, ${new Date(sp.saved).toLocaleDateString()}: ${sp.text.length > 90 ? `${sp.text.slice(0, 90)}…` : sp.text}`, title: sp.text }),
+            button('Copy', 'Copy the report', () => void navigator.clipboard.writeText(sp.text).then(() => this.host.flash('Copied the report.'), () => this.host.flash('Copying was refused by the system.'))),
+            button('Remove', 'Remove it from the library (when you click OK)', () => { spectra = spectra.filter((x) => x !== sp); li.remove(); }));
+          list.append(li);
+        }
+        form.append(list);
+      }
       form.append(el('p', { className: 'ask-buttons' }, button('Cancel', '', () => done(null)), el('button', { type: 'submit', className: 'primary', textContent: 'OK' })));
       form.addEventListener('submit', (e) => {
         e.preventDefault();
-        done({ label: label.value.trim(), name: name.value.trim(), synonyms: syn.value.split('\n').map((x) => x.trim()).filter(Boolean), cas: cas.value.trim(), tags: parseTags(tags.value), notes: notes.value });
+        done({ label: label.value.trim(), name: name.value.trim(), synonyms: syn.value.split('\n').map((x) => x.trim()).filter(Boolean), cas: cas.value.trim(), tags: parseTags(tags.value), notes: notes.value, ...(c.spectra ? { spectra } : {}) });
       });
       d.append(form);
       document.body.append(d);

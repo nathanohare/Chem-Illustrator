@@ -41,6 +41,9 @@ import { casHtml, casRuns, type CasState } from './ui/cas-panel';
 import { pubchemHtml, pubchemRuns, type PubChemState } from './ui/pubchem-panel';
 import { paragraphPages } from './document/doc-file';
 import { reviewAuthor, setReviewAuthor } from './document/revisions';
+import { NMR_SOLVENTS, NmrPanel } from './ui/nmr-panel';
+import { compareMode, nmrQuality, nmrSpectrumMhz, setCompareMode, setNmrQuality, setNmrSpectrumMhz } from './ui/nmr-spectrum';
+import { nmrAutoPredict, nmrRange, peakLabels, setNmrAutoPredict, setNmrRange, setPeakLabels } from './ui/nmr-settings';
 import { analysisHtml, adductHtml, ionInfo, formulaHtml, electronsHtml, analysisRuns, withRepeats, polymerHtml, descriptorRuns, DEFAULT_DESCRIPTORS, nameHtml, type RepeatUnit, type NameState } from './ui/analysis-panel';
 import { attachedAtoms, attachWhereItIs, defaultGap, nearestStructure, placeAttached, structureSig } from './editor/attached';
 import { repeatGroups, lipDirection } from './chem/polymer';
@@ -199,7 +202,7 @@ import type { GuideWindow, GuideHeading } from './ui/guide-window';
 import { SettingsWindow, type SettingsHost, type SettingsPage } from './ui/settings-window';
 import { fileTypesPage, FILE_TYPES } from './ui/file-types-page';
 import { watchRibbons, fitRibbons, setRibbonCollapsed, ribbonCollapsed, addLookToggle, repaintArrows } from './ui/ribbon-fit';
-import { CanvasRibbon } from './ui/canvas-ribbon';
+import { CANVAS_TABS, CanvasRibbon } from './ui/canvas-ribbon';
 import { AnalysisBox, WarningsBox } from './ui/canvas-ribbon-boxes';
 import { placeTitleBar, titleBarPlace } from './ui/title-bar';
 import { canScaleUi, setUiScale, stepUiScale, uiScale, UI_SCALES } from './ui/ui-scale';
@@ -289,7 +292,7 @@ import { placeRead } from './recognise/check';
 import { Diagnostics, catchErrors, errorReport, formatEntry, stamp, type LogEntry, type UnexpectedClose } from './diagnostics';
 import { keepStore, getText, putText } from './keep/store';
 import { Library, storePlace, folderPlace, readPlaceChoice, writePlaceChoice, LIBRARY_FILE } from './library/library-store';
-import { noteMentions, type LibCompound } from './library/library';
+import { compoundBySmiles, newId, noteMentions, type LibCompound, type LibSpectrum } from './library/library';
 import { fetchPubmed, type ZoteroLink } from './library/online';
 import { structuresIn, foundInContents, foundInDocument, foundInWorkbook, foundInFile, type Found, type Spot, type FileReaders } from './library/structures';
 import { parseIndex, indexText } from './library/file-index';
@@ -332,6 +335,9 @@ const showLabCalculator = later(() => import('./ui/lab-calc-dialog'), 'showLabCa
 // with a notice offering to report them through Send Feedback. The desktop app (not the iPad, whose
 // apps the system ends whenever it likes) also notices when it stopped without closing last time.
 const iPadApp = isTauri() && /Mac/.test(navigator.platform) && navigator.maxTouchPoints > 1;
+// NMR prediction is a desktop feature: its data (about 48 MB) is past what the browser version may
+// download, and the iPad app leaves it out (the builds for both drop public/nmr).
+const nmrHere = (isTauri() && !iPadApp) || import.meta.env.DEV;
 // (one copy of the desktop app runs at a time, so a marker left by another stopped, however recent)
 const diagnostics = new Diagnostics({ store: keepStore(), markers: isTauri() && !iPadApp, oneCopy: true });
 // (shown once the page has finished setting up: an error while it starts can come before the notice can show)
@@ -709,6 +715,8 @@ const toolbar = new Toolbar($<HTMLDivElement>('#tools'), TOOL_GROUPS, (name) => 
 /** The Canvas ribbon's Font and Paragraph groups: their rows, filled once the text hooks are made (further down). */
 let canvasTextRows: { font: HTMLElement; paragraph: HTMLElement } | null = null;
 let canvasFont: { refresh(): void } | null = null;
+// (NMR prediction is desktop only: its ribbon groups are left out elsewhere)
+if (!nmrHere) for (const t of CANVAS_TABS) t.groups = t.groups.filter((g) => g.name !== 'NMR');
 const canvasRibbon = new CanvasRibbon({
   command: (cmd) => { command(cmd); },
   pickTool: (name) => pickTool(name),
@@ -2369,6 +2377,50 @@ async function editTorsion(id: number): Promise<void> {
 // ------------------------------------------------------------------ name to structure
 
 const names = new NameReader(new URL('opsin/opsin-data.dat', document.baseURI).href);
+const nmrPanel = new NmrPanel({
+  unavailable: nmrHere ? undefined : `Predicted NMR spectra are in the desktop app for Windows, Mac and Linux. <a href="https://github.com/nathanohare/Chem-Illustrator/releases/latest" target="_blank" rel="noopener">Download it</a>.`,
+  url: new URL('nmr/nmr-hose.dat', document.baseURI).href, measuredUrl: new URL('nmr/nmr-measured.dat', document.baseURI).href, netUrl: new URL('nmr/nmr-net.dat', document.baseURI).href, splitUrl: new URL('nmr/nmr-ch2split.json', document.baseURI).href, fpUrl: new URL('nmr/nmr-fp.dat', document.baseURI).href,
+  graph: (molblock) => chem.namerGraph(molblock),
+  conformers: (molblock) => model3d.build(molblock, 30),
+  redraw: () => editor.requestOverlay(),
+  copy: (text) => navigator.clipboard.writeText(text),
+  flash: (text) => flash(text),
+  copyPicture: (png) => navigator.clipboard.write([new ClipboardItem({ 'image/png': new Blob([png as Uint8Array<ArrayBuffer>], { type: 'image/png' }) })]),
+  placePicture: (png) => placePicture(png, 'image/png', null),
+  importedTables: () => getText(keepStore(), KB_IMPORTED_KEY).catch(() => null),
+  saveSpectra: (molblock, entries) => saveSpectraToLibrary(molblock, entries),
+  savedReports: async (molblock) => {
+    const [w] = await weighMolfiles([molblock]);
+    if (!w) return [];
+    const c = compoundBySmiles((await useLibrary()).now, w.smiles);
+    return (c?.spectra ?? []).filter((x) => x.kind === 'measured').sort((a, b) => b.saved - a.saved).map((x) => x.text);
+  },
+});
+
+/** NMR ▸ Save to Library: adds the structure to the Compound Library if needed and keeps the peak reports with it. */
+async function saveSpectraToLibrary(molblock: string, entries: Omit<LibSpectrum, 'id' | 'saved'>[]): Promise<void> {
+  const lib = await useLibrary();
+  const [w] = await weighMolfiles([molblock]);
+  if (!w) { flash('This structure could not be read for the Compound Library.'); return; }
+  const { addStructures } = await import('./ui/compound-library');
+  const now = Date.now();
+  const t = ws.mainOf(ws.active);
+  let id = '', kept = 0;
+  lib.change((l0) => {
+    const l = addStructures(l0, [{ molfile: molblock, smiles: w.smiles, formula: w.formula, mw: w.mw }], t.ref.kind === 'path' ? t.ref.path : '', now).lib;
+    const c = compoundBySmiles(l, w.smiles);
+    if (!c) return l0;
+    id = c.id;
+    const have = c.spectra ?? [];
+    const fresh = entries.filter((e) => !have.some((h) => h.kind === e.kind && h.text === e.text)).map((e) => ({ ...e, id: newId('s'), saved: now }));
+    kept = fresh.length;
+    return { ...l, compounds: l.compounds.map((x) => (x.id === c.id ? { ...x, spectra: [...have, ...fresh], modified: now } : x)) };
+  });
+  if (!id) { flash('This structure could not be added to the Compound Library.'); return; }
+  const what = entries.length > 1 ? 'predicted and measured spectra' : 'predicted spectrum';
+  flash(kept ? `Saved the ${what} to the Compound Library.` : `The ${what} ${entries.length > 1 ? 'are' : 'is'} already saved in the Compound Library.`, 5000,
+    { label: 'Show', run: () => void openCompoundLibrary([id]) });
+}
 let namesReady = false;
 
 // ------------------------------------------------------------------ structure to name
@@ -9043,6 +9095,15 @@ const COMMANDS: Record<string, () => unknown> = {
   'diagram-to-shapes': () => editor.ungroupSelectedDiagram() || flash('Select a diagram first.'),
   'edit-energy': () => { const id = editor.selectedEnergy(); if (id === null) flash('Select an energy diagram first.'); else void energyDiagram(id); },
   'animate-reaction': () => animateDialog.open(),
+  'nmr-menu': () => nmrMenu(),
+  'predict-nmr': () => nmrRibbon('predict'),
+  'nmr-1h': () => nmrRibbon('1H'),
+  'nmr-13c': () => nmrRibbon('13C'),
+  'nmr-solvent': () => nmrSolventMenu(),
+  'nmr-window': () => nmrRibbon('window'),
+  'nmr-marks': () => nmrRibbon('marks'),
+  'nmr-check': () => nmrRibbon('check'),
+  'nmr-settings': () => (nmrHere ? settingsWindow.open('nmr') : flash('Predicted NMR spectra are in the desktop app.')),
   'animate-step': () => {
     const arrow = pickedReactionArrow();
     if (arrow === undefined) { flash('Select a reaction arrow first, or use Animate Reaction for the whole scheme.'); return; }
@@ -10385,6 +10446,57 @@ function setWarnLook(look: Settings['warnLook']): void {
   editor.requestScene?.();
 }
 
+/** Settings ▸ NMR Prediction (desktop app only). */
+async function nmrSettings(): Promise<void> {
+  const r1 = nmrRange('1H'), r13 = nmrRange('13C'), pk = peakLabels();
+  const r = await ask('NMR Prediction', [
+    { name: 'auto', label: 'Predict NMR as soon as a structure is selected', type: 'checkbox', value: String(nmrAutoPredict()),
+      help: 'Off: the NMR section of the Analysis panel stays closed until you open it (or click Predict NMR on the Canvas ribbon), so selecting things stays quick. On: it opens and predicts with every selection, as long as you left it open.' },
+    { name: 'quality', label: 'Predict spectra with', value: nmrQuality(), options: [
+      { value: 'fast', label: 'Fast: first-order multiplets' }, { value: 'balanced', label: 'Balanced: exact simulation of up to 8 coupled protons' },
+      { value: 'accurate', label: 'Accurate: 3-D conformers, up to 10 coupled protons' }],
+      help: 'Accurate also predicts both shifts of diastereotopic CH2 protons and couplings from the 3-D shape; it takes a few seconds per structure. The Spectrum window\'s dropdown changes the same setting.' },
+    { name: 'solvent', label: 'Solvent', value: nmrPanel.solvent, options: NMR_SOLVENTS.map((x) => ({ value: x, label: x })) },
+    { name: 'mhz', label: 'Spectrometer frequency', value: String(nmrSpectrumMhz()), options: [300, 400, 500, 600, 800].map((m) => ({ value: String(m), label: `${m} MHz` })) },
+    { name: 'h1lo', label: '1H spectrum from', type: 'number', value: String(r1.lo), unit: 'ppm',
+      help: 'The spectrum is drawn over this range (−0.5 to 10 ppm unless you change it) and widens by itself when a peak falls outside it.' },
+    { name: 'h1hi', label: '1H spectrum to', type: 'number', value: String(r1.hi), unit: 'ppm' },
+    { name: 'c13lo', label: '13C spectrum from', type: 'number', value: String(r13.lo), unit: 'ppm',
+      help: 'The spectrum is drawn over this range (−5 to 200 ppm unless you change it) and widens by itself when a peak falls outside it.' },
+    { name: 'c13hi', label: '13C spectrum to', type: 'number', value: String(r13.hi), unit: 'ppm' },
+    { name: 'compare', label: 'Show a pasted report against the prediction', value: compareMode(), options: [
+      { value: 'inverted', label: 'Inverted: measured above, predicted mirrored below' }, { value: 'stacked', label: 'Stacked: one above the other, both upright' }, { value: 'overlay', label: 'Overlay: both on one baseline' }],
+      help: 'Check Data in the Spectrum window. Its Inverted, Stacked and Overlay buttons change the same setting.' },
+    { name: 'plLabel', label: 'Peak labels: atoms', type: 'checkbox', value: String(pk.label),
+      help: 'What the Spectrum window (and its pictures) writes over each predicted peak. Atoms are named as in the list\'s Atoms column.' },
+    { name: 'plShift', label: 'Peak labels: chemical shift (a range for m)', type: 'checkbox', value: String(pk.shift) },
+    { name: 'plMult', label: 'Peak labels: multiplicity', type: 'checkbox', value: String(pk.mult) },
+    { name: 'plCount', label: 'Peak labels: number of H', type: 'checkbox', value: String(pk.count) },
+    { name: 'plJ', label: 'Peak labels: J values', type: 'checkbox', value: String(pk.j) },
+    { name: 'plHover', label: 'Peak labels: show only the first part; hovering a peak shows the rest', type: 'checkbox', value: String(pk.hover) },
+    { name: 'plSize', label: 'Peak label size', type: 'number', value: String(pk.size), unit: 'px' },
+    { name: 'plPlace', label: 'Peak labels go', value: pk.place, options: [
+      { value: 'above', label: 'Above each peak, one part per line' }, { value: 'top', label: 'Along the top on one line, with a line down to the peak' }, { value: 'upright', label: 'Upright over each peak' }] },
+  ], { ok: 'Save' });
+  if (!r) return;
+  setNmrAutoPredict(r.auto === 'true');
+  if (r.compare === 'inverted' || r.compare === 'stacked' || r.compare === 'overlay') setCompareMode(r.compare);
+  if (r.quality === 'fast' || r.quality === 'balanced' || r.quality === 'accurate') setNmrQuality(r.quality);
+  if ((NMR_SOLVENTS as readonly string[]).includes(r.solvent)) nmrPanel.solvent = r.solvent;
+  if (Number(r.mhz) > 0) setNmrSpectrumMhz(Number(r.mhz));
+  const bad: string[] = [];
+  for (const [nuc, lo, hi] of [['1H', r.h1lo, r.h1hi], ['13C', r.c13lo, r.c13hi]] as const) {
+    const a = Number(lo), b = Number(hi);
+    if (lo.trim() === '' || hi.trim() === '' || !Number.isFinite(a) || !Number.isFinite(b) || a >= b) { bad.push(nuc); continue; }
+    setNmrRange(nuc, a, b);
+  }
+  const size = Number(r.plSize);
+  setPeakLabels({ label: r.plLabel === 'true', shift: r.plShift === 'true', mult: r.plMult === 'true', count: r.plCount === 'true', j: r.plJ === 'true', hover: r.plHover === 'true',
+    size: size >= 6 && size <= 24 ? size : pk.size, place: r.plPlace === 'top' || r.plPlace === 'upright' ? r.plPlace : 'above' });
+  if (bad.length) flash(`The ${bad.join(' and ')} range was kept as it was: the first number has to be lower than the second.`, 6000);
+  nmrPanel.settingsChanged(document.getElementById('analysis-body'));
+}
+
 async function personalPreferences(): Promise<void> {
   const alt = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent) ? 'Option+Enter' : 'Alt+Enter';
   const r = await ask('Preferences', [
@@ -11096,6 +11208,33 @@ function showAnalysisList(): void {
   } else if (sideIsFolded()) command('fold-side');
 }
 
+/** The NMR commands on the Canvas ribbon: bring the Analysis list into view, then act on the first structure's NMR section (once the panel has it). */
+function nmrRibbon(act: Parameters<NmrPanel['ribbon']>[0]): void {
+  if (!nmrHere) { flash('Predicted NMR spectra are in the desktop app for Windows, Mac and Linux.'); return; }
+  showAnalysisList();
+  let tries = 0;
+  const go = () => {
+    if (nmrPanel.ribbon(act)) return;
+    if (++tries < 30) { setTimeout(go, 100); return; }
+    flash('Select a structure to predict its NMR spectrum.');
+  };
+  go();
+}
+
+/** Home > NMR: its commands in a menu under the button. */
+function nmrMenu(): void {
+  const b = document.querySelector<HTMLElement>('#canvas-ribbon [data-cmd="nmr-menu"]');
+  const r = b?.getBoundingClientRect() ?? new DOMRect(200, 120, 0, 0);
+  popupMenu(r.left, r.bottom + 2, [['Predict NMR', () => nmrRibbon('predict')], ['Spectrum Window', () => nmrRibbon('window')], ['Show on Drawing', () => nmrRibbon('marks')], ['Check Data…', () => nmrRibbon('check')], null, ['NMR Settings…', () => command('nmr-settings')]]);
+}
+
+/** Chemistry > NMR > Solvent…: the solvents in a menu under the button. */
+function nmrSolventMenu(): void {
+  const b = document.querySelector<HTMLElement>('#canvas-ribbon [data-cmd="nmr-solvent"]');
+  const r = b?.getBoundingClientRect() ?? new DOMRect(200, 120, 0, 0);
+  popupMenu(r.left, r.bottom + 2, NMR_SOLVENTS.map((x) => [`${x === nmrPanel.solvent ? '✓ ' : ''}${x}`, () => nmrRibbon({ solvent: x })] as [string, () => void]));
+}
+
 /** Chemistry > Look Up > Find CAS RN (and the right-click menu): the structure picked, its CAS RN shown in the Analysis panel. */
 async function findCasChosen(): Promise<void> {
   const f = chosenStructures()[0];
@@ -11410,6 +11549,7 @@ async function runAnalysis(force: boolean): Promise<void> {
     ion: firstIon ? { label: adductHtml(firstIon.adduct.label), mz: firstIon.mz.toFixed(4) } : null,
   } : null);
   panel.innerHTML = results.map((r, i) => polymers[i] ? polymerHtml(r, polymers[i]!) : analysisHtml(r, i, adductSel.value, { stereo: r.error ? '' : stereoSummary(frags[i]), unknown: exports[i].unknownLabels, electrons: frags[i].size ? electronsHtml(countElectrons(doc, frags[i].values().next().value!)) : '', rGroups: rGroupNames(frags[i]), name: r.error || !r.smiles || rGroupNames(frags[i]).length ? '' : nameHtml(nameStates.get(r.smiles) ?? { kind: 'idle' }, i), pubchem: r.error || !r.smiles ? '' : pubchemHtml(pubchemStates.get(r.smiles) ?? { kind: 'idle' }, i), cas: r.error || !r.smiles ? undefined : casHtml(casStateOf(r.smiles), i) })).join('');
+  nmrPanel.attach(panel, results.map((r, i) => (r.error || !r.smiles || polymers[i] || rGroupNames(frags[i]).length ? null : { molblock: exports[i].molblock, map: exports[i].map })));
   updatePanels();
 }
 
@@ -13515,6 +13655,7 @@ watchRibbons((on) => { ribbonChosen = on; storeSettings(); });
 addLookToggle(canvasRibbon.el, { simple: () => ribbonLook === 'simple', toggle: () => { setRibbonLook(ribbonLook === 'simple' ? 'classic' : 'simple'); storeSettings(); } });
 const SETTINGS_PAGES: SettingsPage[] = [
   { id: 'general', title: 'General', words: 'backup back up copy move settings file new computer install reinstall export import groups selecting click outline linked text above below ask whole page tracked changes reviewer name start view recent files chemdraw objects ole word powerpoint docx pptx save structures pictures svg png compatibility', open: generalPreferences },
+  ...nmrHere ? [{ id: 'nmr', title: 'NMR Prediction', words: 'nmr prediction predict spectrum spectra proton carbon 1h 13c ppm range width solvent cdcl3 spectrometer frequency mhz quality fast balanced accurate automatic selection', open: nmrSettings }] : [],
   { id: 'preferences', title: 'Preferences', words: 'personal personalize habits enter return key finish text tool box new line alt option escape esc taste alkyl prefix italic dash hyphen tbu t-bu ipr i-pr nbu sbu ibu tert-butyl isopropyl', open: personalPreferences },
   { id: 'drawing', title: 'Drawing', words: 'bond ends round rounded square caps mitre corners methyl me ch3 axial chirality ra sa helicity charges circled ammonium nh4 r groups superscript mechanism arrows reroute wrap around block path gap arrow width arrowhead head size length units pixels px millimeters mm inches angle readout look box plain solid pointer cursor hints modifier shift alt ctrl keys', open: drawingPreferences },
   { id: 'style', perFile: true, title: 'Drawing Style', words: 'bond length line width font journal acs rsc wiley elsevier thieme hash spacing margin arrow text reagents conditions above below size smaller reaction arrows gap fit alignment line up structures plus scheme', open: drawingStyleDialog },
@@ -13640,6 +13781,7 @@ editor.underlay = (ctx) => {
   if (p && pageLook.grid) paintPages(ctx, pageLook, renderer, p, pageExtent(p, doc.bounds()), pagesInUse(p), dark.on, dark.on ? null : darkSurround);
   else paintTint(ctx, orientPrefs, renderer, doc.bounds(), doc.style.labelSize * 1.5 + doc.style.bondLength);
 };
+editor.overlayTop = (ctx) => nmrPanel.drawMarks(ctx, renderer.view.scale, (id) => doc.atoms.get(id), (id) => doc.neighbors(id), getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#0e7c86');
 // Fit on an empty drawing shows its first page
 editor.emptyArea = () => { const p = gridPage(); return p ? { x1: 0, y1: 0, x2: p.w, y2: p.h } : null; };
 // nothing is drawn or moved past a fixed edge of the page grid
