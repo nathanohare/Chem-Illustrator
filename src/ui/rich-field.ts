@@ -2,13 +2,20 @@
 // Scheme pane's rows). It keeps its own text: each character is plain, subscript or superscript,
 // either set by hand (the formatting bar, Ctrl+= and Ctrl+Shift+=) or worked out by chemical
 // interpretation as you type (the digits of formulas drop, as the Catalytic Cycle window's
-// species do). Turning interpretation off leaves the text as typed.
+// species do). Turning interpretation off leaves the text as typed. Where the field's text can
+// hold them (`looks`), characters can also be bold, italic or underlined (Ctrl+B, Ctrl+I, Ctrl+U).
 
 import { chemRuns } from '../text/chemtext';
 import type { TextPart } from '../chem/smart-scheme';
 
 export type Pos = '' | 'sub' | 'sup';
-interface Ch { c: string; pos: Pos; set: boolean }
+/** Bold, italic and underline, as bits. */
+const BOLD = 1, ITALIC = 2, UNDER = 4;
+export type FieldLook = 'bold' | 'italic' | 'underline';
+const BIT: Record<FieldLook, number> = { bold: BOLD, italic: ITALIC, underline: UNDER };
+interface Ch { c: string; pos: Pos; set: boolean; look?: number }
+const lookOf = (p: TextPart): number => (p.bold ? BOLD : 0) | (p.italic ? ITALIC : 0) | (p.underline ? UNDER : 0);
+const lookParts = (n: number): Partial<TextPart> => ({ ...(n & BOLD ? { bold: true } : {}), ...(n & ITALIC ? { italic: true } : {}), ...(n & UNDER ? { underline: true } : {}) });
 
 export interface RichFieldOptions {
   placeholder: string;
@@ -19,6 +26,8 @@ export interface RichFieldOptions {
   done(parts: TextPart[]): void;
   /** The caret moved, or the formatting where it is changed (the bar shows it). */
   onState?(f: RichField): void;
+  /** Bold, italic and underline can be set on characters (the text they go to keeps them). */
+  looks?: boolean;
 }
 
 /** Where each character of `text` goes with chemical interpretation on. */
@@ -37,6 +46,8 @@ export class RichField {
   private was = '';
   /** What the next typed characters are: set by the bar with nothing selected (null: as the text before the caret). */
   private pending: Pos | 'auto' | null = null;
+  /** Bold, italic, underline set by the keys with nothing selected, for the next typed characters (null: as the character before). */
+  private pendingLook: number | null = null;
   private caretAt = -1;
   private undo: Ch[][] = [];
 
@@ -66,7 +77,7 @@ export class RichField {
   // ---------------------------------------------------------------- the text
 
   private load(parts: TextPart[]): void {
-    this.chars = parts.flatMap((p) => [...p.text].map((c) => ({ c, pos: (p.sub ? 'sub' : p.sup ? 'sup' : '') as Pos, set: false })));
+    this.chars = parts.flatMap((p) => [...p.text].map((c) => ({ c, pos: (p.sub ? 'sub' : p.sup ? 'sup' : '') as Pos, set: false, ...(this.o.looks && lookOf(p) ? { look: lookOf(p) } : {}) })));
     this.settle(true);
   }
 
@@ -76,14 +87,15 @@ export class RichField {
     for (const ch of this.chars) {
       const last = out[out.length - 1];
       const pos = ch.pos;
-      if (last && (pos === 'sub') === !!last.sub && (pos === 'sup') === !!last.sup) last.text += ch.c;
-      else out.push({ text: ch.c, ...(pos ? { [pos]: true } : {}) });
+      const look = ch.look ?? 0;
+      if (last && (pos === 'sub') === !!last.sub && (pos === 'sup') === !!last.sup && look === lookOf(last)) last.text += ch.c;
+      else out.push({ text: ch.c, ...(pos ? { [pos]: true } : {}), ...lookParts(look) });
     }
     return out;
   }
 
   text(): string { return this.chars.map((c) => c.c).join(''); }
-  private key(): string { return this.chars.map((c) => c.c + c.pos).join('|'); }
+  private key(): string { return this.chars.map((c) => c.c + c.pos + (c.look ? c.look : '')).join('|'); }
 
   /**
    * Characters not set by hand go where interpretation puts them. With `mark`, a character that
@@ -148,16 +160,51 @@ export class RichField {
   private onSel = (): void => {
     const sel = this.selection();
     // the caret moved somewhere else: what the bar set for the next characters is forgotten
-    if (!sel || sel[0] !== sel[1] || sel[0] !== this.caretAt) { this.pending = null; this.caretAt = sel && sel[0] === sel[1] ? sel[0] : -1; }
+    if (!sel || sel[0] !== sel[1] || sel[0] !== this.caretAt) { this.pending = null; this.pendingLook = null; this.caretAt = sel && sel[0] === sel[1] ? sel[0] : -1; }
     this.o.onState?.(this);
   };
 
   /** Where the next character typed at `at` goes (what the bar shows with nothing selected). */
-  private nextPos(at: number): { pos: Pos; set: boolean } {
-    if (this.pending === 'auto') return { pos: '', set: false };
-    if (this.pending) return { pos: this.pending, set: true };
+  private nextPos(at: number): { pos: Pos; set: boolean; look?: number } {
     const prev = this.chars[at - 1];
-    return prev?.set ? { pos: prev.pos, set: true } : { pos: '', set: false };
+    // bold, italic, underline: as set for what is typed next, else as the character before (as in Word)
+    const look = this.pendingLook ?? prev?.look ?? 0;
+    const l = look ? { look } : {};
+    if (this.pending === 'auto') return { pos: '', set: false, ...l };
+    if (this.pending) return { pos: this.pending, set: true, ...l };
+    return prev?.set ? { pos: prev.pos, set: true, ...l } : { pos: '', set: false, ...l };
+  }
+
+  /** Is bold (italic, underline) on where the caret is, or over all that is selected? */
+  hasLook(key: FieldLook): boolean {
+    const sel = this.selection();
+    if (!sel) return false;
+    const [a, b] = sel;
+    const bit = BIT[key];
+    if (a === b) return !!((this.pendingLook ?? this.chars[a - 1]?.look ?? 0) & bit);
+    return this.chars.slice(a, b).every((c) => (c.look ?? 0) & bit);
+  }
+
+  /** Bold, italic or underline on or off: over the selection, or for what is typed next. */
+  toggleLook(key: FieldLook): void {
+    if (!this.o.looks) return;
+    const sel = this.selection();
+    if (!sel) return;
+    const [a, b] = sel;
+    const bit = BIT[key];
+    if (a === b) {
+      this.pendingLook = (this.pendingLook ?? this.chars[a - 1]?.look ?? 0) ^ bit;
+      this.caretAt = a;
+      this.o.onState?.(this);
+      return;
+    }
+    this.remember();
+    const off = this.chars.slice(a, b).every((c) => (c.look ?? 0) & bit);
+    for (const ch of this.chars.slice(a, b)) {
+      const n = off ? (ch.look ?? 0) & ~bit : (ch.look ?? 0) | bit;
+      if (n) ch.look = n; else delete ch.look;
+    }
+    this.render([a, b]);
   }
 
   /** Is subscript (or superscript) on where the caret is, or over all that is selected? */
@@ -245,7 +292,10 @@ export class RichField {
       case 'historyUndo': e.preventDefault(); this.back(); return;
       case 'formatSubscript': e.preventDefault(); this.toggle('sub'); return;
       case 'formatSuperscript': e.preventDefault(); this.toggle('sup'); return;
-      case 'formatBold': case 'formatItalic': case 'formatUnderline': case 'historyRedo': e.preventDefault(); return;
+      case 'formatBold': e.preventDefault(); this.toggleLook('bold'); return;
+      case 'formatItalic': e.preventDefault(); this.toggleLook('italic'); return;
+      case 'formatUnderline': e.preventDefault(); this.toggleLook('underline'); return;
+      case 'historyRedo': e.preventDefault(); return;
       default: setTimeout(() => this.resync());
     }
   }
@@ -261,14 +311,17 @@ export class RichField {
   private resync(): void {
     const sel = this.selection();
     const out: Ch[] = [];
-    const walk = (n: Node, pos: Pos) => {
-      if (n.nodeType === Node.TEXT_NODE) { for (const c of n.textContent ?? '') out.push({ c, pos, set: false }); return; }
-      const tag = (n as Element).tagName;
+    const walk = (n: Node, pos: Pos, look: number) => {
+      if (n.nodeType === Node.TEXT_NODE) { for (const c of n.textContent ?? '') out.push({ c, pos, set: false, ...(look ? { look } : {}) }); return; }
+      const el = n as HTMLElement;
+      const tag = el.tagName;
       const p: Pos = tag === 'SUB' ? 'sub' : tag === 'SUP' ? 'sup' : pos;
-      for (const k of n.childNodes) walk(k, p);
+      const st = el.style;
+      const l = !this.o.looks ? 0 : look | (tag === 'B' || tag === 'STRONG' || st?.fontWeight === 'bold' ? BOLD : 0) | (tag === 'I' || tag === 'EM' || st?.fontStyle === 'italic' ? ITALIC : 0) | (tag === 'U' || st?.textDecoration === 'underline' ? UNDER : 0);
+      for (const k of n.childNodes) walk(k, p, l);
     };
-    for (const k of this.el.childNodes) walk(k, '');
-    if (out.map((c) => c.c + c.pos).join('|') === this.key()) return;
+    for (const k of this.el.childNodes) walk(k, '', 0);
+    if (out.map((c) => c.c + c.pos + (c.look ? c.look : '')).join('|') === this.key()) return;
     this.remember();
     this.chars = out;
     this.settle(true);
@@ -280,7 +333,9 @@ export class RichField {
     if (e.key === 'Enter') { e.preventDefault(); this.el.blur(); return; }
     if (e.key === 'Escape') { e.preventDefault(); this.undo = []; this.load(this.wasParts); this.render(null); this.el.blur(); return; }
     if (mod && !e.altKey && (e.key === '=' || e.key === '+')) { e.preventDefault(); this.toggle(e.shiftKey || e.key === '+' ? 'sup' : 'sub'); return; }
-    if (mod && !e.shiftKey && e.key.toLowerCase() === 'z') { e.preventDefault(); this.back(); }
+    if (mod && !e.shiftKey && e.key.toLowerCase() === 'z') { e.preventDefault(); this.back(); return; }
+    // Ctrl+B, Ctrl+I, Ctrl+U on the selected characters, or on what is typed next
+    if (mod && !e.altKey && !e.shiftKey && this.o.looks && /^[biu]$/i.test(e.key)) { e.preventDefault(); this.toggleLook(({ b: 'bold', i: 'italic', u: 'underline' } as const)[e.key.toLowerCase() as 'b' | 'i' | 'u']); }
   }
 
   /** The text as last finished (Escape goes back to it). */
@@ -317,9 +372,13 @@ export class RichField {
   private render(sel: [number, number] | null): void {
     const frag = document.createDocumentFragment();
     for (const p of this.parts()) {
-      if (p.sub || p.sup) {
-        const e = document.createElement(p.sub ? 'sub' : 'sup');
+      const styled = p.bold || p.italic || p.underline;
+      if (p.sub || p.sup || styled) {
+        const e = document.createElement(p.sub ? 'sub' : p.sup ? 'sup' : 'span');
         e.textContent = p.text;
+        if (p.bold) e.style.fontWeight = 'bold';
+        if (p.italic) e.style.fontStyle = 'italic';
+        if (p.underline) e.style.textDecoration = 'underline';
         frag.append(e);
       } else frag.append(document.createTextNode(p.text));
     }

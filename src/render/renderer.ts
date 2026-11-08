@@ -357,7 +357,8 @@ export class Renderer {
     if (spec) {
       Object.assign(spec, labelLook(a));
       const weight = labelBold(doc.style, a) ? 'bold' : '';
-      layout = layoutLabel(spec, labelBonds(doc, a), size, (t, s) => measureText(t, s, stack, weight), a.just);
+      // (a piece bold or italic by hand is measured so: a bold Boc doesn't run into the HN after it)
+      layout = layoutLabel(spec, labelBonds(doc, a), size, (t, s, l) => measureText(t, s, stack, [l?.italic && 'italic', (weight || l?.bold) && 'bold'].filter(Boolean).join(' ')), a.just);
       if (weight) layout.bold = true;
       const m = atomMargin(doc.style, a);
       for (const b of layout.boxes) boxes.push({ x1: a.x + b.x1 - m, y1: a.y + b.y1 - m, x2: a.x + b.x2 + m, y2: a.y + b.y2 + m });
@@ -1027,6 +1028,8 @@ export class Renderer {
           const f = `${r.italic ? 'italic ' : ''}${info.layout.bold || r.bold ? 'bold ' : ''}${r.size}px ${info.stack}`;
           if (f !== curFont) { ctx.font = f; curFont = f; }
           ctx.fillText(r.text, a.x + r.dx, a.y + r.dy);
+          // underlined by hand (Ctrl+U on part of the label)
+          if (r.underline) ctx.fillRect(a.x + r.dx, a.y + r.dy + r.size * 0.12, ctx.measureText(r.text).width, Math.max(0.5, r.size * 0.06));
         }
       } else if (a.charge && a.z === 6 && !a.hideCharge) {
         curFont = this.drawCarbonCharge(ctx, doc, a);

@@ -86,6 +86,7 @@ import { attachWhereItIs, defaultGap, placeAttached, refitAttached } from './att
 import { frameAround, frameBox, frameMembers, refitFrames, defaultPad, thingsInside } from './frames';
 import { atomsBox, Align, Measure, POINTS, Snapshot, type TurnText, units, joinGroups, clearOffset, alignOffsets, distributeOffsets, moveUnit, selectionBox, snapshot, transform, withFrameContents, rotation, mirrorX, mirrorY } from './arrange';
 import { elementNumber, hasImplicitH, implicitHydrogens, SYMBOLS } from '../chem/elements';
+import { anyMarks, isMarkToggle, readMark, styleOfMark, toggleMarks, toggledMark, writeMark, type Mark, type MarkToggle } from '../chem/label-marks';
 import { tokenize, addNicknames, isBuiltInNickname, labelGraph, labelOverValent, labelPieces, labelLook, styleLabel, CAP, SUB_SCALE } from '../chem/labels';
 import {
   Handle, type HandleId, arrowEllipseFrame, arrowHit, shapeHit, arrowHandles, shapeHandles, dragArrowHandle, dragShapeHandle, dragCropHandle, shapeBox, shapeMid, shapeTurn,
@@ -579,6 +580,8 @@ export class Editor {
   /** The last label typed in an atom's label box (with its raised and lowered marks), for Repeat Label. */
   lastLabel: { text: string; marks?: string } | null = null;
   private labelInput: HTMLElement | null = null;
+  /** The ribbon's Font buttons on the atom label being typed (null when none is). */
+  private labelTyping: { format(f: TextFormat): boolean; look(): rt.RunStyle } | null = null;
   /** The mouse is over the drawing, so keys are for the drawing even if a button has the focus. */
   private pointerInside = false;
   /** Keys don't reach the drawing (while presenting slides). */
@@ -6170,6 +6173,8 @@ export class Editor {
     let marks = a.label && a.labelMarks ? a.labelMarks.padEnd(text.length, '.').slice(0, text.length) : '.'.repeat(text.length);
     const wasMarks = marks;
     const look = () => labelLook({ label: text, supDigits: a.supDigits, labelMarks: marks });
+    /** The look picked for what is typed next at a caret (Italic pressed with nothing selected). */
+    let pending: { at: number; mark: Mark } | null = null;
     // the first letter's middle on the atom, the baseline where the label's is
     const g = document.createElement('canvas').getContext('2d')!;
     g.font = `${size}px "${font}", Arial, sans-serif`;
@@ -6211,6 +6216,21 @@ export class Editor {
       sel?.removeAllRanges();
       sel?.addRange(r);
     };
+    /** Bold, Italic, Underline, Subscript or Superscript on the selected characters, or on what is typed next. */
+    const toggle = (key: MarkToggle) => {
+      const c = caret();
+      if (!c) return;
+      if (c[1] > c[0]) {
+        marks = toggleMarks(marks, c[0], c[1], key);
+        pending = null;
+        show();
+        place(c[0], c[1]);
+      } else {
+        const now = pending && pending.at === c[0] ? pending.mark : { ...readMark(marks[c[0] - 1]), pos: 'auto' as const };
+        pending = { at: c[0], mark: toggledMark(now, key) };
+      }
+      CaptionEditor.onState?.();
+    };
     // the text drawn as the label will show it: counts lowered, charges and marked characters raised
     const show = () => {
       box.textContent = '';
@@ -6220,6 +6240,8 @@ export class Editor {
         span.textContent = p.text.replace(/−/g, '-');
         if (p.sub || p.sup) { span.className = p.sub ? 'sub' : 'sup'; span.style.fontSize = `${SUB_SCALE * 100}%`; }
         if (p.italic) span.style.fontStyle = 'italic';
+        if (p.bold) span.style.fontWeight = 'bold';
+        if (p.underline) span.style.textDecoration = 'underline';
         box.appendChild(span);
       }
       // what the label shows can differ from what was typed (a minus for a hyphen): keep the typed text
@@ -6252,12 +6274,15 @@ export class Editor {
       if ((ev as InputEvent).isComposing) return;
       const now = [...(box.textContent ?? '')];
       const old = [...text];
-      // keep the marks of the characters that stayed; new ones are unmarked
+      // keep the marks of the characters that stayed; new ones are plain, or in the look picked
+      // for them (Italic pressed with nothing selected, then typed)
       let p = 0;
       while (p < now.length && p < old.length && now[p] === old[p]) p++;
       let q = 0;
       while (q < now.length - p && q < old.length - p && now[now.length - 1 - q] === old[old.length - 1 - q]) q++;
-      marks = marks.slice(0, p) + '.'.repeat(now.length - p - q) + marks.slice(old.length - q);
+      const fresh = pending && pending.at === p ? writeMark(pending.mark) : '.';
+      if (now.length - p - q > 0) pending = null;
+      marks = marks.slice(0, p) + fresh.repeat(now.length - p - q) + marks.slice(old.length - q);
       text = now.join('');
       const c = caret();
       show();
@@ -6266,6 +6291,7 @@ export class Editor {
     const finish = (ok: boolean) => {
       if (this.labelInput !== box) return;
       this.labelInput = null;
+      this.labelTyping = null;
       box.remove();
       hide(false);
       if (ok && doc.atoms.has(id) && (text !== was || marks !== wasMarks)) {
@@ -6277,7 +6303,9 @@ export class Editor {
           this.applyLabel(id, styled.label);
           const now = doc.atoms.get(id)!;
           const sm = styled.marks ?? '';
-          const m = now.label !== null && /[\^_=/]/.test(sm) ? sm : undefined;
+          // a label with a look of its own (an italic N, a bold Br) stays as typed, so it keeps it
+          if (now.label === null && anyMarks(sm) && styled.label) doc.updateAtom(id, { label: styled.label });
+          const m = doc.atoms.get(id)!.label !== null && anyMarks(sm) ? sm : undefined;
           if (now.labelMarks !== m) doc.updateAtom(id, { labelMarks: m });
         });
         // remembered for Repeat Label on the right-click menu (clearing a label is not a label)
@@ -6297,18 +6325,43 @@ export class Editor {
       else if ((e.ctrlKey || e.metaKey) && (e.code === 'Equal' || e.key === '=' || e.key === '+')) {
         // Ctrl+Shift+= raises the selected characters, Ctrl+= lowers them; again puts them back
         e.preventDefault();
-        const c = caret();
-        if (c && c[1] > c[0]) {
-          const want = e.shiftKey ? '^' : '_';
-          const all = [...marks.slice(c[0], c[1])].every((m) => m === want);
-          marks = marks.slice(0, c[0]) + (all ? '.' : want).repeat(c[1] - c[0]) + marks.slice(c[1]);
-          show();
-          place(c[0], c[1]);
-        }
-      } else if ((e.ctrlKey || e.metaKey) && /^[biu]$/i.test(e.key)) e.preventDefault();
+        toggle(e.shiftKey ? 'sup' : 'sub');
+      } else if ((e.ctrlKey || e.metaKey) && !e.altKey && /^[biu]$/i.test(e.key)) {
+        // Ctrl+B, Ctrl+I, Ctrl+U on the selected characters (or what is typed next), as in a text box
+        e.preventDefault();
+        toggle(({ b: 'bold', i: 'italic', u: 'underline' } as const)[e.key.toLowerCase() as 'b' | 'i' | 'u']);
+      }
       e.stopPropagation();
     });
     box.addEventListener('blur', () => finish(true));
+    // the ribbon shows which of Bold, Italic… the selected characters have
+    const selMoved = () => { if (this.labelInput === box) CaptionEditor.onState?.(); else document.removeEventListener('selectionchange', selMoved); };
+    document.addEventListener('selectionchange', selMoved);
+    // the ribbon's and the typing bar's Bold, Italic, Underline, Subscript and Superscript (their
+    // buttons keep the focus here, so the selection is still the one to change)
+    this.labelTyping = {
+      format: (f) => {
+        if (f.kind === 'toggle' && isMarkToggle(f.key)) { toggle(f.key); return true; }
+        if (f.kind === 'clear') {
+          const c = caret();
+          const [s0, e0] = c && c[1] > c[0] ? c : [0, marks.length];
+          marks = marks.slice(0, s0) + '.'.repeat(e0 - s0) + marks.slice(e0);
+          pending = null;
+          show();
+          if (c) place(c[0], c[1]);
+          return true;
+        }
+        return false;
+      },
+      look: () => {
+        const c = caret();
+        if (c && c[0] === c[1] && pending && pending.at === c[0]) return styleOfMark(pending.mark);
+        const span = c && c[1] > c[0] ? [...marks.slice(c[0], c[1])] : [marks[(c?.[0] ?? marks.length) - 1]];
+        const all = span.map(readMark);
+        const every = (k: 'italic' | 'bold' | 'underline') => all.every((m) => m[k]);
+        return { ...(every('bold') ? { bold: true } : {}), ...(every('italic') ? { italic: true } : {}), ...(every('underline') ? { underline: true } : {}), ...(all.every((m) => m.pos === 'up') ? { sup: true } : {}), ...(all.every((m) => m.pos === 'down') ? { sub: true } : {}) };
+      },
+    };
     this.labelInput = box;
   }
 
@@ -6366,6 +6419,8 @@ export class Editor {
    */
   formatText(f: TextFormat): boolean {
     if (this.captionEd) { applyFormat(this.captionEd.ed, f); return true; }
+    // an atom label being typed: Bold, Italic, Underline… on its selected characters
+    if (this.labelTyping?.format(f)) return true;
     const doc = this.doc;
     const st = doc.style;
     const caps = [...this.sel.captions].map((id) => doc.captions.get(id)).filter((c): c is Caption => !!c);
@@ -6475,6 +6530,7 @@ export class Editor {
   textLook(): { style: rt.RunStyle; align: Justify; list?: 'bullet' | 'number'; line: number; before?: number; after?: number; wrap?: number; link?: boolean; defaultSize: number; defaultFont?: string } | null {
     const st = this.doc.style;
     const ed = this.captionEd?.ed;
+    if (this.labelTyping) return { style: this.labelTyping.look(), align: 'left', line: 1, defaultSize: st.labelSize, defaultFont: st.labelFont || 'Arial' };
     if (ed) {
       const p = ed.currentPara();
       return { style: ed.currentStyle(), align: ed.currentAlign(), list: p.list, line: ed.t.lineSpacing ?? 1, before: p.spaceBefore, after: p.spaceAfter, wrap: ed.t.wrap, link: !!ed.linkHere(), defaultSize: ed.defaultSize, defaultFont: ed.defaults.font ?? st.captionFont };

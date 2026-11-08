@@ -16,6 +16,7 @@ import { arrowEllipse, bezPoints, boxOf, shapeTurn } from '../objects';
 import { kids, descendants, wellFormed, withoutDoctype } from './xml';
 import { arialWidth } from '../text-metrics';
 import { toSymbolPieces, isSymbolFont, faceFromStyle } from '../richtext';
+import { readMark } from '../chem/label-marks';
 import { layoutText, SINGLE } from '../text/layout';
 import { runsForChemDraw, TEXT_TAG } from '../text/chemdraw-text';
 import { ATTACH_TAG, CHEM_TAG, IGNORE_TAG, attachTag } from '../editor/attached';
@@ -163,7 +164,7 @@ class CdxmlWriter {
   private legacy: Map<string, Element[]> | null = null;
 
   constructor(private doc: Doc, private opts: WriteOptions) {
-    this.measure = opts.measure ?? arialWidth;
+    this.measure = opts.measure ?? ((t, s, l) => arialWidth(t, s, !!l?.bold));
   }
 
   write(): string {
@@ -2864,12 +2865,12 @@ export function labelRuns(text: string, look: { supDigits: boolean; marks?: stri
   const digits = look.supDigits ? /\d+$/.exec(text) : null;
   const out: TextRun[] = [];
   [...text].forEach((ch, i) => {
-    const m = look.marks?.[i];
-    const base: TextRun = m === '^' || m === '*' ? { text: ch, sup: true } : m === '_' || m === ',' ? { text: ch, sub: true } : m === '=' ? { text: ch } : digits && i >= digits.index ? { text: ch, sup: true } : { text: ch, formula: true };
-    // the t of tBu in italics (the alkyl look)
-    const r: TextRun = m === '/' || m === '*' || m === ',' ? { ...base, italic: true } : m === '!' ? { text: ch, bold: true } : base;
+    const m = readMark(look.marks?.[i]);
+    const base: TextRun = m.pos === 'up' ? { text: ch, sup: true } : m.pos === 'down' ? { text: ch, sub: true } : m.pos === 'line' ? { text: ch } : digits && i >= digits.index ? { text: ch, sup: true } : { text: ch, formula: true };
+    // italics (the t of tBu, by the alkyl look), bold and underline set by hand
+    const r: TextRun = { ...base, ...(m.italic ? { italic: true } : {}), ...(m.bold ? { bold: true } : {}), ...(m.underline ? { underline: true } : {}) };
     const last = out[out.length - 1];
-    if (last && !!last.sup === !!r.sup && !!last.sub === !!r.sub && !!last.formula === !!r.formula && !!last.italic === !!r.italic && !!last.bold === !!r.bold) last.text += ch;
+    if (last && !!last.sup === !!r.sup && !!last.sub === !!r.sub && !!last.formula === !!r.formula && !!last.italic === !!r.italic && !!last.bold === !!r.bold && !!last.underline === !!r.underline) last.text += ch;
     else out.push(r);
   });
   return out.length ? out : [{ text, formula: true }];

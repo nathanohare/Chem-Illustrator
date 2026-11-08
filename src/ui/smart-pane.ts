@@ -69,7 +69,7 @@ let chemOn = (() => { try { return localStorage.getItem('smartPaneChem') !== 'of
 
 
 /** Caption runs as the pieces a row shows. */
-const runParts = (runs: TextRun[]): TextPart[] => runs.map((r) => ({ text: r.text, ...(r.sub ? { sub: true } : r.sup ? { sup: true } : {}) }));
+const runParts = (runs: TextRun[]): TextPart[] => runs.map((r) => ({ text: r.text, ...(r.sub ? { sub: true } : r.sup ? { sup: true } : {}), ...(r.bold ? { bold: true } : {}), ...(r.italic ? { italic: true } : {}), ...(r.underline ? { underline: true } : {}) }));
 
 /** The first text box of a step's conditions above or below its arrow (or its name inside a cycle), as pieces. */
 function stepParts(doc: Doc, l: SmartLink, part: StepPart): TextPart[] {
@@ -338,7 +338,7 @@ export class SmartPane {
     list.className = 'sp-list';
     this.fields.clear();
     const field = (key: string, value: TextPart[], placeholder: string, label: string, done: (v: TextPart[]) => void): HTMLDivElement => {
-      const f = new RichField(value, { placeholder, label, chem: () => chemOn, done, onState: (x) => { if (x === this.active) this.showState(); } });
+      const f = new RichField(value, { placeholder, label, chem: () => chemOn, looks: true, done, onState: (x) => { if (x === this.active) this.showState(); } });
       this.fields.set(key, f);
       f.el.dataset.key = key;
       f.el.addEventListener('focus', () => { this.active = f; this.activeKey = key; this.showState(); });

@@ -6,6 +6,7 @@ import type { Atom, Doc } from '../model';
 import { doubleBondGap } from '../style';
 import { SYMBOLS, elementNumber, hasImplicitH, implicitHydrogens, lowestValence, maxValence, valenceOfBonds } from './elements';
 import { LIGANDS } from './ligands';
+import { anyMarks, readMark, withMark } from './label-marks';
 
 /**
  * Abbreviations, each written as SMILES whose first atom is the one bonded to the structure.
@@ -244,13 +245,13 @@ export function tokenize(label: string): Token[] {
 }
 
 /** Text of one token as displayed, split into normal, subscript and superscript parts. */
-export interface Piece { text: string; sub?: boolean; sup?: boolean; italic?: boolean; bold?: boolean; /** Where it starts in the label text. */ at?: number }
+export interface Piece { text: string; sub?: boolean; sup?: boolean; italic?: boolean; bold?: boolean; underline?: boolean; /** Where it starts in the label text. */ at?: number }
 
 /**
- * Raised and lowered characters set by hand in a label, one mark per character of its text:
- * "^" superscript, "_" subscript, "=" on the line, "/" in italics (the t of tBu, by the alkyl
- * look), "*" raised and "," lowered in italics, "!" on the line in bold, anything else as the
- * label would show it.
+ * The look set by hand on each character of a label, one mark per character of its text: where
+ * it sits (raised, lowered, on the line or as the label puts it) and whether it is in italics
+ * (the t of tBu, by the alkyl look, or by hand), bold or underlined. See label-marks.ts: "^"
+ * superscript, "_" subscript, "=" on the line, "/" in italics, "." as the label would show it.
  */
 export type LabelMarks = string;
 
@@ -320,12 +321,12 @@ export function styleLabel(label: string, marks?: LabelMarks, look: AlkylLook = 
     const had = at.get(i);
     if (had === undefined) { text += label[i]; m += was[i]; continue; }
     text += label[i];
-    m += want.italic ? '/' : was[i] === '/' ? '.' : was[i];
+    m += withMark(was[i], { italic: want.italic });
     const dash = dashFree(label, i) ? want.dash : had;
     if (dash && !had) { text += '-'; m += '.'; }
     else if (!dash && had) i++;
   }
-  return { label: text, ...(/[\^_=/*,!]/.test(m) ? { marks: m } : {}) };
+  return { label: text, ...(anyMarks(m) ? { marks: m } : {}) };
 }
 
 /** Pieces with the hand-set marks applied, split where a mark changes how a character sits. */
@@ -334,15 +335,15 @@ export function markPieces(pieces: Piece[], marks: LabelMarks): Piece[] {
   for (const p of pieces) {
     if (p.at === undefined) { out.push(p); continue; }
     [...p.text].forEach((ch, k) => {
-      const m = marks[p.at! + k];
-      const up = m === '^' || m === '*', down = m === '_' || m === ',';
-      const sup = up ? true : down || m === '=' || m === '!' ? false : !!p.sup;
-      const sub = down ? true : up || m === '=' || m === '!' ? false : !!p.sub;
-      const bold = m === '!';
-      const italic = m === '/' || m === '*' || m === ',' || !!p.italic;
+      const m = readMark(marks[p.at! + k]);
+      const sup = m.pos === 'up' ? true : m.pos === 'auto' ? !!p.sup : false;
+      const sub = m.pos === 'down' ? true : m.pos === 'auto' ? !!p.sub : false;
+      const bold = m.bold || !!p.bold;
+      const italic = m.italic || !!p.italic;
+      const underline = m.underline || !!p.underline;
       const last = out[out.length - 1];
-      if (k > 0 && last && !!last.sup === sup && !!last.sub === sub && !!last.italic === italic && !!last.bold === bold) last.text += ch;
-      else out.push({ text: ch, at: p.at! + k, ...(sup ? { sup } : {}), ...(sub ? { sub } : {}), ...(italic ? { italic } : {}), ...(bold ? { bold } : {}) });
+      if (k > 0 && last && !!last.sup === sup && !!last.sub === sub && !!last.italic === italic && !!last.bold === bold && !!last.underline === underline) last.text += ch;
+      else out.push({ text: ch, at: p.at! + k, ...(sup ? { sup } : {}), ...(sub ? { sub } : {}), ...(italic ? { italic } : {}), ...(bold ? { bold } : {}), ...(underline ? { underline } : {}) });
     });
   }
   return out;
@@ -428,6 +429,8 @@ export interface GlyphRun {
   italic?: boolean;
   /** Set in bold, when the rest of the label needn't be. */
   bold?: boolean;
+  /** Underlined. */
+  underline?: boolean;
   /** Where its text starts in the label text (none for automatic hydrogens and the charge). */
   at?: number;
 }
@@ -442,7 +445,9 @@ export interface LabelLayout {
   bold?: boolean;
 }
 
-export type Measure = (text: string, size: number) => number;
+/** Width of label text at a size; `look` says when a piece is bold or italic by hand (wider or slanted). */
+export type Measure = (text: string, size: number, look?: { bold?: boolean; italic?: boolean }) => number;
+const lookArg = (p: Piece) => (p.bold || p.italic ? { ...(p.bold ? { bold: true } : {}), ...(p.italic ? { italic: true } : {}) } : undefined);
 
 export const SUB_SCALE = 0.75;
 export const CAP = 0.716; // Arial cap height as a fraction of the font size
@@ -547,13 +552,13 @@ export function layoutLabel(spec: LabelSpec, bondDirs: LabelBond[], size: number
   const baseline = (CAP * size) / 2;
   const subSize = size * SUB_SCALE;
 
-  const pieceWidth = (p: Piece) => measure(p.text, p.sub || p.sup ? subSize : size);
+  const pieceWidth = (p: Piece) => measure(p.text, p.sub || p.sup ? subSize : size, lookArg(p));
   const pushPieces = (pieces: Piece[], x: number): number => {
     for (const p of pieces) {
       const s = p.sub || p.sup ? subSize : size;
       const dy = baseline + (p.sub ? size * 0.22 : p.sup ? -size * 0.42 : 0);
-      const w = measure(p.text, s);
-      runs.push({ text: p.text, dx: x, dy, size: s, ...(p.italic ? { italic: true } : {}), ...(p.bold ? { bold: true } : {}), ...(p.at !== undefined ? { at: p.at } : {}) });
+      const w = measure(p.text, s, lookArg(p));
+      runs.push({ text: p.text, dx: x, dy, size: s, ...(p.italic ? { italic: true } : {}), ...(p.bold ? { bold: true } : {}), ...(p.underline ? { underline: true } : {}), ...(p.at !== undefined ? { at: p.at } : {}) });
       boxes.push({ x1: x, y1: dy - CAP * s, x2: x + w, y2: dy + (p.sub ? 0.1 * s : 0) });
       x += w;
     }
