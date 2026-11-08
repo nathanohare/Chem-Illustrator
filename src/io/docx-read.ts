@@ -2535,8 +2535,10 @@ class DocxReader {
 
   /**
    * A Word table style the text's tables can be drawn in: one of ours by its id (unless the
-   * file's differs), the file's own kept with the document, or null for a style that only
-   * draws lines round cells (the table's lines then stand for it, as before).
+   * file's differs), the file's own kept with the document, or null for a style that draws
+   * nothing (the table's lines then stand for it, as before). A style that only draws lines
+   * round cells (Word's Table Grid) is kept too, so the table still names it when saved, with
+   * its lines the style's rather than its own.
    */
   private tableStyleOf(id: string): string | null {
     const chain: Element[] = [];
@@ -2550,7 +2552,7 @@ class DocxReader {
     const ours = builtInStyle(id);
     if (!chain.length) return ours && styleIsRich(ours) ? id : null;
     const def = readTableStyle(id, name, chain, this.a.bind(this), this.on.bind(this));
-    if (!styleIsRich(def)) return null;
+    if (!styleIsRich(def) && !Object.values(def.parts.whole?.borders ?? {}).some((b) => b && b.style !== 'none')) return null;
     if (!(ours && sameStyle(ours, def))) this.tableStyles[id] = def;
     return id;
   }
@@ -2591,6 +2593,8 @@ class DocxReader {
     // a Word table style that shades or picks out parts: drawn in it here too
     const style = this.a(kid(tblPr, 'tblStyle'));
     const styleId = style ? this.tableStyleOf(style) : null;
+    // (a style that only draws lines, such as Table Grid, picks out no parts)
+    const linesOnly = !!styleId && !styleIsRich(this.tableStyles[styleId] ?? builtInStyle(styleId)!);
     // what the table's style (or Word's default one) gives its cells' paragraphs
     const paraLook = this.cellLookOf(style, !!styleId);
     // each row's height, as Word sets it
@@ -2683,7 +2687,7 @@ class DocxReader {
       table.style = styleId;
       const look = readTableLook(kid(tblPr, 'tblLook'), this.a.bind(this));
       if (look) table.look = look;
-      if ((look?.header ?? true) && !table.head) table.head = 1;
+      if ((look?.header ?? true) && !table.head && !linesOnly) table.head = 1;
     }
     // heading rows that only look like headings (no Repeat Header Rows in Word): not repeated when saved either
     if (!head && table.head) table.noRepeat = true;
@@ -2714,7 +2718,8 @@ class DocxReader {
       }
     }
     // lines Word draws that the style (or the lines chosen) here doesn't: kept as the cells' own
-    const direct = styleId ? {} : readBorders(kid(tblPr, 'tblBorders'), this.a.bind(this));
+    // (the table's own lines too, over a style that only draws lines)
+    const direct = styleId && !linesOnly ? {} : readBorders(kid(tblPr, 'tblBorders'), this.a.bind(this));
     Object.assign(table, keepDirectBorders(table, direct, own, this.tableStyles));
     const jc = JUSTIFY[this.a(kid(tblPr, 'jc')) ?? 'left'] ?? 'left';
     const normal = merge<RProps>(this.docDefaults.r, this.chain('paragraph', this.defaultPara).r);
