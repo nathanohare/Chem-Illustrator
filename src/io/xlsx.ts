@@ -661,8 +661,11 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
     // sizes: set by hand, else grown to fit structures (and wrapped text, measured by the grid)
     const colW = (c: number) => (s.hiddenCols.has(c) ? 0 : s.colWidths.get(c) ?? DEFAULT_COL_W);
     const auto = new Map<number, number>(deps.rowHeights?.(s) ?? []);
-    // rows Excel fitted itself go back as Excel had them (a height it fits again, no customHeight)
-    for (const [r, px] of s.fittedRows) if (!auto.has(r)) auto.set(r, px);
+    // rows Excel fitted itself, unchanged since, go back at the height Excel showed them, marked as
+    // set (customHeight): Excel fits rows without it again when it opens our save, and a row it
+    // showed at 40 pt came back at the default height (laptop check 51)
+    const keptFit = new Set<number>();
+    for (const [r, px] of s.fittedRows) if (!auto.has(r)) { auto.set(r, px); keptFit.add(r); }
     // rows grown for a structure's picture keep their height in Excel (its text can't show how tall the picture is)
     const pictureRows = new Set<number>();
     for (const [k, c] of s.cells) {
@@ -823,7 +826,7 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
       }
       // a row grown to fit its wrapped text is one Excel fits again when the text changes (no customHeight)
       const custom = s.rowHeights.get(r) ?? auto.get(r);
-      const fixed = s.rowHeights.has(r) || pictureRows.has(r);
+      const fixed = s.rowHeights.has(r) || pictureRows.has(r) || keptFit.has(r);
       // (a shown row of a zeroHeight sheet says its height, to be sure Excel shows it)
       const attrs = `${custom !== undefined ? ` ht="${own.excel?.rowPts?.get(custom) ?? ptFromPx(custom)}"${fixed ? ' customHeight="1"' : ''}` : zero && !s.hiddenRows.has(r) ? ` ht="${own.fileRowHeight!.pt}"` : ''}${s.hiddenRows.has(r) ? ' hidden="1"' : ''}${outlineAttrs(s.rowLevels, s.hiddenRows, r, !!s.outline?.summaryAbove)}`;
       if (cells.length || attrs || zero) rowXml.push(`<row r="${r + 1}"${attrs}>${cells.join('')}</row>`);

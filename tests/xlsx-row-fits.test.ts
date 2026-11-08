@@ -42,11 +42,17 @@ describe('rows Excel fitted itself (X21)', () => {
     expect(s.fittedRows.has(3)).toBe(false);
   });
 
-  it('saves it back as a height Excel fits again (no customHeight)', async () => {
+  it('saves it back at the height Excel showed, marked as set, while the row is unchanged', async () => {
+    // (Excel fits a row without customHeight again when it opens our save: laptop check 51 saw a
+    // 40 pt row come back at the default height)
     const book = (await readXlsx(file)).book;
-    const xml = sheetXml(await writeXlsx(book, plain));
-    expect(xml).toMatch(/<row r="2" ht="42.75">/);
+    let xml = sheetXml(await writeXlsx(book, plain));
+    expect(xml).toMatch(/<row r="2" ht="42.75" customHeight="1">/);
     expect(xml).toMatch(/<row r="4" ht="30" customHeight="1">/);
+    // once something in it changes, Excel fits it to what it holds
+    book.edit('Type', () => book.sheets[0].setCell(1, 0, { input: 'short' }));
+    xml = sheetXml(await writeXlsx(book, plain));
+    expect(xml).not.toMatch(/<row r="2" ht="42.75"/);
   });
 
   it('lets the row fit what it holds once something in it changes, or its height is set', async () => {
