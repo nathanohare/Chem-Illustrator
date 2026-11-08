@@ -570,7 +570,6 @@ function schemeSpan(doc: Doc, key: string, scheme: Partial<SchemePrefs>): Span |
       return { from: { x: x1 - hl, y: y - hw }, to: { x: x1 - hl, y: y + hw }, label: pt(hw), side: { x: -1, y: 0 } };
     }
   }
-  return null;
 }
 
 /** The drawing mechanismPreview shows: hydroxide, acetone and the two curved arrows, drawn with these gaps. */
