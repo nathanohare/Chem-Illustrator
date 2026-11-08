@@ -77,7 +77,7 @@ function patternSvg(p: IsotopePeak[]): string {
 }
 
 function deg(k: number | null): string {
-  return k === null ? '' : `${Math.round(k - 273.15)} °C`;
+  return k === null ? '' : `${Math.round(k - 273.15)} °C`.replace('-', '−');
 }
 
 /**
