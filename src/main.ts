@@ -11157,9 +11157,20 @@ async function fragmentAt(p: { x: number; y: number }, q: { x: number; y: number
 let analysisTimer = 0;
 /** The structures last analysed, for the panel's buttons. */
 let lastAnalysis: { results: FragmentResult[]; frags: Set<number>[]; molblocks: string[] } | null = null;
-const adductSel = $<HTMLSelectElement>('#analysis-adduct');
-adductSel.innerHTML = COMMON_ADDUCTS.map((a) => `<option>${a}</option>`).join('');
-adductSel.addEventListener('change', () => scheduleAnalysis(true));
+/** The ion for m/z, the isotope pattern and the HRMS text: picked in the m/z row of the Analysis panel. */
+const adductSel = { value: COMMON_ADDUCTS[0] };
+$('#analysis-body').addEventListener('change', (e) => {
+  const t = e.target as HTMLElement;
+  if (!(t instanceof HTMLSelectElement) || !t.matches('select[data-adduct]')) return;
+  adductSel.value = t.value;
+  scheduleAnalysis(true);
+});
+/** Starts the offline namer a few seconds after the first structure is analysed, so names come without asking. */
+let namerTimer = 0;
+function startNamerSoon(): void {
+  if (namerTimer || namer.ready) return;
+  namerTimer = window.setTimeout(() => { namer.start().then(() => scheduleAnalysis(true), () => { /* stays unnamed; tried again next session */ }); }, 3000);
+}
 /** What PubChem had on each structure looked up this session, by SMILES. */
 const pubchemStates = new Map<string, PubChemState>();
 
@@ -11288,10 +11299,6 @@ $('#analysis-body').addEventListener('click', (e) => {
   const t = e.target as HTMLElement;
   const page = t.closest<HTMLElement>('[data-pubchem-page]');
   if (page) { e.preventDefault(); openWebPage(compoundPage(Number(page.dataset.pubchemPage))); return; }
-  const nm = t.closest<HTMLButtonElement>('button[data-name]');
-  if (nm && lastAnalysis) { const k = Number(nm.dataset.name); const r = lastAnalysis.results[k]; if (r?.smiles && lastAnalysis.molblocks[k]) void nameForPanel(r.smiles, lastAnalysis.molblocks[k]); return; }
-  const calc = t.closest<HTMLButtonElement>('button[data-calc]');
-  if (calc && lastAnalysis) { const r = lastAnalysis.results[Number(calc.dataset.calc)]; if (r && !r.error) void showLabCalculator({ mw: r.mw, label: r.formula }); return; }
   const findBtn = t.closest<HTMLButtonElement>('button[data-cas]');
   if (findBtn && lastAnalysis) { const r = lastAnalysis.results[Number(findBtn.dataset.cas)]; if (r?.smiles) void findCas(r.smiles, casStates.has(r.smiles)); return; }
   const look = t.closest<HTMLButtonElement>('button[data-pubchem]');
@@ -11536,6 +11543,7 @@ async function runAnalysis(force: boolean): Promise<void> {
   if (seq !== analysisSeq) return;
   lastAnalysis = { results, frags, molblocks: exports.map((e) => e.molblock) };
   // once the namer is running, every structure analysed gets its name without asking
+  if (results.some((r) => !r.error && r.smiles)) startNamerSoon();
   if (namer.ready) results.forEach((r, i) => { if (!r.error && r.smiles && !polymers[i] && !rGroupNames(frags[i]).length && !nameStates.has(r.smiles)) void nameForPanel(r.smiles, exports[i].molblock); });
   saySelection(results);
   // the ribbon's Analysis box: the first structure's formula (and how many more), weight, exact mass and m/z
@@ -11548,7 +11556,7 @@ async function runAnalysis(force: boolean): Promise<void> {
     exact: first.exact.toFixed(4),
     ion: firstIon ? { label: adductHtml(firstIon.adduct.label), mz: firstIon.mz.toFixed(4) } : null,
   } : null);
-  panel.innerHTML = results.map((r, i) => polymers[i] ? polymerHtml(r, polymers[i]!) : analysisHtml(r, i, adductSel.value, { stereo: r.error ? '' : stereoSummary(frags[i]), unknown: exports[i].unknownLabels, electrons: frags[i].size ? electronsHtml(countElectrons(doc, frags[i].values().next().value!)) : '', rGroups: rGroupNames(frags[i]), name: r.error || !r.smiles || rGroupNames(frags[i]).length ? '' : nameHtml(nameStates.get(r.smiles) ?? { kind: 'idle' }, i), pubchem: r.error || !r.smiles ? '' : pubchemHtml(pubchemStates.get(r.smiles) ?? { kind: 'idle' }, i), cas: r.error || !r.smiles ? undefined : casHtml(casStateOf(r.smiles), i) })).join('');
+  panel.innerHTML = results.map((r, i) => polymers[i] ? polymerHtml(r, polymers[i]!) : analysisHtml(r, i, adductSel.value, { ions: COMMON_ADDUCTS, stereo: r.error ? '' : stereoSummary(frags[i]), unknown: exports[i].unknownLabels, electrons: frags[i].size ? electronsHtml(countElectrons(doc, frags[i].values().next().value!)) : '', rGroups: rGroupNames(frags[i]), name: r.error || !r.smiles || rGroupNames(frags[i]).length ? '' : nameHtml(nameStates.get(r.smiles) ?? { kind: 'idle' }, i), pubchem: r.error || !r.smiles ? '' : pubchemHtml(pubchemStates.get(r.smiles) ?? { kind: 'idle' }, i), cas: r.error || !r.smiles ? undefined : casHtml(casStateOf(r.smiles), i) })).join('');
   nmrPanel.attach(panel, results.map((r, i) => (r.error || !r.smiles || polymers[i] || rGroupNames(frags[i]).length ? null : { molblock: exports[i].molblock, map: exports[i].map })));
   updatePanels();
 }

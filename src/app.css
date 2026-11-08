@@ -672,7 +672,8 @@ details.style-group > :not(summary) { margin-left: 12px; }
 #side-content th, .cr-lent th { text-align: left; font-weight: 500; color: var(--muted); padding: 2px 8px 2px 0; white-space: nowrap; vertical-align: top; }
 #side-content td, .cr-lent td { padding: 2px 0; font-variant-numeric: tabular-nums; }
 .frag + .frag { margin-top: 10px; padding-top: 8px; border-top: 1px dashed var(--line); }
-.formula { font-size: var(--fs-lg); font-weight: 600; margin-bottom: 4px; }
+.formula { font-size: var(--fs-lg); margin-bottom: 4px; overflow-wrap: anywhere; }
+.formula > b { font-weight: 600; }
 .smiles { font-family: var(--mono-font); font-size: var(--fs-xs); color: var(--muted); word-break: break-all; margin-top: 4px; }
 .muted { color: var(--muted); }
 .small { font-size: var(--fs-sm); }
@@ -1882,7 +1883,15 @@ dialog.periodic-table { position: fixed; inset: 64px 16px auto auto; max-height:
 .pt-cell[aria-pressed='true'] { border-color: var(--accent); background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
 
 /* Analysis panel: ion picker, isotope pattern, properties and the text buttons */
-#analysis-adduct { font: inherit; font-size: var(--fs-xs); padding: 0 2px; color: var(--text); background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-control); }
+/* the ion list in place of the m/z row's label, only as wide as the longest ion */
+.an-ion { white-space: nowrap; }
+.an-ion select { appearance: none; -webkit-appearance: none; width: auto; field-sizing: content; font: inherit; font-size: var(--fs-xs); line-height: 16px; padding: 0 11px 0 3px; margin-left: 2px; color: var(--text); background: var(--panel) no-repeat right 3px center / 6px 4px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 6 4'%3E%3Cpath d='M0 0h6L3 4z' fill='%23888'/%3E%3C/svg%3E"); border: 1px solid var(--line); border-radius: var(--r-control); cursor: pointer; }
+.an-ion select:hover, .an-ion select:focus-visible { border-color: var(--accent); }
+/* the systematic name after the formula, not bold, with its caption button */
+.an-iupac { font-weight: 400; }
+.an-iupac .iupac { overflow-wrap: anywhere; }
+.an-icon-btn { display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; margin-left: 3px; padding: 0; vertical-align: -3px; border: 1px solid transparent; border-radius: var(--r-control); background: transparent; color: var(--muted); }
+.an-icon-btn:hover { border-color: var(--line); color: var(--accent); }
 .frag details { margin-top: 6px; }
 .frag summary { cursor: pointer; font-size: var(--fs-sm); color: var(--muted); }
 .frag summary sup { line-height: 0; }
@@ -1904,10 +1913,6 @@ dialog.periodic-table { position: fixed; inset: 64px 16px auto auto; max-height:
 /* the Analysis panel's PubChem section */
 .pubchem { margin-top: 6px; }
 .pubchem .pc-name { overflow-wrap: anywhere; font-family: var(--ui-font); }
-.an-name { margin: 2px 0 4px; }
-.an-name .iupac { overflow-wrap: anywhere; font-size: 13px; }
-.an-name > button { display: block; margin-top: 4px; padding: 2px 8px; font-size: 12px; }
-.an-name.an-buttons { margin-top: 0; }
 .pubchem a { color: var(--accent); }
 .pc-signal { font-weight: 600; }
 .pc-danger { color: var(--slow); }
