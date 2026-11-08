@@ -315,8 +315,11 @@ export function applyRibbon(info: RibbonInfo, p: RibbonPrefs = {}, hooks: OwnGro
         const label = el.querySelector<HTMLElement>(':scope > .rb-label');
         const name = p.groupNames?.[key] ?? info.groups.get(key)!.name;
         if (label && label.textContent !== name) label.textContent = name;
-        const fold = el.querySelector<HTMLElement>(':scope > .rb-fold-btn > span');
-        if (fold && fold.textContent !== name) fold.textContent = name;
+        // (only the words: the button's first span is its picture)
+        const fold = el.querySelector<HTMLElement>(':scope > .rb-fold-btn .rb-fold-text');
+        if (fold && fold.textContent !== `${name} `) fold.textContent = `${name} `;
+        const foldBtn = el.querySelector<HTMLElement>(':scope > .rb-fold-btn');
+        if (foldBtn && foldBtn.getAttribute('aria-label') !== name) { foldBtn.setAttribute('aria-label', name); foldBtn.title = `${name}: show this group's buttons`; }
         applyItems(info, key, el, p, hooks);
       } else if (p.groupNames?.[key]) el.querySelector<HTMLElement>(':scope > .rb-label')!.textContent = p.groupNames[key];
       el.classList.toggle('rb-user-hidden', !!p.hiddenGroups?.includes(key));
