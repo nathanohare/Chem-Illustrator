@@ -19,12 +19,13 @@ function labelled(label: string, extra = {}): { doc: Doc; id: number } {
 }
 
 describe('label marks', () => {
-  it('lowers counts and raises charges by themselves', () => {
-    expect(shown('CH2CO2R1')).toBe('C|H|_2|C|O|_2|R|_1');
+  it('lowers counts and raises charges by themselves (and an R group\'s number, by the setting)', () => {
+    expect(shown('CH2CO2R1')).toBe('C|H|_2|C|O|_2|R|^1');
   });
 
   it('raises, lowers or keeps on the line the marked characters', () => {
-    expect(shown('CH2CO2R1', false, '...^^...')).toBe('C|H|_2|^C|^O|_2|R|_1');
+    expect(shown('CH2CO2R1', false, '...^^...')).toBe('C|H|_2|^C|^O|_2|R|^1');
+    expect(shown('CH2CO2R1', false, '...^^..=')).toBe('C|H|_2|^C|^O|_2|R|1');
     expect(shown('CH2', false, '..=')).toBe('C|H|2');
     expect(shown('Rx', false, '._')).toBe('R|_x');
   });
@@ -33,20 +34,39 @@ describe('label marks', () => {
     expect(markPieces([{ text: 'abc', at: 0 }], '^^.')).toEqual([{ text: 'ab', at: 0, sup: true }, { text: 'c', at: 2 }]);
   });
 
-  it('raises the number of R1 and R12 only, unless the preference is off or the file says otherwise', () => {
-    expect(labelLook({ label: 'R1' }).supDigits).toBe(true);
-    expect(labelLook({ label: 'R12' }).supDigits).toBe(true);
-    expect(labelLook({ label: 'OR1' }).supDigits).toBe(false);
-    expect(labelLook({ label: 'CO2R1' }).supDigits).toBe(false);
+  it('raises an R group\'s number wherever it is in the label by the setting, but not a count of R groups', () => {
+    const up = (label: string, supDigits = false) => labelPieces(label, supDigits).filter((p) => p.sup).map((p) => p.text);
+    expect(up('R1')).toEqual(['1']);
+    expect(up('R12')).toEqual(['12']);
+    expect(up('OR1')).toEqual(['1']);
+    expect(up('CO2R1')).toEqual(['1']);
+    expect(up('N(R1)2')).toEqual(['1']);
+    expect(up('NR1R2')).toEqual(['1', '2']);
+    expect(up('NR2')).toEqual([]);
+    expect(up('PR3')).toEqual([]);
+    expect(up('OR2')).toEqual(['2']);
+    // the setting wins over a file that wrote R1 on the line
     expect(labelLook({ label: 'R1', supDigits: false }).supDigits).toBe(false);
+    expect(up('R1', false)).toEqual(['1']);
     labelPrefs.superscriptR = false;
-    try { expect(labelLook({ label: 'R1' }).supDigits).toBe(false); } finally { labelPrefs.superscriptR = true; }
+    try {
+      expect(up('R1')).toEqual([]);
+      expect(up('OR1')).toEqual([]);
+      // a file's own raised digits stay raised
+      expect(up('R1', true)).toEqual(['1']);
+    } finally { labelPrefs.superscriptR = true; }
+  });
+
+  it('writes R numbers raised to CDXML when the label shows them so', () => {
+    expect(labelRuns('CO2R1', { supDigits: false })).toEqual([{ text: 'CO2R', formula: true }, { text: '1', sup: true }]);
+    labelPrefs.superscriptR = false;
+    try { expect(labelRuns('CO2R1', { supDigits: false })).toEqual([{ text: 'CO2R1', formula: true }]); } finally { labelPrefs.superscriptR = true; }
   });
 });
 
 describe('label marks in CDXML', () => {
   it('writes marked characters as raised or lowered runs and reads them back', () => {
-    expect(labelRuns('CH2CO2R1', { supDigits: false, marks: '...^^...' })).toEqual([{ text: 'CH2', formula: true }, { text: 'CO', sup: true }, { text: '2R1', formula: true }]);
+    expect(labelRuns('CH2CO2R1', { supDigits: false, marks: '...^^...' })).toEqual([{ text: 'CH2', formula: true }, { text: 'CO', sup: true }, { text: '2R', formula: true }, { text: '1', sup: true }]);
     const { doc, id } = labelled('CH2CO2R1', { labelMarks: '...^^...' });
     const xml = writeCdxml(doc);
     expect(xml).toContain('face="64">CO</s>');

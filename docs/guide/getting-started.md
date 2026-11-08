@@ -238,14 +238,15 @@ Presentations, spreadsheets, documents and designs save in their own formats; se
 | Page | What it holds |
 |---|---|
 | **General** | The start view, what a click on a grouped thing selects, outlining the rest of a group, where linked text goes, asking before a command changes every structure on the page, and your name on tracked changes in documents. |
-| **Drawing** | Terminal methyls as Me or CH3; axial chirality as Ra / Sa or P / M (Ra is the same as M, and Sa as P); charges from the + and − keys as a plain sign or in a circle; raised R-group numbers; mechanism arrows finding their own way around. |
+| **Drawing** | Terminal methyls as Me or CH3; axial chirality as Ra / Sa or P / M (Ra is the same as M, and Sa as P); charges from the + and − keys as a plain sign or in a circle; bond ends; raised R-group numbers (R¹, CO₂R¹), in chemistry and, if you like, in regular text; η ligands; and, under **Mechanism Arrows**, arrows finding their own way around, Check Arrows and the gaps at an arrow's tail and head. |
+| **Preferences** | Finishing text with Esc or Enter; alkyl isomer prefixes (tBu, *t*Bu, t-Bu, ᵗBu); how problems are marked; under **Pointer While Drawing**, the angle, length and key hints beside the pointer; and under **Counterions Typed as Text**, adding their charges and grouping them as salts. |
 | **Drawing Style** | Bond length, line widths, fonts and journal styles (see [Canvas](drawing.md#drawing-styles)). |
 | **Hotkeys** | Every key, to change, import or export (see [Keyboard and mouse](keyboard-and-mouse.md)). |
 | **Text and Spelling** | Chemistry typing (subscripts in formulas), spelling, your dictionary and replacements. |
 | **Color Palettes**, **Mode Colors**, **Reading Mode** | Your rows of colors, the color of each kind of tab, and Reading Mode's colors. |
 | **Schemes** | Gaps around arrows and + signs, text size above and below arrows, and the + boxes on new arrows. |
 | **AutoSave and Recovery** | AutoSave, how often unsaved work is copied for recovery, and how many versions are kept. |
-| **File Types** | Which kinds of file Chem Illustrator is offered for under **Open with** in Explorer, and a button to Windows' Default apps page (see [Files and sharing](files-and-sharing.md#opening-files-from-explorer-or-finder-desktop-app)). |
+| **Apps and System** | Which kinds of file Chem Illustrator is offered for under **Open with** in Explorer, and a button to Windows' Default apps page (see [Files and sharing](files-and-sharing.md#opening-files-from-explorer-or-finder-desktop-app)); drawings in Word, PowerPoint and Excel opening here; and the offer to make structures figures when a document is opened. |
 | **Online** | Looking up names on PubChem (sends the name typed to PubChem; clear it to keep everything on your computer) and the update check and whether to get Stable or Latest updates (desktop app only). |
 
 Your preferences, hotkeys, own templates, abbreviations, palettes and toolbox layout are kept in a small settings file, `settings.json`. **Edit ▸ Keyboard Shortcuts…** shows where it is on your computer.

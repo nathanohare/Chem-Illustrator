@@ -10,10 +10,14 @@ import { alkylEdits } from './typing';
 export function restyleRuns(runs: TextRun[], look: AlkylLook): TextRun[] | null {
   const text = rt.plainText(runs);
   const italicAt = (i: number) => !!rt.sliceRuns(runs, i, i + 1)[0]?.italic;
-  const edits = alkylEdits(text, italicAt, look);
+  const supAt = (i: number) => !!rt.sliceRuns(runs, i, i + 1)[0]?.sup;
+  const edits = alkylEdits(text, italicAt, look, supAt);
   if (!edits.length) return null;
   let out = runs;
-  for (const e of edits) if (e.italic !== undefined) out = rt.applyStyle(out, e.start, e.end, { italic: e.italic || undefined });
+  for (const e of edits) {
+    if (e.italic !== undefined) out = rt.applyStyle(out, e.start, e.end, { italic: e.italic || undefined });
+    if (e.pos !== undefined) out = rt.applyStyle(out, e.start, e.end, { sup: e.pos === 'sup' || undefined, sub: undefined });
+  }
   // dashes put in or taken out from the end backwards, keeping the look of the letter they go with
   for (const e of edits.filter((x) => x.text !== undefined).sort((a, b) => b.start - a.start)) {
     const style = rt.typingStyle(out, e.start, e.end, {});

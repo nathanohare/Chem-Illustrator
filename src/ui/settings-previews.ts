@@ -9,7 +9,8 @@ import { Doc } from '../model';
 import type { DocStyle } from '../style';
 import { freeRing, placeRing, sprout } from '../chem/chemgeom';
 import { recordPicture, pictureCanvas } from '../render/picture';
-import { Renderer } from '../render/renderer';
+import { Renderer, type WarnLook } from '../render/renderer';
+import { StructureChecks } from '../chem/warnings';
 import { applySchemePlan, planCleanUp, withSchemePrefs, type SchemePrefs } from '../chem/scheme-layout';
 import type { Measure } from '../editor/arrange';
 import { applyCharge } from '../editor/editor';
@@ -143,13 +144,13 @@ export function schemePreview(style: DocStyle, scheme: Partial<SchemePrefs>, w =
 }
 
 /** A drawing on a canvas, fitted into `w` × `h` CSS pixels on white (or not at all where the browser can't draw). */
-export function drawingCanvas(doc: Doc, w: number, h: number, pad = 10, maxScale = 3): HTMLCanvasElement {
-  const pic = recordPicture(doc, 2);
+export function drawingCanvas(doc: Doc, w: number, h: number, pad = 10, maxScale = 3, setup?: (r: Renderer) => void): HTMLCanvasElement {
+  const pic = recordPicture(doc, 2, setup);
   const out = sized(w, h);
   if (!pic || !out.ctx) return out.canvas;
   const pw = pic.box.x2 - pic.box.x1, ph = pic.box.y2 - pic.box.y1;
   const fit = Math.min((w - 2 * pad) / pw, (h - 2 * pad) / ph, maxScale);
-  const { canvas: src } = pictureCanvas(doc, pic, fit * dpr() * 72);
+  const { canvas: src } = pictureCanvas(doc, pic, fit * dpr() * 72, setup);
   const ctx = out.ctx;
   ctx.fillStyle = '#fff';
   ctx.fillRect(0, 0, w, h);
@@ -333,25 +334,18 @@ export function bondEndSwatch(round: number): HTMLElement {
   return canvas;
 }
 
-/**
- * Sample labels in an alkyl look (italic t, a dash or none), as atom labels show them, counts
- * lowered: typed as tBu, iPr…, and one typed with a dash.
- */
-export function alkylPreview(look: AlkylLook): HTMLElement {
-  const box = document.createElement('div');
-  box.className = 'alkyl-preview';
-  for (const typed of ['OtBu', 'N(iPr)2', 'Si(iPr)3', 'nBu', 'sBu', 'P(t-Bu)2']) {
-    const s = document.createElement('span');
-    s.className = 'ask-swatch';
-    const { label, marks } = styleLabel(typed, undefined, look);
-    for (const p of labelPieces(label, false, marks)) {
-      const el = document.createElement(p.italic ? 'i' : p.sub ? 'sub' : 'span');
-      el.textContent = p.text;
-      s.append(el);
-    }
-    box.append(s);
+/** OtBu written in an alkyl look (Settings ▸ Preferences), beside the list of looks. */
+export function alkylSwatch(look: AlkylLook): HTMLElement {
+  const s = document.createElement('span');
+  s.className = 'ask-swatch alkyl-swatch';
+  const { label, marks } = styleLabel('OtBu', undefined, look);
+  for (const p of labelPieces(label, false, marks)) {
+    let el: HTMLElement = document.createElement(p.sub ? 'sub' : p.sup ? 'sup' : 'span');
+    el.textContent = p.text;
+    if (p.italic) { const i = document.createElement('i'); i.append(el); el = i; }
+    s.append(el);
   }
-  return box;
+  return s;
 }
 
 /** How the drawing's labels are measured, as the canvas measures them (or roughly, where text can't be measured here). */
@@ -364,9 +358,9 @@ function measureOf(doc: Doc): Measure {
 }
 
 /** A small drawing beside a single choice, drawn as the canvas draws it. */
-function thumb(doc: Doc, w: number, h: number): HTMLElement {
+function thumb(doc: Doc, w: number, h: number, scale = 1.5, setup?: (r: Renderer) => void): HTMLElement {
   // (at one scale, so each choice's picture is drawn the same size)
-  const c = drawingCanvas(doc, w, h, 2, 1.5);
+  const c = drawingCanvas(doc, w, h, 2, scale, setup);
   c.classList.add('ask-thumb');
   return c;
 }
@@ -379,7 +373,68 @@ export function chargeSwatch(circled: boolean, style?: DocStyle): HTMLElement {
     const n = doc.addAtom(0, 0, 7);
     applyCharge(doc, n.id, 1, circled, (a, size) => symbolSpot(doc, measureOf(doc), a.id, [], size).at);
   });
-  return thumb(doc, 64, 26);
+  // (larger than the other thumbnails: the circled charge is small beside its label)
+  return thumb(doc, 72, 40, 2.6);
+}
+
+/** A counterion typed as text, with the charge it gets when typed (BF₄ → BF₄⁻), or as typed (Settings ▸ Preferences). */
+export function counterionSwatch(charged: boolean, style?: DocStyle): HTMLElement {
+  const doc = new Doc();
+  if (style) doc.style = { ...style };
+  const look = newTextLook(doc);
+  doc.bulk(() => doc.addCaption({ x: 0, y: 0, runs: [{ text: 'BF' }, { text: '4', sub: true }, ...(charged ? [{ text: '−', sup: true }] : [])].map((r) => ({ ...r, ...look })), justify: 'left' }));
+  return thumb(doc, 60, 30, 1.6);
+}
+
+/**
+ * A salt typed as two text boxes (NBu₄⁺ and BF₄⁻), outlined in grey as one group when counterions
+ * are grouped with their partner (as the canvas outlines a group), or apart (Settings ▸ Preferences).
+ */
+export function saltSwatch(grouped: boolean, style?: DocStyle): HTMLElement {
+  const doc = new Doc();
+  if (style) doc.style = { ...style };
+  const look = newTextLook(doc);
+  const L = doc.style.bondLength;
+  doc.bulk(() => {
+    const cation = doc.addCaption({ x: 0, y: 0, runs: [{ text: 'NBu' }, { text: '4', sub: true }, { text: '+', sup: true }].map((r) => ({ ...r, ...look })), justify: 'left' });
+    // (the anion a little way after the cation, as typed beside it)
+    doc.addCaption({ x: measureOf(doc).captionBox(cation).x2 + L * 0.35, y: 0, runs: [{ text: 'BF' }, { text: '4', sub: true }, { text: '−', sup: true }].map((r) => ({ ...r, ...look })), justify: 'left' });
+  });
+  const W = 112, H = 30, pad = 5;
+  const out = sized(W, H);
+  out.canvas.classList.add('ask-thumb');
+  const pic = recordPicture(doc, 2);
+  if (!pic || !out.ctx) return out.canvas;
+  const ctx = out.ctx;
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(0, 0, W, H);
+  const pw = pic.box.x2 - pic.box.x1, ph = pic.box.y2 - pic.box.y1;
+  const fit = Math.min((W - 2 * pad) / pw, (H - 2 * pad) / ph, 1.6);
+  const { canvas: src } = pictureCanvas(doc, pic, fit * dpr() * 72);
+  const dw = pw * fit, dh = ph * fit, x = (W - dw) / 2, y = (H - dh) / 2;
+  ctx.drawImage(src, x, y, dw, dh);
+  if (grouped) {
+    ctx.strokeStyle = 'rgba(110, 110, 110, 0.85)';
+    ctx.lineWidth = 1;
+    ctx.setLineDash([4, 2]);
+    ctx.strokeRect(x - 2.5, y - 2.5, dw + 5, dh + 5);
+  }
+  return out.canvas;
+}
+
+/** A lone single bond (which Warnings flags: it reads as ethane), marked as problems are marked on the drawing (Settings ▸ Preferences). */
+export function problemSwatch(look: WarnLook, style?: DocStyle): HTMLElement {
+  const doc = new Doc();
+  if (style) doc.style = { ...style };
+  const L = doc.style.bondLength;
+  // (watching from the start, so the checks see the atoms come)
+  const checks = new StructureChecks(doc);
+  doc.bulk(() => {
+    const a = doc.addAtom(0, 0), b = doc.addAtom(L * 0.866, -L / 2);
+    doc.addBond(a.id, b.id);
+  });
+  checks.update();
+  return thumb(doc, 54, 30, 1.5, (r) => { r.showWarnings = true; r.checks = checks; r.warnLook = look; });
 }
 
 /** A short chain whose end is written as the terminal methyls will be (Me or CH₃), as Show Terminal Methyls writes it. */
@@ -415,6 +470,13 @@ export function cursorAidSwatch(look: CursorAidPrefs['look']): HTMLElement {
  * (Settings ▸ Drawing).
  */
 export function mechanismPreview(gaps: { start: number | null; end: number | null }, style?: DocStyle, w = 232): HTMLElement {
+  const box = document.createElement('div');
+  box.append(drawingCanvas(mechanismDoc(gaps, style), w, Math.round(w * 0.5), 6));
+  return box;
+}
+
+/** The drawing mechanismPreview shows: hydroxide, acetone and the two curved arrows, drawn with these gaps. */
+export function mechanismDoc(gaps: { start: number | null; end: number | null }, style?: DocStyle): Doc {
   const doc = new Doc();
   if (style) doc.style = { ...style };
   const L = doc.style.bondLength;
@@ -441,7 +503,5 @@ export function mechanismPreview(gaps: { start: number | null; end: number | nul
       }
     });
   } finally { Object.assign(arrowGaps, was); }
-  const box = document.createElement('div');
-  box.append(drawingCanvas(doc, w, Math.round(w * 0.5), 6));
-  return box;
+  return doc;
 }
