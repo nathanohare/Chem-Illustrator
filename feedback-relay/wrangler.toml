@@ -1,0 +1,15 @@
+# Chemweave feedback relay (see README.md in this folder for setup)
+name = "chemweave-feedback"
+main = "worker.js"
+compatibility_date = "2025-09-01"
+
+[vars]
+PUBLIC_REPO = "nathanohare/Chem-Illustrator"
+PRIVATE_REPO = "nathanohare/Chemweave-feedback"
+PAUSED = "0"
+PER_HOUR = "5"
+
+# Made by `npx wrangler kv namespace create FEEDBACK_KV`; paste the id it prints here.
+[[kv_namespaces]]
+binding = "FEEDBACK_KV"
+id = "PASTE_THE_KV_ID_HERE"

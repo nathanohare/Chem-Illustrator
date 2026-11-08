@@ -151,7 +151,7 @@ The **[user guide](docs/README.md)** covers each mode, every hotkey, and the fil
 
 ## Feedback
 
-Ideas, problems and questions are welcome. In the program, use **Help ▸ Send Feedback**: it fills in a new [issue](https://github.com/nathanohare/Chem-Illustrator/issues) on this page for you, or copies the text to send another way. See [Feedback, problems and ideas](docs/guide/feedback.md).
+Ideas, problems and questions are welcome. In the program, use **Help ▸ Send Feedback**: it sends your report straight to the team, no account needed, and you choose whether it stays private or appears on the public [issues](https://github.com/nathanohare/Chem-Illustrator/issues) page. See [Feedback, problems and ideas](docs/guide/feedback.md).
 
 ## Support Chemweave
 

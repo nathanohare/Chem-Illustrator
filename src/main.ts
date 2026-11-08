@@ -10159,6 +10159,27 @@ const feedback = new FeedbackDialog({
     Computer: computerName(navigator.userAgent),
     Mode: ws.active.mode,
   }),
+  pagePicture: () => {
+    // the drawing on screen, small enough to send (a PNG at screen size, at most 2000 px a side)
+    try {
+      const p = recordPicture(doc, 4);
+      if (!p) return null;
+      const side = Math.max(p.box.x2 - p.box.x1, p.box.y2 - p.box.y1);
+      const dpi = side > 0 ? Math.min(144, Math.max(48, (2000 / side) * 72)) : 96;
+      const c = pictureCanvas(doc, p, dpi).canvas;
+      // on white, so it reads on GitHub's dark pages too
+      const out = document.createElement('canvas');
+      out.width = c.width;
+      out.height = c.height;
+      const g = out.getContext('2d')!;
+      g.fillStyle = '#fff';
+      g.fillRect(0, 0, out.width, out.height);
+      g.drawImage(c, 0, 0);
+      return out.toDataURL('image/png');
+    } catch {
+      return null;
+    }
+  },
 });
 
 /** An error nothing caught: say so, with a button that fills in a problem report about it. */
