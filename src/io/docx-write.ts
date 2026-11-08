@@ -31,7 +31,7 @@ import { themeXml } from './xlsx-view';
 import { facesToEmbed, newGuid, obfuscate, type FontSource } from './font-embed';
 import { fromDataUrl } from '../render/images';
 import { CHEMDRAW_PROG, chemdrawObject, embeddedPart, OLE_REL, OLE_TYPE } from './ole-object';
-import { BULLETS, fitParas, listInfo, paraCount, samePara, schemeOf, splitParagraphs } from '../text/paragraphs';
+import { BULLETS, fitParas, listInfo, paraCount, samePara, schemeOf, splitParagraphs, type ListInfo } from '../text/paragraphs';
 import { BOX_PAD, COL_GAP, COMPOUND, END_FORMAT, FOOT_FORMAT, columnsOf, contentsPrint, OBJECT_CHAR, SHADOWS, charStylesOf, watermarkPlace, fieldTexts, floatOf, floatGaps, lookExtent, lookOf, noteStyle, objectsInText, pruneObjects, EMPTY_FORM, styleOf, runStyleOf, type CharStyle, type DocObject, type DocText, type Embedded, type FigureFrame, type FigureLook, type HeaderFooter, type HfBody, type HfKey, type NamedStyle, type PageBorder, type PageSetup, type Watermark } from '../document/document';
 import { ACS_LINE, GRID_LINE, bibHang, docCellAlign, shownSize } from '../document/doc-layout';
 import { sectionsOf, type Section } from '../document/sections';
@@ -58,7 +58,7 @@ import type { ChartBox } from '../sheet/chart-box';
 import { appPropsXml, corePropsXml, writeKeptParts, type ContentControl } from './kept-parts';
 import { cmlGuid, contentsSig, writeCml } from './cml';
 import {
-  BIB_MARK, CHART_NAME, CITE_FIELD, DOCX_CT, W14_NS, W15_NS, W16CID_NS, W16CEX_NS, DOCX_REL, DRAWING_NAME, FORMULA_STYLE, MODEL_NS, MC_NS, M_NS, PIC_NS, TABLE_MARK, W_NS, WORD_HIGHLIGHTS, WP_NS, WPS_NS, WPG_NS, twips, toWordDate, type DocxModel,
+  BIB_MARK, CHART_NAME, CITE_FIELD, DOCX_CT, W14_FX, W14_NS, W15_NS, W16CID_NS, W16CEX_NS, w14Look, w14Parts, DOCX_REL, DRAWING_NAME, FORMULA_STYLE, MODEL_NS, MC_NS, M_NS, PIC_NS, TABLE_MARK, W_NS, WORD_HIGHLIGHTS, WP_NS, WPS_NS, WPG_NS, twips, toWordDate, type DocxModel,
 } from './docx-base';
 
 export interface DocxDeps {
@@ -157,8 +157,8 @@ class DocxWriter {
   private model: DocxModel;
   private textW: number;
   private fullW: number;
-  /** The comments to write (those on some text), with the Word ids of each one's replies. */
-  private cmts = new Map<number, { c: CommentThread; replies: number[] }>();
+  /** The comments to write (those on some text), by their ids here: each one's Word id, and its replies'. */
+  private cmts = new Map<number, { c: CommentThread; wid: number; replies: number[] }>();
   /** How much of each comment's text is still to be written (its range closes when none is left). */
   private cmtLeft = new Map<number, number>();
   private cmtOpen = new Set<number>();
@@ -216,10 +216,11 @@ class DocxWriter {
     this.fullW = Math.max(36, t.page.w - t.page.left - t.page.right);
     // figures are made to fit a column's width
     this.textW = columnsOf(t.page, this.fullW).w;
-    // comments: replies are comments of their own in Word, numbered after the others
+    // comments: replies are comments of their own in Word; all numbered in the order of the
+    // text, each comment's replies right after it, as Word numbers them
     const placed = placedComments(t.runs, t.comments);
-    let next = Math.max(-1, ...placed.map((p) => p.id)) + 1;
-    for (const p of placed) this.cmts.set(p.id, { c: p.c, replies: (p.c.replies ?? []).map(() => next++) });
+    let next = 0;
+    for (const p of placed) this.cmts.set(p.id, { c: p.c, wid: next++, replies: (p.c.replies ?? []).map(() => next++) });
     for (const r of t.runs) {
       const n = r.text.replace(/\n/g, '').length;
       for (const id of cmtIds(r.cmt)) if (this.cmts.has(id)) this.cmtLeft.set(id, (this.cmtLeft.get(id) ?? 0) + n);
@@ -306,9 +307,11 @@ class DocxWriter {
   private async body(main: string): Promise<string> {
     const t = this.t;
     const n = paraCount(rt.plainText(t.runs));
-    const paras = fitParas(t.paras, n);
+    const fitted = fitParas(t.paras, n);
     const runsOf = this.splitParas(t.runs);
-    const lists = listInfo(paras);
+    const lists = listInfo(fitted);
+    // (a list whose levels are written in different schemes goes to Word as one list)
+    const paras = oneWordList(fitted, lists);
     // tracked changes on the paragraph marks (a line break typed or deleted while tracking)
     const markRev: (string | undefined)[] = [];
     for (const r of t.runs) for (const ch of r.text) if (ch === '\n') markRev.push(r.rev);
@@ -463,7 +466,7 @@ class DocxWriter {
       const w = this.cmts.get(id);
       if (!w || this.cmtOpen.has(id) || !this.cmtLeft.get(id)) continue;
       this.cmtOpen.add(id);
-      for (const x of [id, ...w.replies]) out += `<w:commentRangeStart w:id="${x}"/>`;
+      for (const x of [w.wid, ...w.replies]) out += `<w:commentRangeStart w:id="${x}"/>`;
     }
     return out;
   }
@@ -494,52 +497,67 @@ class DocxWriter {
 
   private cmtEnd(id: number): string {
     this.cmtOpen.delete(id);
-    return [id, ...this.cmts.get(id)!.replies].map((x) => `<w:commentRangeEnd w:id="${x}"/><w:r><w:commentReference w:id="${x}"/></w:r>`).join('');
+    const w = this.cmts.get(id)!;
+    return [w.wid, ...w.replies].map((x) => `<w:commentRangeEnd w:id="${x}"/><w:r><w:commentReference w:id="${x}"/></w:r>`).join('');
   }
 
   /**
-   * Word's comments part, and Word 2013's part linking replies to their comment and marking the
-   * resolved ones (by the id of each comment's last paragraph).
+   * Word's comments part, with the parts Word 365 writes beside it ([MS-DOCX] 2.1): Word 2013's
+   * linking replies to their comment and marking the resolved ones (commentsExtended), and each
+   * comment's lasting id (commentsIds) and that id's time in UTC (commentsExtensible), all by the
+   * paragraph id (w14:paraId) of each comment's last paragraph.
    */
   private commentParts(main: string): void {
+    const part = 'word/comments.xml';
     let para = 0x10000000;
     const notes: string[] = [], ex: string[] = [], cids: string[] = [], cex: string[] = [];
+    // lasting ids: those the comments came with, and new ones (unique, as Word's are) for the rest
+    const kept = new Set<string>();
+    for (const { c } of this.cmts.values()) for (const n of [c, ...(c.replies ?? [])]) if (n.word?.id && /^[0-9A-F]{8}$/i.test(n.word.id)) kept.add(n.word.id.toUpperCase());
+    let durable = 0x20000000;
+    const newId = (): string => {
+      let id = (durable++).toString(16).toUpperCase();
+      while (kept.has(id)) id = (durable++).toString(16).toUpperCase();
+      kept.add(id);
+      return id;
+    };
     const note = (id: number, c: CommentNote, parent: string | null, done: boolean): string => {
-      // a comment from a Word file whose text wasn't changed here: its paragraphs as Word wrote them (with their formatting)
-      const kept = c.word?.paras?.length && c.word.text === c.text ? c.word.paras : null;
+      // a comment from a Word file whose text wasn't changed here: its paragraphs as Word wrote
+      // them (with their formatting), its links related to the comments part afresh
+      const word = c.word?.paras?.length && c.word.text === c.text ? c.word.paras : null;
+      const links = c.word?.links ?? [];
       const lines = c.text.split('\n');
-      const ids = (kept ?? lines).map(() => (para++).toString(16).toUpperCase());
-      const ps = kept ? kept.map((p, i) => p.replace(/^<w:p\b/, `<w:p w14:paraId="${ids[i]}" w14:textId="77777777"`))
+      const ids = (word ?? lines).map(() => (para++).toString(16).toUpperCase());
+      const ps = word ? word.map((p, i) => p.replace(/^<w:p\b/, `<w:p w14:paraId="${ids[i]}" w14:textId="77777777"`)
+        .replace(/ r:id="link:(\d+)"/g, (_, k: string) => ` r:id="${this.pkg.relate(part, REL.hyperlink, links[Number(k)] ?? '', true)}"`))
         : lines.map((line, i) => `<w:p w14:paraId="${ids[i]}" w14:textId="77777777">${i === 0 ? '<w:r><w:annotationRef/></w:r>' : ''}${run('', line)}</w:p>`);
       const last = ids[ids.length - 1];
       const date = c.date ? ` w:date="${xml(toWordDate(c.date))}"` : '';
-      notes.push(`<w:comment w:id="${id}" w:author="${xml(c.author || 'Author')}"${date} w:initials="${xml(initials(c.author) || 'A')}">${ps.join('')}</w:comment>`);
+      // (the initials the comment came with, else made from the name as Word makes them)
+      notes.push(`<w:comment w:id="${id}" w:author="${xml(c.author || 'Author')}"${date} w:initials="${xml(c.word?.initials || initials(c.author) || 'A')}">${ps.join('')}</w:comment>`);
       ex.push(`<w15:commentEx w15:paraId="${last}"${parent ? ` w15:paraIdParent="${parent}"` : ''} w15:done="${done ? 1 : 0}"/>`);
       // Word 365's lasting id for the comment, and its time in UTC
-      const did = c.word?.id && /^[0-9A-F]{8}$/i.test(c.word.id) ? c.word.id.toUpperCase() : null;
+      const did = c.word?.id && /^[0-9A-F]{8}$/i.test(c.word.id) ? c.word.id.toUpperCase() : newId();
       const utc = new Date(c.date);
-      if (did) {
-        cids.push(`<w16cid:commentId w16cid:paraId="${last}" w16cid:durableId="${did}"/>`);
-        if (!isNaN(utc.getTime())) cex.push(`<w16cex:commentExtensible w16cex:durableId="${did}" w16cex:dateUtc="${utc.toISOString().replace(/\.\d+Z$/, 'Z')}"/>`);
-      }
+      cids.push(`<w16cid:commentId w16cid:paraId="${last}" w16cid:durableId="${did}"/>`);
+      if (!isNaN(utc.getTime())) cex.push(`<w16cex:commentExtensible w16cex:durableId="${did}" w16cex:dateUtc="${utc.toISOString().replace(/\.\d+Z$/, 'Z')}"/>`);
       return last;
     };
-    for (const [id, { c, replies }] of this.cmts) {
-      const top = note(id, c, null, !!c.done);
+    for (const { c, wid, replies } of this.cmts.values()) {
+      const top = note(wid, c, null, !!c.done);
       (c.replies ?? []).forEach((r, i) => note(replies[i], r, top, !!c.done));
     }
+    // (Word 2010's and 2013's markup marked as ones to skip, so Word 2007 and strict readers take the parts)
+    const ns = `xmlns:w="${W_NS}" xmlns:r="${NS.r}" xmlns:mc="${MC_NS}" xmlns:w14="${W14_NS}" xmlns:w15="${W15_NS}" xmlns:w16cid="${W16CID_NS}" xmlns:w16cex="${W16CEX_NS}"`;
     this.pkg.relate(main, DOCX_REL.comments, 'comments.xml');
-    // (Word 2010's paragraph ids marked as ones to skip, so Word 2007 and strict readers take the part)
-    this.pkg.add('word/comments.xml', `${HEAD}<w:comments xmlns:w="${W_NS}" xmlns:w14="${W14_NS}" xmlns:mc="${MC_NS}" mc:Ignorable="w14">${notes.join('')}</w:comments>`, DOCX_CT.comments);
+    this.pkg.add(part, `${HEAD}<w:comments ${ns} mc:Ignorable="w14 w15 w16cid w16cex">${notes.join('')}</w:comments>`, DOCX_CT.comments);
     this.pkg.relate(main, DOCX_REL.commentsExtended, 'commentsExtended.xml');
-    this.pkg.add('word/commentsExtended.xml', `${HEAD}<w15:commentsEx xmlns:w15="${W15_NS}" xmlns:mc="${MC_NS}">${ex.join('')}</w15:commentsEx>`, DOCX_CT.commentsExtended);
-    if (cids.length) {
-      this.pkg.relate(main, DOCX_REL.commentsIds, 'commentsIds.xml');
-      this.pkg.add('word/commentsIds.xml', `${HEAD}<w16cid:commentsIds xmlns:w16cid="${W16CID_NS}">${cids.join('')}</w16cid:commentsIds>`, DOCX_CT.commentsIds);
-    }
+    this.pkg.add('word/commentsExtended.xml', `${HEAD}<w15:commentsEx ${ns} mc:Ignorable="w14 w15 w16cid w16cex">${ex.join('')}</w15:commentsEx>`, DOCX_CT.commentsExtended);
+    this.pkg.relate(main, DOCX_REL.commentsIds, 'commentsIds.xml');
+    this.pkg.add('word/commentsIds.xml', `${HEAD}<w16cid:commentsIds ${ns} mc:Ignorable="w14 w15 w16cid w16cex">${cids.join('')}</w16cid:commentsIds>`, DOCX_CT.commentsIds);
     if (cex.length) {
       this.pkg.relate(main, DOCX_REL.commentsExtensible, 'commentsExtensible.xml');
-      this.pkg.add('word/commentsExtensible.xml', `${HEAD}<w16cex:commentsExtensible xmlns:w16cex="${W16CEX_NS}">${cex.join('')}</w16cex:commentsExtensible>`, DOCX_CT.commentsExtensible);
+      this.pkg.add('word/commentsExtensible.xml', `${HEAD}<w16cex:commentsExtensible ${ns} mc:Ignorable="w14 w15 w16cid w16cex">${cex.join('')}</w16cex:commentsExtensible>`, DOCX_CT.commentsExtensible);
     }
   }
 
@@ -1502,6 +1520,14 @@ class DocxWriter {
         out.push(`<w:style w:type="character" w:styleId="${sid}"><w:name w:val="${nm}"/><w:basedOn w:val="DefaultParagraphFont"/><w:uiPriority w:val="99"/><w:semiHidden/><w:unhideWhenUsed/><w:rPr><w:vertAlign w:val="superscript"/></w:rPr></w:style>`);
       }
     }
+    // comments: Word's own styles for their text and marks, and for the links in comments kept as Word wrote them
+    if (this.cmts.size) {
+      const has = (id: string) => !!t.styles[id] || !!this.charStyles[id];
+      if (!has('CommentText')) out.push(`<w:style w:type="paragraph" w:styleId="CommentText"><w:name w:val="annotation text"/><w:basedOn w:val="Normal"/><w:uiPriority w:val="99"/><w:unhideWhenUsed/><w:rPr><w:sz w:val="20"/><w:szCs w:val="20"/></w:rPr></w:style>`);
+      if (!has('CommentReference')) out.push(`<w:style w:type="character" w:styleId="CommentReference"><w:name w:val="annotation reference"/><w:basedOn w:val="DefaultParagraphFont"/><w:uiPriority w:val="99"/><w:semiHidden/><w:unhideWhenUsed/><w:rPr><w:sz w:val="16"/><w:szCs w:val="16"/></w:rPr></w:style>`);
+      const linked = [...this.cmts.values()].some(({ c }) => [c, ...(c.replies ?? [])].some((n) => n.word?.paras?.some((x) => x.includes('<w:rStyle w:val="Hyperlink"/>'))));
+      if (linked && !has('Hyperlink')) out.push(`<w:style w:type="character" w:styleId="Hyperlink"><w:name w:val="Hyperlink"/><w:basedOn w:val="DefaultParagraphFont"/><w:uiPriority w:val="99"/><w:unhideWhenUsed/><w:rPr><w:color w:val="0563C1"/><w:u w:val="single"/></w:rPr></w:style>`);
+    }
     out.push(`<w:style w:type="character" w:default="1" w:styleId="DefaultParagraphFont"><w:name w:val="Default Paragraph Font"/><w:uiPriority w:val="1"/><w:semiHidden/><w:unhideWhenUsed/></w:style>`);
     // the character styles (Emphasis, Strong, Compound Number and the person's own)
     for (const cs of Object.values(this.charStyles)) out.push(charStyleXml(cs));
@@ -1531,7 +1557,8 @@ class DocxWriter {
     const lvls = (key: string) => Array.from({ length: 9 }, (_, i) => {
       const bullet = key.startsWith('b');
       const { left, hang } = listIndent({ list: bullet ? 'bullet' : 'number', level: i }, em);
-      const sc = schemeOf(key.slice(1));
+      // (a list of mixed levels: each level's own scheme)
+      const sc = key.startsWith('n*') ? schemeOf(key.slice(2).split('|')[i]) : schemeOf(key.slice(1));
       const fmt = bullet ? 'bullet' : sc.levels[i].fmt;
       const text = bullet ? key.slice(1) || BULLETS[i % BULLETS.length] : sc.levels[i].text;
       // bullets that ordinary fonts may lack come from a symbol font
@@ -1552,6 +1579,33 @@ class DocxWriter {
 }
 
 // ---------------------------------------------------------------- pieces
+
+/**
+ * Numbered items of one list whose levels are written in different schemes (a Word list
+ * numbered 1. at its first level and a) at its second): all given one scheme id that names
+ * each level's ('*' and the levels' ids joined by |), so they are saved as one Word list, whose
+ * deeper levels start again under each item and keep their own start numbers as Word's do.
+ * A list runs from where its numbers start again to the next paragraph that is in no list.
+ */
+function oneWordList(paras: ParaStyle[], lists: ListInfo[]): ParaStyle[] {
+  const out = [...paras];
+  const numbered = (ps: ParaStyle | undefined) => ps?.list === 'number' && !ps.cont;
+  let from = 0;
+  const close = (to: number) => {
+    const levels: (string | undefined)[] = [];
+    for (let p = from; p < to; p++) if (numbered(paras[p])) levels[Math.max(0, Math.min(8, paras[p].level ?? 0))] ??= paras[p].scheme ?? '';
+    const used = levels.filter((x) => x !== undefined);
+    if (new Set(used).size < 2) return;
+    const id = '*' + Array.from({ length: 9 }, (_, i) => levels[i] ?? used[0]).join('|');
+    for (let p = from; p < to; p++) if (paras[p].list === 'number') out[p] = { ...paras[p], scheme: id };
+  };
+  for (let p = 0; p <= paras.length; p++) {
+    if (p < paras.length && paras[p].list && !(numbered(paras[p]) && lists[p].start)) continue;
+    close(p);
+    from = p;
+  }
+  return out;
+}
 
 /** A table drawing's table, when the drawing is just one table. */
 export function soleTable(c: Contents): TableData | null {
@@ -1655,15 +1709,23 @@ function runProps(r: TextRun, st: NamedStyle, x: { formula?: boolean; pos?: 'bas
  * order): a shadow, an outline round the letters, and the letters' fill (none, or see-through).
  */
 function textEffects(r: TextRun, color: string | undefined): string {
-  if (!r.shadow && !r.outline && !r.noFill && !r.transparency) return '';
+  if (!r.shadow && !r.outline && !r.noFill && !r.transparency && !r.wfx) return '';
   const ns = ` xmlns:w14="${W14_NS}"`;
-  const out: string[] = [];
-  if (r.shadow) out.push(`<w14:shadow${ns} w14:blurRad="38100" w14:dist="38100" w14:dir="2700000" w14:sx="100000" w14:sy="100000" w14:kx="0" w14:ky="0" w14:algn="tl"><w14:srgbClr w14:val="000000"><w14:alpha w14:val="60000"/></w14:srgbClr></w14:shadow>`);
-  if (r.outline) out.push(`<w14:textOutline${ns} w14:w="${Math.round((r.outlineW ?? 0.75) * 12700)}" w14:cap="flat" w14:cmpd="sng" w14:algn="ctr"><w14:solidFill><w14:srgbClr w14:val="${hex6(r.outline)}"/></w14:solidFill><w14:prstDash w14:val="solid"/><w14:round/></w14:textOutline>`);
+  // the effects as a Word file had them: each written back as it was (the shadow, outline and
+  // fill while the run's own still say what they did), else made from the run's own
+  const kept = w14Parts(r.wfx ?? ''), was = w14Look(r.wfx ?? '');
+  const made: Partial<Record<(typeof W14_FX)[number], string>> = {};
+  if (r.shadow) made.shadow = `<w14:shadow${ns} w14:blurRad="38100" w14:dist="38100" w14:dir="2700000" w14:sx="100000" w14:sy="100000" w14:kx="0" w14:ky="0" w14:algn="tl"><w14:srgbClr w14:val="000000"><w14:alpha w14:val="60000"/></w14:srgbClr></w14:shadow>`;
+  if (r.outline) made.textOutline = `<w14:textOutline${ns} w14:w="${Math.round((r.outlineW ?? 0.75) * 12700)}" w14:cap="flat" w14:cmpd="sng" w14:algn="ctr"><w14:solidFill><w14:srgbClr w14:val="${hex6(r.outline)}"/></w14:solidFill><w14:prstDash w14:val="solid"/><w14:round/></w14:textOutline>`;
   // (w14's alpha is how see-through, not how solid)
-  if (r.noFill) out.push(`<w14:textFill${ns}><w14:noFill/></w14:textFill>`);
-  else if (r.transparency) out.push(`<w14:textFill${ns}><w14:solidFill><w14:srgbClr w14:val="${hex6(color ?? '#000000')}"><w14:alpha w14:val="${Math.round(r.transparency * 100000)}"/></w14:srgbClr></w14:solidFill></w14:textFill>`);
-  return out.join('');
+  if (r.noFill) made.textFill = `<w14:textFill${ns}><w14:noFill/></w14:textFill>`;
+  else if (r.transparency) made.textFill = `<w14:textFill${ns}><w14:solidFill><w14:srgbClr w14:val="${hex6(color ?? '#000000')}"><w14:alpha w14:val="${Math.round(r.transparency * 100000)}"/></w14:srgbClr></w14:solidFill></w14:textFill>`;
+  const same: Partial<Record<(typeof W14_FX)[number], boolean>> = {
+    shadow: !!r.shadow === !!was.shadow,
+    textOutline: (r.outline ?? '').toLowerCase() === (was.outline ?? '') && r.outlineW === was.outlineW,
+    textFill: !!r.noFill === !!was.noFill && (r.transparency || 0) === (was.transparency || 0),
+  };
+  return W14_FX.map((k) => (kept.has(k) && same[k] !== false ? kept.get(k)! : made[k] ?? '')).join('');
 }
 
 /** A picture's or drawing's turn and flips, as DrawingML's a:xfrm has them (rot in 60000ths of a degree). */
