@@ -2713,7 +2713,11 @@ class DocxReader {
    * pictures stay (in their line); text boxes and the like inside a cell are left out.
    */
   private textCell(tc: Element, look: CellLook | null = null): TableCell {
-    const { runs, paras } = this.boxText(tc, true, look);
+    const { runs: read, paras } = this.boxText(tc, true, look);
+    // comments on the cell's text go on the whole table (Ctx.cell is off here to keep the cell's
+    // other content), so its runs keep no marks of their own: with both, Word was given the
+    // comment's range twice and called the saved file unreadable (laptop bench wd-551)
+    const runs = read.map((r) => { if (!r.cmt) return r; const { cmt: _, ...rest } = r; return rest; });
     const kept = runs.filter((r) => {
       const o = r.obj !== undefined ? this.objects[r.obj] : undefined;
       if (!o) return true;

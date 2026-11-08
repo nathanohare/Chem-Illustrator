@@ -461,7 +461,7 @@ class DocxWriter {
     let out = '';
     for (const id of cmtIds(r.cmt)) {
       const w = this.cmts.get(id);
-      if (!w || this.cmtOpen.has(id) || !this.cmtLeft.get(id)) continue;
+      if (!w || this.cmtOpen.has(id) || (this.cmtLeft.get(id) ?? 0) <= 0) continue;
       this.cmtOpen.add(id);
       for (const x of [id, ...w.replies]) out += `<w:commentRangeStart w:id="${x}"/>`;
     }
