@@ -9,8 +9,8 @@ export interface Field {
   value: string;
   /** Text after the box, such as a unit. */
   unit?: string;
-  /** A checkbox gives 'true' or 'false'. */
-  type?: 'number' | 'text' | 'textarea' | 'checkbox' | 'color' | 'password';
+  /** A checkbox gives 'true' or 'false'. A heading is a subheading over the fields after it (no box; its help goes in an "i" beside it). */
+  type?: 'number' | 'text' | 'textarea' | 'checkbox' | 'color' | 'password' | 'heading';
   /** Grey example text shown in an empty box. */
   placeholder?: string;
   /** Pick one of these instead of typing. */
@@ -21,6 +21,8 @@ export interface Field {
   help?: string;
   /** A small picture of the choice beside the box, drawn again as it changes. */
   inline?: (value: string) => Node;
+  /** A drop-down list only as wide as its choices, with its picture (`inline`) right beside it. */
+  short?: boolean;
   /** A drop-down list of its own on the same row, after the label (a checkbox's units, say); its value comes back under its own name. */
   beside?: { name: string; value: string; options: { value: string; label: string }[]; label: string };
 }
@@ -72,6 +74,14 @@ export function ask(title: string, fields: Field[], opts: { ok?: string; note?: 
     const inputs = new Map<string, HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>();
     const inlines: (() => void)[] = [];
     for (const f of fields) {
+      if (f.type === 'heading') {
+        const sub = document.createElement('h3');
+        sub.className = 'ask-subhead';
+        sub.textContent = f.label;
+        if (f.help) addInfo(sub, f.help);
+        form.append(sub);
+        continue;
+      }
       const row = document.createElement('label');
       row.className = 'ask-row';
       const name = document.createElement('span');
@@ -132,7 +142,14 @@ export function ask(title: string, fields: Field[], opts: { ok?: string; note?: 
         const slot = document.createElement('span');
         slot.className = 'ask-inline';
         slot.setAttribute('aria-hidden', 'true');
-        row.append(slot);
+        if (f.short && f.type !== 'checkbox') {
+          // the list and its picture together, in the boxes' column
+          const pair = document.createElement('span');
+          pair.className = 'ask-pair';
+          input.replaceWith(pair);
+          pair.append(input, slot);
+        } else row.append(slot);
+        if (f.type === 'checkbox') row.classList.add('ask-has-inline');
         const el = input;
         inlines.push(() => slot.replaceChildren(f.inline!(el instanceof HTMLInputElement && el.type === 'checkbox' ? String(el.checked) : el.value)));
       }

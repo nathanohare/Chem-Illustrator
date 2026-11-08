@@ -813,6 +813,12 @@ dialog.ask { min-width: min(92vw, 340px); }
 .ask-row.ask-check input { padding: 0; }
 .ask-row.ask-check.ask-has-beside { grid-template-columns: auto auto auto 1fr; }
 .ask-row .ask-beside { padding: 1px 4px; }
+/* a subheading over a group of settings on a page; a short list with its picture beside it; a checkbox with its picture after its words */
+.ask-form > .ask-subhead { margin: 8px 0 0; padding-top: 6px; border-top: 1px solid var(--line); font-size: var(--fs-sm, 0.85em); font-weight: 600; }
+.ask-form > .ask-subhead:first-of-type { margin-top: 2px; }
+.ask-form > .ask-row > .ask-pair { grid-column: 2; display: inline-flex; align-items: center; gap: 8px; justify-self: start; }
+.ask-pair > .ask-inline { margin-left: 0; min-width: 0; }
+.ask-row.ask-check.ask-has-inline { grid-template-columns: auto minmax(0, max-content) auto; justify-content: start; max-width: 44em; }
 .ask-thumb { border: 1px solid var(--line); border-radius: var(--r-control); }
 .ask-row.ask-wide { grid-template-columns: 1fr; align-items: start; }
 .ask-row textarea { width: 32em; max-width: 70vw; resize: vertical; font-family: ui-monospace, Consolas, monospace; }
@@ -3877,9 +3883,8 @@ html[data-density='large'] .rb-group { padding: 0 12px; }
 /* small pictures of a choice, beside its box; and a page's bigger preview when it isn't in the Settings window */
 .ask-inline { display: inline-flex; align-items: center; margin-left: 8px; min-width: 54px; }
 .ask-swatch { font: 600 15px Arial, sans-serif; padding: 0 6px; border: 1px solid var(--line); border-radius: var(--r-control); background: #fff; color: #111; line-height: 20px; }
-.alkyl-preview { display: flex; flex-wrap: wrap; gap: 6px; }
-.alkyl-preview .ask-swatch { font-weight: 400; white-space: nowrap; }
-.alkyl-preview sub { font-size: 75%; line-height: 0; }
+.alkyl-swatch { font-weight: 400; white-space: nowrap; }
+.alkyl-swatch :is(sub, sup) { font-size: 75%; line-height: 0; }
 .ask-preview { margin: 6px 0 10px; }
 .ask-preview canvas { border: 1px solid var(--line); border-radius: var(--r-control); }
 .ask-preview-title { margin: 10px 0 4px; font-size: var(--fs-sm, 0.85em); font-weight: 600; color: var(--muted, inherit); text-transform: uppercase; letter-spacing: 0.04em; }

@@ -489,7 +489,7 @@ export class Editor {
   arrowWidth(): number { return this.arrowLook.width ?? this.doc.style.lineWidth; }
   /** Tell the person something in the status bar. */
   say: (msg: string) => void = () => {};
-  /** The angle and length beside the pointer while drawing, and the modifier keys' hints (Settings ▸ Drawing). */
+  /** The angle and length beside the pointer while drawing, and the modifier keys' hints (Settings ▸ Preferences). */
   aids: CursorAidPrefs = { ...DEFAULT_CURSOR_AIDS };
   /** The modifier keys held now (for the hints beside the pointer). */
   private mods: Mods = { shift: false, alt: false, ctrl: false };
@@ -1028,10 +1028,7 @@ export class Editor {
 
   /** Put the highlight on an atom or bond from the keyboard (it stays until the mouse points elsewhere). */
   setKeyHot(h: Hit): void {
-    if (h && !this.hotHinted) {
-      this.hotHinted = true;
-      this.say('Press a key to act on the highlighted atom: 1 adds a bond, 2 a C=O, 6 a ring, letters set labels. Arrow keys move the highlight; Space selects the molecule, Enter returns.');
-    }
+    // (what the keys do is in the status bar's hints, not a message over the drawing)
     this.keyHot = h;
     this.keyHotHover = this.hover;
     this.keyHotAt = this.lastClient;
@@ -1891,8 +1888,6 @@ export class Editor {
 
   // ------------------------------------------------------------------ clicks
 
-  /** The keyboard highlight's hint has been shown (once a session). */
-  private hotHinted = false;
 
   /** The last bond-tool click that grew a bond from an atom (a quick second click there is a double-click). */
   private lastSprout: { atom: number; at: number; p: Vec } | null = null;

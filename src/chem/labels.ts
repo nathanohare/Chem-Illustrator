@@ -6,6 +6,7 @@ import type { Atom, Doc } from '../model';
 import { doubleBondGap } from '../style';
 import { SYMBOLS, elementNumber, hasImplicitH, implicitHydrogens, lowestValence, maxValence, valenceOfBonds } from './elements';
 import { LIGANDS } from './ligands';
+import { rNumberDigits, rNumberPrefs } from './r-numbers';
 import { anyMarks, readMark, withMark } from './label-marks';
 
 /**
@@ -166,6 +167,8 @@ export interface Token {
   charge: string;
   /** The count was written out (so "Ar1" keeps its 1). */
   explicit?: boolean;
+  /** An R group's number (the 1 of R1 or OR1, not the 2 of NR2): raised when Settings ▸ Drawing says so. */
+  rNum?: boolean;
   /** Where the token, its count and its charge start in the label text. */
   at?: number;
   countAt?: number;
@@ -178,6 +181,7 @@ export interface Token {
  */
 export function tokenize(label: string): Token[] {
   const out: Token[] = [];
+  let rDigits: Set<number> | undefined;
   let i = 0;
   while (i < label.length) {
     const rest = label.slice(i);
@@ -239,6 +243,7 @@ export function tokenize(label: string): Token[] {
       i += 1;
     }
     tok.at = start;
+    if (tok.kind === 'generic' && /\d$/.test(tok.text) && (rDigits ??= new Set(rNumberDigits(label))).has(start + tok.text.length - 1)) tok.rNum = true;
     out.push(tok);
   }
   return out;
@@ -260,7 +265,9 @@ function tokenPieces(t: Token, supDigits = false, marks?: LabelMarks): Piece[] {
   const up = supDigits && t.kind !== 'el';
   const m = t.kind === 'generic' ? /^(.*?\D)(\d+)$/.exec(t.text) : null;
   const at = t.at;
-  const p: Piece[] = m ? [{ text: m[1], at }, { text: m[2], sub: !up, sup: up, at: at === undefined ? undefined : at + m[1].length }] : [{ text: t.text, at }];
+  // (an R group's own number goes up by the setting, wherever it is in the label: OR¹, CO₂R¹)
+  const rUp = up || (!!t.rNum && rNumberPrefs.superscriptR);
+  const p: Piece[] = m ? [{ text: m[1], at }, { text: m[2], sub: !rUp, sup: rUp, at: at === undefined ? undefined : at + m[1].length }] : [{ text: t.text, at }];
   if (t.count > 1 || t.explicit) p.push({ text: String(t.count), sub: !up, sup: up, at: t.countAt });
   if (t.charge) p.push({ text: t.charge.replace('-', '−'), sup: true, at: t.chargeAt });
   return marks ? markPieces(p, marks) : p;
@@ -268,16 +275,16 @@ function tokenPieces(t: Token, supDigits = false, marks?: LabelMarks): Piece[] {
 
 /**
  * How the n-, i-, s- and t- of alkyl groups (tBu, iPr, nBu, sBu, iBu) are written, from
- * Settings ▸ Preferences: as typed, or one of four looks (no dash or a dash, upright or in
- * italics). The look is given to labels and text as they are typed, and to what is already in a
+ * Settings ▸ Preferences: as typed, or one of five looks (no dash or a dash, upright or in
+ * italics, or raised in italics with no dash: ᵗBu). The look is given to labels and text as they are typed, and to what is already in a
  * drawing when asked; it is kept in the text (the dash) and the label marks (the italics).
  */
-export type AlkylLook = 'typed' | 'plain' | 'italic' | 'dash' | 'both';
-export const ALKYL_LOOKS: AlkylLook[] = ['typed', 'plain', 'italic', 'dash', 'both'];
+export type AlkylLook = 'typed' | 'plain' | 'italic' | 'dash' | 'both' | 'raised';
+export const ALKYL_LOOKS: AlkylLook[] = ['typed', 'plain', 'italic', 'dash', 'both', 'raised'];
 export const alkylPrefs: { look: AlkylLook } = { look: 'typed' };
-/** What a look asks for: the prefix in italics or not, and a dash after it or not (null: as typed). */
-export function alkylWants(look: AlkylLook = alkylPrefs.look): { italic: boolean; dash: boolean } | null {
-  return look === 'typed' ? null : { italic: look === 'italic' || look === 'both', dash: look === 'dash' || look === 'both' };
+/** What a look asks for: the prefix in italics or not, a dash after it or not, and raised or not (ᵗBu; null: as typed). */
+export function alkylWants(look: AlkylLook = alkylPrefs.look): { italic: boolean; dash: boolean; sup: boolean } | null {
+  return look === 'typed' ? null : { italic: look === 'italic' || look === 'both' || look === 'raised', dash: look === 'dash' || look === 'both', sup: look === 'raised' };
 }
 
 /**
@@ -321,7 +328,8 @@ export function styleLabel(label: string, marks?: LabelMarks, look: AlkylLook = 
     const had = at.get(i);
     if (had === undefined) { text += label[i]; m += was[i]; continue; }
     text += label[i];
-    m += withMark(was[i], { italic: want.italic });
+    // (raised for ᵗBu; a prefix raised by an earlier look comes back down)
+    m += withMark(was[i], { italic: want.italic, ...(want.sup ? { pos: 'up' as const } : readMark(was[i]).pos === 'up' ? { pos: 'auto' as const } : {}) });
     const dash = dashFree(label, i) ? want.dash : had;
     if (dash && !had) { text += '-'; m += '.'; }
     else if (!dash && had) i++;
@@ -349,15 +357,14 @@ export function markPieces(pieces: Piece[], marks: LabelMarks): Piece[] {
   return out;
 }
 
-/** Whether a typed label shows R numbers raised (R¹, R¹²): set from the preferences. */
-export const labelPrefs = { superscriptR: true };
+/** Whether labels show R numbers raised (R¹, OR¹², CO₂R¹): set from Settings ▸ Drawing (the same object as rNumberPrefs). */
+export const labelPrefs = rNumberPrefs;
 
-/** Is this label one whose number goes up by itself (a single R and a number, as R1 or R12)? */
-export const isNumberedR = (label: string | null): boolean => !!label && /^R\d+$/.test(label);
 
 /** How an atom's label raises its characters: R numbers (from the file, or by the preference) and marks set by hand. */
 export function labelLook(a: { label: string | null; supDigits?: boolean; labelMarks?: string; centred?: boolean; stacked?: 'up' | 'down'; stackedLoose?: boolean }): { supDigits: boolean; marks?: LabelMarks; centred?: boolean; stacked?: 'up' | 'down'; stackedLoose?: boolean } {
-  const supDigits = a.supDigits ?? (labelPrefs.superscriptR && isNumberedR(a.label));
+  // (R numbers go up by the setting token by token; this is the label's own, from its file)
+  const supDigits = a.supDigits ?? false;
   return { supDigits, ...(a.labelMarks && a.label ? { marks: a.labelMarks } : {}), ...(a.centred ? { centred: true } : {}), ...(a.stacked ? { stacked: a.stacked } : {}), ...(a.stacked && a.stackedLoose ? { stackedLoose: true } : {}) };
 }
 

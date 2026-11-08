@@ -162,7 +162,8 @@ export function rangeHyphens(text: string): number[] {
 export interface CharLook { pos: 'base' | 'sub' | 'sup'; italic: boolean }
 
 /** One change a Fix makes to characters start..end: new text, and/or position and italics. */
-export interface FixEdit { start: number; end: number; pos?: 'sub' | 'sup'; italic?: boolean; bold?: boolean; text?: string }
+/** A change to make in text: a style (pos 'base' puts characters back on the line) or new text. */
+export interface FixEdit { start: number; end: number; pos?: 'sub' | 'sup' | 'base'; italic?: boolean; bold?: boolean; text?: string }
 
 export type IssueKind = 'formula' | 'solvent' | 'unit' | 'range' | 'nucleus';
 
