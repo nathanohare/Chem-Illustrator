@@ -8,7 +8,7 @@ This page covers Spreadsheet mode: cells and formulas, structures in cells, the 
 
 Click **+** at the end of the tab strip and pick **Spreadsheet (Tables, Charts, and Dashboards)**, or choose **File ▸ New ▸ Spreadsheet**. While a spreadsheet is showing, Ctrl+N starts another one.
 
-**File ▸ New ▸ New from Template…** offers a **Reaction table** (one row per entry: catalyst, loading, solvent, temperature, time, conversion, yield, ee and dr, with the best yield and its entry found for you) and a **Reagent sheet** (the reagent table below, and a Yield sheet that works out the percent yield from the product's structure and its isolated mass).
+**File ▸ New ▸ Spreadsheet** opens a blank workbook with a window of templates over it; click outside the window to keep the blank workbook, or pick one: **Reactions** (reaction table with the best entry found for you, substrate scope table, 24- and 96-well screening plates shaded by yield, kinetics time course with a chart, k and half-life), **Reagents and stock** (reagent sheet with the percent yield worked out, chemical inventory, stock solution calculator, gas cylinder and solvent still log), **Analysis** (HPLC/GC calibration curve, ee and er from HPLC peak areas, NMR yield with an internal standard, organolithium titration) and **Lab management** (order tracker, instrument booking, group duties rota). Turn the window off with the checkbox at its bottom, or in **Settings ▸ Preferences ▸ New Files**.
 
 Spreadsheets open from .xlsx, .xlsm, .xls and .ods files as well as text and SD files; see [File types](files-and-sharing.md#file-types).
 

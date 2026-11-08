@@ -8,6 +8,7 @@ import { foldIntoInfo } from './info-tip';
 import { Doc } from '../model';
 import { Master, SlideSize, LayoutId, layoutFrames, frameFields, textStyles, slideColours } from '../deck/deck';
 import { paintSlide } from '../deck/slide-view';
+import { forgetTextWidths } from '../render/renderer';
 import { SLIDE_TEMPLATES, SlideTemplate, applyTemplate, themeFromMaster, newThemeId } from '../deck/templates';
 import { editTheme } from './theme-editor';
 
@@ -111,7 +112,7 @@ export function pickSlideTemplate(m: Master, size: SlideSize, defaultId: string 
     function render(): void {
       repaint = [];
       const kids: HTMLElement[] = [];
-      for (const group of ['Mine', 'Light', 'Dark title slide', 'Bright'] as const) {
+      for (const group of ['Mine', 'Light', 'Dark title slide', 'Bright', 'Minimal', 'Bold', 'Classic', 'Chemistry'] as const) {
         const list = group === 'Mine' ? mine : SLIDE_TEMPLATES.filter((x) => x.group === group);
         if (!list.length) continue;
         const g = document.createElement('h3');
@@ -147,7 +148,8 @@ export function pickSlideTemplate(m: Master, size: SlideSize, defaultId: string 
     if (typeof document.fonts?.load === 'function') {
       const families = new Set([...SLIDE_TEMPLATES, ...mine].flatMap((t) => [t.titleFont, t.bodyFont]));
       void Promise.allSettled([...families].flatMap((f) => [document.fonts.load(`12px "${f}"`), document.fonts.load(`bold 12px "${f}"`)]))
-        .then(() => { if (d.isConnected) for (const r of repaint) r(); });
+        // (widths measured with the stand-in font are forgotten first, or centered titles sit off center)
+        .then(() => { if (!d.isConnected) return; forgetTextWidths(); for (const r of repaint) r(); });
     }
   });
 }

@@ -214,6 +214,14 @@ function drawDecor(ctx: CanvasRenderingContext2D, sh: DecorShape): void {
     sh.pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
     ctx.closePath();
     ctx.fill();
+  } else if (sh.kind === 'poly') {
+    ctx.strokeStyle = sh.color;
+    ctx.lineWidth = sh.width;
+    ctx.lineJoin = 'miter';
+    ctx.setLineDash([]);
+    sh.pts.forEach(([x, y], i) => (i ? ctx.lineTo(x, y) : ctx.moveTo(x, y)));
+    ctx.closePath();
+    ctx.stroke();
   } else {
     ctx.strokeStyle = sh.color;
     ctx.lineWidth = sh.width;

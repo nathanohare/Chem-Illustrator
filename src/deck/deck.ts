@@ -215,7 +215,8 @@ export interface KeptRel { type: string; data?: string; ext?: string; target?: s
  * a band behind the title, a strip down the left side, a rule under the title, triangles in a
  * corner, a band along the bottom, or a frame round the slide.
  */
-export type Decor = 'none' | 'top-bar' | 'title-band' | 'left-strip' | 'title-rule' | 'corner' | 'footer-band' | 'frame';
+export type Decor = 'none' | 'top-bar' | 'title-band' | 'left-strip' | 'title-rule' | 'corner' | 'footer-band' | 'frame'
+  | 'right-strip' | 'side-bars' | 'double-rule' | 'hairlines' | 'title-tab' | 'header-block' | 'two-tone-footer' | 'crop-marks' | 'stripes' | 'hexagons';
 
 export const DECORS: { id: Decor; name: string }[] = [
   { id: 'none', name: 'None' },
@@ -226,6 +227,16 @@ export const DECORS: { id: Decor; name: string }[] = [
   { id: 'corner', name: 'Triangles in the corner' },
   { id: 'footer-band', name: 'Band along the bottom' },
   { id: 'frame', name: 'Frame around the slide' },
+  { id: 'right-strip', name: 'Strip down the right side' },
+  { id: 'side-bars', name: 'Bars down both sides' },
+  { id: 'double-rule', name: 'Double rule under the title' },
+  { id: 'hairlines', name: 'Thin rules at the top and bottom' },
+  { id: 'title-tab', name: 'Tab beside the title' },
+  { id: 'header-block', name: 'Block at the top left' },
+  { id: 'two-tone-footer', name: 'Two-color band along the bottom' },
+  { id: 'crop-marks', name: 'Corner marks' },
+  { id: 'stripes', name: 'Stripes along the top' },
+  { id: 'hexagons', name: 'Hexagons in the corner' },
 ];
 
 /** The colours a slide with this layout uses: title slides can have their own. */
@@ -255,9 +266,22 @@ export type DecorShape =
   | { kind: 'rect'; x1: number; y1: number; x2: number; y2: number; color: string }
   | { kind: 'line'; x1: number; y1: number; x2: number; y2: number; color: string; width: number }
   | { kind: 'frame'; x1: number; y1: number; x2: number; y2: number; color: string; width: number }
-  | { kind: 'tri'; pts: [number, number][]; color: string };
+  | { kind: 'tri'; pts: [number, number][]; color: string }
+  /** A closed outline (the hexagons), `width` points wide, not filled. */
+  | { kind: 'poly'; pts: [number, number][]; color: string; width: number };
+
+/** A ring's hexagon with a point at the top (as structures are drawn), centered on (cx, cy), `r` from center to corner. */
+function hexagon(cx: number, cy: number, r: number): [number, number][] {
+  return [0, 1, 2, 3, 4, 5].map((i) => {
+    const t = (Math.PI / 3) * i - Math.PI / 2;
+    return [cx + r * Math.cos(t), cy + r * Math.sin(t)] as [number, number];
+  });
+}
 
 /** Where a template's shapes go on a slide of this size and layout, in points. */
+/** Where a template's rule or tab sits on the title slide (halfway between the title and subtitle), and under the title on other slides, as fractions of the slide's height. */
+const TITLE_MID = 0.5, CONTENT_RULE = 0.14;
+
 export function decorShapes(size: SlideSize, m: Master, layout: LayoutId): DecorShape[] {
   const { w, h } = size;
   const title = titleLook(m, layout);
@@ -269,14 +293,14 @@ export function decorShapes(size: SlideSize, m: Master, layout: LayoutId): Decor
         : [{ kind: 'rect', x1: 0, y1: 0, x2: w, y2: 0.022 * h, color: a }];
     case 'title-band':
       return title
-        ? [{ kind: 'rect', x1: 0, y1: 0.27 * h, x2: w, y2: 0.515 * h, color: a }]
-        : [{ kind: 'rect', x1: 0, y1: 0, x2: w, y2: 0.2 * h, color: a }];
+        ? [{ kind: 'rect', x1: 0, y1: 0.345 * h, x2: w, y2: 0.49 * h, color: a }]
+        : [{ kind: 'rect', x1: 0, y1: 0, x2: w, y2: 0.15 * h, color: a }];
     case 'left-strip':
-      return [{ kind: 'rect', x1: 0, y1: 0, x2: (title ? 0.035 : 0.014) * w, y2: h, color: a }];
+      return [{ kind: 'rect', x1: 0, y1: 0, x2: (title ? 0.02 : 0.014) * w, y2: h, color: a }];
     case 'title-rule':
       return title
-        ? [{ kind: 'line', x1: 0.3 * w, y1: 0.515 * h, x2: 0.7 * w, y2: 0.515 * h, color: a, width: 2 }]
-        : [{ kind: 'line', x1: 0.05 * w, y1: 0.2 * h, x2: 0.95 * w, y2: 0.2 * h, color: a, width: 2 }];
+        ? [{ kind: 'line', x1: 0.3 * w, y1: TITLE_MID * h, x2: 0.7 * w, y2: TITLE_MID * h, color: a, width: 2 }]
+        : [{ kind: 'line', x1: 0.05 * w, y1: CONTENT_RULE * h, x2: 0.95 * w, y2: CONTENT_RULE * h, color: a, width: 2 }];
     case 'corner': {
       const k = (title ? 0.34 : 0.2) * h;
       return [
@@ -289,6 +313,61 @@ export function decorShapes(size: SlideSize, m: Master, layout: LayoutId): Decor
     case 'frame': {
       const d = 0.02 * Math.min(w, h) + 0.012 * w;
       return [{ kind: 'frame', x1: d, y1: d, x2: w - d, y2: h - d, color: a, width: 1.5 }];
+    }
+    case 'right-strip':
+      return [{ kind: 'rect', x1: w - (title ? 0.02 : 0.014) * w, y1: 0, x2: w, y2: h, color: a }];
+    case 'side-bars': {
+      const k = (title ? 0.02 : 0.01) * w;
+      return [{ kind: 'rect', x1: 0, y1: 0, x2: k, y2: h, color: a }, { kind: 'rect', x1: w - k, y1: 0, x2: w, y2: h, color: b }];
+    }
+    case 'double-rule':
+      return title
+        ? [{ kind: 'line', x1: 0.3 * w, y1: (TITLE_MID - 0.006) * h, x2: 0.7 * w, y2: (TITLE_MID - 0.006) * h, color: a, width: 2 },
+          { kind: 'line', x1: 0.38 * w, y1: (TITLE_MID + 0.006) * h, x2: 0.62 * w, y2: (TITLE_MID + 0.006) * h, color: b, width: 1 }]
+        : [{ kind: 'line', x1: 0.05 * w, y1: CONTENT_RULE * h, x2: 0.95 * w, y2: CONTENT_RULE * h, color: a, width: 2 },
+          { kind: 'line', x1: 0.05 * w, y1: (CONTENT_RULE + 0.012) * h, x2: 0.95 * w, y2: (CONTENT_RULE + 0.012) * h, color: b, width: 1 }];
+    case 'hairlines':
+      return title
+        ? [{ kind: 'line', x1: 0.2 * w, y1: 0.25 * h, x2: 0.8 * w, y2: 0.25 * h, color: a, width: 1.5 },
+          { kind: 'line', x1: 0.2 * w, y1: 0.75 * h, x2: 0.8 * w, y2: 0.75 * h, color: a, width: 1.5 }]
+        : [{ kind: 'line', x1: 0.05 * w, y1: 0.035 * h, x2: 0.95 * w, y2: 0.035 * h, color: a, width: 0.75 },
+          { kind: 'line', x1: 0.05 * w, y1: 0.915 * h, x2: 0.95 * w, y2: 0.915 * h, color: b, width: 0.75 }];
+    case 'title-tab':
+      return title
+        ? [{ kind: 'rect', x1: 0.46 * w, y1: (TITLE_MID - 0.005) * h, x2: 0.54 * w, y2: (TITLE_MID + 0.005) * h, color: a }]
+        : [{ kind: 'rect', x1: 0.025 * w, y1: 0.055 * h, x2: 0.033 * w, y2: 0.118 * h, color: a }];
+    case 'header-block':
+      return title
+        // (on the title slide a block at the top left over a rule along the top, so the title stays centered)
+        ? [{ kind: 'rect', x1: 0, y1: 0, x2: 0.2 * w, y2: 0.1 * h, color: a }, { kind: 'rect', x1: 0.2 * w, y1: 0, x2: w, y2: 0.012 * h, color: b }]
+        : [{ kind: 'rect', x1: 0, y1: 0, x2: 0.03 * w, y2: CONTENT_RULE * h, color: a }, { kind: 'line', x1: 0.03 * w, y1: CONTENT_RULE * h, x2: w, y2: CONTENT_RULE * h, color: b, width: 1 }];
+    case 'two-tone-footer': {
+      const y = (title ? 0.95 : 0.975) * h;
+      return [{ kind: 'rect', x1: 0, y1: y, x2: 0.7 * w, y2: h, color: a }, { kind: 'rect', x1: 0.7 * w, y1: y, x2: w, y2: h, color: b }];
+    }
+    case 'crop-marks': {
+      const d = 0.035 * h, k = 0.06 * h;
+      const L = (x1: number, y1: number, x2: number, y2: number): DecorShape => ({ kind: 'line', x1, y1, x2, y2, color: a, width: 1.5 });
+      return [
+        L(d, d, d + k, d), L(d, d, d, d + k), L(w - d - k, d, w - d, d), L(w - d, d, w - d, d + k),
+        L(d, h - d, d + k, h - d), L(d, h - d - k, d, h - d), L(w - d - k, h - d, w - d, h - d), L(w - d, h - d - k, w - d, h - d),
+      ];
+    }
+    case 'stripes': {
+      const u = (title ? 0.02 : 0.01) * h;
+      const band = (y: number): DecorShape[] => [
+        { kind: 'rect', x1: 0, y1: y, x2: w, y2: y + u, color: a },
+        { kind: 'rect', x1: 0, y1: y + u, x2: w, y2: y + 1.6 * u, color: b },
+        { kind: 'rect', x1: 0, y1: y + 1.6 * u, x2: w, y2: y + 2 * u, color: a },
+      ];
+      return title ? [...band(0), ...band(h - 2 * u)] : band(0);
+    }
+    case 'hexagons': {
+      // fused rings, as in a drawn structure: one in the corner and its neighbors, partly off the slide
+      const r = (title ? 0.2 : 0.11) * h, step = r * Math.sqrt(3);
+      const cx = w - 0.25 * r, cy = title ? h - 0.35 * r : 0.3 * r;
+      const ring = (x: number, color: string): DecorShape => ({ kind: 'poly', pts: hexagon(x, cy, r), color, width: title ? 3 : 2 });
+      return title ? [ring(cx, b), ring(cx - step, a), ring(cx - 2 * step, b)] : [ring(cx, b), ring(cx - step, a)];
     }
     default:
       return [];
@@ -305,6 +384,13 @@ export function masterGraphics(size: SlideSize, m: Master, layout: LayoutId, z: 
     if (sh.kind === 'rect') return { kind: 'rect', x1: sh.x1, y1: sh.y1, x2: sh.x2, y2: sh.y2, filled: true, color: sh.color, fillColor: sh.color, lineWidth: 0, name: 'Template band', ...lock };
     if (sh.kind === 'frame') return { kind: 'rect', x1: sh.x1, y1: sh.y1, x2: sh.x2, y2: sh.y2, color: sh.color, lineWidth: sh.width, name: 'Template frame', ...lock };
     if (sh.kind === 'line') return { kind: 'line', x1: sh.x1, y1: sh.y1, x2: sh.x2, y2: sh.y2, color: sh.color, lineWidth: sh.width, name: 'Template rule', ...lock };
+    if (sh.kind === 'poly') {
+      const xs = sh.pts.map((q) => q[0]), ys = sh.pts.map((q) => q[1]);
+      // a ring's hexagon: PowerPoint's hexagon turned a quarter, so a point is at the top
+      const cx = (Math.min(...xs) + Math.max(...xs)) / 2, cy = (Math.min(...ys) + Math.max(...ys)) / 2;
+      const hw = (Math.max(...ys) - Math.min(...ys)) / 2, hh = (Math.max(...xs) - Math.min(...xs)) / 2;
+      return { kind: 'geo', geo: 'hexagon', x1: cx - hw, y1: cy - hh, x2: cx + hw, y2: cy + hh, rot: 90, color: sh.color, lineWidth: sh.width, name: 'Template ring', ...lock };
+    }
     // the corner's right triangles (right angle bottom right): a right triangle turned three quarters
     const xs = sh.pts.map((q) => q[0]), ys = sh.pts.map((q) => q[1]);
     return { kind: 'geo', geo: 'rtTriangle', x1: Math.min(...xs), y1: Math.min(...ys), x2: Math.max(...xs), y2: Math.max(...ys), rot: 270, filled: true, color: sh.color, fillColor: sh.color, lineWidth: 0, name: 'Template corner', ...lock };
@@ -485,10 +571,13 @@ export interface Frame { ph: Placeholder; x: number; y: number; w: number; h: nu
  * sizes. Two Content has two text boxes side by side (left first).
  */
 const FRAMES: Record<BuiltinLayout, [Placeholder, number, number, number, number, Caption['justify']][]> = {
-  title: [['title', 0.08, 0.3, 0.84, 0.2, 'center'], ['subtitle', 0.08, 0.53, 0.84, 0.17, 'center']],
-  'title-content': [['title', 0.05, 0.05, 0.9, 0.14, 'left'], ['body', 0.05, 0.22, 0.9, 0.68, 'left']],
-  'two-content': [['title', 0.05, 0.05, 0.9, 0.14, 'left'], ['body', 0.05, 0.22, 0.44, 0.68, 'left'], ['body', 0.51, 0.22, 0.44, 0.68, 'left']],
-  'title-only': [['title', 0.05, 0.05, 0.9, 0.14, 'left']],
+  // the title slide: a one-line title just above the middle of the slide, the subtitle as far below
+  // it, so a rule or tab at the middle (TITLE_MID) sits halfway between them
+  title: [['title', 0.08, 0.387, 0.84, 0.093, 'center'], ['subtitle', 0.08, 0.556, 0.84, 0.16, 'center']],
+  // other slides: the text starts a short way under the title, below a rule at CONTENT_RULE
+  'title-content': [['title', 0.05, 0.05, 0.9, 0.09, 'left'], ['body', 0.05, 0.17, 0.9, 0.73, 'left']],
+  'two-content': [['title', 0.05, 0.05, 0.9, 0.09, 'left'], ['body', 0.05, 0.17, 0.44, 0.73, 'left'], ['body', 0.51, 0.17, 0.44, 0.73, 'left']],
+  'title-only': [['title', 0.05, 0.05, 0.9, 0.09, 'left']],
   blank: [],
 };
 
@@ -1514,6 +1603,32 @@ export class Deck {
   useMaster(m: Master): void {
     this.master = m;
     this.restyleAll();
+  }
+
+  /**
+   * Start a new deck as these slides (a starter deck picked in New's template window), their
+   * placeholders filled in frame order; a body's lines are bullets. Not undoable: the deck starts here.
+   */
+  startWith(pages: { layout: LayoutId; text: string[]; notes?: string }[]): void {
+    if (!pages.length) return;
+    const slides: Slide[] = pages.map((p) => {
+      const d = new Doc();
+      this.styleDoc(d, p.layout);
+      const styles = textStyles(this.master, p.layout);
+      d.bulk(() => {
+        layoutFrames(p.layout, this.size, this.master).forEach((f, i) => {
+          const t = p.text[i] ?? '';
+          const paras = f.ph === 'body' && t ? t.split('\n').map(() => ({ list: 'bullet' as const })) : emptyParas(f.ph);
+          d.addCaption({ ...frameFields(f, styles), runs: t ? [{ text: t }] : [], paras });
+        });
+      });
+      return { id: this.nextSlideId++, layout: p.layout, doc: d, notes: p.notes ?? '' };
+    });
+    const was = this.attached;
+    this.load(slides, this.size, this.master, undefined, this.settings);
+    if (was) this.attach();
+    this.onSwitch();
+    this.onChange();
   }
 
   /** Start a new deck in a style (your default for new slides or designs). Not undoable. */

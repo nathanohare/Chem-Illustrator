@@ -100,6 +100,43 @@ describe('slide templates', () => {
     expect(decorShapes(WIDE, defaultMaster(), 'title')).toEqual([]);
   });
 
+  it('draws the newer shapes on both layouts, inside the slide except the hexagon rings', () => {
+    const decors = ['right-strip', 'side-bars', 'double-rule', 'hairlines', 'title-tab', 'header-block', 'two-tone-footer', 'crop-marks', 'stripes', 'hexagons'] as const;
+    for (const decor of decors) {
+      for (const layout of ['title', 'title-content'] as const) {
+        const shapes = decorShapes(WIDE, { ...defaultMaster(), decor }, layout);
+        expect(shapes.length).toBeGreaterThan(0);
+        // the rings run off the corner on purpose
+        if (decor === 'hexagons') { expect(shapes.every((s) => s.kind === 'poly' && s.pts.length === 6)).toBe(true); continue; }
+        for (const sh of shapes) {
+          const pts = sh.kind === 'tri' || sh.kind === 'poly' ? sh.pts : [[sh.x1, sh.y1], [sh.x2, sh.y2]];
+          for (const [x, y] of pts) { expect(x).toBeGreaterThanOrEqual(0); expect(x).toBeLessThanOrEqual(WIDE.w); expect(y).toBeGreaterThanOrEqual(0); expect(y).toBeLessThanOrEqual(WIDE.h); }
+        }
+      }
+    }
+  });
+
+  it('has the newer groups, each with several themes', () => {
+    for (const g of ['Minimal', 'Bold', 'Classic', 'Chemistry'] as const) {
+      expect(SLIDE_TEMPLATES.filter((t) => t.group === g).length).toBeGreaterThanOrEqual(7);
+    }
+    expect(SLIDE_TEMPLATES.length).toBeGreaterThanOrEqual(50);
+  });
+
+  it('saves the hexagon rings as outlined shapes and opens without warnings', async () => {
+    const host = new Doc();
+    const d = Deck.blank(host);
+    d.attach();
+    d.setMaster({ ...d.master, decor: 'hexagons' });
+    const bytes = await writePptx({ size: d.size, master: d.master, slides: d.slides.map((s, i) => ({ layout: s.layout, doc: d.docOf(i), notes: s.notes })) }, opts);
+    const layout = strFromU8(unzipSync(bytes)['ppt/slideLayouts/slideLayout1.xml']);
+    expect(layout).toContain('name="Hexagon');
+    expect(layout).toContain('<a:noFill/>');
+    const back = readPptx(bytes);
+    expect(back.warnings).toEqual([]);
+    expect(back.master.decor).toBe('hexagons');
+  });
+
   it('saves the shapes and title slide colours in the layouts, and opens the deck as it was', async () => {
     const host = new Doc();
     const d = Deck.blank(host);

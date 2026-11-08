@@ -104,7 +104,7 @@ Chemweave has five modes: **Canvas** (Chemistry), **Presentation** (Slideshow), 
 | Presentation | Spreadsheet |
 |---|---|
 | ![Presentation mode with the reaction scheme on a templated slide, the mouse pointing at a bond of the product](docs/images/slides-dark-ui.png) | ![Spreadsheet mode with structures in cells, formula and MW columns, and a chart](docs/images/sheet-dark-ui.png) |
-| Layouts, about twenty design templates, transitions, animations and presenter view. The structures on a slide are real structures: point at one and edit it with the same tools and hotkeys. Saves as `.pptx` that opens in PowerPoint. | Excel's keys and formulas, structures in cells, columns that work out formula, MW, HRMS m/z and more, charts and dashboards. Saves as `.xlsx`. |
+| Layouts, about fifty design templates, transitions, animations and presenter view. The structures on a slide are real structures: point at one and edit it with the same tools and hotkeys. Saves as `.pptx` that opens in PowerPoint. | Excel's keys and formulas, structures in cells, columns that work out formula, MW, HRMS m/z and more, charts and dashboards. Saves as `.xlsx`. |
 
 | Document | Design |
 |---|---|

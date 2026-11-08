@@ -2190,6 +2190,36 @@ dialog.cite-style-dialog h3 { margin: 10px 0 4px; font-size: var(--fs-md); }
 .cite-entry { padding-left: 2.6em; text-indent: -2.6em; }
 .cite-label { display: inline-block; min-width: 2.6em; text-indent: 0; }
 
+/* the template window over a new file: categories on the left, cards on the right, the mode's color on its edge */
+.template-window { --m: var(--accent); position: fixed; z-index: 28; display: flex; flex-direction: column; gap: 6px; margin: 0; padding: 6px 10px 8px; background: var(--panel); color: var(--text); border: 1px solid var(--line); border-top: 3px solid var(--m); border-radius: var(--r-panel); box-shadow: 0 10px 34px rgb(0 0 0 / 0.22); font: var(--fs-md)/1.4 var(--ui-font); }
+.template-window:focus { outline: none; }
+.template-window.tw-modal { width: min(96vw, 1000px); height: min(86vh, 640px); max-width: none; max-height: none; }
+.tw-drawing { --m: var(--tab-drawing); } .tw-slides { --m: var(--tab-slides); } .tw-sheet { --m: var(--tab-sheet); } .tw-document { --m: var(--tab-document); } .tw-design { --m: var(--tab-design); }
+.tw-head { display: flex; align-items: center; gap: 6px; }
+.tw-head h2 { margin: 0; font-size: var(--fs-md); font-weight: 600; }
+.tw-close { margin-left: auto; width: 22px; height: 22px; padding: 0; border: 1px solid transparent; border-radius: var(--r-control); background: none; color: var(--muted); font-size: 16px; line-height: 1; cursor: pointer; }
+.tw-close:hover, .tw-close:focus-visible { border-color: var(--line); color: var(--text); }
+.tw-body { flex: 1; min-height: 0; display: grid; grid-template-columns: max-content minmax(0, 1fr); gap: 8px; }
+.tw-cats { display: flex; flex-direction: column; gap: 1px; overflow-y: auto; padding-right: 6px; border-right: 1px solid var(--line); }
+.tw-cat { display: flex; align-items: center; justify-content: space-between; gap: 14px; padding: 3px 8px; border: none; border-left: 3px solid transparent; border-radius: 0 var(--r-control) var(--r-control) 0; background: none; color: inherit; font: inherit; text-align: left; white-space: nowrap; cursor: pointer; }
+.tw-cat:hover { background: color-mix(in srgb, var(--m) 9%, var(--panel)); }
+.tw-cat[aria-selected="true"] { border-left-color: var(--m); background: color-mix(in srgb, var(--m) 16%, var(--panel)); font-weight: 600; }
+.tw-count { color: var(--muted); font-size: var(--fs-xs); font-weight: normal; }
+.tw-grid { overflow-y: auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); align-content: start; gap: 8px; padding: 2px; }
+.tw-card { display: flex; flex-direction: column; align-items: flex-start; gap: 1px; min-width: 0; padding: 6px; border: 1px solid var(--line); border-radius: var(--r-panel); background: var(--panel); color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.tw-card:hover, .tw-card:focus-visible { border-color: var(--m); box-shadow: inset 0 0 0 1px var(--m); background: color-mix(in srgb, var(--m) 7%, var(--panel)); outline: none; }
+.tw-card strong { font-weight: 600; font-size: var(--fs-sm); line-height: 1.3; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; max-width: 100%; }
+.tw-detail { color: var(--muted); font-size: var(--fs-xs); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 100%; }
+.tw-thumb { align-self: stretch; display: flex; align-items: center; justify-content: center; height: 96px; margin-bottom: 4px; border-radius: var(--r-control); background: color-mix(in srgb, var(--line) 55%, var(--panel)); overflow: hidden; }
+.tw-thumb > canvas { display: block; max-width: 100%; max-height: 100%; }
+.tw-slides .tw-thumb { height: 120px; }
+.tw-foot { display: flex; align-items: center; gap: 6px; font-size: var(--fs-sm); color: var(--muted); cursor: pointer; align-self: flex-start; }
+.tw-foot input { margin: 0; }
+/* the small pages of a document or sheet template */
+.tw-thumb .ft-page { height: 88px; width: 68px; padding: 5px; }
+.tw-slides .tw-thumb .ft-page { height: 112px; width: 96px; }
+.tw-thumb .ft-sheet { width: 128px; }
+
 /* File > New Design: the template gallery */
 dialog.template-gallery { width: min(94vw, 760px); }
 .tg-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(188px, 1fr)); gap: 10px; max-height: min(64vh, 560px); overflow-y: auto; padding: 2px; }
