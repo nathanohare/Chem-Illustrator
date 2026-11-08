@@ -185,15 +185,14 @@ export function ionSelectHtml(chosen: string, ions: readonly string[]): string {
  * by itself a few seconds after the first structure is analysed; until it has a name the place is
  * empty, or says it is naming.
  */
-export function nameHtml(state: NameState, i: number): string {
+export function nameHtml(state: NameState): string {
   if (state.kind === 'idle') return '';
   if (state.kind === 'busy') return `<span class="an-iupac muted" title="${state.loading ? 'Loading the offline namer (first time this session)' : 'Working out the systematic name'}"> – naming…</span>`;
   if (state.kind === 'none') return `<span class="an-iupac muted" title="${esc(state.message)}"> – no name</span>`;
   const html = nameRuns(state.name).map((r) => (r.italic ? `<i>${esc(r.text)}</i>` : esc(r.text))).join('');
-  return `<span class="an-iupac"> – <span class="iupac" title="Systematic name (OpenClatura), checked by reading it back with OPSIN">${html}</span><button type="button" class="an-icon-btn" data-insert="name:${i}" title="Name caption: put the name under the structure; it follows the structure and can be edited like any text" aria-label="Name caption">${CAPTION_ICON}</button></span>`;
+  return `<span class="an-iupac"> – <span class="iupac" title="Systematic name (OpenClatura), checked by reading it back with OPSIN">${html}</span></span>`;
 }
 
-const CAPTION_ICON = '<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M3 3.5h10M3 7h10"/><path d="M4.5 10.5h7M8 13.5v-6" stroke-width="1.2"/><path d="M6.3 12l1.7 1.7 1.7-1.7"/></svg>';
 
 /** A bench value: measured (from PubChem) or estimated here. */
 export interface BenchValue { v: number; measured: boolean }
@@ -541,7 +540,8 @@ function labelRuns(label: string): TextRun[] {
  * weight, m/z of the ion, elemental analysis, an HRMS line and lab calculations, as chosen, in the
  * order and with the words and decimal places of Settings ▸ Analysis.
  */
-export function descriptorRuns(r: FragmentResult, show: DescriptorKey[], adductText: string, prefs: AnalysisPrefs = analysisPrefs(), bench?: Bench): TextRun[] {
+/** `name`: the structure's systematic name when known (the Name line is left out until it is). */
+export function descriptorRuns(r: FragmentResult, show: DescriptorKey[], adductText: string, prefs: AnalysisPrefs = analysisPrefs(), bench?: Bench, name?: string | null): TextRun[] {
   const out: TextRun[] = [];
   const line = (runs: TextRun[]) => { if (out.length) out.push({ text: '\n' }); out.push(...runs); };
   const order = descriptorChoices(prefs).map((d) => d.key);
@@ -551,6 +551,7 @@ export function descriptorRuns(r: FragmentResult, show: DescriptorKey[], adductT
   const label = (k: DescriptorKey) => fmt(k)?.label ?? DESC_LABELS[k] ?? '';
   for (const k of keys) {
     if (k === 'formula') line([...labelRuns(label(k)), ...fc(r.formula, r.charge)]);
+    else if (k === 'name') { if (name) line([...labelRuns(label(k)), ...nameRuns(name)]); }
     else if (k === 'exact') line([...labelRuns(label(k)), { text: r.exact.toFixed(dpOf(k, 4)) }]);
     else if (k === 'mw') line([...labelRuns(label(k)), { text: r.mw.toFixed(dpOf(k, 2)) }]);
     else if (k === 'mz') {

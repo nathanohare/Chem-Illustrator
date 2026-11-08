@@ -27,6 +27,8 @@ export interface AnalysisSettingsHost {
   bench(r: FragmentResult): Bench;
   /** The ion picked in the panel. */
   adduct(): string;
+  /** The structure's systematic name, if worked out already. */
+  name(r: FragmentResult): string | null;
 }
 
 /** Where the page opens: at its panel rows, or at attached descriptors (the gear by Attach descriptors). */
@@ -106,7 +108,7 @@ export function analysisSettingsPage(host: AnalysisSettingsHost): Promise<void> 
   }
 
   function descItem(x: AnalysisPrefs['descriptors'][number]): string {
-    const plain = x.key === 'formula' || x.key === 'hrms';
+    const plain = x.key === 'formula' || x.key === 'name' || x.key === 'hrms';
     return `<div class="as-item" data-key="${esc(x.key)}"><span class="as-grip" data-grip title="Drag to move">${GRIP}</span><input type="checkbox" data-don="${esc(x.key)}"${x.on ? ' checked' : ''} aria-label="Show ${esc(nameOf(w, x.key))}"><span class="as-name">${esc(nameOf(w, x.key))}${x.key.startsWith('calc:') ? '<span class="as-tag calc">calculation</span>' : ''}</span><span class="as-f">${plain ? '' : `<input type="text" data-label="${esc(x.key)}" value="${esc(x.label)}" placeholder="${x.key.startsWith('calc:') ? esc(nameOf(w, x.key)) + ':' : ''}" title="Words before the value" aria-label="Words before the value">`}${x.dp === null || x.key.startsWith('calc:') ? '' : dpBox('d:' + x.key, x.dp)}</span></div>`;
   }
 
@@ -133,7 +135,7 @@ export function analysisSettingsPage(host: AnalysisSettingsHost): Promise<void> 
   const preview = () => {
     const slot = previewSlot('Attached descriptors');
     const r = host.sample();
-    const html = r ? descriptorRuns(r, w.descriptors.filter((x) => x.on).map((x) => x.key), host.adduct(), w, host.bench(r)).map((run) => {
+    const html = r ? descriptorRuns(r, w.descriptors.filter((x) => x.on).map((x) => x.key), host.adduct(), w, host.bench(r), host.name(r)).map((run) => {
       let t = esc(run.text).replace(/\n/g, '<br>');
       if (run.formula) t = formulaHtml(run.text);
       if (run.sup) t = `<sup>${t}</sup>`;

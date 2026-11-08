@@ -254,7 +254,7 @@ export function attachedNode(text: string | null): string | undefined {
 }
 
 const SIDES: AttachSide[] = ['below', 'above', 'left', 'right'];
-const KEYS = ['formula', 'exact', 'mw', 'mz', 'ea', 'hrms'];
+const KEYS = ['formula', 'name', 'exact', 'mw', 'mz', 'ea', 'hrms'];
 
 export function attachFromTag(text: string | null): Attachment | undefined {
   if (!text) return undefined;

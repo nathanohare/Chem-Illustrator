@@ -318,7 +318,7 @@ R/S and E/Z are worked out for every structure as you draw.
 
 **Chemistry ▸ Look Up ▸ Structure to Name** (also on the right-click menu of a structure) puts the systematic (IUPAC) name of each selected structure under it, as a caption tied to the structure. The name is worked out on your computer by OpenClatura, a free rule-based namer that follows the IUPAC 2013 recommendations, so it works offline. Every name is then read back with the name reader (OPSIN), and it is given only if it reads back as exactly the structure you drew, stereochemistry and charges included; if not, you are told there is no confirmed name rather than given a wrong one. Stereodescriptors, *N*-locants, indicated hydrogen and fusion letters are set in italics, and brackets are nested the IUPAC way, ( ) inside [ ] inside { }.
 
-The namer loads by itself a few seconds after the first structure is analysed (about 14 MB, once a session; **Settings ▸ Analysis** can turn this off). After that, the **Analysis panel** shows the name of every structure you select after its formula, with a **Name caption** button. Structures with R groups or unreadable labels have no name. On a set of 270 everyday and drug-like structures, 267 got a confirmed name.
+The namer loads by itself a few seconds after the first structure is analysed (about 14 MB, once a session; **Settings ▸ Analysis** can turn this off). After that, the **Analysis panel** shows the name of every structure you select after its formula. To put the name under a structure, tick **Name** in its attached descriptors (Style panel, or **Settings ▸ Analysis** for new ones), or use **Structure to Name**. Structures with R groups or unreadable labels have no name. On a set of 270 everyday and drug-like structures, 267 got a confirmed name.
 
 ### 3-D model
 
@@ -493,7 +493,7 @@ A drawing is laid out on pages, as in ChemDraw, so you can see how it will print
 
 Select a structure and the **Analysis** panel shows the list below. In the Canvas it drops down from the **Analysis** box at the right end of the ribbon (see [The Canvas ribbon](#the-canvas-ribbon)); in the other modes it is in the side panel on the right.
 
-- its formula, with its systematic name after it (see [Structure to Name](#structure-to-name)) and a **Name caption** button. The namer starts by itself a few seconds after the first structure is analysed;
+- its formula, with its systematic name after it (see [Structure to Name](#structure-to-name)). The namer starts by itself a few seconds after the first structure is analysed;
 - exact mass and molecular weight;
 - the m/z of the ion picked in the list on its own row ([M+H]⁺, [M+Na]⁺, [M−H]⁻ and so on), with an **HRMS text** button at the end of the row;
 - elemental analysis (percentages), with an **Anal. text** button at the end of the row;
@@ -506,7 +506,7 @@ Select a structure and the **Analysis** panel shows the list below. In the Canva
 
 Buttons put text under the structure:
 
-- **Attach descriptors**: the formula and masses, which follow the structure and update with it. The gear beside it opens their settings;
+- **Attach descriptors**: the formula and masses (and the name, when **Name** is ticked), which follow the structure and update with it. The gear beside it opens their settings;
 - **HRMS text** (the *m/z* icon at the end of the m/z row): an ACS-style line such as `HRMS (ESI) m/z: [M + H]+ Calcd for C8H11N4O2 195.0877; Found 000.0000.` Type your found value over the zeros;
 - **Anal. text** (the % icon at the end of the elemental analysis row): an ACS-style elemental analysis line.
 
