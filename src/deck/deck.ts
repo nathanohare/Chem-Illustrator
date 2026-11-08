@@ -186,7 +186,17 @@ export interface TemplateArt {
   theme?: KeptXmlPart;
   /** The master's color map (a dark template maps the background to dk1), where it isn't PowerPoint's usual one. */
   clrMap?: Record<string, string>;
+  /**
+   * The theme colors the file's master, layouts and slides use (schemeClr, with the changes made
+   * to them: lighter, darker, less saturated...), by the color each comes to ("#rrggbb"). A color
+   * that still is one of them is saved as that theme color again, so it follows a change of theme
+   * in PowerPoint as it did before.
+   */
+  colors?: Record<string, ThemeColor>;
 }
+
+/** A theme color as PowerPoint wrote it: its name in the color map (accent1, tx1...) and its changes in order (lumMod 75000...). */
+export interface ThemeColor { scheme: string; mods?: [string, string][] }
 
 /** One master's or layout's artwork. */
 export interface ArtLayer {

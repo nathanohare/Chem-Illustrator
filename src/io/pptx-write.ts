@@ -42,6 +42,7 @@ import { FADE, tint } from '../colours';
 import { transitionXml, timingXml, highlightParts, partHolds, expandParas, targetKey, mainAnims, triggerSeqs, type Transition, type Anim, type AnimTarget, type MediaTiming } from '../deck/animation';
 import { MEDIA_EXT } from '../deck/media';
 import { effectsXml } from './pptx-effects';
+import { applyColorMods } from './dml-color';
 import { viewPropsXml, slideGuidesExt } from '../deck/guides';
 import { handoutMasterXml, notesMasterXml } from '../deck/notes-pages';
 import { showPrXml, custShowsXml } from '../deck/show-setup';
@@ -379,7 +380,14 @@ function fieldId(): string {
   return `{5C0E1D2A-7F3B-4C59-9A61-${n.toUpperCase()}}`;
 }
 
-function runXml(r: TextRun, explicit: { size: number; font: string } | null, hlink?: LinkXml): string {
+/**
+ * A color element for a color ("#rrggbb"), with `inner` (its alpha) inside: srgbClr, or on slides
+ * the theme color the file had for it (see Writer.themeColours).
+ */
+export type ColourXml = (color: string | undefined, inner?: string) => string;
+export const srgbXml: ColourXml = (color, inner = '') => `<a:srgbClr val="${hex6(color)}"${inner ? `>${inner}</a:srgbClr>` : '/>'}`;
+
+function runXml(r: TextRun, explicit: { size: number; font: string } | null, hlink?: LinkXml, clr: ColourXml = srgbXml): string {
   const click = r.link && hlink ? hlink(r.link) : '';
   const parts = r.formula && !r.sub && !r.sup ? formulaParts(r.text) : [{ text: r.text, pos: r.sub ? 'sub' : r.sup ? 'sup' : 'base' }];
   return parts.map((p) => {
@@ -400,9 +408,9 @@ function runXml(r: TextRun, explicit: { size: number; font: string } | null, hli
     attrs.push('dirty="0"');
     const color = r.color ?? (explicit || r.transparency ? '#000000' : undefined);
     const alpha = r.transparency ? `<a:alpha val="${Math.round((1 - r.transparency) * 100000)}"/>` : '';
-    const fill = r.noFill ? '<a:noFill/>' : color ? `<a:solidFill><a:srgbClr val="${hex6(color)}"${alpha ? `>${alpha}</a:srgbClr>` : '/>'}</a:solidFill>` : '';
+    const fill = r.noFill ? '<a:noFill/>' : color ? `<a:solidFill>${clr(color, alpha)}</a:solidFill>` : '';
     // the Font box's text effects: an outline round the letters (a:ln comes first) and a shadow
-    const ln = r.outline ? `<a:ln w="${Math.round((r.outlineW ?? 0.75) * 12700)}"><a:solidFill><a:srgbClr val="${hex6(r.outline)}"/></a:solidFill></a:ln>` : '';
+    const ln = r.outline ? `<a:ln w="${Math.round((r.outlineW ?? 0.75) * 12700)}"><a:solidFill>${clr(r.outline)}</a:solidFill></a:ln>` : '';
     const shadow = r.shadow ? '<a:effectLst><a:outerShdw blurRad="38100" dist="38100" dir="2700000" algn="tl" rotWithShape="0"><a:prstClr val="black"><a:alpha val="40000"/></a:prstClr></a:outerShdw></a:effectLst>' : '';
     const latin = font ? `<a:latin typeface="${xml(font)}"/><a:cs typeface="${xml(font)}"/>` : '';
     const highlight = r.highlight ? `<a:highlight><a:srgbClr val="${hex6(r.highlight)}"/></a:highlight>` : '';
@@ -434,7 +442,7 @@ export function swapBox(b: Rect): Rect {
 }
 
 /** A caption's paragraphs as PowerPoint paragraphs. */
-export function paragraphsXml(c: Caption, explicit: { size: number; font: string } | null, defaultSize: number, measure: Measure, hlink?: LinkXml): string {
+export function paragraphsXml(c: Caption, explicit: { size: number; font: string } | null, defaultSize: number, measure: Measure, hlink?: LinkXml, clr: ColourXml = srgbXml): string {
   const paras = splitParagraphs(c.runs);
   const styles = fitParas(c.paras, paras.length);
   const lists = listInfo(styles);
@@ -475,7 +483,7 @@ export function paragraphsXml(c: Caption, explicit: { size: number; font: string
       attrs.push(`marL="${emu(indent)}"`, 'indent="0"');
       inner += '<a:buNone/>';
     }
-    const body = runs.map((r) => runXml(r, explicit, hlink)).join('');
+    const body = runs.map((r) => runXml(r, explicit, hlink, clr)).join('');
     const end = `<a:endParaRPr ${lang}${explicit ? ` sz="${Math.round(em * 100)}"` : ''} dirty="0"/>`;
     return `<a:p><a:pPr ${attrs.join(' ')}>${inner}</a:pPr>${body}${end}</a:p>`;
   }).join('');
@@ -560,6 +568,53 @@ class Writer {
   private measure: Measure;
   /** The slide being written (links are related from it). */
   private curPath = '';
+  /** How the slide being written writes its colors (see themeColours). */
+  private clr: ColourXml = srgbXml;
+  /** themeColours' answers, by color map. */
+  private clrMaps = new Map<string, ColourXml>();
+  /** The kept theme's colors (dk1, accent1...), as "RRGGBB". */
+  private themeSlots: Record<string, string> | null = null;
+
+  /**
+   * How a slide with this layout writes its colors: a color the file had as a theme color
+   * (TemplateArt.colors) as that theme color again, with its changes, while the theme written is
+   * the file's and the theme color still comes to that color through the slide's color map;
+   * every other color as srgbClr.
+   */
+  private themeColours(layout: LayoutId): ColourXml {
+    const art = this.deck.master.art;
+    if (!art?.theme || !art.colors) return srgbXml;
+    const map = { ...USUAL_CLRMAP, ...(art.clrMap ?? {}), ...(art.layouts?.[layout]?.clrMap ?? {}) };
+    const key = JSON.stringify(map);
+    const had = this.clrMaps.get(key);
+    if (had) return had;
+    if (!this.themeSlots) {
+      this.themeSlots = {};
+      const doc = new DOMParser().parseFromString(art.theme.xml, 'application/xml');
+      const scheme = doc.getElementsByTagName('parsererror').length ? null : doc.getElementsByTagNameNS(NS.a, 'clrScheme')[0];
+      for (const slot of Array.from(scheme?.children ?? [])) {
+        const v = slot.firstElementChild;
+        if (v) this.themeSlots[slot.localName] = v.localName === 'sysClr' ? v.getAttribute('lastClr') ?? (v.getAttribute('val') === 'window' ? 'FFFFFF' : '000000') : v.getAttribute('val') ?? '';
+      }
+    }
+    const slots = this.themeSlots;
+    const kept = new Map<string, { scheme: string; mods: string }>();
+    for (const [hex, c] of Object.entries(art.colors)) {
+      const base = slots[map[c.scheme] ?? c.scheme];
+      if (!base || !/^[0-9a-f]{6}$/i.test(base)) continue;
+      const mods = c.mods ?? [];
+      // (only while it still comes to the color it stands for)
+      if (applyColorMods(base, mods.map(([n, v]) => ({ localName: n, getAttribute: () => v || null }))) !== hex.toLowerCase()) continue;
+      kept.set(hex6(hex), { scheme: xmlAttr(c.scheme), mods: mods.map(([n, v]) => `<a:${n}${v ? ` val="${xmlAttr(v)}"` : ''}/>`).join('') });
+    }
+    const out: ColourXml = kept.size ? (color, inner = '') => {
+      const k = kept.get(hex6(color));
+      if (!k) return srgbXml(color, inner);
+      return k.mods || inner ? `<a:schemeClr val="${k.scheme}">${k.mods}${inner}</a:schemeClr>` : `<a:schemeClr val="${k.scheme}"/>`;
+    } : srgbXml;
+    this.clrMaps.set(key, out);
+    return out;
+  }
 
   /** The slide's placeholders' places among the layout's (1 is the first), whatever order they are written in. */
   private phAt = new Map<Caption, number>();
@@ -891,6 +946,7 @@ class Writer {
     const s = this.deck.slides[index];
     const doc = s.doc;
     this.curPath = path;
+    this.clr = this.themeColours(s.layout);
     const parts = splitSlide(doc, this.measure);
     const out: string[] = [];
     let id = 2;
@@ -951,7 +1007,7 @@ class Writer {
       mark({ shapes: new Set([p.id]) }, id);
       if (p.kind !== 'picture') {
         spOf.set(p.id, id);
-        out.push(p.kind === 'geo' ? this.geo(path, p, id++, doc, styles.body?.size ?? doc.style.captionSize) : shapeXml(p, id++, doc.style.lineWidth));
+        out.push(p.kind === 'geo' ? this.geo(path, p, id++, doc, styles.body?.size ?? doc.style.captionSize) : shapeXml(p, id++, doc.style.lineWidth, this.clr));
         return;
       }
       const box = { x1: Math.min(p.x1, p.x2), y1: Math.min(p.y1, p.y2), x2: Math.max(p.x1, p.x2), y2: Math.max(p.y1, p.y2) };
@@ -1356,14 +1412,14 @@ class Writer {
    */
   private geo(path: string, s: Shape, id: number, doc: Doc, textSize: number): string {
     const def = geoDef(s.geo);
-    const { box, geom, fill: plainFill, ln, shadow } = geoSpPr(s, doc.style.lineWidth);
+    const { box, geom, fill: plainFill, ln, shadow } = geoSpPr(s, doc.style.lineWidth, this.clr);
     // a picture fill: the picture stretched to the shape (the tag keeps the rest of the look, not the picture again)
     const fill = s.picFill ? this.picFillXml(path, s.picFill) ?? plainFill : plainFill;
     const justify = s.textAlign ?? 'center';
     const algn = justify === 'center' ? 'ctr' : justify === 'right' ? 'r' : justify === 'justify' ? 'just' : 'l';
     const hasText = !!s.text?.runs.some((r) => r.text);
     const body = hasText
-      ? paragraphsXml({ id: 0, x: 0, y: 0, runs: s.text!.runs, paras: s.text!.paras, justify }, { size: textSize, font: doc.style.captionFont || 'Arial' }, textSize, this.measure, this.hlink)
+      ? paragraphsXml({ id: 0, x: 0, y: 0, runs: s.text!.runs, paras: s.text!.paras, justify }, { size: textSize, font: doc.style.captionFont || 'Arial' }, textSize, this.measure, this.hlink, this.clr)
       : `<a:p><a:pPr algn="${algn}"/><a:endParaRPr ${lang} sz="${Math.round(textSize * 100)}" dirty="0"/></a:p>`;
     const anchor = s.textValign === 'top' ? 't' : s.textValign === 'bottom' ? 'b' : 'ctr';
     const ins = def.prst ? 3.6 : 0;
@@ -1399,7 +1455,7 @@ class Writer {
    * arrow (and which shapes it is stuck to).
    */
   private connector(path: string, r: Arrow, id: number, lw: number, site: (g: Glue | undefined) => { id: number; idx: number } | null = () => null): string {
-    const sp = connectorSpPr(r, lw);
+    const sp = connectorSpPr(r, lw, this.clr);
     const { ln } = sp;
     let { frame, geom, curved } = sp;
     let name = curved ? `${r.elbow ? 'Elbow Connector' : 'Curved Arrow'} ${id - 1}` : `Straight Arrow Connector ${id - 1}`;
@@ -1494,7 +1550,7 @@ class Writer {
       box = { x1: box.x1 + to.x - mid.x, y1: box.y1 + to.y - mid.y, x2: box.x2 + to.x - mid.x, y2: box.y2 + to.y - mid.y };
     }
     const explicit = c.ph ? null : { size: doc.style.captionSize, font: doc.style.captionFont || 'Arial' };
-    const body = isEmptyText(c) && c.ph ? `<a:p><a:endParaRPr ${lang} dirty="0"/></a:p>` : paragraphsXml(c, explicit, base?.size ?? doc.style.captionSize, this.measure, this.hlink);
+    const body = isEmptyText(c) && c.ph ? `<a:p><a:endParaRPr ${lang} dirty="0"/></a:p>` : paragraphsXml(c, explicit, base?.size ?? doc.style.captionSize, this.measure, this.hlink, this.clr);
     const wrap = c.wrap !== undefined || c.ph ? 'square' : 'none';
     // AutoFit: shrink text on overflow (at the size it is shrunk to here), a box that keeps its
     // size, or one that grows with its text
@@ -1722,7 +1778,7 @@ export function savedTableLook(t: TableData): string {
  * A connector's place, path and line with its heads, as PowerPoint and Word (in groups) both write
  * them; `curved` when it is drawn along its path (a curve or an elbow) as a shape, not a connector.
  */
-export function connectorSpPr(r: Arrow, lw: number): { frame: string; geom: string; ln: string; curved: boolean } {
+export function connectorSpPr(r: Arrow, lw: number, clr: ColourXml = srgbXml): { frame: string; geom: string; ln: string; curved: boolean } {
   const curved = !r.elbow && !!r.sweep;
   const pts = r.elbow ? elbowRoute(r) : curved ? arrowPoints(r, 32) : [r.tail, r.head];
   const b = boxOf(pts);
@@ -1740,7 +1796,7 @@ export function connectorSpPr(r: Arrow, lw: number): { frame: string; geom: stri
   const end = (style: Arrow['headStyle']) => (style === 'none' ? '' : r.headType === 'angle' ? 'arrow' : 'triangle');
   // PowerPoint's "head end" is where the line starts, its "tail end" where it finishes
   const headEnd = end(r.tailStyle), tailEnd = end(r.headStyle);
-  const ln = `<a:ln w="${emu(r.line === 'bold' ? width * 2.5 : width)}"><a:solidFill><a:srgbClr val="${hex6(r.color ?? '#000000')}"/></a:solidFill>${r.line === 'dashed' ? '<a:prstDash val="dash"/>' : ''}<a:miter lim="800000"/>` +
+  const ln = `<a:ln w="${emu(r.line === 'bold' ? width * 2.5 : width)}"><a:solidFill>${clr(r.color ?? '#000000')}</a:solidFill>${r.line === 'dashed' ? '<a:prstDash val="dash"/>' : ''}<a:miter lim="800000"/>` +
     `${headEnd ? `<a:headEnd type="${headEnd}"/>` : ''}${tailEnd ? `<a:tailEnd type="${tailEnd}"/>` : ''}</a:ln>`;
   return { frame, geom, ln, curved: curved || !!r.elbow };
 }
@@ -1759,7 +1815,7 @@ export function geoGeomXml(geo: string | undefined, w: number, h: number): strin
 }
 
 /** A design shape's place, outline, fill, line and effects (shadow, glow, reflection, soft edges, bevel), as PowerPoint and Word (in groups) both write them. */
-export function geoSpPr(s: Shape, lw: number): { box: Rect; geom: string; fill: string; ln: string; shadow: string } {
+export function geoSpPr(s: Shape, lw: number, clr: ColourXml = srgbXml): { box: Rect; geom: string; fill: string; ln: string; shadow: string } {
   const box = { x1: Math.min(s.x1, s.x2), y1: Math.min(s.y1, s.y2), x2: Math.max(s.x1, s.x2), y2: Math.max(s.y1, s.y2) };
   const w = box.x2 - box.x1, h = box.y2 - box.y1;
   const width = s.lineWidth ?? (s.bold ? lw * 2.5 : lw);
@@ -1767,12 +1823,12 @@ export function geoSpPr(s: Shape, lw: number): { box: Rect; geom: string; fill: 
   const fc = hex6(s.fillColor ?? s.color ?? '#000000');
   const clear = Math.max(0, Math.min(1, s.transparency ?? 0));
   const alpha = clear ? `<a:alpha val="${Math.round((1 - clear) * 100000)}"/>` : '';
-  const fill = patternOrGradient(s, fc, alpha) ?? (!s.filled ? '<a:noFill/>'
+  const fill = patternOrGradient(s, fc, alpha, clr) ?? (!s.filled ? '<a:noFill/>'
     : s.fill === 'faded' ? `<a:solidFill><a:srgbClr val="${hex6(tint('#' + fc, FADE))}">${alpha}</a:srgbClr></a:solidFill>`
     : s.fill === 'shaded' ? `<a:gradFill rotWithShape="1"><a:gsLst><a:gs pos="0"><a:srgbClr val="${hex6(tint('#' + fc, 0.85))}">${alpha}</a:srgbClr></a:gs><a:gs pos="100000"><a:srgbClr val="${fc}">${alpha}</a:srgbClr></a:gs></a:gsLst><a:lin ang="5400000" scaled="0"/></a:gradFill>`
-    : `<a:solidFill><a:srgbClr val="${fc}">${alpha}</a:srgbClr></a:solidFill>`);
+    : `<a:solidFill>${clr(fc, alpha)}</a:solidFill>`);
   const dash = s.dashed ? '<a:prstDash val="dash"/>' : '';
-  const ln = width > 0 ? `<a:ln w="${emu(width)}"><a:solidFill><a:srgbClr val="${hex6(s.color ?? '#000000')}"/></a:solidFill>${dash}<a:round/></a:ln>` : '<a:ln><a:noFill/></a:ln>';
+  const ln = width > 0 ? `<a:ln w="${emu(width)}"><a:solidFill>${clr(s.color ?? '#000000')}</a:solidFill>${dash}<a:round/></a:ln>` : '<a:ln><a:noFill/></a:ln>';
   const sl = shadowLook(s, s.shadowSize ?? Math.max(2, 0.04 * Math.min(w, h)));
   const outer = s.shadow ? `<a:outerShdw${sl.blur ? ` blurRad="${emu(sl.blur)}"` : ''} dist="${emu(sl.distance)}" dir="${Math.round((((sl.angle % 360) + 360) % 360) * 60000)}" algn="tl" rotWithShape="0"><a:srgbClr val="${hex6(sl.colour)}"><a:alpha val="${Math.round(sl.opacity * 100000)}"/></a:srgbClr></a:outerShdw>` : '';
   // (the shadow with the glow, reflection and soft edges, and the bevel)
@@ -1878,25 +1934,25 @@ const PPT_PATTERN: Record<Pattern, string> = {
  * gradient as PowerPoint fill XML; null for the other fills. PowerPoint can't put a pattern
  * over a gradient, so a pattern goes over the gradient's first colour.
  */
-function patternOrGradient(s: Shape, fc: string, alpha: string): string | null {
+function patternOrGradient(s: Shape, fc: string, alpha: string, clr: ColourXml = srgbXml): string | null {
   if (s.pattern) {
     const fg = hex6(patternInk(s));
     const pc = patternClear(s);
     const fgAlpha = pc ? `<a:alpha val="${Math.round((1 - pc) * 100000)}"/>` : '';
-    const bg = s.filled ? `<a:srgbClr val="${s.fill === 'faded' ? hex6(tint('#' + fc, FADE)) : fc}">${alpha}</a:srgbClr>` : '<a:srgbClr val="FFFFFF"><a:alpha val="0"/></a:srgbClr>';
-    return `<a:pattFill prst="${PPT_PATTERN[s.pattern]}"><a:fgClr><a:srgbClr val="${fg}">${fgAlpha}</a:srgbClr></a:fgClr><a:bgClr>${bg}</a:bgClr></a:pattFill>`;
+    const bg = s.filled ? (s.fill === 'faded' ? srgbXml(tint('#' + fc, FADE), alpha) : clr(fc, alpha)) : '<a:srgbClr val="FFFFFF"><a:alpha val="0"/></a:srgbClr>';
+    return `<a:pattFill prst="${PPT_PATTERN[s.pattern]}"><a:fgClr>${clr(fg, fgAlpha)}</a:fgClr><a:bgClr>${bg}</a:bgClr></a:pattFill>`;
   }
   if (s.filled && s.fill === 'gradient') {
     const to = hex6(s.fill2 ?? '#ffffff');
     const ang = ((((s.gradAngle ?? 90) % 360) + 360) % 360);
     const dir = s.gradRadial ? '<a:path path="circle"><a:fillToRect l="50000" t="50000" r="50000" b="50000"/></a:path>' : `<a:lin ang="${Math.round(ang * 60000)}" scaled="0"/>`;
-    return `<a:gradFill rotWithShape="1"><a:gsLst><a:gs pos="0"><a:srgbClr val="${fc}">${alpha}</a:srgbClr></a:gs><a:gs pos="100000"><a:srgbClr val="${to}">${alpha}</a:srgbClr></a:gs></a:gsLst>${dir}</a:gradFill>`;
+    return `<a:gradFill rotWithShape="1"><a:gsLst><a:gs pos="0">${clr(fc, alpha)}</a:gs><a:gs pos="100000">${clr(to, alpha)}</a:gs></a:gsLst>${dir}</a:gradFill>`;
   }
   return null;
 }
 
 /** A box, oval or line as a PowerPoint shape. */
-function shapeXml(s: Shape, id: number, lw: number): string {
+function shapeXml(s: Shape, id: number, lw: number, clr: ColourXml = srgbXml): string {
   const width = (s.bold ? lw * 2.5 : lw);
   const color = hex6(s.color ?? '#000000');
   const dash = s.dotted ? '<a:prstDash val="sysDot"/>' : s.dashed ? '<a:prstDash val="dash"/>' : '';
@@ -1904,7 +1960,7 @@ function shapeXml(s: Shape, id: number, lw: number): string {
     const flips = `${s.x2 < s.x1 ? ' flipH="1"' : ''}${s.y2 < s.y1 ? ' flipV="1"' : ''}`;
     const box = { x1: Math.min(s.x1, s.x2), y1: Math.min(s.y1, s.y2), x2: Math.max(s.x1, s.x2), y2: Math.max(s.y1, s.y2) };
     return `<p:cxnSp><p:nvCxnSpPr><p:cNvPr id="${id}"${nameAttrs(s.name?.trim() || `Line ${id - 1}`, s.hidden)}/><p:cNvCxnSpPr/><p:nvPr/></p:nvCxnSpPr>` +
-      `<p:spPr>${xfrm(box, flips)}<a:prstGeom prst="line"><a:avLst/></a:prstGeom><a:ln w="${emu(width)}"><a:solidFill><a:srgbClr val="${color}"/></a:solidFill>${dash}</a:ln></p:spPr></p:cxnSp>`;
+      `<p:spPr>${xfrm(box, flips)}<a:prstGeom prst="line"><a:avLst/></a:prstGeom><a:ln w="${emu(width)}"><a:solidFill>${clr(color)}</a:solidFill>${dash}</a:ln></p:spPr></p:cxnSp>`;
   }
   const box = { x1: Math.min(s.x1, s.x2), y1: Math.min(s.y1, s.y2), x2: Math.max(s.x1, s.x2), y2: Math.max(s.y1, s.y2) };
   let geom = '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>';
@@ -1916,12 +1972,12 @@ function shapeXml(s: Shape, id: number, lw: number): string {
   }
   // a fill of its own colour, faded (a light tint) or shaded (light to full colour)
   const fc = (s.fillColor ?? s.color ?? '#000000').replace('#', '').toUpperCase();
-  const fill = patternOrGradient(s, fc, '') ?? (!s.filled ? '<a:noFill/>'
+  const fill = patternOrGradient(s, fc, '', clr) ?? (!s.filled ? '<a:noFill/>'
     : s.fill === 'faded' ? `<a:solidFill><a:srgbClr val="${tint('#' + fc, FADE).slice(1).toUpperCase()}"/></a:solidFill>`
     : s.fill === 'shaded' ? `<a:gradFill rotWithShape="1"><a:gsLst><a:gs pos="0"><a:srgbClr val="${tint('#' + fc, 0.85).slice(1).toUpperCase()}"/></a:gs><a:gs pos="100000"><a:srgbClr val="${fc}"/></a:gs></a:gsLst>${s.kind === 'oval' ? '<a:path path="circle"><a:fillToRect l="35000" t="30000" r="65000" b="70000"/></a:path>' : '<a:lin ang="2700000" scaled="0"/>'}</a:gradFill>`
-    : `<a:solidFill><a:srgbClr val="${fc}"/></a:solidFill>`);
+    : `<a:solidFill>${clr(fc)}</a:solidFill>`);
   const outlined = !s.filled || (!!s.fillColor && s.fillColor.toLowerCase() !== (s.color ?? '#000000').toLowerCase());
-  const ln = !outlined ? '<a:ln><a:noFill/></a:ln>' : `<a:ln w="${emu(width)}"><a:solidFill><a:srgbClr val="${color}"/></a:solidFill>${dash}</a:ln>`;
+  const ln = !outlined ? '<a:ln><a:noFill/></a:ln>' : `<a:ln w="${emu(width)}"><a:solidFill>${clr(color)}</a:solidFill>${dash}</a:ln>`;
   const shadow = s.shadow ? `<a:effectLst><a:outerShdw dist="${emu(s.shadowSize ?? 4 * lw)}" dir="2700000" algn="tl" rotWithShape="0"><a:srgbClr val="C0C0C0"/></a:outerShdw></a:effectLst>` : '';
   return `<p:sp><p:nvSpPr><p:cNvPr id="${id}"${nameAttrs(s.name?.trim() || `${s.kind === 'oval' ? 'Oval' : 'Rectangle'} ${id - 1}`, s.hidden)}/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>` +
     `<p:spPr>${xfrm(box, rotAttr(s.rot))}${geom}${fill}${ln}${shadow}</p:spPr></p:sp>`;

@@ -38,7 +38,7 @@ import { knownShape, tidyFx } from '../render/picture-fx';
 import { applyColorMods, dmlFraction, hslHex, linearHex } from './dml-color';
 import { readPictureFx } from './picture-xml';
 import { layoutText, caretPos, ASCENT, PPT_SINGLE } from '../text/layout';
-import { Master, SlideSize, LayoutId, type TemplateArt, type ArtLayer, type KeptRel, type KeptXmlPart, type NotesKept, defaultMaster, textStyles, slideDrawingStyle, slideBackground, slideColours, hasLayout, newLayoutId, deckLayouts, type LayoutDef, type PlaceholderBox, type SectionCount, type DeckSettings, type SlideHF, type DateFormat, showsNumber, showsFooter, showsDate } from '../deck/deck';
+import { Master, SlideSize, LayoutId, type TemplateArt, type ArtLayer, type KeptRel, type KeptXmlPart, type NotesKept, defaultMaster, textStyles, slideDrawingStyle, slideBackground, slideColours, hasLayout, newLayoutId, deckLayouts, type LayoutDef, type PlaceholderBox, type ThemeColor, type SectionCount, type DeckSettings, type SlideHF, type DateFormat, showsNumber, showsFooter, showsDate } from '../deck/deck';
 import { backgroundColour, isPlain, sameBackground, type Background } from '../deck/background';
 import { readFill, readOneFill, type FillContext } from './pptx-background';
 import { TAG, PPT_ASCENT, MIME_EXT, arialMeasure, NS_A14, NS_M, swapBox, tableLookKey, savedTableLook, joinTagPieces, tagLooksCut } from './pptx-write';
@@ -448,7 +448,21 @@ class Reader {
 
   private color(el: Element | null, ph: Element | null = null): string | null {
     const p = ph ? colorIn(ph, this.theme, this.clrMap)?.slice(1) ?? null : null;
-    return colorIn(el, this.theme, this.clrMap, p);
+    const hex = colorIn(el, this.theme, this.clrMap, p);
+    if (hex && el) this.noteThemeColor(el, hex);
+    return hex;
+  }
+
+  /** The theme colors read, by the color each came to (see TemplateArt.colors): the first one for each color. */
+  private themeColors = new Map<string, ThemeColor>();
+
+  /** A theme color read (a schemeClr and its changes, but not its alpha, which is read as transparency). */
+  private noteThemeColor(holder: Element, hex: string): void {
+    const c = kids(holder).find((k) => /Clr$/.test(k.localName));
+    const scheme = c?.localName === 'schemeClr' ? c.getAttribute('val') : null;
+    if (!c || !scheme || scheme === 'phClr' || this.themeColors.has(hex)) return;
+    const mods = kids(c).filter((k) => !/^alpha/.test(k.localName)).map((k): [string, string] => [k.localName, k.getAttribute('val') ?? '']);
+    this.themeColors.set(hex, { scheme, ...(mods.length ? { mods } : {}) });
   }
 
   /** A typeface, with the theme's title and body fonts filled in. */
@@ -650,6 +664,8 @@ class Reader {
         this.claimArt(id, part);
       }
     }
+    // the theme colors the slides use, saved as theme colors again while the theme is the file's
+    if (art.theme && this.themeColors.size) art.colors = Object.fromEntries(this.themeColors);
     if (art.master || art.layouts || art.theme || art.clrMap) this.masterOut.art = art;
   }
 
@@ -817,6 +833,8 @@ class Reader {
     const layout = this.part(layoutPath);
     // theme colors go through the slide's color map: its own, else its layout's, else the master's
     this.clrMap = { ...this.masterClrMap, ...((layout && this.overrideOf(layout)) ?? {}), ...(this.overrideOf(s) ?? {}) };
+    // every theme color on the slide, also where its text and shapes come from our tags (a file saved here)
+    for (const c of Array.from(s.doc.getElementsByTagNameNS(NS.a, 'schemeClr'))) if (c.parentElement) this.color(c.parentElement);
     const tags = this.tagsOf(path, kid(s.doc.documentElement, 'cSld'));
     this.curPath = path;
     this.partsRead[this.slidePaths.indexOf(path)] = readPart(tags[TAG.canvasPart], tags[TAG.canvasKeep], s.tree);
