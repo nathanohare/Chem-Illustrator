@@ -6,6 +6,7 @@
 import { newTextLook } from '../chem/arrow-text';
 import { labelPieces, styleLabel, type AlkylLook } from '../chem/labels';
 import { Doc } from '../model';
+import type { Vec } from '../geom';
 import type { DocStyle } from '../style';
 import { freeRing, placeRing, sprout } from '../chem/chemgeom';
 import { recordPicture, pictureCanvas } from '../render/picture';
@@ -167,16 +168,27 @@ export function stylePreview(style: DocStyle, scheme: Partial<SchemePrefs> = {},
   const box = document.createElement('div');
   const sch = { ...style.scheme, ...scheme };
   const doc = sampleDrawing(style, sch);
-  const span = focus ? schemeSpan(doc, focus, sch) : null;
-  // the arrow close up, where its gaps and the text's place show (and the magnifier, when what it
-  // measures is in it, so the drawing above stays put)
-  const r = [...doc.arrows.values()][0];
-  const L = style.bondLength;
-  const view = r && { x1: Math.min(r.tail.x, r.head.x) - 1.6 * L, y1: r.tail.y - 1.3 * L, x2: Math.max(r.tail.x, r.head.x) + 1.6 * L, y2: r.tail.y + 1.3 * L };
-  const inView = !!(span && view && [span.from, span.to, ...(span.anchors ?? [])].every((q) => q.x >= view.x1 && q.x <= view.x2 && q.y >= view.y1 && q.y <= view.y2));
-  box.append(canvasWithLoupe(doc, w, Math.round(w * 0.42), 6, 3, inView ? null : span));
+  const span = focus ? schemeSpan(doc, focus, sch) ?? structureSpan(doc, focus) : null;
+  box.append(canvasWithLoupe(doc, w, Math.round(w * 0.42), 6, 3, null));
+  // a close-up under it, with the magnifier in it (so the drawing above stays put): of the arrow
+  // and its text, where its gaps show, or of the part of a structure a structure setting measures
+  const arrowView = arrowCloseUp(doc);
+  const pts = span ? [span.from, span.to, ...(span.anchors ?? [])] : [];
+  const inside = (v: Box) => pts.every((q) => q.x >= v.x1 && q.x <= v.x2 && q.y >= v.y1 && q.y <= v.y2);
+  const ch = Math.round(w * 0.36);
+  let view = arrowView, inline = false;
+  if (span && (!view || !inside(view))) {
+    // close up on what is measured (a structure setting), enlarged enough to see a line width,
+    // with the dimension drawn on it
+    const x1 = Math.min(...pts.map((q) => q.x)), x2 = Math.max(...pts.map((q) => q.x));
+    const y1 = Math.min(...pts.map((q) => q.y)), y2 = Math.max(...pts.map((q) => q.y));
+    const vw = Math.max(1.6 * style.bondLength, (x2 - x1) * 1.6, ((y2 - y1) * 1.6 * w) / ch);
+    const vh = (vw * ch) / w;
+    view = { x1: (x1 + x2) / 2 - vw / 2, y1: (y1 + y2) / 2 - vh / 2, x2: (x1 + x2) / 2 + vw / 2, y2: (y1 + y2) / 2 + vh / 2 };
+    inline = true;
+  }
   if (view) {
-    const crop = canvasWithLoupe(doc, w, Math.round(w * 0.36), 0, 4, inView ? span : null, { view });
+    const crop = canvasWithLoupe(doc, w, ch, 0, 40, span, { view, inline, band: 'none' });
     crop.classList.add('sw-zoom');
     box.append(crop);
   }
@@ -185,6 +197,119 @@ export function stylePreview(style: DocStyle, scheme: Partial<SchemePrefs> = {},
   p.textContent = `Bond ${+style.bondLength.toFixed(2)} pt · line ${+style.lineWidth.toFixed(2)} pt · ${style.labelFont} ${style.labelSize} pt`;
   box.append(p);
   return box;
+}
+
+type Box = { x1: number; y1: number; x2: number; y2: number };
+
+/**
+ * The part of a sample drawing round its first reaction arrow: the arrow, its text above and
+ * below (however far out the gaps put it) and a little of the structures either side.
+ */
+function arrowCloseUp(doc: Doc): Box | null {
+  const r = [...doc.arrows.values()][0];
+  if (!r) return null;
+  const L = doc.style.bondLength;
+  const m = measureOf(doc);
+  const x1 = Math.min(r.tail.x, r.head.x), x2 = Math.max(r.tail.x, r.head.x), y = r.tail.y;
+  let top = y - 1.3 * L, bottom = y + 1.3 * L;
+  for (const c of doc.captions.values()) {
+    const b = m.captionBox(c);
+    if (b.x2 < x1 - 1 || b.x1 > x2 + 1) continue;
+    top = Math.min(top, b.y1 - 0.3 * L);
+    bottom = Math.max(bottom, b.y2 + 0.3 * L);
+  }
+  // (level about the arrow, so it stays in the middle)
+  const half = Math.max(y - top, bottom - y);
+  return { x1: x1 - 1.6 * L, y1: y - half, x2: x2 + 1.6 * L, y2: y + half };
+}
+
+/** The structure distances Drawing Style sets, as they show in its sample drawing. */
+export const STRUCTURE_SPANS = ['bondLength', 'lineWidth', 'boldWidth', 'marginWidth', 'hashSpacing', 'bondSpacing'] as const;
+
+/**
+ * Where a structure setting shows in sampleDrawing's first structure: a bond's length and line
+ * width, the width of a wedge's wide end (1.5 bold widths), the clearance a bond keeps from a
+ * label, the spacing of a hashed wedge's hashes and the distance between a double bond's lines.
+ */
+export function structureSpan(doc: Doc, key: string): Span | null {
+  if (!(STRUCTURE_SPANS as readonly string[]).includes(key)) return null;
+  let r: Renderer;
+  try { r = new Renderer(noCanvas, noCanvas); r.showWarnings = false; } catch { return null; }
+  const st = doc.style;
+  const pt = (v: number) => `${+v.toFixed(2)} pt`;
+  const bonds = [...doc.bonds.values()];
+  const atom = (id: number) => doc.atoms.get(id)!;
+  const dirOf = (s: Vec, e: Vec) => { const l = Math.hypot(e.x - s.x, e.y - s.y) || 1; return { x: (e.x - s.x) / l, y: (e.y - s.y) / l }; };
+  const at = (p: Vec, d: Vec, t: number): Vec => ({ x: p.x + d.x * t, y: p.y + d.y * t });
+  // the stereocentre: the atom with the hashed and the wedged bond
+  const hashed = bonds.find((b) => b.display === 'hashWedge');
+  const wedge = bonds.find((b) => b.display === 'wedge');
+  switch (key as (typeof STRUCTURE_SPANS)[number]) {
+    case 'bondLength':
+    case 'lineWidth': {
+      // the plain bond from the stereocentre to the ring
+      const c = hashed?.a1;
+      const b = bonds.find((x) => c !== undefined && (x.a1 === c || x.a2 === c) && (x.display ?? 'solid') === 'solid' && x.order === 1);
+      if (!b) return null;
+      const p = atom(b.a1), q = atom(b.a2), d = dirOf(p, q), n = { x: -d.y, y: d.x };
+      if (key === 'bondLength') return { from: p, to: q, label: pt(Math.hypot(q.x - p.x, q.y - p.y)) };
+      const mid = at(p, d, Math.hypot(q.x - p.x, q.y - p.y) / 2), lw = st.lineWidth;
+      return { from: at(mid, n, -lw / 2), to: at(mid, n, lw / 2), label: pt(lw), side: d };
+    }
+    case 'boldWidth': {
+      if (!wedge) return null;
+      // across the wide end, where the wedge stops at its atom (or its label)
+      const [s, e] = r.bondEnds(doc, atom(wedge.a1), atom(wedge.a2));
+      const d = dirOf(s, e), n = { x: -d.y, y: d.x }, he = (1.5 * st.boldWidth) / 2;
+      return { from: at(e, n, -he), to: at(e, n, he), label: `1.5 × ${pt(st.boldWidth)}`, side: { x: -d.x, y: -d.y } };
+    }
+    case 'hashSpacing': {
+      if (!hashed) return null;
+      // the last two hashes, at the wide end, placed as the renderer places them
+      const p = atom(hashed.a1), q = atom(hashed.a2);
+      const [s, e] = r.bondEnds(doc, p, q);
+      const l = Math.hypot(e.x - s.x, e.y - s.y), d = dirOf(s, e), n = { x: -d.y, y: d.x };
+      const lw = st.lineWidth, hs = st.hashSpacing, w = (1.5 * st.boldWidth) / 2;
+      const short = (a: { id: number; x: number; y: number }, end: Vec) => (doc.degree(a.id) > 1 && Math.hypot(end.x - a.x, end.y - a.y) < 1e-6 ? hs : 0);
+      const h0 = Math.min(short(p, s), l / 3), h1 = Math.min(short(q, e), l / 3);
+      const run = Math.max(0, l - h0 - h1 - lw);
+      const k = Math.max(2, Math.floor(run / hs) + 1);
+      const hash = (i: number) => { const t = h0 + lw / 2 + (run * i) / (k - 1); return { c: at(s, d, t), hw: lw / 2 + (w - lw / 2) * (t / l) }; };
+      const a = hash(k - 2), b = hash(k - 1);
+      return { from: at(a.c, n, b.hw + lw), to: at(b.c, n, b.hw + lw), label: pt(hs), side: n, anchors: [at(a.c, n, a.hw), at(b.c, n, b.hw)] };
+    }
+    case 'bondSpacing': {
+      // the C=O: across its two lines, at the carbon's end
+      const b = bonds.find((x) => x.order === 2 && (atom(x.a1).z === 8 || atom(x.a2).z === 8));
+      if (!b) return null;
+      const oFirst = atom(b.a1).z === 8;
+      const p = atom(b.a1), q = atom(b.a2), n = (() => { const d = dirOf(p, q); return { x: -d.y, y: d.x }; })();
+      const gap = (st.bondSpacing / 100) * st.bondLength, side = r.doubleSide(doc, b);
+      const [o1, o2] = side ? [0, side * gap] : [-gap / 2, gap / 2];
+      const [s, e] = r.bondEnds(doc, p, q);
+      const end = oFirst ? e : s, away = oFirst ? dirOf(s, e) : dirOf(e, s);
+      return { from: at(end, n, o1), to: at(end, n, o2), label: `${+st.bondSpacing.toFixed(1)}% · ${pt(gap)}`, side: away };
+    }
+    case 'marginWidth': {
+      // the bond into the carbamate's N, from where it stops to the letter
+      const nAtom = [...doc.atoms.values()].find((a) => a.z === 7 && !a.charge);
+      const b = nAtom && bonds.find((x) => (x.a1 === nAtom.id || x.a2 === nAtom.id) && (x.display ?? 'solid') === 'solid' && x.order === 1);
+      if (!nAtom || !b) return null;
+      const other = atom(b.a1 === nAtom.id ? b.a2 : b.a1);
+      const [, e] = r.bondEnds(doc, other, nAtom);
+      const boxes = r.atomInfo(doc, nAtom).boxes;
+      if (!boxes.length) return null;
+      // the side of the label's box the bond stops at, and the letter that far inside it
+      let best = { dist: Infinity, n: { x: 0, y: 0 } };
+      for (const bx of boxes) {
+        for (const [dist, nn] of [[Math.abs(e.x - bx.x1), { x: -1, y: 0 }], [Math.abs(e.x - bx.x2), { x: 1, y: 0 }], [Math.abs(e.y - bx.y1), { x: 0, y: -1 }], [Math.abs(e.y - bx.y2), { x: 0, y: 1 }]] as const) {
+          if (dist < best.dist) best = { dist, n: nn };
+        }
+      }
+      const mw = st.marginWidth, inward = { x: -best.n.x, y: -best.n.y };
+      return { from: e, to: at(e, inward, mw), label: pt(mw), side: { x: best.n.y, y: -best.n.x } };
+    }
+  }
 }
 
 /** The dot grid and the tint beyond the drawing (Settings ▸ Navigation), at 100 %. */
@@ -491,7 +616,7 @@ function nearestOnBoxes(boxes: { x1: number; y1: number; x2: number; y2: number 
 }
 
 /** The scheme distances a settings box sets, as they come out in a laid-out sample scheme. */
-export const SCHEME_SPANS = ['structGap', 'plusGap', 'textGap', 'lead', 'headGap', 'arrowWidth', 'headLength', 'headWidth'] as const;
+export const SCHEME_SPANS = ['structGap', 'plusGap', 'textGap', 'textGapBelow', 'lead', 'headGap', 'arrowWidth', 'headLength', 'headWidth'] as const;
 export type SchemeSpanKey = (typeof SCHEME_SPANS)[number];
 
 /**
@@ -547,6 +672,12 @@ function schemeSpan(doc: Doc, key: string, scheme: Partial<SchemePrefs>): Span |
       if (!above) return null;
       const x = (above.b.x1 + above.b.x2) / 2;
       return { from: { x, y: above.b.y2 }, to: { x, y: y - lw / 2 }, label: pt(sp.conditions), side: { x: 1, y: 0 } };
+    }
+    case 'textGapBelow': {
+      const below = texts.filter((x) => x.b.y1 >= y).sort((p, q) => p.b.y1 - q.b.y1)[0];
+      if (!below) return null;
+      const x = (below.b.x1 + below.b.x2) / 2;
+      return { from: { x, y: y + lw / 2 }, to: { x, y: below.b.y1 }, label: pt(sp.conditionsBelow), side: { x: 1, y: 0 } };
     }
     case 'lead': {
       const c = textCorner('start');

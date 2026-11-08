@@ -173,7 +173,7 @@ import { withoutCharge } from './chem/formula';
 import { ORBITAL_KINDS, ORBITAL_LOOKS, angleOfDir, openDirection, orbitalAtom, orbitalShapes, orbitalsAmong, putOrbital, readAngle, readOrbital, redrawOrbital, takenDirections, type OrbitalKind, type OrbitalLook, type OrbitalSpec } from './chem/orbitals';
 import { BATCH_FORMATS, BATCH_INPUTS, readBatchFile, smilesLine, uniqueName, writeBatchItem, type BatchDeps, type BatchFormat } from './io/batch-convert';
 import { zipSync } from 'fflate';
-import { labelsOf, schemePrefs, setSchemePrefs, SPACING, type SchemePrefs } from './chem/scheme-layout';
+import { clampSchemeDistance, labelsOf, SCHEME_LIMITS, schemePrefs, setSchemePrefs, SPACING, type SchemeDistance, type SchemePrefs } from './chem/scheme-layout';
 import { plainText, savableChar } from './richtext';
 import { buildTextToolbox, type TextToolboxHooks } from './ui/text-toolbox';
 import { buildTextBar } from './ui/text-bar';
@@ -3072,12 +3072,14 @@ async function cleanUpChoices(): Promise<void> {
  */
 /** Scheme settings as typed in Settings ▸ Schemes. */
 function schemeFrom(got: Record<string, string>): Partial<SchemePrefs> {
-  const len = (v: string | undefined) => { const n = Number(v); return !v || v.trim() === '' || !isFinite(n) || n < 0 ? null : Math.min(500, n); };
+  const len = (k: SchemeDistance) => { const v = got[k]; return !v || v.trim() === '' ? null : clampSchemeDistance(k, Number(v)) ?? null; };
+  const align = (v: string | undefined) => (v === 'left' || v === 'center' || v === 'right' ? v : null);
   return {
-    structGap: len(got.structGap), plusGap: len(got.plusGap), textGap: len(got.textGap), lead: len(got.lead), headGap: len(got.headGap),
+    structGap: len('structGap'), plusGap: len('plusGap'), textGap: len('textGap'), textGapBelow: len('textGapBelow'), lead: len('lead'), headGap: len('headGap'),
     // (its size and font are the drawing style's now: Settings > Drawing Style)
     textSize: null,
-    textAlign: got.textAlign === 'left' || got.textAlign === 'right' ? got.textAlign : 'center',
+    textAlign: align(got.textAlign) ?? 'center',
+    textAlignBelow: align(got.textAlignBelow),
     helpers: got.helpers === 'true', fit: got.fit === 'true', sameLength: got.sameLength === 'true',
   };
 }
@@ -3088,16 +3090,21 @@ async function schemeSettings(): Promise<void> {
   const bond = doc.style.bondLength;
   const pt = (v: number | null) => (v === null ? '' : String(v));
   const auto = (frac: number) => `${Math.round(frac * bond * 10) / 10} pt`;
+  const aligns = [{ value: 'left', label: 'Left' }, { value: 'center', label: 'Center' }, { value: 'right', label: 'Right' }];
+  /** A distance box, kept from 0 to its limit. */
+  const dist = (name: SchemeDistance, label: string, placeholder: string): Field => ({ name, label, value: pt(p[name] ?? null), type: 'number', unit: 'pt', placeholder, min: 0, max: SCHEME_LIMITS[name] });
   const got = await ask('Scheme Settings', [
-    { name: 'structGap', label: 'Gap between arrow and structures', value: pt(p.structGap), type: 'number', unit: 'pt', placeholder: auto(SPACING.gap) },
-    { name: 'plusGap', label: 'Space either side of +', value: pt(p.plusGap), type: 'number', unit: 'pt', placeholder: auto(SPACING.plus) },
+    dist('structGap', 'Gap between arrow and structures', auto(SPACING.gap)),
+    dist('plusGap', 'Space either side of +', auto(SPACING.plus)),
     { name: 'helpers', label: 'Show + boxes above and below new arrows', value: String(p.helpers), type: 'checkbox' },
-    { name: 'textAlign', label: 'Text alignment', value: p.textAlign, options: [{ value: 'left', label: 'Left' }, { value: 'center', label: 'Center' }, { value: 'right', label: 'Right' }] },
-    { name: 'textGap', label: 'Gap between arrow and text', value: pt(p.textGap), type: 'number', unit: 'pt', placeholder: auto(SPACING.conditions) },
+    { name: 'textAlign', label: 'Text alignment above the arrow', value: p.textAlign, options: aligns },
+    dist('textGap', 'Gap between arrow and text above', auto(SPACING.conditions)),
+    { name: 'textAlignBelow', label: 'Text alignment below the arrow', value: p.textAlignBelow ?? '', options: [{ value: '', label: 'Same as above' }, ...aligns] },
+    dist('textGapBelow', 'Gap between arrow and text below', 'Same as above'),
     { name: 'fit', label: 'Fit arrow length to its text (moves the products)', value: String(p.fit), type: 'checkbox' },
     { name: 'sameLength', label: 'Clean Up Reaction makes arrows the same length', value: String(p.sameLength), type: 'checkbox' },
-    { name: 'lead', label: 'Arrow before the text starts', value: pt(p.lead), type: 'number', unit: 'pt', placeholder: auto(SPACING.overhang) },
-    { name: 'headGap', label: 'Space between text and arrowhead', value: pt(p.headGap), type: 'number', unit: 'pt', placeholder: auto(SPACING.overhang) },
+    dist('lead', 'Arrow before the text starts', auto(SPACING.overhang)),
+    dist('headGap', 'Space between text and arrowhead', auto(SPACING.overhang)),
   ], { ok: 'Save', note: 'Used when you type text beside an arrow, and by Clean Up Reaction and Arrange Scheme. These are the usual values for every file; a drawing style can have its own (Drawing Style ▸ Reaction arrows, with a preview), and those win. The text\'s size and font are in Drawing Style too. Leave a distance blank to scale it with the bond length. Existing schemes change when you next clean them up.',
     preview: { title: 'Preview', below: true, draw: (v, focus) => schemePreview(doc.style, schemeFrom(v), undefined, focus) } });
   if (!got) return;
@@ -10252,7 +10259,9 @@ async function openOutsideFiles(): Promise<void> {
 }
 
 /** A mechanism arrow gap typed in Settings ▸ Drawing, in points: null (the usual gap) when blank or not a number. */
-const arrowGap = (v: string | undefined): number | null => { const n = Number(v); return !v || v.trim() === '' || !isFinite(n) || n < 0 ? null : Math.min(50, n); };
+/** The most a mechanism arrow's gap at either end may be, in points. */
+const ARROW_GAP_MAX = 20;
+const arrowGap = (v: string | undefined): number | null => { const n = Number(v); return !v || v.trim() === '' || !isFinite(n) ? null : Math.min(ARROW_GAP_MAX, Math.max(0, n)); };
 
 /** Settings ▸ Drawing: how structures are written and drawn, set once rather than per structure. */
 async function drawingPreferences(): Promise<void> {
@@ -10274,8 +10283,8 @@ async function drawingPreferences(): Promise<void> {
       help: 'Arrows you bent by hand stay as they are.' },
     { name: 'arrowProducts', label: 'Offer Draw Next Intermediate and Check Arrows (Chemistry ▸ Mechanism Arrows)', type: 'checkbox', value: String(editor.options.arrowProducts),
       help: 'Both read the curved arrows as electrons moving: Check Arrows checks them, and Draw Next Intermediate draws the structure they make. Off takes both commands out of the menus; the arrows themselves are drawn as before.' },
-    { name: 'startGap', label: 'Gap between tail of an arrow and its origin', value: arrowGaps.start === null ? '' : String(arrowGaps.start), type: 'number', unit: 'pt', placeholder: 'Automatic' },
-    { name: 'endGap', label: 'Gap between head of an arrow and its target', value: arrowGaps.end === null ? '' : String(arrowGaps.end), type: 'number', unit: 'pt', placeholder: 'Automatic',
+    { name: 'startGap', label: 'Gap between tail of an arrow and its origin', value: arrowGaps.start === null ? '' : String(arrowGaps.start), type: 'number', unit: 'pt', placeholder: 'Automatic', min: 0, max: ARROW_GAP_MAX },
+    { name: 'endGap', label: 'Gap between head of an arrow and its target', value: arrowGaps.end === null ? '' : String(arrowGaps.end), type: 'number', unit: 'pt', placeholder: 'Automatic', min: 0, max: ARROW_GAP_MAX,
       help: 'Both gaps are measured from the atom\'s label (or a bare carbon\'s corner) or the lone pair\'s dots. Leave blank for the usual gap, which grows with the bond length. New arrows, and arrows stuck to a structure, use them when they are next drawn; Clean Up Arrow redraws the selected ones now.' },
   ], { ok: 'Save', preview: { title: 'Mechanism arrows', draw: (v, focus) => mechanismPreview({ start: arrowGap(v.startGap), end: arrowGap(v.endGap) }, doc.style, undefined, focus) } });
   if (!r) return;
