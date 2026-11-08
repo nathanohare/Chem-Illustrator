@@ -100,7 +100,7 @@ const E = 12700;
 const GRP = '<p:nvGrpSpPr><p:cNvPr id="1" name=""/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr/>';
 const xf = (x: number, y: number, w: number, h: number, extra = '') => `<a:xfrm${extra}><a:off x="${x * E}" y="${y * E}"/><a:ext cx="${w * E}" cy="${h * E}"/></a:xfrm>`;
 
-function powerPointFile(): Uint8Array {
+function powerPointFile(extra = ''): Uint8Array {
   const pkg = new Package();
   const ct = (t: string) => `application/vnd.openxmlformats-officedocument.${t}+xml`;
   pkg.defaultType('png', 'image/png');
@@ -149,9 +149,44 @@ function powerPointFile(): Uint8Array {
     `<p:grpSp><p:nvGrpSpPr><p:cNvPr id="7" name="Group 6"/><p:cNvGrpSpPr/><p:nvPr/></p:nvGrpSpPr><p:grpSpPr><a:xfrm><a:off x="${600 * E}" y="${100 * E}"/><a:ext cx="${50 * E}" cy="${50 * E}"/><a:chOff x="0" y="0"/><a:chExt cx="${100 * E}" cy="${100 * E}"/></a:xfrm></p:grpSpPr>` +
     `<p:pic><p:nvPicPr><p:cNvPr id="8" name="Picture 7"/><p:cNvPicPr/><p:nvPr/></p:nvPicPr><p:blipFill><a:blip r:embed="${img}"/><a:srcRect l="10000" b="5000"/><a:stretch><a:fillRect/></a:stretch></p:blipFill><p:spPr>${xf(20, 20, 80, 60)}</p:spPr></p:pic></p:grpSp>` +
     `<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="9" name="Table 8"/><p:cNvGraphicFramePr/><p:nvPr/></p:nvGraphicFramePr><p:xfrm><a:off x="0" y="0"/><a:ext cx="100" cy="100"/></p:xfrm><a:graphic><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/table"><a:tbl/></a:graphicData></a:graphic></p:graphicFrame>` +
-    `</p:spTree></p:cSld></p:sld>`, ct('presentationml.slide'));
+    `${extra}</p:spTree></p:cSld></p:sld>`, ct('presentationml.slide'));
   return pkg.build();
 }
+
+describe('text typed into a PowerPoint shape, and its bullets (laptop bench pp-538)', () => {
+  const box = `<p:sp><p:nvSpPr><p:cNvPr id="20" name="Rectangle 19"/><p:cNvSpPr/><p:nvPr/></p:nvSpPr><p:spPr>${xf(100, 200, 200, 100)}<a:prstGeom prst="rect"><a:avLst/></a:prstGeom></p:spPr>`
+    + '<p:style><a:lnRef idx="2"><a:schemeClr val="accent1"><a:shade val="50000"/></a:schemeClr></a:lnRef><a:fillRef idx="1"><a:schemeClr val="accent1"/></a:fillRef></p:style>'
+    + '<p:txBody><a:bodyPr anchor="ctr"/><a:lstStyle/><a:p><a:pPr algn="ctr"/><a:r><a:rPr lang="en-US"/><a:t>Inside the box</a:t></a:r></a:p></p:txBody></p:sp>';
+  const bullets = `<p:sp><p:nvSpPr><p:cNvPr id="21" name="TextBox 20"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr><p:spPr>${xf(400, 200, 250, 60)}<a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/></p:spPr>`
+    + '<p:txBody><a:bodyPr/><a:lstStyle/><a:p><a:pPr marL="285750" indent="-285750"><a:buFont typeface="Wingdings" pitchFamily="2" charset="2"/><a:buChar char="Ø"/></a:pPr><a:r><a:rPr lang="en-US" sz="1800"/><a:t>Arrow point</a:t></a:r></a:p></p:txBody></p:sp>';
+  const back = readPptx(powerPointFile(box + bullets));
+  const c = back.slides[0].contents;
+
+  it('keeps the text in the shape, and saves it there', async () => {
+    const sh = c.shapes.find((s) => s.text);
+    expect(sh?.kind).toBe('geo');
+    expect(sh?.text?.runs.map((r) => r.text).join('')).toBe('Inside the box');
+    expect(c.captions.some((x) => text(x) === 'Inside the box')).toBe(false);
+    // a text box stays a text box
+    expect(c.captions.some((x) => text(x).includes('Arrow point'))).toBe(true);
+    const doc = new Doc();
+    doc.restoreContents(c);
+    const bytes = await writePptx({ size: back.size, master: back.master, slides: [{ layout: 'blank', doc, notes: '' }] }, opts);
+    const xml = strFromU8(unzipSync(bytes)['ppt/slides/slide1.xml']);
+    const sp = [...xml.matchAll(/<p:sp>[\s\S]*?<\/p:sp>/g)].map((m) => m[0]).find((x) => x.includes('Inside the box'))!;
+    expect(sp).toContain('prst="rect"');
+    expect(sp).not.toContain('<a:noFill/></p:spPr>');
+  });
+
+  it('writes a Wingdings arrow bullet back in Wingdings', async () => {
+    const doc = new Doc();
+    doc.restoreContents(c);
+    const bytes = await writePptx({ size: back.size, master: back.master, slides: [{ layout: 'blank', doc, notes: '' }] }, opts);
+    const xml = strFromU8(unzipSync(bytes)['ppt/slides/slide1.xml']);
+    expect(xml).toContain('<a:buFont typeface="Wingdings" pitchFamily="2" charset="2"/><a:buChar char="Ø"/>');
+    expect(xml).not.toContain('➢');
+  });
+});
 
 describe('opening files made in PowerPoint', () => {
   const back = readPptx(powerPointFile());

@@ -1700,6 +1700,17 @@ class Reader {
     return out;
   }
 
+  /**
+   * A box or oval with text typed into it (PowerPoint's default shape, filled or outlined, not a
+   * text box): a design shape, so its text stays in it when saved again rather than becoming a
+   * text box laid over a box (laptop bench pp-538).
+   */
+  private textInShape(sp: Element, spPr: Element | null): boolean {
+    if (kid(sp, 'nvSpPr', 'cNvSpPr')?.getAttribute('txBox') === '1' || !this.plain(sp).trim()) return false;
+    const look = this.look(sp, spPr);
+    return !!(look.fill || look.line);
+  }
+
   private shape(s: Part, layout: Part | null, sp: Element, t: Xf, doc: Doc): void {
     const ph = phOf(sp);
     if (ph && SKIP_PH.has(ph.type)) return; // slide numbers, footers and dates come from the master
@@ -1715,7 +1726,7 @@ class Reader {
     if (!ph) {
       // a design shape saved here, or a PowerPoint shape that is one (in designs, boxes and ovals too)
       const geoTag = this.tagsOf(s.path, kid(sp, 'nvSpPr', 'nvPr'))[TAG.geo];
-      if (geoTag || (GEO_BY_PRST.has(prst) && (this.design || !PLAIN_PRST.has(prst) || fancyFill(spPr)))) {
+      if (geoTag || (GEO_BY_PRST.has(prst) && (this.design || !PLAIN_PRST.has(prst) || fancyFill(spPr) || this.textInShape(sp, spPr)))) {
         if (this.geoShape(sp, spPr, prst, box, geoTag, doc, s.path)) return;
       }
     }

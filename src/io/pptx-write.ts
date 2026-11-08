@@ -367,6 +367,17 @@ export function swapBox(b: Rect): Rect {
   return { x1: mx - hw, y1: my - hh, x2: mx + hw, y2: my + hh };
 }
 
+/**
+ * Bullets Arial doesn't have, in Wingdings as PowerPoint writes them (read back as the characters
+ * they show: pptx-read's bulletChar), so PowerPoint shows the same arrow or tick (laptop bench pp-538).
+ */
+const WINGDINGS_BULLETS: Record<string, string> = { '➢': 'Ø', '✓': 'ü', '☑': 'þ', '➔': 'è', '❑': 'q', '❖': 'v', '◆': 'u' };
+
+/** A bullet's PowerPoint markup: in Arial, or in Wingdings for those Arial lacks. */
+export function bulletXml(ch: string): string {
+  const w = WINGDINGS_BULLETS[ch];
+  return w ? `<a:buFont typeface="Wingdings" pitchFamily="2" charset="2"/><a:buChar char="${xml(w)}"/>` : `<a:buFont typeface="Arial"/><a:buChar char="${xml(ch)}"/>`;
+}
 /** A caption's paragraphs as PowerPoint paragraphs. */
 export function paragraphsXml(c: Caption, explicit: { size: number; font: string } | null, defaultSize: number, measure: Measure, hlink?: LinkXml): string {
   const paras = splitParagraphs(c.runs);
@@ -395,7 +406,7 @@ export function paragraphsXml(c: Caption, explicit: { size: number; font: string
       attrs.push(`marL="${emu(textLeft)}"`, `indent="${ps.cont ? 0 : emu(markLeft - textLeft)}"`);
       if (level) attrs.push(`lvl="${level}"`);
       if (ps.cont) inner += '<a:buNone/>';
-      else if (ps.list === 'bullet') inner += `<a:buFont typeface="Arial"/><a:buChar char="${xml(m ?? '•')}"/>`;
+      else if (ps.list === 'bullet') inner += bulletXml(m ?? '•');
       else if (ps.numType && autoNumLabel(ps.numType, 1)) {
         // PowerPoint's own numbering, kept
         const n = lists[i].n ?? 1;
