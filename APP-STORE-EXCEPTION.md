@@ -5,7 +5,7 @@ any later version ([LICENSE](LICENSE)). Under section 7 of that licence, its cop
 add this permission:
 
 > **Additional permission under GNU GPL version 3 section 7.** As a special exception, the
-> copyright holders of Chemweave give you permission to distribute this program, and
+> copyright holders of Chemweave (formerly Chem Illustrator) give you permission to distribute this program, and
 > works based on it, through Apple's App Store and TestFlight, under the terms Apple sets for
 > apps distributed there (including its Usage Rules and standard end-user licence agreement),
 > even though those terms place restrictions on recipients that the GNU GPL does not allow. You
