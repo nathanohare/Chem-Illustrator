@@ -2865,7 +2865,8 @@ dialog.settings-window { max-width: none; }
 .rb-group.rb-compact button.rb-iconbtn:has(svg) { font-size: 0; }
 /* the Clipboard group's Cut, Copy and Format Painter keep their words while they fit, in every mode, and drop them (pictures only, words in the tooltips) by the same rule */
 .rb-group.rb-compact .rb-col > button:is([data-cmd], [data-sh], [data-doc]):is([data-cmd='cut'], [data-cmd='copy'], [data-cmd='format-painter'], [data-sh='cut'], [data-sh='copy'], [data-sh='format-painter'], [data-doc='cut'], [data-doc='copy'], [data-doc='format-painter']) { font-size: 0; }
-.rb-group.rb-compact .rb-col > button :is(.rb-lead svg, .rb-lead .ci-ic, .fp-icon) { margin-right: 0; }
+/* (only the buttons that lose their words when compact; the others keep a gap before their words) */
+.rb-group.rb-compact .rb-col > button:is([data-cmd='cut'], [data-cmd='copy'], [data-cmd='format-painter'], [data-sh='cut'], [data-sh='copy'], [data-sh='format-painter'], [data-doc='cut'], [data-doc='copy'], [data-doc='format-painter']) :is(.rb-lead svg, .rb-lead .ci-ic, .fp-icon) { margin-right: 0; }
 .rb-fold-btn { display: none; }
 .rb-group.rb-folded > .rb-fold-btn { display: inline-flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 2px; align-self: stretch; padding: 3px 8px; font-size: var(--fs-sm); line-height: 1.15; white-space: nowrap; }
 .rb-fold-btn .rb-icon svg { width: 22px; height: 22px; vertical-align: middle; }
@@ -3710,6 +3711,9 @@ dialog.crystal-dialog { width: min(96vw, 1060px); max-width: min(96vw, 1060px); 
 .ci-ic .p { fill: var(--ic-paper); }
 .ci-ic .s { fill: var(--ic-acc); stroke: none; }
 .ci-ic .k { stroke: var(--ic-on); }
+.ci-ic .i { fill: var(--ic-ink); stroke: none; }
+.ci-ic text { fill: var(--ic-ink); stroke: none; font-family: system-ui, "Segoe UI", sans-serif; }
+.ci-ic text.a { fill: var(--ic-acc); stroke: none; }
 :root[data-icons='colour'] .ci-ic[data-hue='blue'] { --ic-acc: var(--hue-blue); }
 :root[data-icons='colour'] .ci-ic[data-hue='green'] { --ic-acc: var(--hue-green); }
 :root[data-icons='colour'] .ci-ic[data-hue='red'] { --ic-acc: var(--hue-red); }
