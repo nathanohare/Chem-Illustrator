@@ -8,7 +8,7 @@
 
 import { Doc, applyBase, captionBase, type Caption, type Media, type Shape } from '../model';
 import { playWindow, volumeAt } from './media';
-import { layoutText } from '../text/layout';
+import { layoutText, PPT_SINGLE } from '../text/layout';
 import { measureText } from '../render/renderer';
 import { linkAtPoint } from '../links';
 import { turnAbout } from '../geom';
@@ -80,7 +80,7 @@ function paraBands(doc: Doc, id: number): Rect[] {
   const c = doc.captions.get(id);
   if (!c) return [];
   const base = c.ph ? doc.textStyles?.[c.ph] : captionBase(doc.style);
-  const lay = layoutText(base ? { ...c, runs: applyBase(c.runs, base) } : c, base?.size ?? doc.style.captionSize, (t, s, family, style) => measureText(t, s, family, style));
+  const lay = layoutText({ ...(base ? { ...c, runs: applyBase(c.runs, base) } : c), single: PPT_SINGLE }, base?.size ?? doc.style.captionSize, (t, s, family, style) => measureText(t, s, family, style));
   const box = selectionBox(doc, { atoms: new Set(), bonds: new Set(), captions: new Set([id]), arrows: new Set(), shapes: new Set() }, POINTS);
   const n = plainText(c.runs).split('\n').length;
   const out: Rect[] = [];
@@ -282,7 +282,7 @@ export class SlideFrames {
     for (const c of doc.captions.values()) {
       if (!c.runs.some((r) => r.link)) continue;
       const base = c.ph ? doc.textStyles?.[c.ph] : captionBase(doc.style);
-      const lay = layoutText(base ? { ...c, runs: applyBase(c.runs, base) } : c, base?.size ?? doc.style.captionSize, (t, s, family, style) => measureText(t, s, family, style));
+      const lay = layoutText({ ...(base ? { ...c, runs: applyBase(c.runs, base) } : c), single: PPT_SINGLE }, base?.size ?? doc.style.captionSize, (t, s, family, style) => measureText(t, s, family, style));
       const q = c.rot ? turnAbout(p, c, -c.rot) : p;
       const span = linkAtPoint(lay, c.runs, q.x - c.x, q.y - c.y);
       if (span) return span.link;
@@ -299,7 +299,7 @@ export class SlideFrames {
     for (const c of doc.captions.values()) {
       if (c.hidden || !want(c)) continue;
       const base = c.ph ? doc.textStyles?.[c.ph] : captionBase(doc.style);
-      const lay = layoutText(base ? { ...c, runs: applyBase(c.runs, base) } : c, base?.size ?? doc.style.captionSize, (t, s, family, style) => measureText(t, s, family, style));
+      const lay = layoutText({ ...(base ? { ...c, runs: applyBase(c.runs, base) } : c), single: PPT_SINGLE }, base?.size ?? doc.style.captionSize, (t, s, family, style) => measureText(t, s, family, style));
       const q = c.rot ? turnAbout(p, c, -c.rot) : p;
       const b = lay.box, m = 2;
       if (q.x - c.x >= b.x1 - m && q.x - c.x <= b.x2 + m && q.y - c.y >= b.y1 - m && q.y - c.y <= b.y2 + m) top = c;

@@ -16,7 +16,7 @@ import { Doc, Caption, Shape, TextRun, ParaStyle, Arrow, applyBase, PICTURE_SHAD
 import { bakedPart, tidyFx } from '../render/picture-fx';
 import { blipEffectsXml, pictureGeomXml } from './picture-xml';
 import { turnAbout, type Rect, type Vec } from '../geom';
-import { layoutText, ASCENT, FONT_STACK, type Measure } from '../text/layout';
+import { layoutText, ASCENT, FONT_STACK, PPT_SINGLE, type Measure } from '../text/layout';
 import { fitParas, listInfo, autoNumLabel, splitParagraphs } from '../text/paragraphs';
 import { formulaParts, plainText } from '../richtext';
 import { officeTarget, slideOfLink } from '../links';
@@ -42,6 +42,7 @@ import { FADE, tint } from '../colours';
 import { transitionXml, timingXml, highlightParts, partHolds, expandParas, targetKey, mainAnims, triggerSeqs, type Transition, type Anim, type AnimTarget, type MediaTiming } from '../deck/animation';
 import { MEDIA_EXT } from '../deck/media';
 import { effectsXml } from './pptx-effects';
+import { applyColorMods } from './dml-color';
 import { viewPropsXml, slideGuidesExt } from '../deck/guides';
 import { handoutMasterXml, notesMasterXml } from '../deck/notes-pages';
 import { showPrXml, custShowsXml } from '../deck/show-setup';
@@ -138,6 +139,72 @@ export const TAG = {
    */
   picPrint: 'CHEMILLUSTRATOR_PIC_PRINT',
 };
+
+/**
+ * PowerPoint (365 for Windows) cuts a tag's value at this many characters when it saves, without
+ * a word: an 8 MB value comes back as its first 5 MB.
+ */
+export const TAG_CUT = 5_242_879;
+/** The most characters written in one tag: a longer value is written in pieces (see tagPieces). */
+export const TAG_PIECE = 4_000_000;
+
+/**
+ * A tag as written: a value up to TAG_PIECE characters under its own name; a longer one in pieces
+ * of up to that many, the first under the tag's name, the next ones under the name with __2, __3…
+ * after it, and the number of pieces under the name with __PARTS, all in the same tag list (so
+ * PowerPoint keeps them together on the same shape or slide).
+ */
+export function tagPieces(name: string, value: string): [string, string][] {
+  if (value.length <= TAG_PIECE) return [[name, value]];
+  const out: [string, string][] = [];
+  for (let at = 0; at < value.length;) {
+    let end = Math.min(value.length, at + TAG_PIECE);
+    // (never between the two halves of a character written as a surrogate pair)
+    if (end < value.length && /[\uD800-\uDBFF]/.test(value[end - 1])) end--;
+    out.push([out.length ? `${name}__${out.length + 1}` : name, value.slice(at, end)]);
+    at = end;
+  }
+  out.push([`${name}__PARTS`, String(out.length)]);
+  return out;
+}
+
+/**
+ * A tag list's tags with values written in pieces joined again (see tagPieces). `missing` hears of
+ * each tag with a piece missing (left with the pieces that are there).
+ */
+export function joinTagPieces(raw: Record<string, string>, missing: (name: string) => void = () => {}): Record<string, string> {
+  const out = { ...raw };
+  for (const key of Object.keys(raw)) {
+    const name = key.endsWith('__PARTS') ? key.slice(0, -7) : null;
+    if (!name || raw[name] === undefined) continue;
+    const n = Number(raw[key]);
+    delete out[key];
+    if (!Number.isInteger(n) || n < 2) continue;
+    let value = raw[name];
+    for (let i = 2; i <= n; i++) {
+      const piece = raw[`${name}__${i}`];
+      if (piece === undefined) { missing(name); continue; }
+      value += piece;
+      delete out[`${name}__${i}`];
+    }
+    out[name] = value;
+  }
+  return out;
+}
+
+/**
+ * Whether a tag's value looks cut short by PowerPoint: exactly TAG_CUT characters long and, for
+ * JSON or XML (CDXML), not a whole one.
+ */
+export function tagLooksCut(value: string): boolean {
+  if (value.length !== TAG_CUT) return false;
+  const v = value.trimStart();
+  if (v.startsWith('{') || v.startsWith('[')) {
+    try { JSON.parse(v); return false; } catch { return true; }
+  }
+  if (v.startsWith('<')) return !/>\s*$/.test(v);
+  return true;
+}
 
 /** The group a structure or scheme picture's things are all in, if they are all in one. */
 function selGroup(doc: Doc, sel: Selection): number | undefined {
@@ -313,7 +380,14 @@ function fieldId(): string {
   return `{5C0E1D2A-7F3B-4C59-9A61-${n.toUpperCase()}}`;
 }
 
-function runXml(r: TextRun, explicit: { size: number; font: string } | null, hlink?: LinkXml): string {
+/**
+ * A color element for a color ("#rrggbb"), with `inner` (its alpha) inside: srgbClr, or on slides
+ * the theme color the file had for it (see Writer.themeColours).
+ */
+export type ColourXml = (color: string | undefined, inner?: string) => string;
+export const srgbXml: ColourXml = (color, inner = '') => `<a:srgbClr val="${hex6(color)}"${inner ? `>${inner}</a:srgbClr>` : '/>'}`;
+
+function runXml(r: TextRun, explicit: { size: number; font: string } | null, hlink?: LinkXml, clr: ColourXml = srgbXml): string {
   const click = r.link && hlink ? hlink(r.link) : '';
   const parts = r.formula && !r.sub && !r.sup ? formulaParts(r.text) : [{ text: r.text, pos: r.sub ? 'sub' : r.sup ? 'sup' : 'base' }];
   return parts.map((p) => {
@@ -334,9 +408,9 @@ function runXml(r: TextRun, explicit: { size: number; font: string } | null, hli
     attrs.push('dirty="0"');
     const color = r.color ?? (explicit || r.transparency ? '#000000' : undefined);
     const alpha = r.transparency ? `<a:alpha val="${Math.round((1 - r.transparency) * 100000)}"/>` : '';
-    const fill = r.noFill ? '<a:noFill/>' : color ? `<a:solidFill><a:srgbClr val="${hex6(color)}"${alpha ? `>${alpha}</a:srgbClr>` : '/>'}</a:solidFill>` : '';
+    const fill = r.noFill ? '<a:noFill/>' : color ? `<a:solidFill>${clr(color, alpha)}</a:solidFill>` : '';
     // the Font box's text effects: an outline round the letters (a:ln comes first) and a shadow
-    const ln = r.outline ? `<a:ln w="${Math.round((r.outlineW ?? 0.75) * 12700)}"><a:solidFill><a:srgbClr val="${hex6(r.outline)}"/></a:solidFill></a:ln>` : '';
+    const ln = r.outline ? `<a:ln w="${Math.round((r.outlineW ?? 0.75) * 12700)}"><a:solidFill>${clr(r.outline)}</a:solidFill></a:ln>` : '';
     const shadow = r.shadow ? '<a:effectLst><a:outerShdw blurRad="38100" dist="38100" dir="2700000" algn="tl" rotWithShape="0"><a:prstClr val="black"><a:alpha val="40000"/></a:prstClr></a:outerShdw></a:effectLst>' : '';
     const latin = font ? `<a:latin typeface="${xml(font)}"/><a:cs typeface="${xml(font)}"/>` : '';
     const highlight = r.highlight ? `<a:highlight><a:srgbClr val="${hex6(r.highlight)}"/></a:highlight>` : '';
@@ -368,7 +442,7 @@ export function swapBox(b: Rect): Rect {
 }
 
 /** A caption's paragraphs as PowerPoint paragraphs. */
-export function paragraphsXml(c: Caption, explicit: { size: number; font: string } | null, defaultSize: number, measure: Measure, hlink?: LinkXml): string {
+export function paragraphsXml(c: Caption, explicit: { size: number; font: string } | null, defaultSize: number, measure: Measure, hlink?: LinkXml, clr: ColourXml = srgbXml): string {
   const paras = splitParagraphs(c.runs);
   const styles = fitParas(c.paras, paras.length);
   const lists = listInfo(styles);
@@ -409,7 +483,7 @@ export function paragraphsXml(c: Caption, explicit: { size: number; font: string
       attrs.push(`marL="${emu(indent)}"`, 'indent="0"');
       inner += '<a:buNone/>';
     }
-    const body = runs.map((r) => runXml(r, explicit, hlink)).join('');
+    const body = runs.map((r) => runXml(r, explicit, hlink, clr)).join('');
     const end = `<a:endParaRPr ${lang}${explicit ? ` sz="${Math.round(em * 100)}"` : ''} dirty="0"/>`;
     return `<a:p><a:pPr ${attrs.join(' ')}>${inner}</a:pPr>${body}${end}</a:p>`;
   }).join('');
@@ -438,18 +512,22 @@ function romanValue(m: string): number {
  * How a layout's placeholders are named in PowerPoint: its title (a centred title on Title
  * Slide), then its other boxes by number (subtitles as subtitles; halves on Two Content).
  */
-function layoutPh(def: LayoutDef): { title: string | null; bodies: string[] } {
+function layoutPh(def: LayoutDef): { title: string | null; bodies: string[]; pics: string[] } {
   const others = def.boxes.filter((b) => b.ph !== 'title');
   const half = def.id === 'two-content' && others.length === 2;
+  // picture placeholders after the text ones (10 to 12 are the date's, footer's and slide number's)
+  const picIdx = (j: number) => { const n = others.length + j + 1; return n >= 10 ? n + 3 : n; };
   return {
     title: def.boxes.some((b) => b.ph === 'title') ? (def.id === 'title' ? '<p:ph type="ctrTitle"/>' : '<p:ph type="title"/>') : null,
-    bodies: others.map((b, i) => (b.ph === 'subtitle' ? `<p:ph type="subTitle" idx="${i + 1}"/>` : `<p:ph${half ? ' sz="half"' : ''} idx="${i + 1}"/>`)),
+    // (a text placeholder from a PowerPoint layout, a caption, as its kind there)
+    bodies: others.map((b, i) => (b.ph === 'subtitle' ? `<p:ph type="subTitle" idx="${i + 1}"/>` : `<p:ph${b.pptType === 'body' ? ' type="body"' : ''}${half ? ' sz="half"' : ''} idx="${i + 1}"/>`)),
+    pics: (def.pics ?? []).map((_, j) => `<p:ph type="pic" idx="${picIdx(j)}"/>`),
   };
 }
 
-/** PowerPoint's kind of layout for each built-in one; layouts made here are its custom ones. */
+/** PowerPoint's kind of layout for each built-in one; layouts made here are its custom ones (a PowerPoint layout read in keeps its kind). */
 const LAYOUT_TYPE: Record<string, string> = { title: 'title', 'title-content': 'obj', 'two-content': 'twoObj', 'title-only': 'titleOnly', blank: 'blank' };
-const layoutType = (id: LayoutId) => (isBuiltinLayout(id) ? LAYOUT_TYPE[id] : 'cust');
+const layoutType = (def: LayoutDef) => (isBuiltinLayout(def.id) ? LAYOUT_TYPE[def.id] : def.pptType && /^[A-Za-z]+$/.test(def.pptType) ? def.pptType : 'cust');
 
 /** The id PowerPoint 2010 gives its sections' list in presentation.xml. */
 const SECTIONS_EXT = '{521415D9-36F7-43E2-AB2F-B90AF26B5E84}';
@@ -494,6 +572,65 @@ class Writer {
   private measure: Measure;
   /** The slide being written (links are related from it). */
   private curPath = '';
+  /** The picture placeholders of the slide being written's layout (their p:ph), and which have a picture in them. */
+  private curPics: string[] = [];
+  private picsUsed = new Set<number>();
+
+  /** The picture placeholder a slide's picture is in (Shape.phPic), when its layout has it and no other picture is in it; not in a group. */
+  private picPlaceholder(pic: Shape | undefined): string | undefined {
+    const k = pic?.phPic;
+    if (k === undefined || pic?.grp !== undefined || this.picsUsed.has(k) || !this.curPics[k]) return undefined;
+    this.picsUsed.add(k);
+    return this.curPics[k];
+  }
+
+  /** How the slide being written writes its colors (see themeColours). */
+  private clr: ColourXml = srgbXml;
+  /** themeColours' answers, by color map. */
+  private clrMaps = new Map<string, ColourXml>();
+  /** The kept theme's colors (dk1, accent1...), as "RRGGBB". */
+  private themeSlots: Record<string, string> | null = null;
+
+  /**
+   * How a slide with this layout writes its colors: a color the file had as a theme color
+   * (TemplateArt.colors) as that theme color again, with its changes, while the theme written is
+   * the file's and the theme color still comes to that color through the slide's color map;
+   * every other color as srgbClr.
+   */
+  private themeColours(layout: LayoutId): ColourXml {
+    const art = this.deck.master.art;
+    if (!art?.theme || !art.colors) return srgbXml;
+    const map = { ...USUAL_CLRMAP, ...(art.clrMap ?? {}), ...(art.layouts?.[layout]?.clrMap ?? {}) };
+    const key = JSON.stringify(map);
+    const had = this.clrMaps.get(key);
+    if (had) return had;
+    if (!this.themeSlots) {
+      this.themeSlots = {};
+      const doc = new DOMParser().parseFromString(art.theme.xml, 'application/xml');
+      const scheme = doc.getElementsByTagName('parsererror').length ? null : doc.getElementsByTagNameNS(NS.a, 'clrScheme')[0];
+      for (const slot of Array.from(scheme?.children ?? [])) {
+        const v = slot.firstElementChild;
+        if (v) this.themeSlots[slot.localName] = v.localName === 'sysClr' ? v.getAttribute('lastClr') ?? (v.getAttribute('val') === 'window' ? 'FFFFFF' : '000000') : v.getAttribute('val') ?? '';
+      }
+    }
+    const slots = this.themeSlots;
+    const kept = new Map<string, { scheme: string; mods: string }>();
+    for (const [hex, c] of Object.entries(art.colors)) {
+      const base = slots[map[c.scheme] ?? c.scheme];
+      if (!base || !/^[0-9a-f]{6}$/i.test(base)) continue;
+      const mods = c.mods ?? [];
+      // (only while it still comes to the color it stands for)
+      if (applyColorMods(base, mods.map(([n, v]) => ({ localName: n, getAttribute: () => v || null }))) !== hex.toLowerCase()) continue;
+      kept.set(hex6(hex), { scheme: xmlAttr(c.scheme), mods: mods.map(([n, v]) => `<a:${n}${v ? ` val="${xmlAttr(v)}"` : ''}/>`).join('') });
+    }
+    const out: ColourXml = kept.size ? (color, inner = '') => {
+      const k = kept.get(hex6(color));
+      if (!k) return srgbXml(color, inner);
+      return k.mods || inner ? `<a:schemeClr val="${k.scheme}">${k.mods}${inner}</a:schemeClr>` : `<a:schemeClr val="${k.scheme}"/>`;
+    } : srgbXml;
+    this.clrMaps.set(key, out);
+    return out;
+  }
 
   /** The slide's placeholders' places among the layout's (1 is the first), whatever order they are written in. */
   private phAt = new Map<Caption, number>();
@@ -535,7 +672,8 @@ class Writer {
   /** A set of tags in ppt/tags; returns its relationship id from `from`. */
   private addTags(from: string, tags: Record<string, string>): string {
     const path = `ppt/tags/tag${++this.tags}.xml`;
-    const list = Object.entries(tags).map(([k, v]) => `<p:tag name="${xml(k)}" val="${xmlAttr(v)}"/>`).join('');
+    // (long values in pieces PowerPoint keeps whole)
+    const list = Object.entries(tags).flatMap(([k, v]) => tagPieces(k, v)).map(([k, v]) => `<p:tag name="${xml(k)}" val="${xmlAttr(v)}"/>`).join('');
     this.pkg.add(path, `${HEAD}<p:tagLst ${XMLNS}>${list}</p:tagLst>`, CT.tags);
     return this.pkg.relate(from, REL.tags, fromPpt(from, path));
   }
@@ -722,16 +860,20 @@ class Writer {
     shapes.push(...frames.map((f, i) => {
       const prompt = f.ph === 'title' ? 'Click to edit Master title style' : f.ph === 'subtitle' ? 'Click to edit Master subtitle style' : 'Click to edit Master text styles';
       const algn = f.justify === 'center' ? 'ctr' : 'l';
-      const lst = f.ph === 'subtitle'
+      // (a PowerPoint layout's own text styles for the placeholder, as it had them)
+      const lst = def.boxes[i]?.lst ?? (f.ph === 'subtitle'
         ? `<a:lvl1pPr marL="0" indent="0" algn="ctr"><a:buNone/><a:defRPr sz="${Math.round(m.subtitleSize * 100)}">${fill(c.textColor)}</a:defRPr></a:lvl1pPr>`
-        : f.ph === 'title' ? `<a:lvl1pPr algn="${algn}"><a:defRPr>${fill(c.titleColor)}</a:defRPr></a:lvl1pPr>` : '';
-      return phShape(i + 2, `${f.ph === 'title' ? 'Title' : f.ph === 'subtitle' ? 'Subtitle' : 'Content Placeholder'} ${i + 1}`, f.ph === 'title' ? phs.title! : phs.bodies[other++],
+        : f.ph === 'title' ? `<a:lvl1pPr algn="${algn}"><a:defRPr>${fill(c.titleColor)}</a:defRPr></a:lvl1pPr>` : '');
+      return phShape(i + 2, `${f.ph === 'title' ? 'Title' : f.ph === 'subtitle' ? 'Subtitle' : def.boxes[i]?.pptType === 'body' ? 'Text Placeholder' : 'Content Placeholder'} ${i + 1}`, f.ph === 'title' ? phs.title! : phs.bodies[other++],
         f, prompt, 'anchor="t"', lst);
     }));
     const fm = { ...m, footerColor: c.footerColor };
     shapes.push(footerShape(frames.length + 2, `Footer Placeholder ${frames.length + 1}`, '<p:ph type="ftr" sz="quarter" idx="11"/>', d.footer, fm, ''));
     shapes.push(footerShape(frames.length + 3, `Slide Number Placeholder ${frames.length + 2}`, '<p:ph type="sldNum" sz="quarter" idx="12"/>', d.number, fm, '‹#›'));
     shapes.push(footerShape(first + decor.length, `Date Placeholder ${frames.length + 3}`, '<p:ph type="dt" sz="half" idx="10"/>', d.date, fm, dateText(m)));
+    // its picture placeholders (Picture with Caption's picture)
+    (def.pics ?? []).forEach((p, j) => shapes.push(picPhShape(first + decor.length + 1 + j, `Picture Placeholder ${frames.length + 4 + j}`, phs.pics[j],
+      { x1: p.x * size.w, y1: p.y * size.h, x2: (p.x + p.w) * size.w, y2: (p.y + p.h) * size.h }, p.lst ?? '')));
     // a title slide's own background goes on its layout
     const ownBg = slideBackground(m, id), base: Background = m.fill ?? { kind: 'solid', color: m.background };
     const bg = own && !sameBackground(ownBg, base) ? await this.background(path, ownBg) : '';
@@ -739,7 +881,7 @@ class Writer {
     const layer = m.art?.layouts?.[id];
     const art = layer?.xml.length ? this.artXml(path, layer, ((this.artIds.layouts ??= {})[id] = [])) : '';
     const map = layer?.clrMap ? `<a:overrideClrMapping ${Object.entries({ ...USUAL_CLRMAP, ...(m.art?.clrMap ?? {}), ...layer.clrMap }).map(([k, v]) => `${k}="${xmlAttr(v)}"`).join(' ')}/>` : '<a:masterClrMapping/>';
-    return `${HEAD}<p:sldLayout ${XMLNS} type="${layoutType(id)}" preserve="1"${layer?.hideMaster ? ' showMasterSp="0"' : ''}><p:cSld name="${xml(name)}">${bg}<p:spTree>${GROUP}${art}${shapes.join('')}</p:spTree></p:cSld>` +
+    return `${HEAD}<p:sldLayout ${XMLNS} type="${layoutType(def)}" preserve="1"${layer?.hideMaster ? ' showMasterSp="0"' : ''}><p:cSld name="${xml(name)}">${bg}<p:spTree>${GROUP}${art}${shapes.join('')}</p:spTree></p:cSld>` +
       `<p:clrMapOvr>${map}</p:clrMapOvr></p:sldLayout>`;
   }
 
@@ -824,6 +966,9 @@ class Writer {
     const s = this.deck.slides[index];
     const doc = s.doc;
     this.curPath = path;
+    this.clr = this.themeColours(s.layout);
+    this.curPics = layoutPh(layoutDef(this.deck.master, s.layout)).pics;
+    this.picsUsed = new Set();
     const parts = splitSlide(doc, this.measure);
     const out: string[] = [];
     let id = 2;
@@ -884,7 +1029,7 @@ class Writer {
       mark({ shapes: new Set([p.id]) }, id);
       if (p.kind !== 'picture') {
         spOf.set(p.id, id);
-        out.push(p.kind === 'geo' ? this.geo(path, p, id++, doc, styles.body?.size ?? doc.style.captionSize) : shapeXml(p, id++, doc.style.lineWidth));
+        out.push(p.kind === 'geo' ? this.geo(path, p, id++, doc, styles.body?.size ?? doc.style.captionSize) : shapeXml(p, id++, doc.style.lineWidth, this.clr));
         return;
       }
       const box = { x1: Math.min(p.x1, p.x2), y1: Math.min(p.y1, p.y2), x2: Math.max(p.x1, p.x2), y2: Math.max(p.y1, p.y2) };
@@ -947,6 +1092,13 @@ class Writer {
       k = e;
     }
     out.splice(first, out.length - first, ...wrapped);
+    // the layout's picture placeholders no picture is in, empty, as on PowerPoint's slides of that layout
+    this.curPics.forEach((ph, k) => {
+      if (this.picsUsed.has(k)) return;
+      out.push(`<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="Picture Placeholder ${id - 1}"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr>${ph}</p:nvPr></p:nvSpPr><p:spPr/></p:sp>`);
+      id++;
+    });
+    this.curPics = [];
     // slide number and footer, when the master shows them
     const m = this.deck.master;
     const d = decorFrames(this.deck.size, m);
@@ -1289,14 +1441,14 @@ class Writer {
    */
   private geo(path: string, s: Shape, id: number, doc: Doc, textSize: number): string {
     const def = geoDef(s.geo);
-    const { box, geom, fill: plainFill, ln, shadow } = geoSpPr(s, doc.style.lineWidth);
+    const { box, geom, fill: plainFill, ln, shadow } = geoSpPr(s, doc.style.lineWidth, this.clr);
     // a picture fill: the picture stretched to the shape (the tag keeps the rest of the look, not the picture again)
     const fill = s.picFill ? this.picFillXml(path, s.picFill) ?? plainFill : plainFill;
     const justify = s.textAlign ?? 'center';
     const algn = justify === 'center' ? 'ctr' : justify === 'right' ? 'r' : justify === 'justify' ? 'just' : 'l';
     const hasText = !!s.text?.runs.some((r) => r.text);
     const body = hasText
-      ? paragraphsXml({ id: 0, x: 0, y: 0, runs: s.text!.runs, paras: s.text!.paras, justify }, { size: textSize, font: doc.style.captionFont || 'Arial' }, textSize, this.measure, this.hlink)
+      ? paragraphsXml({ id: 0, x: 0, y: 0, runs: s.text!.runs, paras: s.text!.paras, justify }, { size: textSize, font: doc.style.captionFont || 'Arial' }, textSize, this.measure, this.hlink, this.clr)
       : `<a:p><a:pPr algn="${algn}"/><a:endParaRPr ${lang} sz="${Math.round(textSize * 100)}" dirty="0"/></a:p>`;
     const anchor = s.textValign === 'top' ? 't' : s.textValign === 'bottom' ? 'b' : 'ctr';
     const ins = def.prst ? 3.6 : 0;
@@ -1332,7 +1484,7 @@ class Writer {
    * arrow (and which shapes it is stuck to).
    */
   private connector(path: string, r: Arrow, id: number, lw: number, site: (g: Glue | undefined) => { id: number; idx: number } | null = () => null): string {
-    const sp = connectorSpPr(r, lw);
+    const sp = connectorSpPr(r, lw, this.clr);
     const { ln } = sp;
     let { frame, geom, curved } = sp;
     let name = curved ? `${r.elbow ? 'Elbow Connector' : 'Curved Arrow'} ${id - 1}` : `Straight Arrow Connector ${id - 1}`;
@@ -1366,7 +1518,7 @@ class Writer {
     const ext = MIME_EXT[mime];
     if (!ext) return '';
     const fx = tidyFx(pic?.fx);
-    const more: PicMore = { rot: pic?.rot, hidden: pic?.hidden };
+    const more: PicMore = { rot: pic?.rot, hidden: pic?.hidden, ph: this.picPlaceholder(pic) };
     const descr = alt?.trim() || undefined;
     // what Office can't show live goes in worked in. PowerPoint keeps the original as the blip's
     // layer only as an HD Photo (.wdp) and refuses a PNG there, so the original goes in a tag with
@@ -1409,7 +1561,8 @@ class Writer {
   private text(path: string, c: Caption, id: number, layout: LayoutId, styles: ReturnType<typeof textStyles>, phCount: Record<string, number>, doc: Doc, more: Record<string, string> = {}): string {
     const base = c.ph ? styles[c.ph] : undefined;
     const size0 = c.runs[0]?.size ?? base?.size ?? doc.style.captionSize;
-    const lay = layoutText(c.ph ? { ...c, runs: applyBase(c.runs, base) } : c, base?.size ?? doc.style.captionSize, this.measure);
+    // (lines spaced as PowerPoint spaces them)
+    const lay = layoutText({ ...(c.ph ? { ...c, runs: applyBase(c.runs, base) } : c), single: PPT_SINGLE }, base?.size ?? doc.style.captionSize, this.measure);
     const firstSize = lay.lines[0] ? lay.lines[0].ascent / ASCENT : size0;
     // the box: the placeholder's own, or around the text, moved so PowerPoint's first baseline is ours
     const top = c.y - PPT_ASCENT * firstSize;
@@ -1426,7 +1579,7 @@ class Writer {
       box = { x1: box.x1 + to.x - mid.x, y1: box.y1 + to.y - mid.y, x2: box.x2 + to.x - mid.x, y2: box.y2 + to.y - mid.y };
     }
     const explicit = c.ph ? null : { size: doc.style.captionSize, font: doc.style.captionFont || 'Arial' };
-    const body = isEmptyText(c) && c.ph ? `<a:p><a:endParaRPr ${lang} dirty="0"/></a:p>` : paragraphsXml(c, explicit, base?.size ?? doc.style.captionSize, this.measure, this.hlink);
+    const body = isEmptyText(c) && c.ph ? `<a:p><a:endParaRPr ${lang} dirty="0"/></a:p>` : paragraphsXml(c, explicit, base?.size ?? doc.style.captionSize, this.measure, this.hlink, this.clr);
     const wrap = c.wrap !== undefined || c.ph ? 'square' : 'none';
     // AutoFit: shrink text on overflow (at the size it is shrunk to here), a box that keeps its
     // size, or one that grows with its text
@@ -1654,7 +1807,7 @@ export function savedTableLook(t: TableData): string {
  * A connector's place, path and line with its heads, as PowerPoint and Word (in groups) both write
  * them; `curved` when it is drawn along its path (a curve or an elbow) as a shape, not a connector.
  */
-export function connectorSpPr(r: Arrow, lw: number): { frame: string; geom: string; ln: string; curved: boolean } {
+export function connectorSpPr(r: Arrow, lw: number, clr: ColourXml = srgbXml): { frame: string; geom: string; ln: string; curved: boolean } {
   const curved = !r.elbow && !!r.sweep;
   const pts = r.elbow ? elbowRoute(r) : curved ? arrowPoints(r, 32) : [r.tail, r.head];
   const b = boxOf(pts);
@@ -1672,7 +1825,7 @@ export function connectorSpPr(r: Arrow, lw: number): { frame: string; geom: stri
   const end = (style: Arrow['headStyle']) => (style === 'none' ? '' : r.headType === 'angle' ? 'arrow' : 'triangle');
   // PowerPoint's "head end" is where the line starts, its "tail end" where it finishes
   const headEnd = end(r.tailStyle), tailEnd = end(r.headStyle);
-  const ln = `<a:ln w="${emu(r.line === 'bold' ? width * 2.5 : width)}"><a:solidFill><a:srgbClr val="${hex6(r.color ?? '#000000')}"/></a:solidFill>${r.line === 'dashed' ? '<a:prstDash val="dash"/>' : ''}<a:miter lim="800000"/>` +
+  const ln = `<a:ln w="${emu(r.line === 'bold' ? width * 2.5 : width)}"><a:solidFill>${clr(r.color ?? '#000000')}</a:solidFill>${r.line === 'dashed' ? '<a:prstDash val="dash"/>' : ''}<a:miter lim="800000"/>` +
     `${headEnd ? `<a:headEnd type="${headEnd}"/>` : ''}${tailEnd ? `<a:tailEnd type="${tailEnd}"/>` : ''}</a:ln>`;
   return { frame, geom, ln, curved: curved || !!r.elbow };
 }
@@ -1691,7 +1844,7 @@ export function geoGeomXml(geo: string | undefined, w: number, h: number): strin
 }
 
 /** A design shape's place, outline, fill, line and effects (shadow, glow, reflection, soft edges, bevel), as PowerPoint and Word (in groups) both write them. */
-export function geoSpPr(s: Shape, lw: number): { box: Rect; geom: string; fill: string; ln: string; shadow: string } {
+export function geoSpPr(s: Shape, lw: number, clr: ColourXml = srgbXml): { box: Rect; geom: string; fill: string; ln: string; shadow: string } {
   const box = { x1: Math.min(s.x1, s.x2), y1: Math.min(s.y1, s.y2), x2: Math.max(s.x1, s.x2), y2: Math.max(s.y1, s.y2) };
   const w = box.x2 - box.x1, h = box.y2 - box.y1;
   const width = s.lineWidth ?? (s.bold ? lw * 2.5 : lw);
@@ -1699,12 +1852,12 @@ export function geoSpPr(s: Shape, lw: number): { box: Rect; geom: string; fill: 
   const fc = hex6(s.fillColor ?? s.color ?? '#000000');
   const clear = Math.max(0, Math.min(1, s.transparency ?? 0));
   const alpha = clear ? `<a:alpha val="${Math.round((1 - clear) * 100000)}"/>` : '';
-  const fill = patternOrGradient(s, fc, alpha) ?? (!s.filled ? '<a:noFill/>'
+  const fill = patternOrGradient(s, fc, alpha, clr) ?? (!s.filled ? '<a:noFill/>'
     : s.fill === 'faded' ? `<a:solidFill><a:srgbClr val="${hex6(tint('#' + fc, FADE))}">${alpha}</a:srgbClr></a:solidFill>`
     : s.fill === 'shaded' ? `<a:gradFill rotWithShape="1"><a:gsLst><a:gs pos="0"><a:srgbClr val="${hex6(tint('#' + fc, 0.85))}">${alpha}</a:srgbClr></a:gs><a:gs pos="100000"><a:srgbClr val="${fc}">${alpha}</a:srgbClr></a:gs></a:gsLst><a:lin ang="5400000" scaled="0"/></a:gradFill>`
-    : `<a:solidFill><a:srgbClr val="${fc}">${alpha}</a:srgbClr></a:solidFill>`);
+    : `<a:solidFill>${clr(fc, alpha)}</a:solidFill>`);
   const dash = s.dashed ? '<a:prstDash val="dash"/>' : '';
-  const ln = width > 0 ? `<a:ln w="${emu(width)}"><a:solidFill><a:srgbClr val="${hex6(s.color ?? '#000000')}"/></a:solidFill>${dash}<a:round/></a:ln>` : '<a:ln><a:noFill/></a:ln>';
+  const ln = width > 0 ? `<a:ln w="${emu(width)}"><a:solidFill>${clr(s.color ?? '#000000')}</a:solidFill>${dash}<a:round/></a:ln>` : '<a:ln><a:noFill/></a:ln>';
   const sl = shadowLook(s, s.shadowSize ?? Math.max(2, 0.04 * Math.min(w, h)));
   const outer = s.shadow ? `<a:outerShdw${sl.blur ? ` blurRad="${emu(sl.blur)}"` : ''} dist="${emu(sl.distance)}" dir="${Math.round((((sl.angle % 360) + 360) % 360) * 60000)}" algn="tl" rotWithShape="0"><a:srgbClr val="${hex6(sl.colour)}"><a:alpha val="${Math.round(sl.opacity * 100000)}"/></a:srgbClr></a:outerShdw>` : '';
   // (the shadow with the glow, reflection and soft edges, and the bevel)
@@ -1742,7 +1895,7 @@ function decorXml(sh: DecorShape, id: number): string {
 }
 
 /** A picture's turn and whether it is hidden (Selection Pane). */
-interface PicMore { rot?: number; hidden?: boolean }
+interface PicMore { rot?: number; hidden?: boolean; /** The picture placeholder it is in (its p:ph). */ ph?: string }
 
 /**
  * A picture element: PNG (or another bitmap), optionally with an SVG PowerPoint shows instead,
@@ -1753,8 +1906,9 @@ function picXml(id: number, name: string, blipId: string, svgId: string | null, 
   const ext = exts ? `<a:extLst>${exts}</a:extLst>` : '';
   const src = crop && (crop.l || crop.t || crop.r || crop.b)
     ? `<a:srcRect l="${Math.round(crop.l * 100000)}" t="${Math.round(crop.t * 100000)}" r="${Math.round(crop.r * 100000)}" b="${Math.round(crop.b * 100000)}"/>` : '';
-  const nvPr = tagsId ? `<p:nvPr><p:custDataLst><p:tags r:id="${tagsId}"/></p:custDataLst></p:nvPr>` : '<p:nvPr/>';
-  return `<p:pic><p:nvPicPr><p:cNvPr id="${id}"${nameAttrs(name, more.hidden)}${descr ? ` descr="${xmlAttr(descr)}"` : ''}/><p:cNvPicPr><a:picLocks noChangeAspect="1"/></p:cNvPicPr>${nvPr}</p:nvPicPr>` +
+  const ph = more.ph ?? '';
+  const nvPr = tagsId ? `<p:nvPr>${ph}<p:custDataLst><p:tags r:id="${tagsId}"/></p:custDataLst></p:nvPr>` : ph ? `<p:nvPr>${ph}</p:nvPr>` : '<p:nvPr/>';
+  return `<p:pic><p:nvPicPr><p:cNvPr id="${id}"${nameAttrs(name, more.hidden)}${descr ? ` descr="${xmlAttr(descr)}"` : ''}/><p:cNvPicPr><a:picLocks${ph ? ' noGrp="1"' : ''} noChangeAspect="1"/></p:cNvPicPr>${nvPr}</p:nvPicPr>` +
     `<p:blipFill><a:blip r:embed="${blipId}">${blipEffectsXml(fx)}${ext}</a:blip>${src}<a:stretch><a:fillRect/></a:stretch></p:blipFill>` +
     `<p:spPr>${xfrm(box, rotAttr(more.rot))}${pictureLookXml(look, fx)}</p:spPr></p:pic>`;
 }
@@ -1810,25 +1964,25 @@ const PPT_PATTERN: Record<Pattern, string> = {
  * gradient as PowerPoint fill XML; null for the other fills. PowerPoint can't put a pattern
  * over a gradient, so a pattern goes over the gradient's first colour.
  */
-function patternOrGradient(s: Shape, fc: string, alpha: string): string | null {
+function patternOrGradient(s: Shape, fc: string, alpha: string, clr: ColourXml = srgbXml): string | null {
   if (s.pattern) {
     const fg = hex6(patternInk(s));
     const pc = patternClear(s);
     const fgAlpha = pc ? `<a:alpha val="${Math.round((1 - pc) * 100000)}"/>` : '';
-    const bg = s.filled ? `<a:srgbClr val="${s.fill === 'faded' ? hex6(tint('#' + fc, FADE)) : fc}">${alpha}</a:srgbClr>` : '<a:srgbClr val="FFFFFF"><a:alpha val="0"/></a:srgbClr>';
-    return `<a:pattFill prst="${PPT_PATTERN[s.pattern]}"><a:fgClr><a:srgbClr val="${fg}">${fgAlpha}</a:srgbClr></a:fgClr><a:bgClr>${bg}</a:bgClr></a:pattFill>`;
+    const bg = s.filled ? (s.fill === 'faded' ? srgbXml(tint('#' + fc, FADE), alpha) : clr(fc, alpha)) : '<a:srgbClr val="FFFFFF"><a:alpha val="0"/></a:srgbClr>';
+    return `<a:pattFill prst="${PPT_PATTERN[s.pattern]}"><a:fgClr>${clr(fg, fgAlpha)}</a:fgClr><a:bgClr>${bg}</a:bgClr></a:pattFill>`;
   }
   if (s.filled && s.fill === 'gradient') {
     const to = hex6(s.fill2 ?? '#ffffff');
     const ang = ((((s.gradAngle ?? 90) % 360) + 360) % 360);
     const dir = s.gradRadial ? '<a:path path="circle"><a:fillToRect l="50000" t="50000" r="50000" b="50000"/></a:path>' : `<a:lin ang="${Math.round(ang * 60000)}" scaled="0"/>`;
-    return `<a:gradFill rotWithShape="1"><a:gsLst><a:gs pos="0"><a:srgbClr val="${fc}">${alpha}</a:srgbClr></a:gs><a:gs pos="100000"><a:srgbClr val="${to}">${alpha}</a:srgbClr></a:gs></a:gsLst>${dir}</a:gradFill>`;
+    return `<a:gradFill rotWithShape="1"><a:gsLst><a:gs pos="0">${clr(fc, alpha)}</a:gs><a:gs pos="100000">${clr(to, alpha)}</a:gs></a:gsLst>${dir}</a:gradFill>`;
   }
   return null;
 }
 
 /** A box, oval or line as a PowerPoint shape. */
-function shapeXml(s: Shape, id: number, lw: number): string {
+function shapeXml(s: Shape, id: number, lw: number, clr: ColourXml = srgbXml): string {
   const width = (s.bold ? lw * 2.5 : lw);
   const color = hex6(s.color ?? '#000000');
   const dash = s.dotted ? '<a:prstDash val="sysDot"/>' : s.dashed ? '<a:prstDash val="dash"/>' : '';
@@ -1836,7 +1990,7 @@ function shapeXml(s: Shape, id: number, lw: number): string {
     const flips = `${s.x2 < s.x1 ? ' flipH="1"' : ''}${s.y2 < s.y1 ? ' flipV="1"' : ''}`;
     const box = { x1: Math.min(s.x1, s.x2), y1: Math.min(s.y1, s.y2), x2: Math.max(s.x1, s.x2), y2: Math.max(s.y1, s.y2) };
     return `<p:cxnSp><p:nvCxnSpPr><p:cNvPr id="${id}"${nameAttrs(s.name?.trim() || `Line ${id - 1}`, s.hidden)}/><p:cNvCxnSpPr/><p:nvPr/></p:nvCxnSpPr>` +
-      `<p:spPr>${xfrm(box, flips)}<a:prstGeom prst="line"><a:avLst/></a:prstGeom><a:ln w="${emu(width)}"><a:solidFill><a:srgbClr val="${color}"/></a:solidFill>${dash}</a:ln></p:spPr></p:cxnSp>`;
+      `<p:spPr>${xfrm(box, flips)}<a:prstGeom prst="line"><a:avLst/></a:prstGeom><a:ln w="${emu(width)}"><a:solidFill>${clr(color)}</a:solidFill>${dash}</a:ln></p:spPr></p:cxnSp>`;
   }
   const box = { x1: Math.min(s.x1, s.x2), y1: Math.min(s.y1, s.y2), x2: Math.max(s.x1, s.x2), y2: Math.max(s.y1, s.y2) };
   let geom = '<a:prstGeom prst="rect"><a:avLst/></a:prstGeom>';
@@ -1848,15 +2002,21 @@ function shapeXml(s: Shape, id: number, lw: number): string {
   }
   // a fill of its own colour, faded (a light tint) or shaded (light to full colour)
   const fc = (s.fillColor ?? s.color ?? '#000000').replace('#', '').toUpperCase();
-  const fill = patternOrGradient(s, fc, '') ?? (!s.filled ? '<a:noFill/>'
+  const fill = patternOrGradient(s, fc, '', clr) ?? (!s.filled ? '<a:noFill/>'
     : s.fill === 'faded' ? `<a:solidFill><a:srgbClr val="${tint('#' + fc, FADE).slice(1).toUpperCase()}"/></a:solidFill>`
     : s.fill === 'shaded' ? `<a:gradFill rotWithShape="1"><a:gsLst><a:gs pos="0"><a:srgbClr val="${tint('#' + fc, 0.85).slice(1).toUpperCase()}"/></a:gs><a:gs pos="100000"><a:srgbClr val="${fc}"/></a:gs></a:gsLst>${s.kind === 'oval' ? '<a:path path="circle"><a:fillToRect l="35000" t="30000" r="65000" b="70000"/></a:path>' : '<a:lin ang="2700000" scaled="0"/>'}</a:gradFill>`
-    : `<a:solidFill><a:srgbClr val="${fc}"/></a:solidFill>`);
+    : `<a:solidFill>${clr(fc)}</a:solidFill>`);
   const outlined = !s.filled || (!!s.fillColor && s.fillColor.toLowerCase() !== (s.color ?? '#000000').toLowerCase());
-  const ln = !outlined ? '<a:ln><a:noFill/></a:ln>' : `<a:ln w="${emu(width)}"><a:solidFill><a:srgbClr val="${color}"/></a:solidFill>${dash}</a:ln>`;
+  const ln = !outlined ? '<a:ln><a:noFill/></a:ln>' : `<a:ln w="${emu(width)}"><a:solidFill>${clr(color)}</a:solidFill>${dash}</a:ln>`;
   const shadow = s.shadow ? `<a:effectLst><a:outerShdw dist="${emu(s.shadowSize ?? 4 * lw)}" dir="2700000" algn="tl" rotWithShape="0"><a:srgbClr val="C0C0C0"/></a:outerShdw></a:effectLst>` : '';
   return `<p:sp><p:nvSpPr><p:cNvPr id="${id}"${nameAttrs(s.name?.trim() || `${s.kind === 'oval' ? 'Oval' : 'Rectangle'} ${id - 1}`, s.hidden)}/><p:cNvSpPr/><p:nvPr/></p:nvSpPr>` +
     `<p:spPr>${xfrm(box, rotAttr(s.rot))}${geom}${fill}${ln}${shadow}</p:spPr></p:sp>`;
+}
+
+/** A picture placeholder in a layout, as PowerPoint writes one (its prompt is PowerPoint's own). */
+function picPhShape(id: number, name: string, ph: string, box: Rect, lst: string): string {
+  return `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="${xml(name)}"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr>${ph}</p:nvPr></p:nvSpPr>` +
+    `<p:spPr>${xfrm(box)}</p:spPr><p:txBody><a:bodyPr/><a:lstStyle>${lst}</a:lstStyle><a:p><a:endParaRPr ${lang} dirty="0"/></a:p></p:txBody></p:sp>`;
 }
 
 /** A placeholder in a master or layout, with the prompt PowerPoint shows. */

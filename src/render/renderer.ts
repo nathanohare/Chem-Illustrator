@@ -24,7 +24,7 @@ import { atomStereoText, bondStereoText, shownDescriptor, axialStyle, StereoPlac
 import { arialWidth } from '../text-metrics';
 import { attachDiamondSize, attachStarSize, hasAttachDiamond, isMapNumber, mapBox } from './atom-marks';
 import { paintMapBox } from './map-box';
-import { layoutText, FONT_STACK, withStack, type TextLayout } from '../text/layout';
+import { layoutText, FONT_STACK, withStack, PPT_SINGLE, type TextLayout } from '../text/layout';
 import { drawLayout } from '../text/draw';
 import { geoDef, moveSteps, textArea, traceSteps, type GeoStep } from '../design/geo';
 import { cutCorners, fillInk, patternClear, patternInk, ringShadowGroups, ringShadowSize, shadowLook, insetPolygon, dotCentres, gradientBands, hatchLines, isDotPattern, patternAngles, patternSpacing, radialBands, shapePolygons } from './fills';
@@ -2259,7 +2259,8 @@ export class Renderer {
     let lay = this.capLayouts.get(c);
     if (!lay) {
       const base = this.baseOf(c);
-      lay = layoutText(base ? { ...c, runs: applyBase(c.runs, base) } : c, base?.size ?? this.captionSize, (t, s, family, style) => measureText(t, s, family, style));
+      // (on a slide, lines spaced as PowerPoint spaces them)
+      lay = layoutText({ ...(base ? { ...c, runs: applyBase(c.runs, base) } : c), ...this.slideLines() }, base?.size ?? this.captionSize, (t, s, family, style) => measureText(t, s, family, style));
       this.capLayouts.set(c, lay);
     }
     return lay;
@@ -2787,7 +2788,7 @@ export class Renderer {
     const justify = s.textAlign ?? 'center';
     let c = this.geoLayouts.get(text);
     if (!c || c.w !== w || c.size !== size || c.justify !== justify) {
-      const lay = layoutText({ runs: text.runs, paras: text.paras, justify, wrap: w }, size, (t, sz, family, style) => measureText(t, sz, family, style));
+      const lay = layoutText({ runs: text.runs, paras: text.paras, justify, wrap: w, ...this.slideLines() }, size, (t, sz, family, style) => measureText(t, sz, family, style));
       c = { w, size, justify, lay };
       this.geoLayouts.set(text, c);
     }
@@ -2818,6 +2819,11 @@ export class Renderer {
       this.tableLayouts.set(t, lay);
     }
     return lay;
+  }
+
+  /** Text on slides and designs (documents with a slide master's text styles) has its lines spaced as PowerPoint spaces them. */
+  slideLines(): { single?: number } {
+    return this.textStyles ? { single: PPT_SINGLE } : {};
   }
 
   /** The master formatting a placeholder's text takes. */
@@ -2888,7 +2894,7 @@ export class Renderer {
     ctx.strokeRect(f.x1, f.y1, f.x2 - f.x1, f.y2 - f.y1);
     ctx.setLineDash([]);
     const text = PROMPTS[c.ph!];
-    const lay = layoutText({ runs: applyBase([{ text, color: '#8a909b', bold: false }], base), justify: c.justify, wrap: c.wrap, paras: c.paras }, base?.size ?? this.captionSize, (t, s, family, style) => measureText(t, s, family, style));
+    const lay = layoutText({ runs: applyBase([{ text, color: '#8a909b', bold: false }], base), justify: c.justify, wrap: c.wrap, paras: c.paras, ...this.slideLines() }, base?.size ?? this.captionSize, (t, s, family, style) => measureText(t, s, family, style));
     drawLayout(ctx, lay, c.x, c.y);
     ctx.restore();
   }
