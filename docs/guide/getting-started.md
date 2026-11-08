@@ -8,7 +8,7 @@ A note on keys: this guide writes Ctrl, as on Windows and Linux. On a Mac, use C
 
 ## Installing
 
-Download the newest installer from the **Releases** page of the project on GitHub: <https://github.com/nathanohare/Chem-Illustrator/releases>. The newest release is at the top. Open its **Assets** list and pick the file for your computer.
+Download the newest installer from the **Releases** page of the project on GitHub: <https://github.com/nathanohare/Chemweave/releases>. The newest release is at the top. Open its **Assets** list and pick the file for your computer.
 
 ### Windows
 

@@ -10,7 +10,7 @@ It is free and open source (GPL v3), and runs on Windows, macOS and Linux, with 
 
 > **Beta.** Chemweave is under active development: new features arrive every few days and some things may not work as they should yet. Save often, and please [report anything that goes wrong](docs/guide/feedback.md). If you would rather update less often, choose **Stable** updates in **Edit ▸ Settings ▸ Online**: those versions are tried out on a real computer before they are offered.
 
-### [▶ Try it in your browser](https://nathanohare.github.io/Chem-Illustrator/) · [Download the desktop app](https://github.com/nathanohare/Chem-Illustrator/releases/latest)
+### [▶ Try it in your browser](https://nathanohare.github.io/Chemweave/) · [Download the desktop app](https://github.com/nathanohare/Chemweave/releases/latest)
 
 Nothing to install: the browser version opens straight away. The desktop app adds what a browser can't do: editing drawings inside Word and PowerPoint, AutoSave to your own folders, and automatic updates.
 
@@ -136,7 +136,7 @@ In Word, PowerPoint and Excel your structures show as sharp pictures; open the f
 
 ## Install
 
-Download the installer for your computer from the **[latest release](https://github.com/nathanohare/Chem-Illustrator/releases/latest)**:
+Download the installer for your computer from the **[latest release](https://github.com/nathanohare/Chemweave/releases/latest)**:
 
 - **Windows**: the file ending in `x64-setup.exe`. Windows will warn that the installer isn't signed: click **More info**, then **Run anyway**. It installs for you alone, so it doesn't need administrator rights. To run it from a flash drive or a folder without installing anything, take `x64-portable.zip` instead and unzip it ([portable copy](docs/guide/getting-started.md#windows-without-installing-portable-copy)).
 - **macOS** (Apple silicon or Intel, macOS 11 or newer): the file ending in `universal.dmg`. Open it and drag **Chemweave** into **Applications**. The app is signed and notarised by Apple, so it opens without a warning.
@@ -151,7 +151,7 @@ The **[user guide](docs/README.md)** covers each mode, every hotkey, and the fil
 
 ## Feedback
 
-Ideas, problems and questions are welcome. In the program, use **Help ▸ Send Feedback**: it fills in a new [issue](https://github.com/nathanohare/Chem-Illustrator/issues) on this page for you, or copies the text to send another way. See [Feedback, problems and ideas](docs/guide/feedback.md).
+Ideas, problems and questions are welcome. In the program, use **Help ▸ Send Feedback**: it fills in a new [issue](https://github.com/nathanohare/Chemweave/issues) on this page for you, or copies the text to send another way. See [Feedback, problems and ideas](docs/guide/feedback.md).
 
 ## Support Chemweave
 
@@ -159,7 +159,7 @@ Chemweave is free and always will be. If it saves you time, you can help keep it
 
 ## Try it
 
-**[▶ Try Chemweave in your browser](https://nathanohare.github.io/Chem-Illustrator/)**, or **[download the desktop app](https://github.com/nathanohare/Chem-Illustrator/releases/latest)** for Windows, macOS or Linux, or **[join the iPad test](https://testflight.apple.com/join/hMdcFJBH)**.
+**[▶ Try Chemweave in your browser](https://nathanohare.github.io/Chemweave/)**, or **[download the desktop app](https://github.com/nathanohare/Chemweave/releases/latest)** for Windows, macOS or Linux, or **[join the iPad test](https://testflight.apple.com/join/hMdcFJBH)**.
 
 ## For developers
 
