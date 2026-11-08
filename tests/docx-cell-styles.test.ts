@@ -106,3 +106,34 @@ describe('a table style\'s paragraph settings (W12)', () => {
     expect(cell).toMatch(/<w:spacing [^>]*w:after="0"/);
   });
 });
+
+describe('a table in Word\'s Table Grid style (Word laptop check 6)', () => {
+  it('keeps naming the style, with its lines the style\'s rather than the table\'s own', async () => {
+    const { doc } = await readDocx(wordFile(tbl('TableGrid', [[p('Entry'), p('Yield')], [p('1'), p('92%')]]) + p('After')));
+    expect(tableOf(doc).style).toBe('TableGrid');
+    const files = unzipSync(await writeDocx(doc, deps));
+    const x = strFromU8(files['word/document.xml']);
+    expect(x).toContain('<w:tblStyle w:val="TableGrid"/>');
+    expect(x).not.toContain('<w:tblBorders>');
+    expect(x).not.toContain('<w:tcBorders>');
+    // the style itself goes with the file, drawing every cell's lines
+    const grid = /<w:style w:type="table" w:styleId="TableGrid">.*?<\/w:style>/.exec(strFromU8(files['word/styles.xml']))?.[0] ?? '';
+    expect(grid).toContain('<w:name w:val="Table Grid"/>');
+    expect(grid).toMatch(/<w:tblBorders><w:top w:val="single"[^>]*\/><w:left [^>]*\/><w:bottom [^>]*\/><w:right [^>]*\/><w:insideH w:val="single"[^>]*\/><w:insideV w:val="single"[^>]*\/><\/w:tblBorders>/);
+    expect(tableOf((await readDocx(zipSync(files))).doc).style).toBe('TableGrid');
+  });
+
+  it('keeps lines the table takes off its style as the cells\' own', async () => {
+    // Table Grid with no lines between the columns (the table's own borders over its style's)
+    const body = tbl('TableGrid', [[p('Entry'), p('Yield')], [p('1'), p('92%')]]).replace('<w:tblLook', '<w:tblBorders><w:insideV w:val="nil"/></w:tblBorders><w:tblLook') + p('After');
+    const { doc } = await readDocx(wordFile(body));
+    const t = tableOf(doc);
+    expect(t.style).toBe('TableGrid');
+    expect(t.rows[0][0].borders?.right?.style).toBe('none');
+    expect(t.rows[1][1].borders?.left?.style).toBe('none');
+    expect(t.rows[0][0].borders?.left).toBeUndefined();
+    const x = await saved(doc);
+    expect(x).toContain('<w:tblStyle w:val="TableGrid"/>');
+    expect(x).toMatch(/<w:tcBorders><w:right w:val="nil"\/><\/w:tcBorders>/);
+  });
+});

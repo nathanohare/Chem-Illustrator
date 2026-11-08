@@ -107,15 +107,17 @@ describe('comments in Word files', () => {
     const body = strFromU8(files['word/document.xml']);
     const notes = strFromU8(files['word/comments.xml']);
     const ex = strFromU8(files['word/commentsExtended.xml']);
-    expect(body).toContain('<w:commentRangeStart w:id="0"/>');
-    // the reply (Word id 2, after the comments' own) shares its comment's range
-    expect(body).toContain('<w:commentRangeStart w:id="2"/>');
-    expect(body).toMatch(/<w:commentRangeEnd w:id="0"\/><w:r><w:commentReference w:id="0"\/><\/w:r>/);
+    // numbered in the order of the text, as Word numbers them: the comment over the paragraph
+    // break first (Word id 0), then the one on "2 h" (1) and its reply right after it (2)
+    expect([...notes.matchAll(/<w:comment w:id="(\d+)" w:author="(\w+)"/g)].map((m) => `${m[1]} ${m[2]}`)).toEqual(['0 Ana', '1 Nate', '2 Ana']);
+    // the reply shares its comment's range
+    expect(body).toContain('<w:commentRangeStart w:id="1"/><w:commentRangeStart w:id="2"/>');
+    expect(body).toMatch(/<w:commentRangeEnd w:id="1"\/><w:r><w:commentReference w:id="1"\/><\/w:r><w:commentRangeEnd w:id="2"\/>/);
     expect(body.match(/<w:commentRangeStart /g)?.length).toBe(3);
     expect(body.match(/<w:commentRangeEnd /g)?.length).toBe(3);
-    // comment 1 opens in the first paragraph and closes in the second
+    // the first comment opens in the first paragraph and closes in the second
     const paras = body.split('</w:p>');
-    expect(paras.findIndex((p) => p.includes('commentRangeStart w:id="1"'))).toBeLessThan(paras.findIndex((p) => p.includes('commentRangeEnd w:id="1"')));
+    expect(paras.findIndex((p) => p.includes('commentRangeStart w:id="0"'))).toBeLessThan(paras.findIndex((p) => p.includes('commentRangeEnd w:id="0"')));
     expect(notes).toContain('w:author="Nate" w:date="2026-10-14T21:00:00Z" w:initials="NA"');
     expect(notes).toContain('in the notebook.');
     expect(notes).not.toContain('orphan');
@@ -136,7 +138,8 @@ describe('comments in Word files', () => {
     expect(byText['Reword?']).toBe('stirred for 2 h.\nThen');
     expect(placed.length).toBe(2);
     const first = placed.find((p) => p.c.author === 'Nate')!.c;
-    expect(first.replies).toEqual([{ author: 'Ana', date: '2026-10-14T22:00:00.000Z', text: 'It was 16 h.' }]);
+    // (with the lasting id Word 365 knows it by, given on saving)
+    expect(first.replies).toEqual([{ author: 'Ana', date: '2026-10-14T22:00:00.000Z', text: 'It was 16 h.', word: { initials: 'AN', id: expect.stringMatching(/^[0-9A-F]{8}$/) } }]);
     expect(placed.find((p) => p.c.text === 'Reword?')!.c.done).toBe(true);
     expect(first.done).toBeFalsy();
   });
@@ -154,7 +157,7 @@ describe('comments in Word files', () => {
       // (copied so the zip library takes them as files)
       const u8 = (t: string) => { const b = strToU8(t), out = new Uint8Array(b.length); out.set(b); return out; };
       // (a comment is known by its last paragraph)
-      const first = /<w:comment w:id="0"[^]*?<\/w:comment>/.exec(strFromU8(files['word/comments.xml']))![0];
+      const first = /<w:comment w:id="\d+" w:author="Nate"[^]*?<\/w:comment>/.exec(strFromU8(files['word/comments.xml']))![0];
       const para = [...first.matchAll(/w14:paraId="([0-9A-F]+)"/g)].pop()![1];
       files['word/commentsIds.xml'] = u8(`<w16cid:commentsIds xmlns:w16cid="http://schemas.microsoft.com/office/word/2016/wordml/cid"><w16cid:commentId w16cid:paraId="${para}" w16cid:durableId="1257A547"/></w16cid:commentsIds>`);
       files['word/commentsExtensible.xml'] = u8('<w16cex:commentsExtensible xmlns:w16cex="http://schemas.microsoft.com/office/word/2018/wordml/cex"><w16cex:commentExtensible w16cex:durableId="1257A547" w16cex:dateUtc="2026-10-14T21:30:00Z"/></w16cex:commentsExtensible>');
