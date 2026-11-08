@@ -150,7 +150,7 @@ Backgrounds are saved as PowerPoint's own, so PowerPoint (and LibreOffice) shows
 
 ## Design templates
 
-**Design & Transitions** tab ▸ **Templates…** (or **Format ▸ Presentation ▸ Slide Templates…**) offers 21 ready-made looks in three groups: **Light**, **Dark title slide** and **Bright**. Picking one changes the fonts, colors, background and the shapes behind every slide. Your text, structures and pictures stay where they are, and Undo puts the old look back.
+**Design & Transitions** tab ▸ **Templates…** (or **Format ▸ Presentation ▸ Slide Templates…**) offers 51 ready-made looks in seven groups: **Light**, **Dark title slide**, **Bright**, **Minimal**, **Bold**, **Classic** and **Chemistry**. Picking one changes the fonts, colors, background and the shapes behind every slide. Your text, structures and pictures stay where they are, and Undo puts the old look back.
 
 Check **Also start new presentations with the template I pick** to make it the starting look for new decks. You can change any part of a template afterwards with **Slide Master…**.
 

@@ -13,7 +13,7 @@ export interface SlideTemplate {
   id: string;
   name: string;
   /** Where it shows in the gallery: the ready-made groups, or your own themes. */
-  group: 'Light' | 'Dark title slide' | 'Bright' | 'Mine';
+  group: 'Light' | 'Dark title slide' | 'Bright' | 'Minimal' | 'Bold' | 'Classic' | 'Chemistry' | 'Mine';
   background: string;
   titleFont: string;
   bodyFont: string;
@@ -58,6 +58,47 @@ export const SLIDE_TEMPLATES: SlideTemplate[] = [
   T('coral', 'Coral', 'Bright', { background: '#ffffff', titleFont: 'Montserrat', bodyFont: 'Lato', titleColor: '#3a2622', textColor: '#3a3332', footerColor: '#958a88', accent: '#e4572e', accent2: '#f5c3b3', decor: 'left-strip' }),
   T('violet', 'Violet', 'Bright', { background: '#ffffff', titleFont: 'Inter', bodyFont: 'Inter', titleColor: '#2d2147', textColor: '#353042', footerColor: '#8e889c', accent: '#6c4ab6', accent2: '#cfc2ee', decor: 'title-rule' }),
   T('sunrise', 'Sunrise', 'Bright', { background: '#fffaf2', titleFont: 'Lato', bodyFont: 'Lato', titleColor: '#3b2a1a', textColor: '#3d342b', footerColor: '#9a8d7e', accent: '#f2a541', accent2: '#f2545b', decor: 'corner' }),
+  // ---------------- minimal: thin lines, lots of white
+  T('hairline', 'Hairline', 'Minimal', { background: '#ffffff', titleFont: 'Inter', bodyFont: 'Inter', titleColor: '#111111', textColor: '#333333', footerColor: '#999999', accent: '#111111', accent2: '#c8c8c8', decor: 'hairlines' }),
+  T('cobalt-tab', 'Cobalt Tab', 'Minimal', { background: '#ffffff', titleFont: 'IBM Plex Sans', bodyFont: 'IBM Plex Sans', titleColor: '#14213d', textColor: '#2b3445', footerColor: '#8a93a3', accent: '#1f4fd1', accent2: '#c9d6f7', decor: 'title-tab' }),
+  T('ink', 'Ink', 'Minimal', { background: '#fcfcfc', titleFont: 'Source Sans 3', bodyFont: 'Source Sans 3', titleColor: '#22223b', textColor: '#33334a', footerColor: '#8d8da0', accent: '#22223b', accent2: '#c9c9d6', decor: 'right-strip' }),
+  T('crop-marks', 'Crop Marks', 'Minimal', { background: '#ffffff', titleFont: 'Barlow Condensed', bodyFont: 'Inter', titleColor: '#262626', textColor: '#3a3a3a', footerColor: '#949494', accent: '#3a3a3a', accent2: '#bdbdbd', decor: 'crop-marks' }),
+  T('terminal', 'Terminal', 'Minimal', { background: '#ffffff', titleFont: 'JetBrains Mono', bodyFont: 'IBM Plex Sans', titleColor: '#1b1b1b', textColor: '#2f2f2f', footerColor: '#8f8f8f', accent: '#2e7d32', accent2: '#c8e6c9', decor: 'title-rule' }),
+  T('linen', 'Linen', 'Minimal', { background: '#faf8f3', titleFont: 'Lato', bodyFont: 'Lato', titleColor: '#3b342c', textColor: '#463f37', footerColor: '#9b9286', accent: '#8c7b6b', accent2: '#e2dacf', decor: 'double-rule' }),
+  T('glacier', 'Glacier', 'Minimal', { background: '#f5f9fb', titleFont: 'Inter', bodyFont: 'Inter', titleColor: '#1d3640', textColor: '#30454e', footerColor: '#869aa3', accent: '#5aa9c9', accent2: '#d7ebf3', decor: 'side-bars' }),
+  T('pewter', 'Pewter', 'Minimal', { background: '#f3f3f1', titleFont: 'IBM Plex Sans', bodyFont: 'IBM Plex Sans', titleColor: '#2c2c2a', textColor: '#3b3b38', footerColor: '#8e8e89', accent: '#6e6e6a', accent2: '#a9a9a4', decor: 'two-tone-footer' }),
+  // ---------------- bold: poster fonts and strong color
+  T('signal', 'Signal', 'Bold', { background: '#ffffff', titleFont: 'Archivo Black', bodyFont: 'Inter', titleColor: '#1d3557', textColor: '#26303d', footerColor: '#7f8996', accent: '#e63946', accent2: '#1d3557', decor: 'stripes', titleBold: false,
+    titleSlide: { background: '#1d3557', titleColor: '#ffffff', textColor: '#c9d6e8' } }),
+  T('marquee', 'Marquee', 'Bold', { background: '#ffffff', titleFont: 'Bebas Neue', bodyFont: 'Lato', titleColor: '#023047', textColor: '#21323b', footerColor: '#7c8b93', accent: '#ffb703', accent2: '#023047', decor: 'header-block', titleBold: false,
+    titleSlide: { background: '#023047', titleColor: '#ffb703', textColor: '#e6eef2' } }),
+  T('citrus', 'Citrus', 'Bold', { background: '#ffffff', titleFont: 'Montserrat', bodyFont: 'Lato', titleColor: '#24361a', textColor: '#30382b', footerColor: '#848c7e', accent: '#5f8f12', accent2: '#fb6107', decor: 'two-tone-footer' }),
+  T('magenta', 'Magenta', 'Bold', { background: '#ffffff', titleFont: 'Montserrat', bodyFont: 'Inter', titleColor: '#3d0f24', textColor: '#3a2f34', footerColor: '#958890', accent: '#c2185b', accent2: '#f8bbd0', decor: 'title-tab' }),
+  T('electric', 'Electric', 'Bold', { background: '#ffffff', titleFont: 'Oswald', bodyFont: 'Source Sans 3', titleColor: '#240a6b', textColor: '#2d2a3d', footerColor: '#8a87a0', accent: '#3a0ca3', accent2: '#4cc9f0', decor: 'stripes', titleBold: false }),
+  T('tangerine', 'Tangerine', 'Bold', { background: '#ffffff', titleFont: 'Oswald', bodyFont: 'Lato', titleColor: '#ffffff', textColor: '#3a2f28', footerColor: '#988b82', accent: '#e8630a', accent2: '#ffd8be', decor: 'title-band', titleBold: false }),
+  T('night-shift', 'Night Shift', 'Bold', { background: '#ffffff', titleFont: 'Barlow Condensed', bodyFont: 'IBM Plex Sans', titleColor: '#111827', textColor: '#2b3340', footerColor: '#8a919c', accent: '#10b981', accent2: '#374151', decor: 'side-bars',
+    titleSlide: { background: '#111827', titleColor: '#f9fafb', textColor: '#9ca3af' } }),
+  T('poster-red', 'Poster Red', 'Bold', { background: '#ffffff', titleFont: 'Bebas Neue', bodyFont: 'Source Sans 3', titleColor: '#7f1414', textColor: '#332a2a', footerColor: '#958888', accent: '#b91c1c', accent2: '#fecaca', decor: 'header-block', titleBold: false }),
+  // ---------------- classic: serif titles
+  T('baskerville', 'Baskerville', 'Classic', { background: '#fffdf8', titleFont: 'Libre Baskerville', bodyFont: 'Source Serif 4', titleColor: '#3a2618', textColor: '#3d3229', footerColor: '#9a8c7f', accent: '#6b4226', accent2: '#e8d8c3', decor: 'double-rule', titleBold: false }),
+  T('oxford', 'Oxford', 'Classic', { background: '#ffffff', titleFont: 'Merriweather', bodyFont: 'Source Sans 3', titleColor: '#002147', textColor: '#26303d', footerColor: '#7f8996', accent: '#002147', accent2: '#b9c7d9', decor: 'header-block' }),
+  T('cambridge', 'Cambridge Blue', 'Classic', { background: '#ffffff', titleFont: 'Source Serif 4', bodyFont: 'Source Sans 3', titleColor: '#1f3b2d', textColor: '#2d3a33', footerColor: '#87958d', accent: '#85b09a', accent2: '#d5e6dc', decor: 'top-bar' }),
+  T('claret', 'Claret', 'Classic', { background: '#ffffff', titleFont: 'Libre Baskerville', bodyFont: 'Lato', titleColor: '#4a1022', textColor: '#3a2e31', footerColor: '#968a8d', accent: '#7b1e3a', accent2: '#c98a9d', decor: 'two-tone-footer', titleBold: false,
+    titleSlide: { background: '#4a1022', titleColor: '#ffffff', textColor: '#ecd3da' } }),
+  T('journal', 'Journal', 'Classic', { background: '#ffffff', titleFont: 'Source Serif 4', bodyFont: 'Source Serif 4', titleColor: '#222222', textColor: '#333333', footerColor: '#8f8f8f', accent: '#333333', accent2: '#aaaaaa', decor: 'hairlines', titleBold: false }),
+  T('parchment', 'Parchment', 'Classic', { background: '#f8f3e6', titleFont: 'Merriweather', bodyFont: 'Lato', titleColor: '#3f2d14', textColor: '#40362a', footerColor: '#9c8f7b', accent: '#9c6b30', accent2: '#e6d5b8', decor: 'crop-marks' }),
+  T('ink-gold', 'Ink and Gold', 'Classic', { background: '#ffffff', titleFont: 'Libre Baskerville', bodyFont: 'Source Sans 3', titleColor: '#1b1f3b', textColor: '#2c2f45', footerColor: '#8b8ea3', accent: '#c9a227', accent2: '#1b1f3b', decor: 'title-rule', titleBold: false,
+    titleSlide: { background: '#1b1f3b', titleColor: '#e9c46a', textColor: '#d9dbe6' } }),
+  // ---------------- chemistry: rings and lab colors
+  T('benzene', 'Benzene', 'Chemistry', { background: '#ffffff', titleFont: 'Inter', bodyFont: 'Inter', titleColor: '#0b3b37', textColor: '#26363a', footerColor: '#7d8f90', accent: '#0f766e', accent2: '#99d5cc', decor: 'hexagons' }),
+  T('aromatic', 'Aromatic', 'Chemistry', { background: '#ffffff', titleFont: 'IBM Plex Sans', bodyFont: 'IBM Plex Sans', titleColor: '#2e1065', textColor: '#332d42', footerColor: '#8c879b', accent: '#7c3aed', accent2: '#ddd6fe', decor: 'hexagons',
+    titleSlide: { background: '#2e1065', titleColor: '#ffffff', textColor: '#ddd6fe' } }),
+  T('uv-lamp', 'UV Lamp', 'Chemistry', { background: '#fbfbfe', titleFont: 'Lato', bodyFont: 'Lato', titleColor: '#1e1b4b', textColor: '#2e2c45', footerColor: '#8987a2', accent: '#4f46e5', accent2: '#c7d2fe', decor: 'right-strip' }),
+  T('fume-hood', 'Fume Hood', 'Chemistry', { background: '#ffffff', titleFont: 'Barlow Condensed', bodyFont: 'IBM Plex Sans', titleColor: '#1f2937', textColor: '#2b3340', footerColor: '#8a919c', accent: '#f59e0b', accent2: '#1f2937', decor: 'stripes' }),
+  T('flame-test', 'Flame Test', 'Chemistry', { background: '#ffffff', titleFont: 'Montserrat', bodyFont: 'Lato', titleColor: '#3b1d0b', textColor: '#3a322c', footerColor: '#958a82', accent: '#ea580c', accent2: '#16a34a', decor: 'two-tone-footer' }),
+  T('cobalt-chloride', 'Cobalt Chloride', 'Chemistry', { background: '#ffffff', titleFont: 'Inter', bodyFont: 'Inter', titleColor: '#172554', textColor: '#28304a', footerColor: '#878ea6', accent: '#1e40af', accent2: '#f472b6', decor: 'double-rule' }),
+  T('silica', 'Silica', 'Chemistry', { background: '#f7f7f2', titleFont: 'Source Sans 3', bodyFont: 'Source Sans 3', titleColor: '#1e293b', textColor: '#334155', footerColor: '#8d96a3', accent: '#64748b', accent2: '#cbd5e1', decor: 'hexagons',
+    titleSlide: { background: '#334155', titleColor: '#ffffff', textColor: '#cbd5e1' } }),
 ];
 
 /** The master with a template's look: its fonts, colours, background and shapes; everything else is kept. */

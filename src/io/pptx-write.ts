@@ -1722,14 +1722,15 @@ export function groupXml(id: number, name: string, box: Rect, kids: string, nvPr
 function decorXml(sh: DecorShape, id: number): string {
   const nv = (name: string) => `<p:nvSpPr><p:cNvPr id="${id}" name="${name} ${id}"/><p:cNvSpPr/><p:nvPr userDrawn="1"/></p:nvSpPr>`;
   const solid = (c: string) => `<a:solidFill><a:srgbClr val="${hex6(c)}"/></a:solidFill>`;
-  if (sh.kind === 'tri') {
+  if (sh.kind === 'tri' || sh.kind === 'poly') {
     const xs = sh.pts.map((q) => q[0]), ys = sh.pts.map((q) => q[1]);
     const box = { x1: Math.min(...xs), y1: Math.min(...ys), x2: Math.max(...xs), y2: Math.max(...ys) };
     const W = box.x2 - box.x1, H = box.y2 - box.y1;
     const pt = ([x, y]: [number, number]) => `<a:pt x="${emu(x - box.x1)}" y="${emu(y - box.y1)}"/>`;
     const path = `<a:moveTo>${pt(sh.pts[0])}</a:moveTo>${sh.pts.slice(1).map((q) => `<a:lnTo>${pt(q)}</a:lnTo>`).join('')}<a:close/>`;
-    return `<p:sp>${nv('Triangle')}<p:spPr>${xfrm(box)}<a:custGeom><a:avLst/><a:gdLst/><a:ahLst/><a:cxnLst/><a:rect l="0" t="0" r="r" b="b"/>` +
-      `<a:pathLst><a:path w="${emu(W)}" h="${emu(H)}">${path}</a:path></a:pathLst></a:custGeom>${solid(sh.color)}<a:ln><a:noFill/></a:ln></p:spPr></p:sp>`;
+    return `<p:sp>${nv(sh.kind === 'poly' ? 'Hexagon' : 'Triangle')}<p:spPr>${xfrm(box)}<a:custGeom><a:avLst/><a:gdLst/><a:ahLst/><a:cxnLst/><a:rect l="0" t="0" r="r" b="b"/>` +
+      `<a:pathLst><a:path w="${emu(W)}" h="${emu(H)}">${path}</a:path></a:pathLst></a:custGeom>` +
+      (sh.kind === 'poly' ? `<a:noFill/><a:ln w="${emu(sh.width)}">${solid(sh.color)}</a:ln>` : `${solid(sh.color)}<a:ln><a:noFill/></a:ln>`) + '</p:spPr></p:sp>';
   }
   if (sh.kind === 'line') {
     return `<p:cxnSp><p:nvCxnSpPr><p:cNvPr id="${id}" name="Line ${id}"/><p:cNvCxnSpPr/><p:nvPr userDrawn="1"/></p:nvCxnSpPr>` +

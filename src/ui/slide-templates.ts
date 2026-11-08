@@ -111,7 +111,7 @@ export function pickSlideTemplate(m: Master, size: SlideSize, defaultId: string 
     function render(): void {
       repaint = [];
       const kids: HTMLElement[] = [];
-      for (const group of ['Mine', 'Light', 'Dark title slide', 'Bright'] as const) {
+      for (const group of ['Mine', 'Light', 'Dark title slide', 'Bright', 'Minimal', 'Bold', 'Classic', 'Chemistry'] as const) {
         const list = group === 'Mine' ? mine : SLIDE_TEMPLATES.filter((x) => x.group === group);
         if (!list.length) continue;
         const g = document.createElement('h3');
