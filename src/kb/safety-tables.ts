@@ -80,7 +80,6 @@ export function safetyRow(r: SafetyRecord): Record<string, Cell> {
     incompatible: r.incompatible ? r.incompatible.replace(/\s*\[Note:.*$/, '') : null,
     incident: inc ? inc.what : null,
     ghs: r.ghs?.codes.join(' ') || null,
-    cas: r.cas,
     smiles: r.smiles,
     sources: sources || null,
   };
@@ -114,7 +113,6 @@ export const REAGENT_SAFETY: KbTable = {
     { key: 'incompatible', label: 'Incompatible with' },
     { key: 'incident', label: 'Incident', filter: 'present' },
     { key: 'ghs', label: 'GHS (harmonized)' },
-    { key: 'cas', label: 'CAS' },
     { key: 'sources', label: 'Sources' },
   ],
   rows: sortSafety(SAFETY_RECORDS.map(safetyRow)),
@@ -136,7 +134,7 @@ export function constantsRow(r: SafetyRecord): Record<string, Cell> {
   return {
     cid: r.cid, name: r.name, formula: r.formula, mw: r.mw === null ? null : Number(r.mw.toFixed(2)),
     mp: short(r.mp?.text), bp: short(r.bp?.text), density: short(r.density?.text), flash: short(r.flash?.text),
-    vp: vp === null ? null : vp > 760 ? 'gas' : sig(vp), cas: r.cas, smiles: r.smiles, sources: src || null,
+    vp: vp === null ? null : vp > 760 ? 'gas' : sig(vp), smiles: r.smiles, sources: src || null,
   };
 }
 
@@ -154,7 +152,6 @@ export const PHYSICAL_CONSTANTS: KbTable = {
     { key: 'density', label: 'Density', numeric: true },
     { key: 'flash', label: 'Flash point', numeric: true },
     { key: 'vp', label: 'VP (mmHg, ~25 °C)', numeric: true },
-    { key: 'cas', label: 'CAS' },
     { key: 'sources', label: 'Sources' },
   ],
   rows: SAFETY_RECORDS.map(constantsRow).sort((a, b) => String(a.name).localeCompare(String(b.name))),

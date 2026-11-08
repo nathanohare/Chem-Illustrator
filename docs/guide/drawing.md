@@ -367,7 +367,7 @@ Where the numbers come from, in order: your Compound Library, numbers found befo
 **Chemistry ▸ Look Up ▸ Knowledge Base…** (in every mode) opens reference tables to look things up while you work. The search box searches every table at once, and the list on the left shows how many rows of each table match (Solvents and Miscibility, short tables you read whole, have no search box and always show every row):
 
 - **A name or any word** (chloroform, CD3): rows containing every word.
-- **A CAS number** (865-49-6): that compound exactly.
+- **A CAS number** (865-49-6): that compound exactly, found through PubChem (needs the internet; the tables themselves hold no CAS numbers).
 - **SMILES** (ClC([2H])(Cl)Cl): the same compound however it is written, under **This compound**, then every compound containing it (a substructure search) under **Containing it**. **Draw…** beside the search box opens a window to draw the structure instead, or just the part you are looking for: it has its own bond, ring and atom buttons, and the toolbox and the usual keys (point at an atom and type N, O, Cl) work in it too. **Search** (Ctrl+Enter) finds that compound, then every compound containing it; **Use Selected** starts from the structure selected in the drawing, to trim it down to the part you want; **Clear** starts again; **Cancel** (Esc) closes it without searching. The drawing is kept, so Draw… opens it again to change it. The first structure search after the window opens takes a few seconds; later ones are immediate.
 - **A number** (7.26, 2.17 ppm): the peaks near it, within 0.05 ppm in 1H and 0.5 ppm in 13C, nearest first. Use this to identify a stray NMR peak.
 
