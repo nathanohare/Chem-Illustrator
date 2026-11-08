@@ -21,7 +21,7 @@ It costs nothing: Cloudflare's free plan allows 100,000 requests a day, and the 
 
 ### 1. A GitHub token
 
-GitHub ▸ your picture ▸ **Settings ▸ Developer settings ▸ Personal access tokens ▸ Fine-grained tokens ▸ Generate new token**.
+In a web browser (the GitHub phone app doesn't have this), open <https://github.com/settings/personal-access-tokens/new>. Or click through: your picture (top right) ▸ **Settings** ▸ at the very bottom of the left-hand list, **Developer settings ▸ Personal access tokens ▸ Fine-grained tokens ▸ Generate new token**.
 
 - **Token name**: Chemweave feedback relay
 - **Expiration**: the longest offered (when it runs out, Send says it can't send and people can still use Copy Text; make a new token and put it in as in step 3)
