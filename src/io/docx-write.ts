@@ -30,7 +30,7 @@ import { DEFAULT_THEME, type WorkbookTheme } from '../sheet/themes';
 import { themeXml } from './xlsx-view';
 import { facesToEmbed, newGuid, obfuscate, type FontSource } from './font-embed';
 import { fromDataUrl } from '../render/images';
-import { CHEMDRAW_PROG, chemdrawObject, embeddedPart, OLE_REL, OLE_TYPE } from './ole-object';
+import { chemdrawProg, chemdrawObject, embeddedPart, OLE_REL, OLE_TYPE } from './ole-object';
 import { BULLETS, fitParas, listInfo, paraCount, samePara, schemeOf, splitParagraphs, type ListInfo } from '../text/paragraphs';
 import { BOX_PAD, COL_GAP, COMPOUND, END_FORMAT, FOOT_FORMAT, columnsOf, contentsPrint, OBJECT_CHAR, SHADOWS, charStylesOf, watermarkPlace, fieldTexts, floatOf, floatGaps, lookExtent, lookOf, noteStyle, objectsInText, pruneObjects, EMPTY_FORM, styleOf, runStyleOf, type CharStyle, type DocObject, type DocText, type Embedded, type FigureFrame, type FigureLook, type HeaderFooter, type HfBody, type HfKey, type NamedStyle, type PageBorder, type PageSetup, type Watermark } from '../document/document';
 import { ACS_LINE, GRID_LINE, bibHang, docCellAlign, shownSize } from '../document/doc-layout';
@@ -1121,7 +1121,7 @@ class DocxWriter {
     // a structure saved as a ChemDraw object: one that came from a ChemDraw object, or any when
     // structures are saved as ChemDraw objects (in the line only, and not turned: as Word keeps objects)
     if (o.kind === 'drawing' && !floatOf(o) && !o.rot && !o.flipH && !o.flipV && !o.frame && !lookOf(o)) {
-      const prog = o.ole ?? (this.deps.chemdrawObjects && o.contents.atoms.length ? CHEMDRAW_PROG : undefined);
+      const prog = o.ole ?? (this.deps.chemdrawObjects && o.contents.atoms.length ? chemdrawProg() : undefined);
       const got = prog ? await this.chemdrawDrawing(main, id, o, prog, rPr) : null;
       if (got) return got;
     }

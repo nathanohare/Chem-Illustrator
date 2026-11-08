@@ -5113,7 +5113,8 @@ export class Editor {
   /** An arrow's reaction roles: kept with it, or worked out from where things sit. */
   reactionRoles(arrowId: number): StepRoles | null {
     const r = this.doc.arrows.get(arrowId);
-    if (!r || !isReactionArrow(r)) return null;
+    // (an energy diagram's axis is an arrow, not a reaction step)
+    if (!r || !isReactionArrow(r) || energyFrameOf(this.doc, 'arrow', arrowId) !== null) return null;
     return rolesOf(r, this.schemeItems(), this.doc.style.bondLength);
   }
 

@@ -27,7 +27,7 @@ import { PPT_STYLE_IDS, lookOf, slideCellLook, styledRuns, type CellLine, type S
 import { tableBorders } from './cdxml-table';
 import { writeCdxml } from './cdxml-write';
 import { cdxmlToCdx } from './cdx';
-import { CHEMDRAW_PROG, chemdrawInObject, chemdrawObject, chemdrawObjectName, OLE_REL, OLE_TYPE } from './ole-object';
+import { chemdrawProg, chemdrawInObject, chemdrawObject, chemdrawObjectName, OLE_REL, OLE_TYPE } from './ole-object';
 import { extractDrawing } from './clipboard';
 import { contentsAlt, titleOverlaps, roughCaptionBox } from '../accessibility';
 import type { Selection } from '../editor/editor';
@@ -1196,7 +1196,7 @@ class Writer {
     }
     // a ChemDraw object from PowerPoint goes back as one, which opens in ChemDraw (with the drawing as made here kept beside it),
     // and so does every structure when structures are saved as ChemDraw objects
-    const prog = was?.prog ?? (this.opts.chemdrawObjects && part.atoms.size ? CHEMDRAW_PROG : undefined);
+    const prog = was?.prog ?? (this.opts.chemdrawObjects && part.atoms.size ? chemdrawProg() : undefined);
     const cdx = prog ? chemdrawCdxOf(cdxml) : null;
     // (the drawing rides inside the SVG too, for programs that drop PowerPoint's tags)
     const svgBytes = new TextEncoder().encode(svgWithDrawing(pic.svg, cdxml, box));

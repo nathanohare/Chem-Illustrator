@@ -295,6 +295,22 @@ export const CHEMDRAW_CLASS = '{41BA6D21-A02E-11CE-8FD9-0020AFD1F20C}';
 /** The program name older and 32-bit ChemDraw give its objects; 64-bit ChemDraw writes ChemDraw_x64.Document.6.0. */
 export const CHEMDRAW_PROG = 'ChemDraw.Document.6.0';
 
+let installedProg: string | null = null;
+
+/**
+ * The program name new ChemDraw objects get: the one this computer's ChemDraw is registered under
+ * (desktop app, set at start), else ChemDraw.Document.6.0. PowerPoint finds the program to open an
+ * object by this name, so one it doesn't know leaves the object with Edit greyed out.
+ */
+export function chemdrawProg(): string {
+  return installedProg ?? CHEMDRAW_PROG;
+}
+
+/** Record the program name this computer's ChemDraw is registered under (null: none found). */
+export function setInstalledChemdrawProg(prog: string | null | undefined): void {
+  installedProg = prog && isChemDraw(prog) ? prog : null;
+}
+
 /**
  * The CDX in another program's object (a compound file, as PowerPoint copies it and keeps it in
  * its files), when the object is ChemDraw's; null for anything else. An Excel or Word object can
@@ -315,7 +331,7 @@ export function chemdrawInObject(cfb: Uint8Array): Uint8Array | null {
 }
 
 /** A ChemDraw object holding a drawing (its CDX), as PowerPoint keeps one: double-clicked in PowerPoint, it opens in ChemDraw. */
-export function chemdrawObject(cdx: Uint8Array, prog = CHEMDRAW_PROG): Uint8Array {
+export function chemdrawObject(cdx: Uint8Array, prog = chemdrawProg()): Uint8Array {
   return writeCfb([
     ['\u0001CompObj', compObj(chemdrawObjectName(prog), prog, CHEMDRAW_CLASS, 'ChemDraw Interchange Format')],
     ['\u0001Ole', OLE_STREAM],

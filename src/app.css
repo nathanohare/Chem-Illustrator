@@ -4142,6 +4142,8 @@ dialog.hotkeys:not([data-view="board"]) .hk-board { display: none; }
 .smart-pane .sp-arrow svg { display: block; margin: 0 auto; }
 .smart-pane .sp-opts { font-size: var(--fs-xs); }
 .smart-pane .sp-foot .sp-ungroup { padding: 1px 6px; font-size: var(--fs-xs); }
+/* docked with no scheme selected, the list stays out of the way in the other modes (a slide's Smart Scheme selected shows it) */
+body:is(.slides-mode, .doc-mode, .sheet-mode, .design-mode) .toolbox[data-id='smart']:has(> .tb-body > .smart-pane.sp-none) { display: none; }
 .smart-pane.docked { position: static; width: auto; min-width: 230px; max-width: 300px; max-height: none; border: none; border-radius: 0; box-shadow: none; padding: 4px 6px; }
 .smart-pane .sp-empty { padding: 6px 2px; }
 /* Chemistry > Newman Projection */

@@ -139,6 +139,7 @@ export class SmartPane {
     head.title = 'Drag to another edge of the drawing to dock this list there, or off the edge to float it';
     this.wireDrag(head);
     this.el.replaceChildren(head, p);
+    this.el.classList.add('sp-none');
   }
 
   constructor(private hooks: SmartPaneHooks) {
@@ -226,6 +227,7 @@ export class SmartPane {
     const s = doc.shapes.get(id);
     const read = readSmart(doc, m, id);
     if (!s?.smart || !read) { this.hide(); return; }
+    this.el.classList.remove('sp-none');
     this.shown = id;
     this.drawnFor = `${id} ${doc.version} ${folded}`;
     this.drawnShape = this.shapeOf(id);

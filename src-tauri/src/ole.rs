@@ -89,6 +89,58 @@ pub fn ole_object_folder() -> Result<String, String> {
 }
 
 /// Whether the object type is registered (Windows); always false elsewhere.
+/// The program name Windows has for ChemDraw's objects (ChemDraw_x64.Document.6.0 for 64-bit
+/// ChemDraw 25, ChemDraw.Document.6.0 for older and 32-bit ones), so a ChemDraw object saved here
+/// names the ChemDraw this computer has: PowerPoint looks an object's program up by that name, and
+/// with one it doesn't know it can't open the object (Edit greyed out). None when ChemDraw isn't installed.
+#[tauri::command]
+pub fn chemdraw_prog_id() -> Option<String> {
+    #[cfg(windows)]
+    {
+        win_prog::chemdraw()
+    }
+    #[cfg(not(windows))]
+    {
+        None
+    }
+}
+
+#[cfg(windows)]
+mod win_prog {
+    use std::ffi::c_void;
+    use windows_sys::Win32::Foundation::ERROR_SUCCESS;
+    use windows_sys::Win32::System::Registry::{RegGetValueW, HKEY_CLASSES_ROOT, RRF_RT_REG_SZ};
+
+    fn wide(s: &str) -> Vec<u16> {
+        s.encode_utf16().chain(std::iter::once(0)).collect()
+    }
+
+    /// The default value of a key under HKEY_CLASSES_ROOT.
+    fn default_of(key: &str) -> Option<String> {
+        let k = wide(key);
+        let mut buf = vec![0u16; 260];
+        let mut size = (buf.len() * 2) as u32;
+        let r = unsafe { RegGetValueW(HKEY_CLASSES_ROOT, k.as_ptr(), std::ptr::null(), RRF_RT_REG_SZ, std::ptr::null_mut(), buf.as_mut_ptr() as *mut c_void, &mut size) };
+        if r != ERROR_SUCCESS {
+            return None;
+        }
+        let n = (size as usize / 2).saturating_sub(1).min(buf.len());
+        let s = String::from_utf16_lossy(&buf[..n]).trim_end_matches('\0').trim().to_string();
+        if s.is_empty() { None } else { Some(s) }
+    }
+
+    pub fn chemdraw() -> Option<String> {
+        // the names a ChemDraw that is installed answers to, 64-bit first
+        for prog in ["ChemDraw_x64.Document.6.0", "ChemDraw.Document.6.0"] {
+            if default_of(&format!(r"{prog}\CLSID")).is_some() {
+                return Some(prog.to_string());
+            }
+        }
+        // else the name its class says
+        default_of(r"CLSID\{41BA6D21-A02E-11CE-8FD9-0020AFD1F20C}\ProgID")
+    }
+}
+
 #[tauri::command]
 pub fn ole_registered() -> bool {
     #[cfg(windows)]

@@ -566,7 +566,7 @@ export function askEnergy(editing: EnergyData | null, size: { w: number; h: numb
     const files = $<HTMLInputElement>('input[name=qm]');
     form.querySelector('[data-act=import]')!.addEventListener('click', () => files.click());
     files.addEventListener('change', async () => {
-      const list = [...(files.files ?? [])].sort((a, b) => a.name.localeCompare(b.name, undefined, { numeric: true }));
+      const list = reactionOrder([...(files.files ?? [])]);
       files.value = '';
       if (!list.length) return;
       const got: QmResult[] = [], skipped: string[] = [];
@@ -640,4 +640,34 @@ export function askEnergy(editing: EnergyData | null, size: { w: number; h: numb
     d.showModal();
     redraw();
   });
+}
+
+/** Where a species' file name puts it along a reaction (rc, ts1, int1, ts2, pc, p…), or null when the name doesn't say. */
+function stepRank(name: string): number | null {
+  const words = name.replace(/\.[a-z0-9]+$/i, '').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
+  for (const w of words.reverse()) {
+    const m = /^([a-z]+)(\d*)$/.exec(w);
+    if (!m) continue;
+    const n = m[2] ? Number(m[2]) : 1;
+    const role = m[1];
+    if (/^(sm|r|re|reac|reactants?|start|starting|sub|substrates?)$/.test(role)) return -2;
+    if (/^(rc|prc|prec|precomplex|rcomplex)$/.test(role)) return -1;
+    if (/^(ts|tss)$/.test(role)) return 2 * n;
+    if (/^(int|im|i|in|inter|intermediate)$/.test(role)) return 2 * n + 1;
+    if (/^(pc|poc|postc|postcomplex|pcomplex)$/.test(role)) return 1000;
+    if (/^(p|pr|prod|products?)$/.test(role)) return 1001;
+  }
+  return null;
+}
+
+/**
+ * Files picked together, in the reaction's order when every name says where it goes (rc, ts,
+ * pc; sm, ts1, int1, ts2, p), else by name (numbers in order: 2 before 10).
+ */
+export function reactionOrder<T extends { name: string }>(files: T[]): T[] {
+  const byName = (a: T, b: T) => a.name.localeCompare(b.name, undefined, { numeric: true });
+  const ranks = new Map(files.map((f) => [f, stepRank(f.name)]));
+  // names that start with their own numbers are already in order
+  if (files.some((f) => ranks.get(f) === null) || files.every((f) => /^\d/.test(f.name))) return [...files].sort(byName);
+  return [...files].sort((a, b) => ranks.get(a)! - ranks.get(b)! || byName(a, b));
 }

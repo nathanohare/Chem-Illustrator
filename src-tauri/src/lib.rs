@@ -525,6 +525,7 @@ pub fn run() {
             ole::ole_registered,
             ole::ole_register,
             ole::ole_object_folder,
+            ole::chemdraw_prog_id,
             web::web_get,
             zotero::zotero_post,
             zotero::zotero_activate,
