@@ -37,11 +37,11 @@ import { dataUrl, imageSize } from '../render/images';
 import { knownShape, tidyFx } from '../render/picture-fx';
 import { applyColorMods, dmlFraction, hslHex, linearHex } from './dml-color';
 import { readPictureFx } from './picture-xml';
-import { layoutText, caretPos, ASCENT } from '../text/layout';
-import { Master, SlideSize, LayoutId, type TemplateArt, type ArtLayer, type KeptRel, type KeptXmlPart, type NotesKept, defaultMaster, textStyles, slideDrawingStyle, slideBackground, slideColours, hasLayout, newLayoutId, deckLayouts, type LayoutDef, type PlaceholderBox, type SectionCount, type DeckSettings, type SlideHF, type DateFormat, showsNumber, showsFooter, showsDate } from '../deck/deck';
+import { layoutText, caretPos, ASCENT, PPT_SINGLE } from '../text/layout';
+import { Master, SlideSize, LayoutId, type TemplateArt, type ArtLayer, type KeptRel, type KeptXmlPart, type NotesKept, defaultMaster, textStyles, slideDrawingStyle, slideBackground, slideColours, hasLayout, newLayoutId, deckLayouts, type LayoutDef, type PlaceholderBox, type PicturePlaceholder, type ThemeColor, type SectionCount, type DeckSettings, type SlideHF, type DateFormat, showsNumber, showsFooter, showsDate } from '../deck/deck';
 import { backgroundColour, isPlain, sameBackground, type Background } from '../deck/background';
 import { readFill, readOneFill, type FillContext } from './pptx-background';
-import { TAG, PPT_ASCENT, MIME_EXT, arialMeasure, NS_A14, NS_M, swapBox, tableLookKey, savedTableLook } from './pptx-write';
+import { TAG, PPT_ASCENT, MIME_EXT, arialMeasure, NS_A14, NS_M, swapBox, tableLookKey, savedTableLook, joinTagPieces, tagLooksCut } from './pptx-write';
 import { ommlToTex, toOmml } from '../document/math';
 import { shapeMathPicture, shapeMathSize } from '../deck/equation';
 import { GEOS } from '../design/geo';
@@ -242,6 +242,9 @@ function inheritEl(own: Element | null, chain: Chain, lvl: number, names: string
 
 // ---------------------------------------------------------------- the reader
 
+/** Said when some of Chemweave's data kept in the file's tags was cut short by PowerPoint, or a piece of it is missing. */
+const CUT_TAG_WARNING = 'Some Chemweave data kept in this file (structures, text or picture settings saved with the slides) was cut short when PowerPoint saved it, as PowerPoint keeps at most about 5 million characters in each tag. What it belonged to came in as PowerPoint shows it.';
+
 const SKIP_PH = new Set(['dt', 'ftr', 'sldNum', 'hdr', 'sldImg']);
 
 interface PhInfo { type: string; idx: string | null }
@@ -251,6 +254,16 @@ const phOf = (sp: Element): PhInfo | null => {
 };
 const isTitle = (t: string) => t === 'title' || t === 'ctrTitle';
 const isBody = (t: string) => !isTitle(t) && !SKIP_PH.has(t);
+
+/** A placeholder's text styles (its lstStyle's levels) as XML to keep; none when it has none, or they point at other parts. */
+function lstXml(sp: Element): string | undefined {
+  const levels = kids(kid(sp, 'txBody', 'lstStyle')).filter((k) => /^lvl\dpPr$/.test(k.localName));
+  if (!levels.length) return undefined;
+  const ser = new XMLSerializer();
+  // (without the a: namespace each level is given on its own, as the part it goes in has it)
+  const xml = levels.map((k) => ser.serializeToString(k).replace(` xmlns:a="${NS.a}"`, '')).join('');
+  return /\sr:(embed|id|link)=/.test(xml) ? undefined : xml;
+}
 
 /** Our placeholder kind for PowerPoint's. */
 const phKind = (t: string): Placeholder => (isTitle(t) ? 'title' : t === 'subTitle' ? 'subtitle' : 'body');
@@ -323,8 +336,13 @@ class Reader {
       const rel = this.r.rels(from).get(rAttr(t, 'id') ?? '');
       const doc = rel ? this.r.xml(rel.target) : null;
       if (!doc) continue;
-      for (const tag of Array.from(doc.getElementsByTagNameNS(NS.p, 'tag'))) out[tag.getAttribute('name') ?? ''] = tag.getAttribute('val') ?? '';
+      const raw: Record<string, string> = {};
+      for (const tag of Array.from(doc.getElementsByTagNameNS(NS.p, 'tag'))) raw[tag.getAttribute('name') ?? ''] = tag.getAttribute('val') ?? '';
+      // long values written in pieces, joined again
+      Object.assign(out, joinTagPieces(raw, () => this.warnings.add(CUT_TAG_WARNING)));
     }
+    // a value PowerPoint cut short (one written whole by an older version, before long ones were written in pieces)
+    if (Object.values(out).some(tagLooksCut)) this.warnings.add(CUT_TAG_WARNING);
     return out;
   }
 
@@ -442,7 +460,21 @@ class Reader {
 
   private color(el: Element | null, ph: Element | null = null): string | null {
     const p = ph ? colorIn(ph, this.theme, this.clrMap)?.slice(1) ?? null : null;
-    return colorIn(el, this.theme, this.clrMap, p);
+    const hex = colorIn(el, this.theme, this.clrMap, p);
+    if (hex && el) this.noteThemeColor(el, hex);
+    return hex;
+  }
+
+  /** The theme colors read, by the color each came to (see TemplateArt.colors): the first one for each color. */
+  private themeColors = new Map<string, ThemeColor>();
+
+  /** A theme color read (a schemeClr and its changes, but not its alpha, which is read as transparency). */
+  private noteThemeColor(holder: Element, hex: string): void {
+    const c = kids(holder).find((k) => /Clr$/.test(k.localName));
+    const scheme = c?.localName === 'schemeClr' ? c.getAttribute('val') : null;
+    if (!c || !scheme || scheme === 'phClr' || this.themeColors.has(hex)) return;
+    const mods = kids(c).filter((k) => !/^alpha/.test(k.localName)).map((k): [string, string] => [k.localName, k.getAttribute('val') ?? '']);
+    this.themeColors.set(hex, { scheme, ...(mods.length ? { mods } : {}) });
   }
 
   /** A typeface, with the theme's title and body fonts filled in. */
@@ -644,6 +676,8 @@ class Reader {
         this.claimArt(id, part);
       }
     }
+    // the theme colors the slides use, saved as theme colors again while the theme is the file's
+    if (art.theme && this.themeColors.size) art.colors = Object.fromEntries(this.themeColors);
     if (art.master || art.layouts || art.theme || art.clrMap) this.masterOut.art = art;
   }
 
@@ -811,6 +845,8 @@ class Reader {
     const layout = this.part(layoutPath);
     // theme colors go through the slide's color map: its own, else its layout's, else the master's
     this.clrMap = { ...this.masterClrMap, ...((layout && this.overrideOf(layout)) ?? {}), ...(this.overrideOf(s) ?? {}) };
+    // every theme color on the slide, also where its text and shapes come from our tags (a file saved here)
+    for (const c of Array.from(s.doc.getElementsByTagNameNS(NS.a, 'schemeClr'))) if (c.parentElement) this.color(c.parentElement);
     const tags = this.tagsOf(path, kid(s.doc.documentElement, 'cSld'));
     this.curPath = path;
     this.partsRead[this.slidePaths.indexOf(path)] = readPart(tags[TAG.canvasPart], tags[TAG.canvasKeep], s.tree);
@@ -941,8 +977,17 @@ class Reader {
     const got = this.ownLayouts.get(layout.path);
     if (got !== undefined && (!force || got !== 'blank')) return got;
     const boxes: PlaceholderBox[] = [];
+    const pics: PicturePlaceholder[] = [];
+    const r = (v: number) => +v.toFixed(4);
     for (const sp of kids(layout.tree, 'sp')) {
       const ph = phOf(sp);
+      // picture placeholders (Picture with Caption's picture), in order (see picSlot)
+      if (ph?.type === 'pic') {
+        const b = boxOf(kid(sp, 'spPr', 'xfrm'), IDENTITY);
+        const lst = lstXml(sp);
+        if (b) pics.push({ x: r(b.x1 / this.size.w), y: r(b.y1 / this.size.h), w: r((b.x2 - b.x1) / this.size.w), h: r((b.y2 - b.y1) / this.size.h), ...(lst ? { lst } : {}) });
+        continue;
+      }
       if (!ph || SKIP_PH.has(ph.type) || !(isTitle(ph.type) || ph.type === 'subTitle' || ph.type === 'body' || ph.type === 'obj')) continue;
       const own = kid(sp, 'spPr', 'xfrm');
       const xf = own ?? this.inherited(null, ph).map((e) => kid(e, 'spPr', 'xfrm')).find((x) => x) ?? null;
@@ -951,14 +996,23 @@ class Reader {
       const kind = phKind(ph.type);
       if (kind === 'title' && boxes.some((x) => x.ph === 'title')) continue;
       const algn = kid(sp, 'txBody', 'lstStyle', 'lvl1pPr')?.getAttribute('algn') ?? kid(sp, 'txBody', 'p', 'pPr')?.getAttribute('algn');
-      const r = (v: number) => +v.toFixed(4);
-      boxes.push({ ph: kind, x: r(b.x1 / this.size.w), y: r(b.y1 / this.size.h), w: r((b.x2 - b.x1) / this.size.w), h: r((b.y2 - b.y1) / this.size.h), justify: algn === 'ctr' ? 'center' : algn === 'r' ? 'right' : 'left' });
+      // (a text placeholder's kind, and the layout's text styles for it, kept)
+      const lst = lstXml(sp);
+      boxes.push({
+        ph: kind, x: r(b.x1 / this.size.w), y: r(b.y1 / this.size.h), w: r((b.x2 - b.x1) / this.size.w), h: r((b.y2 - b.y1) / this.size.h), justify: algn === 'ctr' ? 'center' : algn === 'r' ? 'right' : 'left',
+        ...(ph.type === 'body' ? { pptType: 'body' as const } : {}), ...(lst ? { lst } : {}),
+      });
     }
-    if (!force && !boxes.length && !kids(layout.tree, 'sp').length) { this.ownLayouts.set(layout.path, 'blank'); return 'blank'; }
-    if (!force && !boxes.length) return null;
+    if (!force && !boxes.length && !pics.length && !kids(layout.tree, 'sp').length) { this.ownLayouts.set(layout.path, 'blank'); return 'blank'; }
+    if (!force && !boxes.length && !pics.length) return null;
     const m = this.masterOut;
     const list = [...deckLayouts(m), ...(m.layouts ?? [])];
-    const def: LayoutDef = { id: newLayoutId(list), name: kid(layout.doc.documentElement, 'cSld')?.getAttribute('name') || 'Custom Layout', boxes };
+    const t = layout.doc.documentElement.getAttribute('type') ?? '';
+    const def: LayoutDef = {
+      id: newLayoutId(list), name: kid(layout.doc.documentElement, 'cSld')?.getAttribute('name') || 'Custom Layout', boxes,
+      // (its kind, unless it is another layout of one of the five's kinds, made one of its own for its artwork)
+      ...(!force && t && t !== 'cust' && /^[A-Za-z]+$/.test(t) ? { pptType: t } : {}), ...(pics.length ? { pics } : {}),
+    };
     m.layouts = [...(m.layouts ?? []), def];
     this.ownLayouts.set(layout.path, def.id);
     return def.id;
@@ -967,15 +1021,16 @@ class Reader {
   /** Our layout for PowerPoint's, by its type or else by the text boxes on the slide. */
   private layoutId(layout: Part | null, doc: Doc): LayoutId {
     const t = layout?.doc.documentElement.getAttribute('type') ?? '';
-    // PowerPoint's own custom layouts become layouts of the master, with their names and placeholders
-    if (layout && (t === 'cust' || t === '') && !this.ourMaster) {
-      const own = this.customLayout(layout);
-      if (own) return own;
-    }
     const known: Record<string, LayoutId> = {
       title: 'title', secHead: 'title', obj: 'title-content', tx: 'title-content', txAndObj: 'two-content', objAndTx: 'two-content',
       twoObj: 'two-content', twoTxTwoObj: 'two-content', twoColTx: 'two-content', titleOnly: 'title-only', blank: 'blank',
     };
+    // PowerPoint's own custom layouts, and its layouts of kinds the five here don't stand for
+    // (Picture with Caption), become layouts of the master, with their names and placeholders
+    if (layout && !known[t] && !this.ourMaster) {
+      const own = this.customLayout(layout);
+      if (own) return own;
+    }
     if (known[t]) return known[t];
     const phs = [...doc.captions.values()].map((c) => c.ph);
     const bodies = phs.filter((p) => p === 'body').length;
@@ -1403,12 +1458,22 @@ class Reader {
     }
   }
 
+  /** Which of its layout's picture placeholders (in order, as LayoutDef.pics lists them) a picture placeholder is. */
+  private picSlot(layout: Part | null, ph: PhInfo | null): number | undefined {
+    if (ph?.type !== 'pic' || !layout) return undefined;
+    const pics = kids(layout.tree, 'sp').filter((sp) => phOf(sp)?.type === 'pic' && kid(sp, 'spPr', 'xfrm'));
+    const k = pics.findIndex((sp) => ph.idx !== null && phOf(sp)?.idx === ph.idx);
+    return k >= 0 ? k : pics.length === 1 ? 0 : undefined;
+  }
+
   private pictureEl(s: Part, layout: Part | null, el: Element, t: Xf, doc: Doc): void {
     // a picture put in a placeholder (the picture button in a content placeholder) can have no
     // place of its own: it fills its layout's (or master's) placeholder, as a placeholder's text does
     const own = kid(el, 'spPr', 'xfrm');
     const ph = own ? null : phOf(el);
     const xfrm = own ?? (ph ? this.inherited(layout, ph).map((e) => kid(e, 'spPr', 'xfrm')).find((x) => x) ?? null : null);
+    // a picture in a picture placeholder: which of its layout's it is in
+    const phPic = this.picSlot(layout, phOf(el));
     const box = boxOf(xfrm, own ? t : IDENTITY);
     if (!box) return;
     const tags = this.tagsOf(s.path, kid(el, 'nvPicPr', 'nvPr'));
@@ -1475,6 +1540,7 @@ class Reader {
     doc.addShape({
       ...(plate ? { plate } : {}),
       kind: 'picture', x1: at.x1, y1: at.y1, x2: at.x2, y2: at.y2, src: img.src, px: img.px, ...(img.crop ? { crop: img.crop } : {}), ...(look && Object.keys(look).length ? { look } : {}), ...(fx ? { fx } : {}), ...(video ? { video } : {}), ...(alt ? { alt } : {}),
+      ...(phPic !== undefined && !video ? { phPic } : {}),
       ...(click ? { link: click } : {}), ...(zoom && click ? { zoom } : {}), ...turn(box),
     });
   }
@@ -1512,7 +1578,8 @@ class Reader {
     // drops it when it saves, and gives its id to some other part)
     let bytes: Uint8Array | null = null, mime: string | undefined;
     if (layer === 'tag') {
-      try { if (origTag) ({ bytes, mime } = fromDataUrl(origTag)); } catch { /* lost */ }
+      // (not one PowerPoint cut short: the picture then stays as PowerPoint shows it)
+      try { if (origTag && !tagLooksCut(origTag)) ({ bytes, mime } = fromDataUrl(origTag)); } catch { /* lost */ }
     } else if (layer) {
       const rel = this.r.rels(from).get(layer);
       const target = rel && /\/image$/.test(rel.type ?? '') ? rel.target : undefined;
@@ -1744,6 +1811,8 @@ class Reader {
   private shape(s: Part, layout: Part | null, sp: Element, t: Xf, doc: Doc): void {
     const ph = phOf(sp);
     if (ph && SKIP_PH.has(ph.type)) return; // slide numbers, footers and dates come from the master
+    // an empty picture placeholder isn't text (it is saved again with its layout's picture placeholders)
+    if (ph?.type === 'pic' && !this.plain(sp).trim()) return;
     // reference lines saved here are made again from the references
     if (!ph && this.tagsOf(s.path, kid(sp, 'nvSpPr', 'nvPr'))[TAG.refLines]) return;
     const from = ph ? this.inherited(layout, ph) : [];
@@ -2682,7 +2751,7 @@ class Reader {
     const full = base ? { ...c, runs: out.map((r) => ({ ...base, ...dropUndefined(r) }) as TextRun) } : c;
     if (!wrapNone || ph) c.wrap = Math.max(1, w);
     else {
-      const natural = layoutText(full, sizeFor, arialMeasure).boxWidth;
+      const natural = layoutText({ ...full, single: PPT_SINGLE }, sizeFor, arialMeasure).boxWidth;
       if (justify !== 'left' || natural > w) c.wrap = Math.max(w, natural);
     }
     const numCol = Number(bp('numCol') ?? 1);
@@ -2701,11 +2770,13 @@ class Reader {
       c.boxH = box.y2 - box.y1;
       if (!c.runs.some((r) => r.text.trim())) {
         c.runs = [];
-        c.paras = kind === 'body' ? [{ list: 'bullet' }] : undefined;
+        // (a bulleted list, unless its layout's first level has no bullet: Picture with Caption's caption)
+        c.paras = kind === 'body' && inheritEl(null, chain, 0, ['buNone', 'buChar', 'buAutoNum', 'buBlip'])?.localName !== 'buNone' ? [{ list: 'bullet' }] : undefined;
         if (!c.paras) delete c.paras;
       }
     }
-    const lay = layoutText({ ...full, wrap: c.wrap }, sizeFor, arialMeasure);
+    // (lines spaced as PowerPoint spaces them)
+    const lay = layoutText({ ...full, wrap: c.wrap, single: PPT_SINGLE }, sizeFor, arialMeasure);
     const first = lay.lines[0] ? lay.lines[0].ascent / ASCENT : sizeFor;
     const anchor = bp('anchor') ?? 't';
     const room = box.y2 - box.y1 - tI - bI;

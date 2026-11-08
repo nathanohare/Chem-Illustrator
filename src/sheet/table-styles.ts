@@ -31,6 +31,12 @@ export interface TableDef {
   columns?: { name: string; calc?: string }[];
   /** The sort Excel remembers for the table (its sortState element), kept to save back. */
   sortState?: string;
+  /**
+   * A table a data query fills in Excel (Power Query, a database or web query): its query table
+   * part, and the table's place and columns as the file had them (with the ids the part refers to
+   * them by), kept to save back while the table is still in that place with those columns.
+   */
+  query?: { xml: string; ref: string; columns: { name: string; id: string; uniqueName?: string; fieldId?: string }[] };
 }
 
 /** The Office colours a style family is made in: none (black and greys), then accents 1 to 6. */

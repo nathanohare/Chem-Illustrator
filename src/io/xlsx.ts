@@ -17,7 +17,9 @@
 
 import { MAX_CELL_TEXT } from './sheet-sniff';
 import { Package, PackageReader, xml, xmlAttr, hex6, REL, kids, kid, rAttr, PackageError } from './ooxml';
-import { appPropsXml, corePropsXml, readKeptParts, writeKeptParts, readTree, writeTree, type KeptTree } from './kept-parts';
+import { appPropsXml, corePropsXml, readKeptParts, writeKeptParts, readTree, writeTree, relativeTarget, type KeptTree } from './kept-parts';
+import { printOf } from './native-print';
+import { fromDataUrl } from '../render/images';
 import { GRID_NAME, gridOf, gridNameXml, readGridName, restoreSheet, moveFilter, STILL, type Grid } from './xlsx-relocate';
 import { officeTarget, linkFromTarget } from '../links';
 import { Workbook, Sheet, Structure, CellStyle, ColumnDef, Filter, Condition, CompareOp, Border, BorderStyle, Side } from '../sheet/workbook';
@@ -37,11 +39,11 @@ import type { Contents } from '../model';
 import type { ExcelStyles, ExcelLook, NamedCellStyle } from '../sheet/workbook';
 import type { DocStyle } from '../style';
 import { applyTint } from '../colours';
-import { chartXml, chartAnchorXml, readChartXml, CT_CHART, REL_CHART, C_NS, CX_NS, CT_CHARTEX, REL_CHARTEX, addChartExStyle } from './xlsx-chart';
-import { Chart, chartData, seenChartId, newChartId, sameChartData, isChartEx } from '../sheet/chart';
+import { chartXml, chartAnchorXml, readChartXml, CT_CHART, REL_CHART, C_NS, CX_NS, CT_CHARTEX, REL_CHARTEX, addChartExStyle, refreshChartCaches } from './xlsx-chart';
+import { Chart, chartData, seenChartId, newChartId, sameChartData, isChartEx, readRef } from '../sheet/chart';
 import { dashboardStandIn } from './xlsx-dashboard';
 import { Dashboard, seenTileId } from '../sheet/dashboard';
-import { condFormatsXml, dxfXml, tableXml, readDxfs, readCondFormats, readTable, sameRules } from './xlsx-format';
+import { condFormatsXml, dxfXml, tableXml, readDxfs, readCondFormats, readTable, sameRules, queryHolds } from './xlsx-format';
 import type { CondFormat, CfLook } from '../sheet/conditional';
 import { seenCondFormatId } from '../sheet/conditional';
 import { TableDef, tableColumnNames, seenTableId } from '../sheet/table-styles';
@@ -61,8 +63,8 @@ import { seenSparkId } from '../sheet/sparklines';
 import { type CompoundCard } from '../sheet/compound';
 import { type Query, seenQueryId } from '../sheet/query';
 import { keepFileValues, fileValues, type FileValue } from './xlsx-cached';
-import { readRichValues, writeRichParts, richMetadataXml, keepPointers, pointerOf } from './xlsx-rich';
-import { LeftOut } from './xlsx-left-out';
+import { readRichValues, writeRichParts, richMetadataXml, keepPointers, pointerOf, richValueKinds } from './xlsx-rich';
+import { LeftOut, connectionsKept, queryTableOf, CT_QUERY_TABLE, REL as KEPT_FEATURE_REL } from './xlsx-left-out';
 export { applyTint };
 
 /** Pictures of structures for Excel (the app draws them; tests use stand-ins). */
@@ -600,6 +602,11 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
   let imageNo = 0, drawingNo = 0, tableNo = 0, chartNo = 0, notesNo = 0, pivotNo = 0;
   const pivotCaches: string[] = [];
   let anyDynamic = false;
+  // the data connections kept from the file, and the query tables written that use them
+  const connectionsKept = !!book.kept?.trees?.some((t) => t.type === KEPT_FEATURE_REL.connections);
+  const queryParts = new Set<string>();
+  // formulas, which Excel is asked to work out again on opening (unless they have the values Excel saved)
+  let anyFormula = false;
   // calls to defined names (LAMBDA ones) are dynamic array formulas in Excel
   const lambdaNames = new Set(book.names.map((n) => n.name.toUpperCase()));
   const nameCase = book.nameCase();
@@ -629,8 +636,10 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
     const path = `xl/worksheets/sheet${si + 1}.xml`;
     const ms: ModelSheet = { name: s.name, id: si + 1, cells: [], defs: [...s.colDefs].map(([col, def]) => ({ col, def })), chemCols: [], filter: s.filter };
     if (s.condFormats.length) ms.condFormats = s.condFormats;
-    if (s.tables.length) ms.tables = s.tables;
-    if (s.charts.length && !own.dashboard) ms.charts = s.charts;
+    // (a query table's part is in the file already)
+    if (s.tables.length) ms.tables = s.tables.map(({ query: _query, ...t }) => t);
+    // (an Excel chart's own part is in the file already)
+    if (s.charts.length && !own.dashboard) ms.charts = s.charts.map(({ file: _file, ...c }) => c);
     if (own.dashboard) ms.dashboard = own.dashboard;
     if (s.dataTables.length) ms.dataTables = s.dataTables;
     if (s.pivots.length && !own.dashboard) ms.pivots = s.pivots;
@@ -743,6 +752,7 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
         const dt = dataTableAt.get(k);
         const blockRef = arrayRef ?? legacyRef;
         const f = dt ? dataTableXml(dt) : formula === null ? '' : blockRef ? `<f t="array" ref="${blockRef}">${xml(formula)}</f>` : `<f>${xml(formula)}</f>`;
+        if (f) anyFormula = true;
         // a dynamic array formula's cell points at the metadata that says so
         // a picture placed in the cell (a rich value), while the cell is as it was read
         const vm = book.excel?.richValues ? pointerOf(cell) : undefined;
@@ -815,7 +825,7 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
       const custom = s.rowHeights.get(r) ?? auto.get(r);
       const fixed = s.rowHeights.has(r) || pictureRows.has(r);
       // (a shown row of a zeroHeight sheet says its height, to be sure Excel shows it)
-      const attrs = `${custom !== undefined ? ` ht="${ptFromPx(custom)}"${fixed ? ' customHeight="1"' : ''}` : zero && !s.hiddenRows.has(r) ? ` ht="${own.fileRowHeight!.pt}"` : ''}${s.hiddenRows.has(r) ? ' hidden="1"' : ''}${outlineAttrs(s.rowLevels, s.hiddenRows, r, !!s.outline?.summaryAbove)}`;
+      const attrs = `${custom !== undefined ? ` ht="${own.excel?.rowPts?.get(custom) ?? ptFromPx(custom)}"${fixed ? ' customHeight="1"' : ''}` : zero && !s.hiddenRows.has(r) ? ` ht="${own.fileRowHeight!.pt}"` : ''}${s.hiddenRows.has(r) ? ' hidden="1"' : ''}${outlineAttrs(s.rowLevels, s.hiddenRows, r, !!s.outline?.summaryAbove)}`;
       if (cells.length || attrs || zero) rowXml.push(`<row r="${r + 1}"${attrs}>${cells.join('')}</row>`);
     }
 
@@ -878,8 +888,15 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
         })
         : null;
       const tpath = `xl/tables/table${tableNo}.xml`;
-      pkg.add(tpath, HEAD + tableXml(t, tableNo, tableNames.get(t)!, totals, af), CT.table);
+      // a table a data query fills: its query table, as the file had it (once, and with the workbook's connections kept)
+      const withQuery = connectionsKept && queryHolds(t, tableNames.get(t)!) && !queryParts.has(t.query!.xml);
+      pkg.add(tpath, HEAD + tableXml(withQuery ? t : { ...t, query: undefined }, tableNo, tableNames.get(t)!, totals, af), CT.table);
       tableIds.push(pkg.relate(path, RELS.table, `../tables/table${tableNo}.xml`));
+      if (withQuery) {
+        queryParts.add(t.query!.xml);
+        pkg.add(`xl/queryTables/queryTable${queryParts.size}.xml`, t.query!.xml, CT_QUERY_TABLE);
+        pkg.relate(tpath, KEPT_FEATURE_REL.queryTable, `../queryTables/queryTable${queryParts.size}.xml`);
+      }
     }
     // PivotTables: a cache (the records) and a pivot table part for each, refreshed when Excel opens them
     for (const pt of standIn ? [] : s.pivots) {
@@ -903,8 +920,12 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
       // histograms and box charts go in Excel 2016's newer chart part
       const ex = isChartEx(ch.kind);
       const cname = `${ex ? 'chartEx' : 'chart'}${chartNo}.xml`;
-      pkg.add(`xl/charts/${cname}`, HEAD + chartXml(ch, standIn?.data.get(ch.id) ?? chartData(book, s, ch)), ex ? CT_CHARTEX : CT_CHART);
-      if (ex) addChartExStyle(pkg, `xl/charts/${cname}`, chartNo);
+      // the chart's part as the Excel file had it, while nothing about the chart changed here
+      if (!ex && !standIn && ch.file && ch.file.print === keptChartPrint(ch)) writeKeptChart(pkg, ch.file, `xl/charts/${cname}`, chartNo, (f, text) => cacheValues(book, s, f, text, saved));
+      else {
+        pkg.add(`xl/charts/${cname}`, HEAD + chartXml(ch, standIn?.data.get(ch.id) ?? chartData(book, s, ch)), ex ? CT_CHARTEX : CT_CHART);
+        if (ex) addChartExStyle(pkg, `xl/charts/${cname}`, chartNo);
+      }
       const rid = pkg.relate(drawingPath, ex ? REL_CHARTEX : REL_CHART, `../charts/${cname}`);
       const x = cols.start(ch.at.col) + ch.at.dx, y = rows.start(ch.at.row) + ch.at.dy;
       const end = cols.at(x + ch.w, ch.at.col), endR = rows.at(y + ch.h, ch.at.row);
@@ -1054,8 +1075,8 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
     `<sheets>${sheetEntries.join('')}</sheets>` +
     (linkIds.length ? `<externalReferences>${linkIds.map((id) => `<externalReference r:id="${id}"/>`).join('')}</externalReferences>` : '') +
     (allNames.length ? `<definedNames>${allNames.join('')}</definedNames>` : '') +
-    // formulas are worked out again when Excel opens the file
-    `<calcPr calcId="191029"${book.excel?.calcAttrs ?? ''} fullCalcOnLoad="1"/>` + customWorkbookViewsXml(book) +
+    // formulas are worked out again when Excel opens the file (unless nothing has changed them since Excel saved it)
+    `<calcPr calcId="191029"${book.excel?.calcAttrs ?? ''}${anyFormula && !(book.excel?.calculated && !book.edits) ? ' fullCalcOnLoad="1"' : ''}/>` + customWorkbookViewsXml(book) +
     (pivotCaches.length ? `<pivotCaches>${pivotCaches.join('')}</pivotCaches>` : '') + '</workbook>',
     opts.macros ? CT.workbookMacros : CT.workbook);
   if (vba) {
@@ -1400,9 +1421,12 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
   const date1904 = isOn(kid(root, 'workbookPr')?.getAttribute('date1904'));
   const bookKept = readBookKept(root);
   // pictures placed in cells and other rich values: their parts and the metadata cells point into
-  const richValues = readRichValues(pkg, wbPath, [...rels.values()].find((r) => r.type === RELS.metadata)?.target ?? null);
+  const metadataPath = [...rels.values()].find((r) => r.type === RELS.metadata)?.target ?? null;
+  const richValues = readRichValues(pkg, wbPath, metadataPath);
   const pointers = new Map<Sheet, Map<number, number>>();
-  let richCells = 0;
+  // the cells holding them, by kind (Excel 365's #SPILL! and #CALC! are rich values too, and need no word)
+  const richKind = richValueKinds(pkg, wbPath, metadataPath);
+  let richCells = 0, richOther = false;
   // controls, data connections, query tables, background pictures, macro sheets and XML maps: named on opening
   const leftOut = new LeftOut();
 
@@ -1448,14 +1472,17 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
   if (Object.keys(excelStyles).length) book.excelStyles = excelStyles;
   const activeTab = Number(kid(root, 'bookViews', 'workbookView')?.getAttribute('activeTab') ?? 0);
   if (sheetEls.some((s) => s.getAttribute('state') === 'hidden' || s.getAttribute('state') === 'veryHidden')) notKept.add('hidden sheets (shown here)');
-  leftOut.workbook(pkg, wbPath, sheetEls.map((el) => rels.get(rAttr(el, 'id') ?? '')?.type ?? ''));
+  // data connections (Power Query's), kept whole with the query tables of the tables they fill
+  const keepConnections = connectionsKept(pkg, wbPath);
+  leftOut.workbook(pkg, wbPath, sheetEls.map((el) => rels.get(rAttr(el, 'id') ?? '')?.type ?? ''), keepConnections);
+  const keptQueries = new Set<string>();
   const definedNames = kids(kid(root, 'definedNames'), 'definedName');
   const nameSet = new Set(definedNames.map((d) => (d.getAttribute('name') ?? '').toUpperCase()));
   const nameCase = new Map(definedNames.map((d) => [(d.getAttribute('name') ?? '').toUpperCase(), d.getAttribute('name') ?? '']));
 
   if (model?.drawingStyle) book.drawingStyle = { ...book.drawingStyle, ...model.drawingStyle };
   // other programs' data (custom XML, custom properties, add-ins' settings), to save back
-  book.kept = readKeptParts(pkg, { main: wbPath, ours: (r) => r.namespaceURI === MODEL_NS, theme: true });
+  book.kept = readKeptParts(pkg, { main: wbPath, ours: (r) => r.namespaceURI === MODEL_NS, theme: true, ...(keepConnections ? { trees: [KEPT_FEATURE_REL.connections] } : {}) });
   if (book.kept?.theme) book.kept.theme.look = JSON.stringify(workbookTheme);
   // links to other workbooks (formulas reading [1]Sheet1!A1), kept as they are to save back in the same order
   for (const ref of kids(kid(root, 'externalReferences'), 'externalReference')) {
@@ -1493,6 +1520,8 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
   let foreignPictures = 0;
   // the values formulas had in the file, for those this program can't work out
   const formulaValues = new Map<Sheet, Map<number, FileValue>>();
+  /** Formulas the file saved no value for. */
+  let unvalued = 0;
   const restored = { structures: 0, changed: 0 };
   book.build(() => {
     sheetEls.forEach((el, si) => {
@@ -1523,6 +1552,7 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
       const rowPt = s.fileRowHeight?.pt ?? 15;
       const listed = new Set<number>();
       const fitted = new Map<number, number>();
+      const rowPts = new Map<number, number>();
       let defW = fmtPr?.getAttribute('defaultColWidth') ? pxFromWidth(Number(fmtPr.getAttribute('defaultColWidth')))
         // a base width in digits, with padding and gridline, rounded up to 8 pixels (18.3.1.81)
         : fmtPr?.getAttribute('baseColWidth') ? Math.ceil((Number(fmtPr.getAttribute('baseColWidth')) * 7 + 5) / 8) * 8 : DEFAULT_COL_W;
@@ -1567,6 +1597,8 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
           if (isOn(row.getAttribute('customHeight'))) s.setRowHeight(r, pxFromPt(ht));
           // a height Excel fitted the row to (wrapped text, a bigger font): shown as Excel shows it
           else if (Number.isFinite(ht) && ht >= 0 && Math.abs(ht - rowPt) > 0.01) fitted.set(r, pxFromPt(ht));
+          // (the height in points as written, to write back)
+          if (Number.isFinite(ht) && ht >= 0 && !rowPts.has(pxFromPt(ht))) rowPts.set(pxFromPt(ht), ht);
         }
         listed.add(r);
         if (isOn(row.getAttribute('hidden'))) s.setRowHidden(r, true);
@@ -1607,7 +1639,9 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
           // a rich value's cell (a picture placed in it): its pointer, kept with the cell
           const vm = c.getAttribute('vm');
           if (vm !== null) {
-            richCells++;
+            const kind = richKind(Number(vm));
+            if (kind !== 'error') richCells++;
+            if (kind === 'other') richOther = true;
             let list = pointers.get(s);
             if (!list) pointers.set(s, (list = new Map()));
             if (richValues && Number(vm) >= 1 && Number(vm) <= richValues.metadata.blocks.length) list.set(keyOf(r, col), Number(vm));
@@ -1643,7 +1677,7 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
                 let list = formulaValues.get(s);
                 if (!list) formulaValues.set(s, (list = new Map()));
                 list.set(keyOf(r, col), { v: value, ...(t === 'e' ? { error: true } : {}) });
-              }
+              } else unvalued++;
             }
           } else if (arrays.some((a) => inRange(a.R, r, col) && !(a.r === r && a.c === col))) {
             // spilled there: the formula fills it again (the file's value is kept for one this program can't work out)
@@ -1672,6 +1706,7 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
       if (defW !== DEFAULT_COL_W) for (let c = 0; c <= maxCol; c++) if (!widthSet.has(c)) s.setColWidth(c, defW);
       // (after the cells, which would otherwise take Excel's fit off)
       for (const [r, px] of fitted) s.setFittedRow(r, px);
+      if ([...rowPts].some(([px, pt]) => ptFromPx(px) !== pt)) s.excel = { ...s.excel, rowPts };
       // rows hidden unless listed: those up to the last listed are hidden here too (the rest of the sheet stays hidden in Excel)
       if (s.fileRowHeight?.zero) {
         let last = -1;
@@ -1744,8 +1779,17 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
       for (const r of pkg.rels(path!).values()) {
         if (r.type !== RELS.table) continue;
         const td = pkg.xml(r.target);
-        const got = td ? readTable(td, tables.length + 1) : null;
+        const queryPath = keepConnections ? queryTableOf(pkg, r.target) : null;
+        const got = td ? readTable(td, tables.length + 1, queryPath ? pkg.text(queryPath) : null) : null;
         if (!got) continue;
+        // (a query table's link holds while the header cells name its columns as its part does, as they do in Excel's files)
+        if (got.table.query) {
+          const R = got.table.range;
+          const heads: string[] = [];
+          for (let c = R.c1; c <= R.c2; c++) heads.push(String(raw.get(keyOf(R.r1, c)) ?? ''));
+          if (queryHolds(got.table, tableColumnNames(heads))) keptQueries.add(r.target);
+          else delete got.table.query;
+        }
         const mine = ms?.tables?.find((t) => t.name === got.table.name && sameRange(t.range, got.table.range) && t.range.r2 === got.table.range.r2);
         if (mine) seenTableId(mine.id);
         tables.push(mine ? { ...got.table, id: mine.id, ...(mine.custom ? { custom: mine.custom } : {}), ...(got.table.style === 'none' && mine.style !== 'none' ? { style: mine.style } : {}) } : got.table);
@@ -1825,9 +1869,12 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
           // its alt text, as set here or in Excel
           const descr = kid(gf, 'nvGraphicFramePr', 'cNvPr')?.getAttribute('descr')?.trim();
           const alt = descr ? { alt: descr } : {};
-          if (mine && sameChartData(mine, got.chart)) { seenChartId(mine.id); const { alt: _was, placement: _had, ...kept } = mine; charts.push({ ...kept, at, ...alt, ...placement }); continue; }
+          // the file's own chart part, kept to write back while the chart isn't changed here (not a PivotChart's, which follows its PivotTable)
+          const tree = cref?.namespaceURI === C_NS && !kid(cdoc.documentElement, 'pivotSource') ? readTree(pkg, target!) : null;
+          const withFile = (c: Chart): Chart => (tree ? { ...c, file: { print: keptChartPrint(c), path: target!, ...tree } } : c);
+          if (mine && sameChartData(mine, got.chart)) { seenChartId(mine.id); const { alt: _was, placement: _had, ...kept } = mine; charts.push(withFile({ ...kept, at, ...alt, ...placement })); continue; }
           if (got.partial) notKept.add('parts of combined charts');
-          charts.push({ ...got.chart, ...alt, ...placement });
+          charts.push(withFile({ ...got.chart, ...alt, ...placement }));
         }
         if (charts.length) s.setCharts(charts);
       }
@@ -1842,7 +1889,7 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
       const sheetRelList = [...pkg.rels(path!).values()];
       const relOf = (type: string) => sheetRelList.find((r) => r.type === type)?.target;
       const commentsPath = relOf(NOTES_REL.comments), vmlPath = relOf(NOTES_REL.vml), threadedPath = relOf(NOTES_REL.threaded);
-      leftOut.sheet(pkg, path!, ws, vmlPath ? pkg.text(vmlPath) : null);
+      leftOut.sheet(pkg, path!, ws, vmlPath ? pkg.text(vmlPath) : null, (t) => keptQueries.has(t));
       if (commentsPath || threadedPath) {
         const notes = readNotes(commentsPath ? pkg.xml(commentsPath) : null, shownNotes(vmlPath ? pkg.text(vmlPath) : null), threadedPath ? pkg.xml(threadedPath) : null, personsDoc);
         for (const [k, n] of notes) s.setNote(rowOf(k), colOf(k), n);
@@ -1902,12 +1949,17 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
   book.active = Math.min(Math.max(0, activeTab), book.sheets.length - 1);
   book.excel = richValues ? { ...bookKept, richValues } : bookKept;
   keepFileValues(book, formulaValues);
+  if (!unvalued && !date1904 && !isOn(kid(root, 'calcPr')?.getAttribute('fullCalcOnLoad')) && book.sheets.every((s) => !s.dataTables.length) && asSaved(book, formulaValues)) {
+    book.excel = { ...book.excel, calculated: true };
+  }
   if (richValues) keepPointers(book, pointers);
 
+  // (only pictures, unless some are data types or the like)
+  const what = (many: boolean) => (richOther ? (many ? 'pictures or other values' : 'a picture or other value') : many ? 'pictures' : 'a picture');
   if (richCells && richValues) {
-    warnings.push(`${richCells} cell${richCells > 1 ? 's hold pictures or other values' : ' holds a picture or other value'} placed in ${richCells > 1 ? 'them' : 'it'} in Excel: ` +
+    warnings.push(`${richCells} cell${richCells > 1 ? 's hold' : ' holds'} ${what(richCells > 1)} placed in ${richCells > 1 ? 'them' : 'it'} in Excel: ` +
       `shown as #VALUE! here, and kept for Excel unless ${richCells > 1 ? 'the cells are' : 'the cell is'} changed.`);
-  } else if (richCells) notKept.add(`${richCells} picture${richCells > 1 ? 's' : ''} or other value${richCells > 1 ? 's' : ''} placed in cells`);
+  } else if (richCells) notKept.add(`${richCells} ${what(richCells > 1).replace(/^a /, '')} placed in cells`);
   for (const item of leftOut.items()) notKept.add(item);
   if (foreignPictures) notKept.add(`${foreignPictures} picture${foreignPictures > 1 ? 's' : ''} or chart${foreignPictures > 1 ? 's' : ''}`);
   if (unknownFormulas) warnings.push(`${unknownFormulas} formula${unknownFormulas > 1 ? 's use' : ' uses'} Excel functions this program can't work out yet.`);
@@ -1919,6 +1971,87 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
   if (restored.changed) warnings.push(`${restored.changed} structure or calculated cell${restored.changed > 1 ? 's were' : ' was'} changed in another program: ${restored.changed > 1 ? 'they show' : 'it shows'} what that program saved.`);
   if (notKept.size) warnings.push(`Not shown here, and left out if you save over this file: ${[...notKept].join(', ')}.`);
   return { book, warnings };
+}
+
+/** A value or a list of them as text, with the keys of objects in order (for prints). */
+const stableText = (v: unknown): string => {
+  if (Array.isArray(v)) return `[${v.map(stableText).join(',')}]`;
+  if (v && typeof v === 'object') {
+    const o = v as Record<string, unknown>;
+    return `{${Object.keys(o).filter((k) => o[k] !== undefined).sort().map((k) => `${JSON.stringify(k)}:${stableText(o[k])}`).join(',')}}`;
+  }
+  return JSON.stringify(v) ?? 'null';
+};
+
+/** A chart's print, to tell whether it was changed here: all of it but where it sits, its size and its alt text (which its part doesn't hold). */
+function keptChartPrint(c: Chart): string {
+  const { id: _id, at: _at, w: _w, h: _h, alt: _alt, placement: _placement, file: _file, ...rest } = c;
+  return printOf([stableText(rest)]);
+}
+
+/**
+ * What a chart's reference holds now, for its part's caches: numbers, or for `text` the cells as
+ * they show; null for an empty cell. `saved` gives Excel's values for formulas worked out here as
+ * errors. Null when it can't be read here (more than one block of cells, another workbook's, a
+ * name) or holds an error: the file's cache is the better guess.
+ */
+function cacheValues(book: Workbook, home: Sheet, ref: string, text: boolean, saved: (s: Sheet, k: number) => Value | undefined): (number | string | null)[] | null {
+  if (/[,(]/.test(ref)) return null;
+  const got = readRef(book, `=${ref}`, home);
+  if (!got) return null;
+  const { sheet, range: R } = got;
+  // (a whole column, down to the sheet's last row)
+  const r2 = R.r2 - R.r1 > 100000 ? Math.max(R.r1, sheet.lastRow) : R.r2;
+  const out: (number | string | null)[] = [];
+  for (let r = R.r1; r <= r2; r++) for (let c = R.c1; c <= R.c2; c++) {
+    const k = keyOf(r, c);
+    const had = saved(sheet, k);
+    const v = had ?? sheet.values.get(k) ?? null;
+    if (isError(v)) return null;
+    out.push(v === null ? null : !text ? (typeof v === 'number' ? v : null) : had !== undefined ? String(v) : sheet.shownText(r, c));
+  }
+  return out;
+}
+
+/**
+ * Write a chart's part kept from an Excel file at `path` (the `n`th chart), with the parts it
+ * leads to: its style and colours beside it numbered as it is (style2.xml for chart2.xml), any
+ * other part under a name of its own, and its caches brought up to date.
+ */
+function writeKeptChart(pkg: Package, file: NonNullable<Chart['file']>, path: string, n: number, valuesOf: (ref: string, text: boolean) => (number | string | null)[] | null): void {
+  const dir = path.slice(0, path.lastIndexOf('/') + 1);
+  const at = new Map<string, string>([[file.path, path]]);
+  for (const p of file.parts) {
+    if (at.has(p.path)) continue;
+    const home = p.path.slice(0, p.path.lastIndexOf('/') + 1);
+    const [, stem, digits, ext] = /^(.*?)(\d*)(\.[^.]*)?$/.exec(p.path.slice(home.length))!;
+    const want = home === dir ? `${home}${stem}${n}${ext ?? ''}` : `${home}${stem}${digits}_c${n}${ext ?? ''}`;
+    let to = want;
+    for (let k = 2; pkg.has(to) || [...at.values()].includes(to); k++) to = want.replace(/(\.[^./]*)?$/, (e) => `_${k}${e}`);
+    at.set(p.path, to);
+  }
+  for (const p of file.parts) {
+    const text = p.path === file.path && p.xml !== undefined ? refreshChartCaches(p.xml, valuesOf) : p.xml;
+    pkg.add(at.get(p.path)!, text ?? fromDataUrl(p.data ?? 'data:application/octet-stream,').bytes, p.type);
+  }
+  for (const r of file.rels) {
+    const from = at.get(r.from);
+    if (!from) continue;
+    if (r.external) pkg.relate(from, r.type, r.target, true, r.id);
+    else if (at.has(r.target)) pkg.relate(from, r.type, relativeTarget(from, at.get(r.target)!), false, r.id);
+  }
+}
+
+/** Does every formula have the value the file saved for it (worked out here, or kept from the file)? */
+function asSaved(book: Workbook, values: Map<Sheet, Map<number, FileValue>>): boolean {
+  const saved = fileValues(book);
+  for (const [s, list] of values) {
+    for (const [k, fv] of list) {
+      const now = saved(s, k) ?? s.values.get(k) ?? null;
+      if (fv.error ? !(isError(now) && now.code === fv.v) : !sameWrote(isError(now) ? null : now as Wrote, fv.v)) return false;
+    }
+  }
+  return true;
 }
 
 /** The cell each structure's picture (named "Structure A2" by the cell it was saved over) is over now. */

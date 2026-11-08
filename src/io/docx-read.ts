@@ -23,7 +23,7 @@ import { keepDirectBorders, readBorder, readBorders, readLook as readTableLook, 
 import { cleanBorders } from '../document/para-borders';
 import { ACS_1996, type DocStyle } from '../style';
 import * as rt from '../richtext';
-import { PackageReader, REL, bytesHash, kid, kids, rAttr, fromEmu } from './ooxml';
+import { NS, PackageReader, REL, bytesHash, kid, kids, rAttr, fromEmu } from './ooxml';
 import { dataUrl, imageSize, pictureMime } from '../render/images';
 import { drawingInEmf } from '../render/emf';
 import { BULLETS, BULLET_LIBRARY, LIST_SCHEMES, cleanPara, listInfo } from '../text/paragraphs';
@@ -40,7 +40,7 @@ import { shownSize } from '../document/doc-layout';
 import { coveringCell, layoutTable } from '../table';
 import { chemdrawCdx, isChemDraw, readEmbedded } from './ole-object';
 import { cmtIds, cmtString, type CommentNote, type CommentThread } from '../document/comments';
-import { BIB_MARK, CHART_NAME, CITE_FIELD, WORD_HIGHLIGHTS, DOCX_REL, W14_NS, W15_NS, W16CID_NS, W16CEX_NS, fromWordDate, DRAWING_NAME, FORMULA_STYLE, MODEL_NS, TABLE_MARK, TABLE_NAME, W_NS, type DocxModel } from './docx-base';
+import { BIB_MARK, CHART_NAME, CITE_FIELD, WORD_HIGHLIGHTS, DOCX_REL, W14_FX, W14_NS, W15_NS, W16CID_NS, W16CEX_NS, fromWordDate, w14Look, DRAWING_NAME, FORMULA_STYLE, MODEL_NS, TABLE_MARK, TABLE_NAME, W_NS, type DocxModel } from './docx-base';
 import { wordTablePrint } from './native-print';
 import { citationNumbers, cleanRef, type Piece as BibPiece, type Reference } from '../document/references';
 import { bibFieldApp, placeRef, readCiteField, readMendeleyTag, styleFromCsl, zoteroStyleOf, MANAGERS, type CiteLive, type CiteManager, type ManagerCite } from '../document/live-cites';
@@ -140,7 +140,7 @@ const WARN = {
 
 type Pos = 'base' | 'sub' | 'sup';
 /** Text formatting as a file gives it (only what it gives). `color` null is "automatic". */
-interface RProps { lang?: string; noProof?: boolean; raise?: number; font?: string; size?: number; bold?: boolean; italic?: boolean; underline?: boolean; color?: string | null; highlight?: string | null; pos?: Pos; hidden?: boolean; formula?: boolean; strike?: boolean; smallCaps?: boolean; allCaps?: boolean; cstyle?: string; spacing?: number; noKern?: boolean; noFill?: boolean; transparency?: number; outline?: string; outlineW?: number; shadow?: boolean }
+interface RProps { /** Word 2010's text effects as written (see TextRun.wfx). */ wfx?: string; lang?: string; noProof?: boolean; raise?: number; font?: string; size?: number; bold?: boolean; italic?: boolean; underline?: boolean; color?: string | null; highlight?: string | null; pos?: Pos; hidden?: boolean; formula?: boolean; strike?: boolean; smallCaps?: boolean; allCaps?: boolean; cstyle?: string; spacing?: number; noKern?: boolean; noFill?: boolean; transparency?: number; outline?: string; outlineW?: number; shadow?: boolean }
 /** Paragraph formatting as a file gives it, in points. */
 interface PProps {
   align?: Justify; before?: number; after?: number; line?: { v: number; rule: string };
@@ -452,7 +452,15 @@ class DocxReader {
 
   private readRPr(el: Element | null, direct = true): RProps {
     const out: RProps = {};
+    const fx: string[] = [];
     for (const c of kids(el)) {
+      // Word 2010's text effects (glow, reflection, 3-D...) set on the text itself, kept as Word
+      // wrote them, with what is drawn here read from them (a style's, such as ligatures for
+      // the whole document, aren't put on every run)
+      if (direct && c.namespaceURI === W14_NS && c.prefix === 'w14' && (W14_FX as readonly string[]).includes(c.localName)) {
+        fx.push(elementXml(c).replaceAll(` xmlns:w14="${W14_NS}"`, ''));
+        continue;
+      }
       switch (c.localName) {
         case 'rFonts': {
           const th = this.a(c, 'asciiTheme') ?? this.a(c, 'hAnsiTheme');
@@ -518,6 +526,10 @@ class DocxReader {
           break;
         }
       }
+    }
+    if (fx.length) {
+      out.wfx = fx.join('');
+      Object.assign(out, w14Look(out.wfx));
     }
     return out;
   }
@@ -1377,7 +1389,7 @@ class DocxReader {
     return rt.cleanStyle({
       font: r.font ?? WORD_FONT, size: r.size ?? WORD_SIZE, bold: r.bold, italic: r.italic, underline: r.underline,
       strike: r.strike, smallCaps: r.smallCaps, allCaps: r.allCaps, cstyle: r.cstyle,
-      spacing: r.spacing, noKern: r.noKern, noFill: r.noFill, transparency: r.transparency, outline: r.outline, outlineW: r.outlineW, shadow: r.shadow,
+      spacing: r.spacing, noKern: r.noKern, noFill: r.noFill, transparency: r.transparency, outline: r.outline, outlineW: r.outlineW, shadow: r.shadow, wfx: r.wfx,
       lang: r.lang && r.lang.toLowerCase() !== (this.docDefaults.r.lang ?? 'en-US').toLowerCase() ? r.lang : undefined, noProof: r.noProof, raise: r.raise || undefined,
       color: r.color ?? undefined, highlight: r.highlight ?? undefined, formula: formula || undefined,
       sub: (!formula && r.pos === 'sub') || undefined, sup: (!formula && r.pos === 'sup') || undefined,
@@ -1501,8 +1513,11 @@ class DocxReader {
       const text = paras.map((p) => [...p.getElementsByTagNameNS(this.W, '*')]
         .map((e) => (e.localName === 't' ? e.textContent ?? '' : e.localName === 'tab' ? '\t' : e.localName === 'br' ? '\n' : '')).join('')).join('\n');
       const last = paras[paras.length - 1];
-      const kept = this.commentParas(c);
-      notes.set(id, { author: this.a(c, 'author') ?? '', date: fromWordDate(this.a(c, 'date') ?? ''), text, para: last?.getAttributeNS(W14_NS, 'paraId') ?? '', ...(kept ? { word: { paras: kept, text } } : {}) });
+      const kept = this.commentParas(c, path!);
+      // (the initials Word shows on it, as written: Word makes them only when the comment is made)
+      const ini = this.a(c, 'initials');
+      const word = { ...(kept ? { paras: kept.paras, text, ...(kept.links.length ? { links: kept.links } : {}) } : {}), ...(ini ? { initials: ini } : {}) };
+      notes.set(id, { author: this.a(c, 'author') ?? '', date: fromWordDate(this.a(c, 'date') ?? ''), text, para: last?.getAttributeNS(W14_NS, 'paraId') ?? '', ...(Object.keys(word).length ? { word } : {}) });
     }
     // Word 365 keeps each comment's time in UTC too, by a lasting id found from its paragraph id
     const part = (rel: string) => { const at = this.pkg.relOfType(this.main, rel); return at ? this.pkg.xml(at)?.documentElement ?? null : null; };
@@ -1547,26 +1562,42 @@ class DocxReader {
   }
 
   /**
-   * A comment's paragraphs as Word wrote them (bold, italics, subscripts in it), less their
-   * paragraph ids (given afresh on saving); null when its text has no formatting, or it holds more
-   * than paragraphs, or anything that goes through the comments part's relationships (a link, a picture).
+   * A comment's paragraphs as Word wrote them (bold, italics, subscripts, links in it), less their
+   * paragraph ids (given afresh on saving), with the address of each link to a web page or file
+   * (its r:id written "link:0", "link:1"... for the comments part's relationship made on saving).
+   * Null when its text has no formatting or links, or it holds more than paragraphs, or anything
+   * else that goes through the comments part's relationships (a picture).
    */
-  private commentParas(c: Element): string[] | null {
+  private commentParas(c: Element, part: string): { paras: string[]; links: string[] } | null {
     const blocks = kids(c);
     if (!blocks.length || blocks.some((b) => b.localName !== 'p' || b.namespaceURI !== W_NS || b.prefix !== 'w')) return null;
-    // (only when its text has formatting: plain text is written as it is)
+    // (only when its text has formatting or links: plain text is written as it is)
     const looks = Array.from(c.getElementsByTagNameNS(W_NS, 'r')).some((r) => kid(r, 't') && kids(kid(r, 'rPr')).some((k) => k.localName !== 'rStyle'));
-    if (!looks) return null;
-    const out: string[] = [];
+    if (!looks && !c.getElementsByTagNameNS(W_NS, 'hyperlink').length) return null;
+    const out: string[] = [], links: string[] = [];
+    const rels = this.pkg.rels(part);
     for (const b of blocks) {
       const q = b.cloneNode(true) as Element;
       q.removeAttributeNS(W14_NS, 'paraId');
       q.removeAttributeNS(W14_NS, 'textId');
-      const x = elementXml(q).replaceAll(` xmlns:w="${W_NS}"`, '');
-      if (x.includes('officeDocument/2006/relationships') || !x.startsWith('<w:p')) return null;
+      // (a run style put straight in the paragraph's properties, as some programs write it against the standard, left out)
+      for (const st of kids(kid(q, 'pPr'), 'rStyle')) st.parentNode?.removeChild(st);
+      // (the relationships' prefix declared here, so links are written with it: the part declares it again)
+      q.setAttributeNS('http://www.w3.org/2000/xmlns/', 'xmlns:r', NS.r);
+      for (const el of [q, ...Array.from(q.getElementsByTagName('*'))]) {
+        for (const at of Array.from(el.attributes)) {
+          if (at.namespaceURI !== NS.r) continue;
+          const rel = el.localName === 'hyperlink' && el.namespaceURI === W_NS && at.localName === 'id' ? rels.get(at.value) : undefined;
+          if (!rel?.external || rel.type !== REL.hyperlink) return null;
+          el.setAttributeNS(NS.r, at.name, `link:${links.length}`);
+          links.push(rel.target);
+        }
+      }
+      const x = elementXml(q).replaceAll(` xmlns:w="${W_NS}"`, '').replaceAll(` xmlns:r="${NS.r}"`, '');
+      if (x.includes(NS.r) || !x.startsWith('<w:p')) return null;
       out.push(x);
     }
-    return out;
+    return { paras: out, links };
   }
 
   private emitObject(ctx: Ctx, o: DocObject, r: RProps, keepPos = false): number | null {
@@ -2516,8 +2547,10 @@ class DocxReader {
 
   /**
    * A Word table style the text's tables can be drawn in: one of ours by its id (unless the
-   * file's differs), the file's own kept with the document, or null for a style that only
-   * draws lines round cells (the table's lines then stand for it, as before).
+   * file's differs), the file's own kept with the document, or null for a style that draws
+   * nothing (the table's lines then stand for it, as before). A style that only draws lines
+   * round cells (Word's Table Grid) is kept too, so the table still names it when saved, with
+   * its lines the style's rather than its own.
    */
   private tableStyleOf(id: string): string | null {
     const chain: Element[] = [];
@@ -2531,7 +2564,7 @@ class DocxReader {
     const ours = builtInStyle(id);
     if (!chain.length) return ours && styleIsRich(ours) ? id : null;
     const def = readTableStyle(id, name, chain, this.a.bind(this), this.on.bind(this));
-    if (!styleIsRich(def)) return null;
+    if (!styleIsRich(def) && !Object.values(def.parts.whole?.borders ?? {}).some((b) => b && b.style !== 'none')) return null;
     if (!(ours && sameStyle(ours, def))) this.tableStyles[id] = def;
     return id;
   }
@@ -2572,6 +2605,8 @@ class DocxReader {
     // a Word table style that shades or picks out parts: drawn in it here too
     const style = this.a(kid(tblPr, 'tblStyle'));
     const styleId = style ? this.tableStyleOf(style) : null;
+    // (a style that only draws lines, such as Table Grid, picks out no parts)
+    const linesOnly = !!styleId && !styleIsRich(this.tableStyles[styleId] ?? builtInStyle(styleId)!);
     // what the table's style (or Word's default one) gives its cells' paragraphs
     const paraLook = this.cellLookOf(style, !!styleId);
     // each row's height, as Word sets it
@@ -2664,7 +2699,7 @@ class DocxReader {
       table.style = styleId;
       const look = readTableLook(kid(tblPr, 'tblLook'), this.a.bind(this));
       if (look) table.look = look;
-      if ((look?.header ?? true) && !table.head) table.head = 1;
+      if ((look?.header ?? true) && !table.head && !linesOnly) table.head = 1;
     }
     // heading rows that only look like headings (no Repeat Header Rows in Word): not repeated when saved either
     if (!head && table.head) table.noRepeat = true;
@@ -2695,7 +2730,8 @@ class DocxReader {
       }
     }
     // lines Word draws that the style (or the lines chosen) here doesn't: kept as the cells' own
-    const direct = styleId ? {} : readBorders(kid(tblPr, 'tblBorders'), this.a.bind(this));
+    // (the table's own lines too, over a style that only draws lines)
+    const direct = styleId && !linesOnly ? {} : readBorders(kid(tblPr, 'tblBorders'), this.a.bind(this));
     Object.assign(table, keepDirectBorders(table, direct, own, this.tableStyles));
     const jc = JUSTIFY[this.a(kid(tblPr, 'jc')) ?? 'left'] ?? 'left';
     const normal = merge<RProps>(this.docDefaults.r, this.chain('paragraph', this.defaultPara).r);
@@ -2947,7 +2983,11 @@ class DocxReader {
             case 'fldSimple': {
               const instr = this.a(c, 'instr') ?? '';
               if (/^\s*PAGE\b/i.test(instr)) pageHere();
-              else visit(c);
+              else {
+                // (written the short way, as other programs do: the same as below)
+                if (hfField(instr)) rich = true;
+                visit(c);
+              }
               break;
             }
             case 'fldChar': {
@@ -2957,12 +2997,12 @@ class DocxReader {
                 const f = fields[fields.length - 1];
                 f.result = true;
                 if (/^PAGE\b/i.test(f.instr.trim())) pageHere();
-                // (a field kept as Word had it, such as a heading's text, needs the header as it is)
-                if (otherField(f.instr)) rich = true;
+                // (any other field, such as a heading's text or the date, needs the header as it is, to stay a field)
+                if (hfField(f.instr)) rich = true;
               } else if (t === 'end') {
                 const f = fields.pop();
                 if (f && !f.result && /^PAGE\b/i.test(f.instr.trim())) pageHere();
-                if (f && !f.result && otherField(f.instr)) rich = true;
+                if (f && !f.result && hfField(f.instr)) rich = true;
               }
               break;
             }
@@ -3198,12 +3238,13 @@ function keepUsedMarks(t: DocText): void {
 }
 
 /**
- * A field none of ours stands for (a note's number, a heading's text, a calculation), which is
- * kept as Word had it; not a reference manager's (ADDIN), whose citations are read as such.
+ * A field in a header or footer other than its page number (a heading's text, the date, the
+ * number of pages, a field none of ours stands for): the header is then read as Word's
+ * paragraphs, so the field stays a field (with its last result) rather than becoming text.
  */
-function otherField(instr: string): boolean {
+function hfField(instr: string): boolean {
   const s = instr.trim();
-  return !!s && !/^(SEQ|XE|TA|INDEX|TOA|TOC|FORMTEXT|FORMCHECKBOX|FORMDROPDOWN|HYPERLINK|ADDIN|REF|PAGEREF|PAGE)\b/i.test(s) && !s.startsWith(CITE_FIELD) && !parseFieldInstr(s);
+  return !!s && !/^PAGE\b/i.test(s);
 }
 
 /** A Word colour ("FF0000", "auto") as ours (null for automatic or none). */

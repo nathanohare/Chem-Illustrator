@@ -61,7 +61,7 @@ export function hslHex(hue: number, sat: number, lum: number): string {
 }
 
 /** A colour ("RRGGBB") with the changes in `mods` (the colour element's children) applied, as "#rrggbb". */
-export function applyColorMods(hex: string, mods: Iterable<Element>): string {
+export function applyColorMods(hex: string, mods: Iterable<Pick<Element, 'localName' | 'getAttribute'>>): string {
   const n = parseInt(hex.padStart(6, '0').slice(-6), 16);
   let c: Rgb = [((n >> 16) & 255) / 255, ((n >> 8) & 255) / 255, (n & 255) / 255];
   const inHsl = (fn: (h: number, s: number, l: number) => Rgb) => { const [h, s, l] = hsl(c); c = fn(h, s, l); };

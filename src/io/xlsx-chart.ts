@@ -145,16 +145,18 @@ type SerKind = 'scatter' | 'line' | 'column' | 'bar' | 'area' | 'pie' | 'bubble'
 function serXml(c: Chart, s: Series, i: number, d: SeriesData | undefined, kind: SerKind): string {
   const scatter = kind === 'scatter', pie = kind === 'pie', bubble = kind === 'bubble', radar = kind === 'radar';
   const color = d?.color ?? '#4472c4';
+  // (a colour of the workbook's theme, as the file had it, while the series has none of its own)
+  const paint = (c: string) => (!s.color && s.scheme ? `<a:solidFill>${s.scheme}</a:solidFill>` : fill(c));
   const name = s.name?.startsWith('=') ? `<c:tx>${strRef(s.name, [d?.name ?? ''])}</c:tx>` : s.name ? `<c:tx><c:v>${xml(s.name)}</c:v></c:tx>` : '';
   const lineOn = kind === 'line' || (radar && !c.filled) ? s.line !== false : !!s.line;
   const lineLike = scatter || kind === 'line' || (radar && !c.filled);
   const sp = pie ? '' : lineLike
-    ? `<c:spPr>${lineOn ? `<a:ln w="${Math.round((s.lineWidth ?? 2) * 9525)}" cap="rnd">${fill(color)}${s.dash && s.dash !== 'solid' ? `<a:prstDash val="${DASH[s.dash]}"/>` : ''}<a:round/></a:ln>` : '<a:ln w="19050"><a:noFill/></a:ln>'}</c:spPr>`
+    ? `<c:spPr>${lineOn ? `<a:ln w="${Math.round((s.lineWidth ?? 2) * 9525)}" cap="rnd">${paint(color)}${s.dash && s.dash !== 'solid' ? `<a:prstDash val="${DASH[s.dash]}"/>` : ''}<a:round/></a:ln>` : '<a:ln w="19050"><a:noFill/></a:ln>'}</c:spPr>`
     : bubble ? `<c:spPr><a:solidFill><a:srgbClr val="${hex6(color)}"><a:alpha val="75000"/></a:srgbClr></a:solidFill><a:ln w="9525">${fill(color)}</a:ln></c:spPr>`
-      : `<c:spPr>${fill(color)}</c:spPr>`;
+      : `<c:spPr>${paint(color)}</c:spPr>`;
   const sticks = scatter && !!s.sticks;
   const markerShape = s.marker ?? (scatter && !sticks ? 'circle' : 'none');
-  const marker = lineLike ? `<c:marker>${v('symbol', MARKER_NAME[markerShape])}${markerShape !== 'none' ? `${v('size', Math.max(2, Math.min(72, Math.round((s.markerSize ?? 7) * 0.75))))}<c:spPr>${fill(color)}<a:ln w="9525">${fill(color)}</a:ln></c:spPr>` : ''}</c:marker>` : '';
+  const marker = lineLike ? `<c:marker>${v('symbol', MARKER_NAME[markerShape])}${markerShape !== 'none' ? `${v('size', Math.max(2, Math.min(72, Math.round((s.markerSize ?? 7) * 0.75))))}<c:spPr>${paint(color)}<a:ln w="9525">${paint(color)}</a:ln></c:spPr>` : ''}</c:marker>` : '';
   const showX = scatter && !!s.labelX;
   const lblFmt = s.labelFmt ? `<c:numFmt formatCode="${xml(s.labelFmt)}" sourceLinked="0"/>` : '';
   // labels of peaks drawn downwards go under them
@@ -238,11 +240,13 @@ export function chartXml(c: Chart, data: SeriesData[]): string {
       plot = `<c:pieChart>${v('varyColors', true)}${all('pie')}${v('firstSliceAng', 0)}</c:pieChart>`;
       break;
   }
+  // Excel's automatic title, as the file had it
+  const autoTitle = c.title ? undefined : c.autoTitle;
   const legend = c.legend === 'none' ? '' : `<c:legend>${v('legendPos', c.legend === 'right' ? 'r' : c.legend === 'top' ? 't' : 'b')}${v('overlay', false)}</c:legend>`;
   const bg = c.background === 'none' ? '<a:noFill/>' : fill(c.background ?? '#ffffff');
   const border = c.border === false ? '<a:ln><a:noFill/></a:ln>' : `<a:ln w="9525">${fill('#d9d9d9')}</a:ln>`;
   return `<c:chartSpace xmlns:c="${C_NS}" xmlns:a="${A_NS}" xmlns:r="${R_NS}">${v('roundedCorners', false)}` +
-    `<c:chart>${titleXml(c.title, sizePt * 1.4)}${v('autoTitleDeleted', !c.title)}<c:plotArea><c:layout/>${plot}</c:plotArea>${legend}` +
+    `<c:chart>${titleXml(c.title, sizePt * 1.4)}${autoTitle === 'title' ? '<c:title><c:overlay val="0"/></c:title>' : ''}${v('autoTitleDeleted', !c.title && !autoTitle)}<c:plotArea><c:layout/>${plot}</c:plotArea>${legend}` +
     `${v('plotVisOnly', !c.showHidden)}${v('dispBlanksAs', 'gap')}</c:chart>` +
     `<c:spPr>${bg}${border}</c:spPr>` +
     `<c:txPr><a:bodyPr/><a:lstStyle/><a:p><a:pPr><a:defRPr sz="${Math.round(sizePt * 100)}"><a:solidFill><a:srgbClr val="404040"/></a:solidFill>${c.font ? `<a:latin typeface="${xml(c.font)}"/>` : ''}</a:defRPr></a:pPr><a:endParaRPr lang="en-US"/></a:p></c:txPr>` +
@@ -451,6 +455,15 @@ const colourIn = (sp: Element | null): string | undefined => {
   return c ? `#${c.toLowerCase()}` : undefined;
 };
 
+/** A fill's colour of the theme (its schemeClr, with what is done to it: lumMod and the like), as DrawingML text. */
+const schemeIn = (el: Element | null): string | undefined => {
+  const sc = kid(el, 'solidFill', 'schemeClr');
+  const name = sc?.getAttribute('val');
+  if (!sc || !name) return undefined;
+  const mods = kids(sc).map((m) => `<a:${m.localName}${m.hasAttribute('val') ? ` val="${xmlAttr(m.getAttribute('val')!)}"` : ''}/>`).join('');
+  return `<a:schemeClr val="${xmlAttr(name)}"${mods ? `>${mods}</a:schemeClr>` : '/>'}`;
+};
+
 function readAxis(ax: Element | null): ChartAxis {
   if (!ax) return {};
   const sc = kid(ax, 'scaling');
@@ -502,8 +515,10 @@ function readSeries(ser: Element, kind: ChartKind): Series {
     const size = numVal(m, 'size');
     if (size && size !== 5) s.markerSize = Math.round(size / 0.75);
     if (!s.color) s.color = colourIn(kid(m, 'spPr'));
+    if (!s.color) s.scheme = schemeIn(ln) ?? schemeIn(kid(m, 'spPr'));
     if (bool(ser, 'smooth')) s.smooth = true;
   } else if (fillColour && kind !== 'pie') s.color = fillColour;
+  else if (kind !== 'pie') s.scheme = schemeIn(sp);
   const dl = kid(ser, 'dLbls');
   if (dl && (bool(dl, 'showVal') || bool(dl, 'showPercent'))) s.labels = true;
   else if (dl && kind === 'scatter' && bool(dl, 'showCatName')) { s.labels = true; s.labelX = true; }
@@ -611,6 +626,10 @@ export function readChartXml(doc: Document, at: Chart['at'], w: number, h: numbe
   if (kind === 'radar' && val(main, 'radarStyle') === 'filled') chart.filled = true;
   const title = readTitle(kid(ch, 'title'));
   if (title) chart.title = title;
+  // Excel's automatic title: a title element with no text of its own, or none but not deleted (autoTitleDeleted 0)
+  const deleted = kid(ch, 'autoTitleDeleted') ? bool(ch, 'autoTitleDeleted') : null;
+  if (!title && deleted !== true && kid(ch, 'title')) chart.autoTitle = 'title';
+  else if (!title && deleted === false) chart.autoTitle = 'on';
   if (grouping === 'stacked' || grouping === 'percentStacked') chart.stacked = true;
   if (bgNone) chart.background = 'none';
   else if (bg && bg !== '#ffffff') chart.background = bg;
@@ -619,4 +638,57 @@ export function readChartXml(doc: Document, at: Chart['at'], w: number, h: numbe
   if (!bool(ch, 'plotVisOnly', true)) chart.showHidden = true;
   seenChartId(id);
   return { chart, partial: (found.length > 1 && kind !== 'combo') || known.length > found.length };
+}
+
+// ---------------------------------------------------------------- Excel's own chart parts, kept
+
+/**
+ * A chart part kept from an Excel file, with the numbers and labels it caches beside each of its
+ * references brought up to date (`valuesOf` gives what a reference holds now, as numbers or as
+ * `text`, with null for an empty cell, or null when it can't be read). The part is returned as it
+ * was when its caches already hold those.
+ */
+export function refreshChartCaches(text: string, valuesOf: (ref: string, text: boolean) => (number | string | null)[] | null): string {
+  let doc: Document;
+  try { doc = new DOMParser().parseFromString(text, 'application/xml'); } catch { return text; }
+  if (doc.getElementsByTagName('parsererror').length) return text;
+  let changed = false;
+  for (const tag of ['numRef', 'strRef']) {
+    for (const el of Array.from(doc.getElementsByTagNameNS(C_NS, tag))) {
+      const f = kid(el, 'f')?.textContent?.trim();
+      const cache = kid(el, tag === 'numRef' ? 'numCache' : 'strCache');
+      const values = f && cache ? valuesOf(f, tag === 'strRef') : null;
+      if (!cache || !values) continue;
+      const pts = values.map((x) => (tag === 'numRef' ? (typeof x === 'number' && Number.isFinite(x) ? String(x) : null) : x === null || x === '' ? null : String(x)));
+      // (Excel writes numbers to 15 figures, and may give an empty label a point of its own)
+      const had = new Map(kids(cache, 'pt').map((pt): [number, string] => [Number(pt.getAttribute('idx')), kid(pt, 'v')?.textContent ?? '']).filter(([, t]) => t !== ''));
+      const near = (a: number, b: number) => a === b || Math.abs(a - b) <= 1e-12 * Math.max(Math.abs(a), Math.abs(b));
+      const same = Number(kid(cache, 'ptCount')?.getAttribute('val') ?? -1) === pts.length && had.size === pts.filter((x) => x !== null).length &&
+        pts.every((x, i) => x === null || (had.has(i) && (tag === 'numRef' ? near(Number(had.get(i)), Number(x)) : had.get(i) === x)));
+      if (same) continue;
+      changed = true;
+      const make = (name: string) => doc.createElementNS(C_NS, cache.prefix ? `${cache.prefix}:${name}` : name);
+      for (const pt of kids(cache, 'pt')) cache.removeChild(pt);
+      let count = kid(cache, 'ptCount');
+      if (!count) {
+        count = make('ptCount');
+        const code = kid(cache, 'formatCode');
+        cache.insertBefore(count, code ? code.nextSibling : cache.firstChild);
+      }
+      count.setAttribute('val', String(pts.length));
+      let after: Node = count;
+      pts.forEach((x, i) => {
+        if (x === null) return;
+        const pt = make('pt'), v = make('v');
+        pt.setAttribute('idx', String(i));
+        v.textContent = x;
+        pt.appendChild(v);
+        cache.insertBefore(pt, after.nextSibling);
+        after = pt;
+      });
+    }
+  }
+  if (!changed) return text;
+  const decl = /^\s*<\?xml[^>]*\?>\s*/.exec(text)?.[0] ?? '';
+  return decl + new XMLSerializer().serializeToString(doc.documentElement);
 }

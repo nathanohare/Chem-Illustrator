@@ -4,7 +4,7 @@
 
 import type { Doc, Caption, Shape, Arrow, OleMark } from '../model';
 import type { Rect } from '../geom';
-import { layoutText, type Measure } from '../text/layout';
+import { layoutText, PPT_SINGLE, type Measure } from '../text/layout';
 import { arialWidth } from '../text-metrics';
 import { arrowPoints, shapeBox, boxOf, shapeOrder } from '../objects';
 import type { Selection } from '../editor/editor';
@@ -112,7 +112,7 @@ export function splitSlide(doc: Doc, measure: Measure = arialMeasure): SlidePart
     // and linked text, such as a compound number linking back to where it was first shown, whose
     // link would be lost in a picture even when it sits under its structure)
     if (!c.ole && (c.ph || c.wrap !== undefined || c.hidden || c.runs.some((r) => r.link))) { texts.push(c); continue; }
-    const lay = layoutText(c, doc.style.captionSize, measure);
+    const lay = layoutText({ ...c, single: PPT_SINGLE }, doc.style.captionSize, measure);
     items.push({ box: { x1: c.x + lay.box.x1, y1: c.y + lay.box.y1, x2: c.x + lay.box.x2, y2: c.y + lay.box.y2 }, chem: !!c.ole, add: (s) => s.captions.add(c.id), text: c, ...(c.piece !== undefined ? { piece: c.piece } : {}), ...(c.ole ? { ole: c.ole } : {}) });
   }
   // group things that touch (within the gap), by joining groups
@@ -166,7 +166,7 @@ export function roughBox(doc: Doc, it: StackItem): Rect | null {
     case 'caption': {
       const c = doc.captions.get(it.ids[0]);
       if (!c) return null;
-      const lay = layoutText(c, doc.style.captionSize, arialMeasure);
+      const lay = layoutText({ ...c, single: PPT_SINGLE }, doc.style.captionSize, arialMeasure);
       return { x1: c.x + lay.box.x1, y1: c.y + lay.box.y1, x2: c.x + lay.box.x2, y2: c.y + lay.box.y2 };
     }
     case 'structure': {

@@ -235,7 +235,7 @@ describe('pictures placed in cells (X13)', () => {
 
   it('says so on opening, and keeps the picture and its cell for Excel', async () => {
     const { book, warnings } = await readXlsx(file());
-    expect(warnings).toContain('1 cell holds a picture or other value placed in it in Excel: shown as #VALUE! here, and kept for Excel unless the cell is changed.');
+    expect(warnings).toContain('1 cell holds a picture placed in it in Excel: shown as #VALUE! here, and kept for Excel unless the cell is changed.');
     // a dynamic array formula and a floating picture of this program's own, beside it
     book.edit('type', () => book.sheet.setInput(0, 1, '=SEQUENCE(2)'));
     book.build(() => book.sheet.setObjects([{ id: 1, kind: 'picture', at: { row: 4, col: 4, dx: 0, dy: 0 }, w: 10, h: 10, src: `data:image/png;base64,${btoa(String.fromCharCode(...PNG))}` }]));
@@ -294,11 +294,13 @@ describe('features left out (X16)', () => {
     ],
   });
 
-  it('names controls, connections, query tables, background pictures, macro sheets and XML maps on opening', async () => {
+  it('names controls, query tables, background pictures, macro sheets and XML maps on opening', async () => {
     const { warnings } = await readXlsx(file());
     const list = warnings.find((w) => w.startsWith('Not shown here'));
     expect(list).toBeDefined();
-    for (const item of ['2 form controls (buttons, check boxes, lists)', '1 ActiveX control', '2 data connections', '1 query table\'s link to the data it was imported from',
+    // (the data connections are kept: tests/xlsx-excel-kept.test.ts; the query table's link isn't, as its header cell doesn't name its column)
+    expect(list).not.toContain('data connection');
+    for (const item of ['2 form controls (buttons, check boxes, lists)', '1 ActiveX control', '1 query table\'s link to the data it was imported from',
       '1 sheet background picture', '1 Excel 4 macro sheet (opened as an ordinary sheet)', 'XML maps']) expect(list).toContain(item);
   });
 });
@@ -335,7 +337,7 @@ describe('sheet views and settings (X20)', () => {
     expect(plan).toMatch(/<autoFilter ref="A1:B2"><\/autoFilter><sortState ref="A2:B2"><sortCondition descending="1" ref="B2"\/><\/sortState>/);
     expect(plan).toMatch(/<pageSetup [^>]*firstPageNumber="5"[^>]* useFirstPageNumber="1"\/>.*<ignoredErrors><ignoredError sqref="A1:B2" numberStoredAsText="1"\/><\/ignoredErrors><\/worksheet>/);
     expect(part(saved, 'xl/worksheets/sheet2.xml')).toContain('<pageSetup firstPageNumber="1" useFirstPageNumber="1"/>');
-    expect(part(saved, 'xl/workbook.xml')).toContain('<calcPr calcId="191029" calcMode="manual" iterate="1" iterateCount="50" fullPrecision="0" fullCalcOnLoad="1"/>');
+    expect(part(saved, 'xl/workbook.xml')).toContain('<calcPr calcId="191029" calcMode="manual" iterate="1" iterateCount="50" fullPrecision="0"/>');
     // panes changed here: this program's own selection
     book.edit('freeze', () => book.sheets[1].setFrozen(2, 0));
     const again = part(await writeXlsx(book, pictures), 'xl/worksheets/sheet2.xml');
