@@ -95,6 +95,33 @@ describe('Word fields kept as Word had them', () => {
   });
 });
 
+describe('Word fields in headers and footers', () => {
+  const hfFile = (header: string, footer: string) => zipSync({
+    '[Content_Types].xml': new Uint8Array(strToU8('<?xml version="1.0"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="xml" ContentType="application/xml"/><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/></Types>')),
+    '_rels/.rels': new Uint8Array(strToU8(`<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="${R}officeDocument" Target="word/document.xml"/></Relationships>`)),
+    'word/_rels/document.xml.rels': new Uint8Array(strToU8(`<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId7" Type="${R}header" Target="header1.xml"/><Relationship Id="rId8" Type="${R}footer" Target="footer1.xml"/></Relationships>`)),
+    'word/document.xml': new Uint8Array(strToU8(`<?xml version="1.0"?><w:document ${W}><w:body><w:p>${text('Results')}</w:p><w:sectPr><w:headerReference w:type="default" r:id="rId7"/><w:footerReference w:type="default" r:id="rId8"/></w:sectPr></w:body></w:document>`)),
+    'word/header1.xml': new Uint8Array(strToU8(`<?xml version="1.0"?><w:hdr ${W}>${header}</w:hdr>`)),
+    'word/footer1.xml': new Uint8Array(strToU8(`<?xml version="1.0"?><w:ftr ${W}>${footer}</w:ftr>`)),
+  });
+
+  it('keeps a style reference written the short way (w:fldSimple) as a field, with its last result', async () => {
+    const header = '<w:p><w:pPr><w:jc w:val="right"/></w:pPr><w:fldSimple w:instr=" STYLEREF  &quot;Heading 1&quot; \\* MERGEFORMAT "><w:r><w:t>Results</w:t></w:r></w:fldSimple></w:p>';
+    const footer = `<w:p>${text('Printed ')}<w:fldSimple w:instr=" PRINTDATE \\@ &quot;d MMM yyyy&quot; "><w:r><w:t>8 Nov 2026</w:t></w:r></w:fldSimple></w:p>`;
+    const { doc } = await readDocx(hfFile(header, footer));
+    // (the print date is one of ours)
+    expect(fields(doc)).toEqual([{ kind: 'field', code: 'word', instr: ' STYLEREF  "Heading 1" \\* MERGEFORMAT ', text: 'Results' }, { kind: 'field', code: 'printdate', format: 'd MMM yyyy' }]);
+    const out = await writeDocx(doc, deps);
+    const hdr = partOf(out, 'word/header1.xml');
+    expect(hdr).toContain('<w:instrText xml:space="preserve"> STYLEREF  &quot;Heading 1&quot; \\* MERGEFORMAT </w:instrText>');
+    expect(hdr).toMatch(/<w:fldChar w:fldCharType="separate"\/><\/w:r><w:r>(?:<w:rPr>(?:(?!<\/w:rPr>).)*<\/w:rPr>)?<w:t xml:space="preserve">Results<\/w:t>/);
+    expect(hdr).toContain('<w:jc w:val="right"/>');
+    expect(partOf(out, 'word/footer1.xml')).toContain('PRINTDATE');
+    const again = await readDocx(out);
+    expect(fields(again.doc).map((o) => o.kind === 'field' && o.code)).toEqual(['word', 'printdate']);
+  });
+});
+
 describe('Hidden text', () => {
   const hidden = (s: string, more = '') => `<w:r><w:rPr>${more}<w:vanish/></w:rPr><w:t xml:space="preserve">${s}</w:t></w:r>`;
   const body = `<w:p>${text('Visible ')}${hidden('note to self, ')}${hidden('really', '<w:b/>')}${text(' text.')}</w:p>`;

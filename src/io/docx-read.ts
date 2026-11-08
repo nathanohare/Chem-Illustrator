@@ -2943,7 +2943,11 @@ class DocxReader {
             case 'fldSimple': {
               const instr = this.a(c, 'instr') ?? '';
               if (/^\s*PAGE\b/i.test(instr)) pageHere();
-              else visit(c);
+              else {
+                // (written the short way, as other programs do: the same as below)
+                if (hfField(instr)) rich = true;
+                visit(c);
+              }
               break;
             }
             case 'fldChar': {
@@ -2953,12 +2957,12 @@ class DocxReader {
                 const f = fields[fields.length - 1];
                 f.result = true;
                 if (/^PAGE\b/i.test(f.instr.trim())) pageHere();
-                // (a field kept as Word had it, such as a heading's text, needs the header as it is)
-                if (otherField(f.instr)) rich = true;
+                // (any other field, such as a heading's text or the date, needs the header as it is, to stay a field)
+                if (hfField(f.instr)) rich = true;
               } else if (t === 'end') {
                 const f = fields.pop();
                 if (f && !f.result && /^PAGE\b/i.test(f.instr.trim())) pageHere();
-                if (f && !f.result && otherField(f.instr)) rich = true;
+                if (f && !f.result && hfField(f.instr)) rich = true;
               }
               break;
             }
@@ -3194,12 +3198,13 @@ function keepUsedMarks(t: DocText): void {
 }
 
 /**
- * A field none of ours stands for (a note's number, a heading's text, a calculation), which is
- * kept as Word had it; not a reference manager's (ADDIN), whose citations are read as such.
+ * A field in a header or footer other than its page number (a heading's text, the date, the
+ * number of pages, a field none of ours stands for): the header is then read as Word's
+ * paragraphs, so the field stays a field (with its last result) rather than becoming text.
  */
-function otherField(instr: string): boolean {
+function hfField(instr: string): boolean {
   const s = instr.trim();
-  return !!s && !/^(SEQ|XE|TA|INDEX|TOA|TOC|FORMTEXT|FORMCHECKBOX|FORMDROPDOWN|HYPERLINK|ADDIN|REF|PAGEREF|PAGE)\b/i.test(s) && !s.startsWith(CITE_FIELD) && !parseFieldInstr(s);
+  return !!s && !/^PAGE\b/i.test(s);
 }
 
 /** A Word colour ("FF0000", "auto") as ours (null for automatic or none). */
