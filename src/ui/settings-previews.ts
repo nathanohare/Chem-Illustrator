@@ -11,7 +11,8 @@ import { freeRing, placeRing, sprout } from '../chem/chemgeom';
 import { recordPicture, pictureCanvas } from '../render/picture';
 import { Renderer, type WarnLook } from '../render/renderer';
 import { StructureChecks } from '../chem/warnings';
-import { applySchemePlan, planCleanUp, withSchemePrefs, type SchemePrefs } from '../chem/scheme-layout';
+import { applySchemePlan, planCleanUp, schemePrefs, spacing, withSchemePrefs, type SchemePrefs } from '../chem/scheme-layout';
+import { canvasWithLoupe, type Span } from './gap-loupe';
 import type { Measure } from '../editor/arrange';
 import { applyCharge } from '../editor/editor';
 import { drawCursorAids, hintLines, type CursorAidPrefs } from '../editor/cursor-aids';
@@ -115,7 +116,7 @@ function laidOut(doc: Doc, scheme: Partial<SchemePrefs>): void {
  * a catalyst above and conditions below, and the product, laid out by Clean Up Reaction in the
  * scheme settings `scheme`, `w` CSS pixels wide.
  */
-export function schemePreview(style: DocStyle, scheme: Partial<SchemePrefs>, w = 460): HTMLElement {
+export function schemePreview(style: DocStyle, scheme: Partial<SchemePrefs>, w = 460, /** The setting being hovered or typed in: its distance shown in a magnifier. */ focus?: string): HTMLElement {
   const doc = new Doc();
   // (the settings being edited, not a drawing style's own scheme spacing)
   doc.style = { ...style, scheme: undefined };
@@ -140,7 +141,9 @@ export function schemePreview(style: DocStyle, scheme: Partial<SchemePrefs>, w =
     aryl(x0 + L * 6, 'Ph');
   });
   laidOut(doc, scheme);
-  return drawingCanvas(doc, w, Math.round(w * 0.22), 6);
+  const span = focus ? schemeSpan(doc, focus, scheme) : null;
+  // (the magnifier beside the drawing, so the page below doesn't move)
+  return canvasWithLoupe(doc, w, Math.round(w * 0.22), 6, 3, span, { band: 'right' });
 }
 
 /** A drawing on a canvas, fitted into `w` × `h` CSS pixels on white (or not at all where the browser can't draw). */
@@ -159,34 +162,21 @@ export function drawingCanvas(doc: Doc, w: number, h: number, pad = 10, maxScale
   return out.canvas;
 }
 
-/** Part of a drawing (`view`, in its points) on a canvas `w` × `h` CSS pixels, on white. */
-export function drawingCrop(doc: Doc, view: { x1: number; y1: number; x2: number; y2: number }, w: number, h: number): HTMLCanvasElement {
-  const pic = recordPicture(doc, 2);
-  const out = sized(w, h);
-  if (!pic || !out.ctx) return out.canvas;
-  const vw = view.x2 - view.x1, vh = view.y2 - view.y1;
-  const fit = Math.min(w / vw, h / vh, 4);
-  const { canvas: src, dpi } = pictureCanvas(doc, pic, fit * dpr() * 72);
-  const k = dpi / 72;
-  const ctx = out.ctx;
-  ctx.fillStyle = '#fff';
-  ctx.fillRect(0, 0, w, h);
-  const dw = vw * fit, dh = vh * fit;
-  ctx.drawImage(src, (view.x1 - pic.box.x1) * k, (view.y1 - pic.box.y1) * k, vw * k, vh * k, (w - dw) / 2, (h - dh) / 2, dw, dh);
-  return out.canvas;
-}
-
 /** Drawing Style: a sample drawn in it, `w` CSS pixels wide (the wide preview column). */
-export function stylePreview(style: DocStyle, scheme: Partial<SchemePrefs> = {}, w = 352): HTMLElement {
+export function stylePreview(style: DocStyle, scheme: Partial<SchemePrefs> = {}, w = 352, /** The box being hovered or typed in: its distance shown in a magnifier. */ focus?: string): HTMLElement {
   const box = document.createElement('div');
-  const doc = sampleDrawing(style, { ...style.scheme, ...scheme });
-  box.append(drawingCanvas(doc, w, Math.round(w * 0.42), 6));
-  // the arrow close up, where its gaps and the text's place show
+  const sch = { ...style.scheme, ...scheme };
+  const doc = sampleDrawing(style, sch);
+  const span = focus ? schemeSpan(doc, focus, sch) : null;
+  // the arrow close up, where its gaps and the text's place show (and the magnifier, when what it
+  // measures is in it, so the drawing above stays put)
   const r = [...doc.arrows.values()][0];
-  if (r) {
-    const L = style.bondLength;
-    const x1 = Math.min(r.tail.x, r.head.x), x2 = Math.max(r.tail.x, r.head.x);
-    const crop = drawingCrop(doc, { x1: x1 - 1.6 * L, y1: r.tail.y - 1.3 * L, x2: x2 + 1.6 * L, y2: r.tail.y + 1.3 * L }, w, Math.round(w * 0.36));
+  const L = style.bondLength;
+  const view = r && { x1: Math.min(r.tail.x, r.head.x) - 1.6 * L, y1: r.tail.y - 1.3 * L, x2: Math.max(r.tail.x, r.head.x) + 1.6 * L, y2: r.tail.y + 1.3 * L };
+  const inView = !!(span && view && [span.from, span.to, ...(span.anchors ?? [])].every((q) => q.x >= view.x1 && q.x <= view.x2 && q.y >= view.y1 && q.y <= view.y2));
+  box.append(canvasWithLoupe(doc, w, Math.round(w * 0.42), 6, 3, inView ? null : span));
+  if (view) {
+    const crop = canvasWithLoupe(doc, w, Math.round(w * 0.36), 0, 4, inView ? span : null, { view });
     crop.classList.add('sw-zoom');
     box.append(crop);
   }
@@ -469,10 +459,117 @@ export function cursorAidSwatch(look: CursorAidPrefs['look']): HTMLElement {
  * oxygen) with its curved arrows drawn with the gaps given, in points, or the usual ones for null
  * (Settings ▸ Drawing).
  */
-export function mechanismPreview(gaps: { start: number | null; end: number | null }, style?: DocStyle, w = 232): HTMLElement {
+export function mechanismPreview(gaps: { start: number | null; end: number | null }, style?: DocStyle, w = 232, /** The gap box in use ('startGap' or 'endGap'): shown in a magnifier. */ focus?: string): HTMLElement {
   const box = document.createElement('div');
-  box.append(drawingCanvas(mechanismDoc(gaps, style), w, Math.round(w * 0.5), 6));
+  const doc = mechanismDoc(gaps, style);
+  box.append(canvasWithLoupe(doc, w, Math.round(w * 0.5), 6, 3, focus === 'startGap' || focus === 'endGap' ? mechanismSpan(doc, focus, focus === 'startGap' ? gaps.start : gaps.end) : null));
   return box;
+}
+
+/** The gap a mechanism arrow's tail ('startGap') or head ('endGap') leaves in mechanismDoc's drawing: from the label's edge to the arrow's end. */
+function mechanismSpan(doc: Doc, which: 'startGap' | 'endGap', value: number | null): Span | null {
+  const atoms = [...doc.atoms.values()];
+  const arrows = [...doc.arrows.values()];
+  const a = which === 'startGap' ? atoms.find((x) => x.charge === -1) : atoms.find((x) => x.z === 8 && !x.charge);
+  const r = arrows[which === 'startGap' ? 0 : 1];
+  if (!a || !r) return null;
+  const end = which === 'startGap' ? r.tail : r.head;
+  const edge = nearestOnBoxes(measureOf(doc).atomBoxes(a), end) ?? a;
+  const measured = Math.hypot(end.x - edge.x, end.y - edge.y);
+  return { from: edge, to: end, label: `${(value ?? measured).toFixed(1)} pt` };
+}
+
+/** The point of these boxes nearest p. */
+function nearestOnBoxes(boxes: { x1: number; y1: number; x2: number; y2: number }[], p: { x: number; y: number }): { x: number; y: number } | null {
+  let best: { x: number; y: number } | null = null, bd = Infinity;
+  for (const b of boxes) {
+    const q = { x: Math.max(b.x1, Math.min(p.x, b.x2)), y: Math.max(b.y1, Math.min(p.y, b.y2)) };
+    const d = Math.hypot(q.x - p.x, q.y - p.y);
+    if (d < bd) { bd = d; best = q; }
+  }
+  return best;
+}
+
+/** The scheme distances a settings box sets, as they come out in a laid-out sample scheme. */
+export const SCHEME_SPANS = ['structGap', 'plusGap', 'textGap', 'lead', 'headGap', 'arrowWidth', 'headLength', 'headWidth'] as const;
+export type SchemeSpanKey = (typeof SCHEME_SPANS)[number];
+
+/**
+ * Where `key` shows in a laid-out scheme (its first reaction arrow): the gap from the structures
+ * before the arrow to its tail, from a structure to the + after it, from the text above to the
+ * arrow, from the tail to where the text starts, from where it ends to the arrowhead, and the
+ * arrow's own line width, head length and head width. Labelled with the value in use.
+ */
+function schemeSpan(doc: Doc, key: string, scheme: Partial<SchemePrefs>): Span | null {
+  const r = [...doc.arrows.values()][0];
+  if (!r || !(SCHEME_SPANS as readonly string[]).includes(key)) return null;
+  const m = measureOf(doc);
+  const L = doc.style.bondLength;
+  const sp = spacing(L, { ...schemePrefs, ...scheme });
+  const pt = (v: number) => `${+v.toFixed(1)} pt`;
+  const y = r.tail.y;
+  const x0 = Math.min(r.tail.x, r.head.x), x1 = Math.max(r.tail.x, r.head.x);
+  const lw = r.lineWidth ?? doc.style.arrowWidth ?? doc.style.lineWidth;
+  const caps = [...doc.captions.values()].map((c) => ({ c, b: m.captionBox(c) }));
+  const plus = caps.find((x) => x.c.runs.map((t) => t.text).join('').trim() === '+');
+  const texts = caps.filter((x) => x !== plus && x.b.x1 >= x0 - 1 && x.b.x2 <= x1 + 1);
+  const above = texts.filter((x) => x.b.y2 <= y).sort((p, q) => q.b.y2 - p.b.y2)[0];
+  /** The right edge of the structures before x: its x, and the point there nearest height `at`. */
+  const edgeBefore = (x: number, at: number) => {
+    let best = { x: -Infinity, y: at };
+    for (const a of doc.atoms.values()) {
+      if (a.x >= x) continue;
+      const boxes = m.atomBoxes(a);
+      for (const b of boxes.length ? boxes : [{ x1: a.x, y1: a.y, x2: a.x, y2: a.y }]) {
+        if (b.x2 > best.x) best = { x: b.x2, y: Math.max(b.y1, Math.min(at, b.y2)) };
+      }
+    }
+    return best;
+  };
+  /** The text over the arrow (else under it) nearest the tail ('start') or the head ('end'), and its corner away from the line. */
+  const textCorner = (which: 'start' | 'end') => {
+    const pick = (list: typeof texts) => list.sort((p, q) => (which === 'start' ? p.b.x1 - q.b.x1 : q.b.x2 - p.b.x2))[0];
+    const over = pick(texts.filter((t) => t.b.y2 <= y + 0.5)), t = over ?? pick([...texts]);
+    if (!t) return null;
+    return { x: which === 'start' ? t.b.x1 : t.b.x2, y: over ? t.b.y1 : t.b.y2, up: !!over };
+  };
+  switch (key as SchemeSpanKey) {
+    case 'structGap': {
+      const e = edgeBefore(x0, y);
+      return isFinite(e.x) ? { from: { x: e.x, y }, to: { x: x0, y }, label: pt(sp.gap), side: { x: 0, y: e.y < y ? -1 : 1 }, anchors: [e, { x: x0, y }] } : null;
+    }
+    case 'plusGap': {
+      if (!plus) return null;
+      const py = (plus.b.y1 + plus.b.y2) / 2, e = edgeBefore(plus.b.x1, py);
+      return isFinite(e.x) ? { from: { x: e.x, y: py }, to: { x: plus.b.x1, y: py }, label: pt(sp.plus), side: { x: 0, y: e.y < py ? -1 : 1 }, anchors: [e, { x: plus.b.x1, y: py }] } : null;
+    }
+    case 'textGap': {
+      if (!above) return null;
+      const x = (above.b.x1 + above.b.x2) / 2;
+      return { from: { x, y: above.b.y2 }, to: { x, y: y - lw / 2 }, label: pt(sp.conditions), side: { x: 1, y: 0 } };
+    }
+    case 'lead': {
+      const c = textCorner('start');
+      if (!c) return null;
+      return { from: { x: x0, y }, to: { x: c.x, y }, label: pt(sp.lead), side: { x: 0, y: c.up ? -1 : 1 }, anchors: [{ x: x0, y }, c] };
+    }
+    case 'headGap': {
+      const c = textCorner('end');
+      if (!c) return null;
+      const base = x1 - (r.headLength ?? lw * 10);
+      return { from: { x: c.x, y }, to: { x: base, y }, label: pt(sp.headGap), side: { x: 0, y: c.up ? -1 : 1 }, anchors: [c, { x: base, y }] };
+    }
+    case 'arrowWidth':
+      return { from: { x: (x0 + x1) / 2, y: y - lw / 2 }, to: { x: (x0 + x1) / 2, y: y + lw / 2 }, label: pt(lw), side: { x: 1, y: 0 } };
+    case 'headLength': {
+      const hl = r.headLength ?? lw * 10, hw = r.headWidth ?? lw * 2.5;
+      return { from: { x: x1 - hl, y: y + hw }, to: { x: x1, y: y + hw }, label: pt(hl), side: { x: 0, y: 1 }, anchors: [{ x: x1 - hl, y: y + hw }, { x: x1, y }] };
+    }
+    case 'headWidth': {
+      const hl = r.headLength ?? lw * 10, hw = r.headWidth ?? lw * 2.5;
+      return { from: { x: x1 - hl, y: y - hw }, to: { x: x1 - hl, y: y + hw }, label: pt(hw), side: { x: -1, y: 0 } };
+    }
+  }
 }
 
 /** The drawing mechanismPreview shows: hydroxide, acetone and the two curved arrows, drawn with these gaps. */

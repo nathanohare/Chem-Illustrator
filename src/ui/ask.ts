@@ -32,7 +32,8 @@ export interface AskPreview {
   title: string;
   /** Under the fields, rather than in the Settings window's right-hand pane. */
   below?: boolean;
-  draw: (values: Record<string, string>) => Node;
+  /** `focus` names the field being hovered or typed in (a preview can show what it sets). */
+  draw: (values: Record<string, string>, focus?: string) => Node;
 }
 
 /** Buttons in an ask window that act at once rather than when it is saved. */
@@ -84,6 +85,7 @@ export function ask(title: string, fields: Field[], opts: { ok?: string; note?: 
       }
       const row = document.createElement('label');
       row.className = 'ask-row';
+      row.dataset.field = f.name;
       const name = document.createElement('span');
       name.className = 'ask-name';
       name.textContent = f.label;
@@ -238,14 +240,28 @@ export function ask(title: string, fields: Field[], opts: { ok?: string; note?: 
         form.insertBefore(big, form.querySelector('.ask-row'));
       }
     }
+    // the field being pointed at, or else typed in: the preview can show what it sets
+    let hovered: string | undefined, focused: string | undefined, shownFor: string | undefined;
+    const fieldOf = (t: EventTarget | null) => (t instanceof Element ? (t.closest<HTMLElement>('[data-field]')?.dataset.field) : undefined);
+    const drawBig = () => {
+      shownFor = hovered ?? focused;
+      if (big && opts.preview) big.replaceChildren(opts.preview.draw(values(), shownFor));
+    };
     const redraw = () => {
       for (const f of inlines) f();
-      if (big && opts.preview) big.replaceChildren(opts.preview.draw(values()));
+      drawBig();
     };
     if (inlines.length || big) {
       redraw();
       form.addEventListener('input', redraw);
       form.addEventListener('change', redraw);
+    }
+    if (big) {
+      const moved = () => { if ((hovered ?? focused) !== shownFor) drawBig(); };
+      form.addEventListener('mouseover', (e) => { hovered = fieldOf(e.target); moved(); });
+      form.addEventListener('mouseleave', () => { hovered = undefined; moved(); });
+      form.addEventListener('focusin', (e) => { focused = fieldOf(e.target); moved(); });
+      form.addEventListener('focusout', (e) => { if (!fieldOf(e.relatedTarget)) { focused = undefined; moved(); } });
     }
     const first = form.querySelector<HTMLInputElement | HTMLTextAreaElement>('input:not([type=checkbox]), textarea');
     first?.focus();
