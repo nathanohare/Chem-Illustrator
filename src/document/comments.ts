@@ -17,9 +17,11 @@ export interface CommentNote {
   text: string;
   /**
    * From a Word file: the note's paragraphs as Word wrote them (with their formatting), written
-   * back while `text` is still what they said (`text` here), and its lasting id (w16cid:durableId).
+   * back while `text` is still what they said (`text` here), with the addresses of the links in
+   * them (`links`, which the paragraphs' w:hyperlink r:id="link:0"... stand for); its lasting id
+   * (w16cid:durableId); and the initials Word shows on it (w:initials).
    */
-  word?: { paras?: string[]; text?: string; id?: string };
+  word?: { paras?: string[]; text?: string; links?: string[]; id?: string; initials?: string };
 }
 
 /** A comment: its first note, the replies under it, and whether it has been resolved. */

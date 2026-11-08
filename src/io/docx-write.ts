@@ -157,8 +157,8 @@ class DocxWriter {
   private model: DocxModel;
   private textW: number;
   private fullW: number;
-  /** The comments to write (those on some text), with the Word ids of each one's replies. */
-  private cmts = new Map<number, { c: CommentThread; replies: number[] }>();
+  /** The comments to write (those on some text), by their ids here: each one's Word id, and its replies'. */
+  private cmts = new Map<number, { c: CommentThread; wid: number; replies: number[] }>();
   /** How much of each comment's text is still to be written (its range closes when none is left). */
   private cmtLeft = new Map<number, number>();
   private cmtOpen = new Set<number>();
@@ -216,10 +216,11 @@ class DocxWriter {
     this.fullW = Math.max(36, t.page.w - t.page.left - t.page.right);
     // figures are made to fit a column's width
     this.textW = columnsOf(t.page, this.fullW).w;
-    // comments: replies are comments of their own in Word, numbered after the others
+    // comments: replies are comments of their own in Word; all numbered in the order of the
+    // text, each comment's replies right after it, as Word numbers them
     const placed = placedComments(t.runs, t.comments);
-    let next = Math.max(-1, ...placed.map((p) => p.id)) + 1;
-    for (const p of placed) this.cmts.set(p.id, { c: p.c, replies: (p.c.replies ?? []).map(() => next++) });
+    let next = 0;
+    for (const p of placed) this.cmts.set(p.id, { c: p.c, wid: next++, replies: (p.c.replies ?? []).map(() => next++) });
     for (const r of t.runs) {
       const n = r.text.replace(/\n/g, '').length;
       for (const id of cmtIds(r.cmt)) if (this.cmts.has(id)) this.cmtLeft.set(id, (this.cmtLeft.get(id) ?? 0) + n);
@@ -465,7 +466,7 @@ class DocxWriter {
       const w = this.cmts.get(id);
       if (!w || this.cmtOpen.has(id) || !this.cmtLeft.get(id)) continue;
       this.cmtOpen.add(id);
-      for (const x of [id, ...w.replies]) out += `<w:commentRangeStart w:id="${x}"/>`;
+      for (const x of [w.wid, ...w.replies]) out += `<w:commentRangeStart w:id="${x}"/>`;
     }
     return out;
   }
@@ -496,52 +497,67 @@ class DocxWriter {
 
   private cmtEnd(id: number): string {
     this.cmtOpen.delete(id);
-    return [id, ...this.cmts.get(id)!.replies].map((x) => `<w:commentRangeEnd w:id="${x}"/><w:r><w:commentReference w:id="${x}"/></w:r>`).join('');
+    const w = this.cmts.get(id)!;
+    return [w.wid, ...w.replies].map((x) => `<w:commentRangeEnd w:id="${x}"/><w:r><w:commentReference w:id="${x}"/></w:r>`).join('');
   }
 
   /**
-   * Word's comments part, and Word 2013's part linking replies to their comment and marking the
-   * resolved ones (by the id of each comment's last paragraph).
+   * Word's comments part, with the parts Word 365 writes beside it ([MS-DOCX] 2.1): Word 2013's
+   * linking replies to their comment and marking the resolved ones (commentsExtended), and each
+   * comment's lasting id (commentsIds) and that id's time in UTC (commentsExtensible), all by the
+   * paragraph id (w14:paraId) of each comment's last paragraph.
    */
   private commentParts(main: string): void {
+    const part = 'word/comments.xml';
     let para = 0x10000000;
     const notes: string[] = [], ex: string[] = [], cids: string[] = [], cex: string[] = [];
+    // lasting ids: those the comments came with, and new ones (unique, as Word's are) for the rest
+    const kept = new Set<string>();
+    for (const { c } of this.cmts.values()) for (const n of [c, ...(c.replies ?? [])]) if (n.word?.id && /^[0-9A-F]{8}$/i.test(n.word.id)) kept.add(n.word.id.toUpperCase());
+    let durable = 0x20000000;
+    const newId = (): string => {
+      let id = (durable++).toString(16).toUpperCase();
+      while (kept.has(id)) id = (durable++).toString(16).toUpperCase();
+      kept.add(id);
+      return id;
+    };
     const note = (id: number, c: CommentNote, parent: string | null, done: boolean): string => {
-      // a comment from a Word file whose text wasn't changed here: its paragraphs as Word wrote them (with their formatting)
-      const kept = c.word?.paras?.length && c.word.text === c.text ? c.word.paras : null;
+      // a comment from a Word file whose text wasn't changed here: its paragraphs as Word wrote
+      // them (with their formatting), its links related to the comments part afresh
+      const word = c.word?.paras?.length && c.word.text === c.text ? c.word.paras : null;
+      const links = c.word?.links ?? [];
       const lines = c.text.split('\n');
-      const ids = (kept ?? lines).map(() => (para++).toString(16).toUpperCase());
-      const ps = kept ? kept.map((p, i) => p.replace(/^<w:p\b/, `<w:p w14:paraId="${ids[i]}" w14:textId="77777777"`))
+      const ids = (word ?? lines).map(() => (para++).toString(16).toUpperCase());
+      const ps = word ? word.map((p, i) => p.replace(/^<w:p\b/, `<w:p w14:paraId="${ids[i]}" w14:textId="77777777"`)
+        .replace(/ r:id="link:(\d+)"/g, (_, k: string) => ` r:id="${this.pkg.relate(part, REL.hyperlink, links[Number(k)] ?? '', true)}"`))
         : lines.map((line, i) => `<w:p w14:paraId="${ids[i]}" w14:textId="77777777">${i === 0 ? '<w:r><w:annotationRef/></w:r>' : ''}${run('', line)}</w:p>`);
       const last = ids[ids.length - 1];
       const date = c.date ? ` w:date="${xml(toWordDate(c.date))}"` : '';
-      notes.push(`<w:comment w:id="${id}" w:author="${xml(c.author || 'Author')}"${date} w:initials="${xml(initials(c.author) || 'A')}">${ps.join('')}</w:comment>`);
+      // (the initials the comment came with, else made from the name as Word makes them)
+      notes.push(`<w:comment w:id="${id}" w:author="${xml(c.author || 'Author')}"${date} w:initials="${xml(c.word?.initials || initials(c.author) || 'A')}">${ps.join('')}</w:comment>`);
       ex.push(`<w15:commentEx w15:paraId="${last}"${parent ? ` w15:paraIdParent="${parent}"` : ''} w15:done="${done ? 1 : 0}"/>`);
       // Word 365's lasting id for the comment, and its time in UTC
-      const did = c.word?.id && /^[0-9A-F]{8}$/i.test(c.word.id) ? c.word.id.toUpperCase() : null;
+      const did = c.word?.id && /^[0-9A-F]{8}$/i.test(c.word.id) ? c.word.id.toUpperCase() : newId();
       const utc = new Date(c.date);
-      if (did) {
-        cids.push(`<w16cid:commentId w16cid:paraId="${last}" w16cid:durableId="${did}"/>`);
-        if (!isNaN(utc.getTime())) cex.push(`<w16cex:commentExtensible w16cex:durableId="${did}" w16cex:dateUtc="${utc.toISOString().replace(/\.\d+Z$/, 'Z')}"/>`);
-      }
+      cids.push(`<w16cid:commentId w16cid:paraId="${last}" w16cid:durableId="${did}"/>`);
+      if (!isNaN(utc.getTime())) cex.push(`<w16cex:commentExtensible w16cex:durableId="${did}" w16cex:dateUtc="${utc.toISOString().replace(/\.\d+Z$/, 'Z')}"/>`);
       return last;
     };
-    for (const [id, { c, replies }] of this.cmts) {
-      const top = note(id, c, null, !!c.done);
+    for (const { c, wid, replies } of this.cmts.values()) {
+      const top = note(wid, c, null, !!c.done);
       (c.replies ?? []).forEach((r, i) => note(replies[i], r, top, !!c.done));
     }
+    // (Word 2010's and 2013's markup marked as ones to skip, so Word 2007 and strict readers take the parts)
+    const ns = `xmlns:w="${W_NS}" xmlns:r="${NS.r}" xmlns:mc="${MC_NS}" xmlns:w14="${W14_NS}" xmlns:w15="${W15_NS}" xmlns:w16cid="${W16CID_NS}" xmlns:w16cex="${W16CEX_NS}"`;
     this.pkg.relate(main, DOCX_REL.comments, 'comments.xml');
-    // (Word 2010's paragraph ids marked as ones to skip, so Word 2007 and strict readers take the part)
-    this.pkg.add('word/comments.xml', `${HEAD}<w:comments xmlns:w="${W_NS}" xmlns:w14="${W14_NS}" xmlns:mc="${MC_NS}" mc:Ignorable="w14">${notes.join('')}</w:comments>`, DOCX_CT.comments);
+    this.pkg.add(part, `${HEAD}<w:comments ${ns} mc:Ignorable="w14 w15 w16cid w16cex">${notes.join('')}</w:comments>`, DOCX_CT.comments);
     this.pkg.relate(main, DOCX_REL.commentsExtended, 'commentsExtended.xml');
-    this.pkg.add('word/commentsExtended.xml', `${HEAD}<w15:commentsEx xmlns:w15="${W15_NS}" xmlns:mc="${MC_NS}">${ex.join('')}</w15:commentsEx>`, DOCX_CT.commentsExtended);
-    if (cids.length) {
-      this.pkg.relate(main, DOCX_REL.commentsIds, 'commentsIds.xml');
-      this.pkg.add('word/commentsIds.xml', `${HEAD}<w16cid:commentsIds xmlns:w16cid="${W16CID_NS}">${cids.join('')}</w16cid:commentsIds>`, DOCX_CT.commentsIds);
-    }
+    this.pkg.add('word/commentsExtended.xml', `${HEAD}<w15:commentsEx ${ns} mc:Ignorable="w14 w15 w16cid w16cex">${ex.join('')}</w15:commentsEx>`, DOCX_CT.commentsExtended);
+    this.pkg.relate(main, DOCX_REL.commentsIds, 'commentsIds.xml');
+    this.pkg.add('word/commentsIds.xml', `${HEAD}<w16cid:commentsIds ${ns} mc:Ignorable="w14 w15 w16cid w16cex">${cids.join('')}</w16cid:commentsIds>`, DOCX_CT.commentsIds);
     if (cex.length) {
       this.pkg.relate(main, DOCX_REL.commentsExtensible, 'commentsExtensible.xml');
-      this.pkg.add('word/commentsExtensible.xml', `${HEAD}<w16cex:commentsExtensible xmlns:w16cex="${W16CEX_NS}">${cex.join('')}</w16cex:commentsExtensible>`, DOCX_CT.commentsExtensible);
+      this.pkg.add('word/commentsExtensible.xml', `${HEAD}<w16cex:commentsExtensible ${ns} mc:Ignorable="w14 w15 w16cid w16cex">${cex.join('')}</w16cex:commentsExtensible>`, DOCX_CT.commentsExtensible);
     }
   }
 
@@ -1503,6 +1519,14 @@ class DocxWriter {
       for (const [sid, nm] of [['FootnoteReference', 'footnote reference'], ['EndnoteReference', 'endnote reference']]) {
         out.push(`<w:style w:type="character" w:styleId="${sid}"><w:name w:val="${nm}"/><w:basedOn w:val="DefaultParagraphFont"/><w:uiPriority w:val="99"/><w:semiHidden/><w:unhideWhenUsed/><w:rPr><w:vertAlign w:val="superscript"/></w:rPr></w:style>`);
       }
+    }
+    // comments: Word's own styles for their text and marks, and for the links in comments kept as Word wrote them
+    if (this.cmts.size) {
+      const has = (id: string) => !!t.styles[id] || !!this.charStyles[id];
+      if (!has('CommentText')) out.push(`<w:style w:type="paragraph" w:styleId="CommentText"><w:name w:val="annotation text"/><w:basedOn w:val="Normal"/><w:uiPriority w:val="99"/><w:unhideWhenUsed/><w:rPr><w:sz w:val="20"/><w:szCs w:val="20"/></w:rPr></w:style>`);
+      if (!has('CommentReference')) out.push(`<w:style w:type="character" w:styleId="CommentReference"><w:name w:val="annotation reference"/><w:basedOn w:val="DefaultParagraphFont"/><w:uiPriority w:val="99"/><w:semiHidden/><w:unhideWhenUsed/><w:rPr><w:sz w:val="16"/><w:szCs w:val="16"/></w:rPr></w:style>`);
+      const linked = [...this.cmts.values()].some(({ c }) => [c, ...(c.replies ?? [])].some((n) => n.word?.paras?.some((x) => x.includes('<w:rStyle w:val="Hyperlink"/>'))));
+      if (linked && !has('Hyperlink')) out.push(`<w:style w:type="character" w:styleId="Hyperlink"><w:name w:val="Hyperlink"/><w:basedOn w:val="DefaultParagraphFont"/><w:uiPriority w:val="99"/><w:unhideWhenUsed/><w:rPr><w:color w:val="0563C1"/><w:u w:val="single"/></w:rPr></w:style>`);
     }
     out.push(`<w:style w:type="character" w:default="1" w:styleId="DefaultParagraphFont"><w:name w:val="Default Paragraph Font"/><w:uiPriority w:val="1"/><w:semiHidden/><w:unhideWhenUsed/></w:style>`);
     // the character styles (Emphasis, Strong, Compound Number and the person's own)

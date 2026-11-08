@@ -23,7 +23,7 @@ import { keepDirectBorders, readBorder, readBorders, readLook as readTableLook, 
 import { cleanBorders } from '../document/para-borders';
 import { ACS_1996, type DocStyle } from '../style';
 import * as rt from '../richtext';
-import { PackageReader, REL, bytesHash, kid, kids, rAttr, fromEmu } from './ooxml';
+import { NS, PackageReader, REL, bytesHash, kid, kids, rAttr, fromEmu } from './ooxml';
 import { dataUrl, imageSize, pictureMime } from '../render/images';
 import { drawingInEmf } from '../render/emf';
 import { BULLETS, BULLET_LIBRARY, LIST_SCHEMES, cleanPara, listInfo } from '../text/paragraphs';
@@ -1501,8 +1501,11 @@ class DocxReader {
       const text = paras.map((p) => [...p.getElementsByTagNameNS(this.W, '*')]
         .map((e) => (e.localName === 't' ? e.textContent ?? '' : e.localName === 'tab' ? '\t' : e.localName === 'br' ? '\n' : '')).join('')).join('\n');
       const last = paras[paras.length - 1];
-      const kept = this.commentParas(c);
-      notes.set(id, { author: this.a(c, 'author') ?? '', date: fromWordDate(this.a(c, 'date') ?? ''), text, para: last?.getAttributeNS(W14_NS, 'paraId') ?? '', ...(kept ? { word: { paras: kept, text } } : {}) });
+      const kept = this.commentParas(c, path!);
+      // (the initials Word shows on it, as written: Word makes them only when the comment is made)
+      const ini = this.a(c, 'initials');
+      const word = { ...(kept ? { paras: kept.paras, text, ...(kept.links.length ? { links: kept.links } : {}) } : {}), ...(ini ? { initials: ini } : {}) };
+      notes.set(id, { author: this.a(c, 'author') ?? '', date: fromWordDate(this.a(c, 'date') ?? ''), text, para: last?.getAttributeNS(W14_NS, 'paraId') ?? '', ...(Object.keys(word).length ? { word } : {}) });
     }
     // Word 365 keeps each comment's time in UTC too, by a lasting id found from its paragraph id
     const part = (rel: string) => { const at = this.pkg.relOfType(this.main, rel); return at ? this.pkg.xml(at)?.documentElement ?? null : null; };
@@ -1547,26 +1550,42 @@ class DocxReader {
   }
 
   /**
-   * A comment's paragraphs as Word wrote them (bold, italics, subscripts in it), less their
-   * paragraph ids (given afresh on saving); null when its text has no formatting, or it holds more
-   * than paragraphs, or anything that goes through the comments part's relationships (a link, a picture).
+   * A comment's paragraphs as Word wrote them (bold, italics, subscripts, links in it), less their
+   * paragraph ids (given afresh on saving), with the address of each link to a web page or file
+   * (its r:id written "link:0", "link:1"... for the comments part's relationship made on saving).
+   * Null when its text has no formatting or links, or it holds more than paragraphs, or anything
+   * else that goes through the comments part's relationships (a picture).
    */
-  private commentParas(c: Element): string[] | null {
+  private commentParas(c: Element, part: string): { paras: string[]; links: string[] } | null {
     const blocks = kids(c);
     if (!blocks.length || blocks.some((b) => b.localName !== 'p' || b.namespaceURI !== W_NS || b.prefix !== 'w')) return null;
-    // (only when its text has formatting: plain text is written as it is)
+    // (only when its text has formatting or links: plain text is written as it is)
     const looks = Array.from(c.getElementsByTagNameNS(W_NS, 'r')).some((r) => kid(r, 't') && kids(kid(r, 'rPr')).some((k) => k.localName !== 'rStyle'));
-    if (!looks) return null;
-    const out: string[] = [];
+    if (!looks && !c.getElementsByTagNameNS(W_NS, 'hyperlink').length) return null;
+    const out: string[] = [], links: string[] = [];
+    const rels = this.pkg.rels(part);
     for (const b of blocks) {
       const q = b.cloneNode(true) as Element;
       q.removeAttributeNS(W14_NS, 'paraId');
       q.removeAttributeNS(W14_NS, 'textId');
-      const x = elementXml(q).replaceAll(` xmlns:w="${W_NS}"`, '');
-      if (x.includes('officeDocument/2006/relationships') || !x.startsWith('<w:p')) return null;
+      // (a run style put straight in the paragraph's properties, as some programs write it against the standard, left out)
+      for (const st of kids(kid(q, 'pPr'), 'rStyle')) st.parentNode?.removeChild(st);
+      // (the relationships' prefix declared here, so links are written with it: the part declares it again)
+      q.setAttributeNS('http://www.w3.org/2000/xmlns/', 'xmlns:r', NS.r);
+      for (const el of [q, ...Array.from(q.getElementsByTagName('*'))]) {
+        for (const at of Array.from(el.attributes)) {
+          if (at.namespaceURI !== NS.r) continue;
+          const rel = el.localName === 'hyperlink' && el.namespaceURI === W_NS && at.localName === 'id' ? rels.get(at.value) : undefined;
+          if (!rel?.external || rel.type !== REL.hyperlink) return null;
+          el.setAttributeNS(NS.r, at.name, `link:${links.length}`);
+          links.push(rel.target);
+        }
+      }
+      const x = elementXml(q).replaceAll(` xmlns:w="${W_NS}"`, '').replaceAll(` xmlns:r="${NS.r}"`, '');
+      if (x.includes(NS.r) || !x.startsWith('<w:p')) return null;
       out.push(x);
     }
-    return out;
+    return { paras: out, links };
   }
 
   private emitObject(ctx: Ctx, o: DocObject, r: RProps, keepPos = false): number | null {
