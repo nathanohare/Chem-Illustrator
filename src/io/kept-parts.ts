@@ -81,6 +81,8 @@ export interface KeptParts {
   props?: string[];
   /** Word's document variables (settings' w:docVars), as the element. */
   vars?: string;
+  /** Word's ids for the document (settings' w14:docId and w15:docId), kept from save to save. */
+  docIds?: { w14?: string; w15?: string };
   trees?: KeptTree[];
   docProps?: KeptProps;
   /**

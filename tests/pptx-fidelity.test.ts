@@ -340,6 +340,8 @@ describe('structure pictures changed in PowerPoint', () => {
 const textBox = (id: number, paras: string, x = 100, y = 300, extra = '') =>
   `<p:sp><p:nvSpPr><p:cNvPr id="${id}" name="TextBox ${id}"/><p:cNvSpPr txBox="1"/><p:nvPr/></p:nvSpPr><p:spPr>${xf(x, y, 400, 100)}<a:prstGeom prst="rect"><a:avLst/></a:prstGeom><a:noFill/>${extra}</p:spPr><p:txBody><a:bodyPr wrap="none"/><a:lstStyle/>${paras}</p:txBody></p:sp>`;
 const caption = (got: PptxRead, word: string) => got.slides[0].contents.captions.find((c) => c.runs.map((r) => r.text).join('').includes(word))!;
+/** A shape with text typed into it, by a word of its text. */
+const inShape = (got: PptxRead, word: string) => got.slides[0].contents.shapes.find((s) => s.text?.runs.map((r) => r.text).join('').includes(word))!;
 
 describe('groups', () => {
   const deck = powerPointDeck({
@@ -390,12 +392,12 @@ describe('SmartArt', () => {
   it('comes in as shapes and text where PowerPoint drew it', () => {
     const got = readPptx(deck);
     expect(got.warnings).toContain('SmartArt came in as shapes and text.');
-    const purify = caption(got, 'Purify');
+    // in its shape (with the text typed in it), in the frame (200 across, plus 200 in it)
+    const purify = inShape(got, 'Purify');
     expect(purify).toBeTruthy();
-    // in its shape, in the frame (200 across, plus 200 in it)
-    expect(purify.x).toBeGreaterThan(400);
-    expect(purify.runs[0].color).toBe('#ffffff');
-    const boxes = got.slides[0].contents.shapes.filter((s) => s.kind === 'rect');
+    expect(Math.min(purify.x1, purify.x2)).toBeCloseTo(400, 0);
+    expect(purify.text!.runs[0].color).toBe('#ffffff');
+    const boxes = got.slides[0].contents.shapes.filter((s) => s.text);
     expect(boxes.map((b) => Math.round(Math.min(b.x1, b.x2))).sort()).toEqual([200, 400]);
   });
 });
@@ -415,7 +417,8 @@ describe('text as PowerPoint formats it', () => {
     const { listMarkers } = await import('../src/text/paragraphs');
     expect(listMarkers(c.paras!)).toEqual(['➢', 'C)', 'D)']);
     const slide = part(await resave(got), 'ppt/slides/slide1.xml');
-    expect(slide).toContain('<a:buChar char="➢"/>');
+    // in Wingdings, as PowerPoint wrote it (Arial has no arrowhead)
+    expect(slide).toContain('<a:buFont typeface="Wingdings" pitchFamily="2" charset="2"/><a:buChar char="Ø"/>');
     expect(slide).toContain('<a:buAutoNum type="alphaUcParenR" startAt="3"/>');
     expect(slide).toContain('<a:buAutoNum type="alphaUcParenR" startAt="4"/>');
   });
@@ -427,7 +430,8 @@ describe('text as PowerPoint formats it', () => {
         `<p:txBody><a:bodyPr anchor="ctr"/><a:lstStyle/><a:p><a:r><a:rPr lang="en-US" sz="2000"/><a:t>White</a:t></a:r></a:p><a:p><a:pPr><a:spcBef><a:spcPct val="50000"/></a:spcBef></a:pPr><a:r><a:rPr lang="en-US" sz="2000"/><a:t>Below</a:t></a:r></a:p></p:txBody></p:sp>`,
     });
     const got = readPptx(deck);
-    const c = caption(got, 'White');
+    // (the text typed into the shape stays in it)
+    const c = inShape(got, 'White').text!;
     expect(c.runs[0].color).toBe('#ffffff');
     // in the theme's heading font, as the style says
     expect(c.runs[0].font).toBe('Georgia');
@@ -503,7 +507,7 @@ describe('speaker notes', () => {
 
   it('keep their formatting through a save', async () => {
     const got = readPptx(await withNotes(formatted));
-    expect(got.slides[0].notes).toBe('Mention the yield\nthen the ee');
+    expect(got.slides[0].notes).toBe('Mention the yield\n• then the ee');
     const back = await resave({ ...got, slides: got.slides.map((s) => ({ ...s })) });
     const notes = Object.keys(files(back)).find((k) => /notesSlides\/notesSlide\d+\.xml$/.test(k))!;
     const xml = part(back, notes);

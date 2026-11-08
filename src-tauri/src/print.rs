@@ -60,6 +60,31 @@ mod imp {
         Printers { names, default }
     }
 
+    /// A printer that prints to a file (Microsoft Print to PDF, the XPS writer) asks where to save
+    /// it in a window of the print spooler's own, which Windows opens minimized behind the app:
+    /// bring it up in front for a while after printing starts.
+    fn raise_save_window() {
+        use windows::Win32::UI::WindowsAndMessaging::{FindWindowW, IsIconic, SetForegroundWindow, ShowWindow, SW_RESTORE};
+        std::thread::spawn(|| {
+            let title = HSTRING::from("Save Print Output As");
+            for _ in 0..100 {
+                std::thread::sleep(std::time::Duration::from_millis(150));
+                // (the dialog's class is #32770)
+                if let Ok(w) = unsafe { FindWindowW(&HSTRING::from("#32770"), &title) } {
+                    if !w.is_invalid() {
+                        unsafe {
+                            if IsIconic(w).as_bool() {
+                                let _ = ShowWindow(w, SW_RESTORE);
+                            }
+                            let _ = SetForegroundWindow(w);
+                        }
+                        return;
+                    }
+                }
+            }
+        });
+    }
+
     pub async fn print(window: tauri::WebviewWindow, printer: String, w: f64, h: f64, copies: i32, pages: String) -> Result<(), String> {
         let (tx, rx) = std::sync::mpsc::channel::<Result<(), String>>();
         let done = tx.clone();
@@ -97,7 +122,11 @@ mod imp {
                             });
                             Ok(())
                         }));
-                        core.Print(&s, &handler)
+                        let printing = core.Print(&s, &handler);
+                        if printing.is_ok() {
+                            raise_save_window();
+                        }
+                        printing
                     }
                 })();
                 if let Err(e) = started {

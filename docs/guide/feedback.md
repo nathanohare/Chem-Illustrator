@@ -10,12 +10,19 @@ Open **Help ▸ Send Feedback…** (or **Help ▸ Report a Problem…** if somet
 
 1. Pick what it is: **Feature request**, **Problem (bug)** or **Comment or question**.
 2. Give it a short title, and say what you'd like or what went wrong. For a problem, the steps that make it happen help most: what you opened, what you clicked, and what you saw.
-3. Leave **Include the program's version and computer** checked, unless you'd rather not share them. It adds the version number, the kind of computer (Windows, macOS or Linux) and which mode you were in. Nothing else about you or your files is included.
-4. Then choose how to send it:
-   - **Open on GitHub** opens a new issue on the project's GitHub page in your web browser, already filled in. Check it, add a screenshot if it helps (drag the picture into the text box), and click **Create** or **Submit new issue**. You need a free GitHub account for this.
-   - **Copy Text** copies the same text so you can paste it into an email or a message, for example to whoever looks after Chemweave in your lab.
+3. Choose **Who can read it**: **Only the Chemweave team** (the default) or **Everyone (public on GitHub)**, which puts it on the project's public issues page so others can follow it and add to it.
+4. If you'd like an answer, give an **Email for a reply**. Only the Chemweave team sees it, even on a public report.
+5. To show what you mean, check **Attach a picture of the current page** (a preview shows what will be sent), or click **Add a File…** to pick a screenshot or other picture. Pictures are left out unless you check the box, so nothing unpublished goes by accident; on a public report the picture is public too.
+6. Leave **Include the program's version and computer** checked, unless you'd rather not share them. It adds the version number, the kind of computer (Windows, macOS or Linux) and which mode you were in. Nothing else about you or your files is included.
+7. Click **Send**. No account is needed. The window then shows the report's number (and, for a public report, a link to it). If it can't be sent, for example with no internet connection, your text stays in the window: click **Try Again**, or use one of the other ways below.
 
-Nothing is sent by the program itself: you always see the text first, in your browser or wherever you paste it. If you close the window by mistake, what you wrote is still there the next time you open it (until you quit the program).
+Other ways to send it, on the left of the buttons:
+
+- **Open on GitHub** opens a new issue on the project's GitHub page in your web browser, already filled in, to check and submit with your own GitHub account (anyone can read it).
+- **Email…** opens your email program with the feedback filled in.
+- **Copy Text** copies the same text so you can paste it into an email or a message, for example to whoever looks after Chemweave in your lab.
+
+Nothing leaves your computer until you click **Send** (or submit it yourself on GitHub or in your email). If you close the window by mistake, what you wrote is still there the next time you open it (until you quit the program).
 
 ## When something goes wrong
 
@@ -40,8 +47,8 @@ You can also go to <https://github.com/nathanohare/Chemweave/issues> and click *
 ## What makes a good report
 
 - **One thing per report.** Three small ideas are easier to track as three issues.
-- **A file that shows the problem**, if you can share it. Only attach files you are happy to make public: issues on GitHub can be read by anyone.
+- **A picture or file that shows the problem**, if you can share it. Send it as **Only the Chemweave team** if it holds anything unpublished: public reports and issues on GitHub can be read by anyone.
 - **What you expected**, not only what happened. "The arrow head should stop at the bond" tells us more than "the arrow looks wrong".
-- **For drawings, a screenshot.** On Windows, Win+Shift+S takes one; on a Mac, Cmd+Shift+4.
+- **For drawings, a picture.** **Attach a picture of the current page** covers most cases. For anything else, take a screenshot (Win+Shift+S on Windows, Cmd+Shift+4 on a Mac) and add it with **Add a File…**.
 
 Next: [Getting started](getting-started.md) · [Canvas](drawing.md) · [Keyboard and mouse](keyboard-and-mouse.md) · [Presentation](slides.md) · [Document](documents.md) · [Spreadsheet](sheets.md) · [Design](design.md) · [Files and sharing](files-and-sharing.md)

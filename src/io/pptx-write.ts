@@ -27,12 +27,13 @@ import { PPT_STYLE_IDS, lookOf, slideCellLook, styledRuns, type CellLine, type S
 import { tableBorders } from './cdxml-table';
 import { writeCdxml } from './cdxml-write';
 import { cdxmlToCdx } from './cdx';
-import { CHEMDRAW_PROG, chemdrawInObject, chemdrawObject, chemdrawObjectName, OLE_REL, OLE_TYPE } from './ole-object';
+import { chemdrawProg, chemdrawInObject, chemdrawObject, chemdrawObjectName, OLE_REL, OLE_TYPE } from './ole-object';
 import { extractDrawing } from './clipboard';
 import { contentsAlt, titleOverlaps, roughCaptionBox } from '../accessibility';
 import type { Selection } from '../editor/editor';
 import { Package, NS, REL, emu, xml, xmlAttr, hex6, MediaFiles, structureAltText, bytesHash } from './ooxml';
 import { SLIDE_SIZE_TYPES } from '../deck/deck';
+import { notesParagraphs, type NotesLook } from '../deck/notes-look';
 import { appPropsXml, corePropsXml, writeKeptParts, type KeptParts } from './kept-parts';
 import { olePrint, picturePrint, svgWithDrawing, type KeptOle, type KeptPicture } from './ole-kept';
 import { facesToEmbed, toEot, type FontSource } from './font-embed';
@@ -253,7 +254,8 @@ function highlightSpot(doc: Doc, h: Selection): { x: number; y: number; bond?: t
 }
 
 /** A picture of part of a slide (structures, schemes): SVG and PNG, and the area it shows, in points. */
-export interface DrawingPicture { svg: string; png: Uint8Array; box: Rect }
+/** `emf`: the same picture as an EMF, for a ChemDraw object to show until it is opened. */
+export interface DrawingPicture { svg: string; png: Uint8Array; box: Rect; emf?: Uint8Array }
 
 export interface PptxOptions {
   /** A picture of a drawing (made by the app, which can draw). Null when there is nothing to show. */
@@ -284,7 +286,7 @@ export interface DeckData {
   size: SlideSize;
   master: Master;
   /** `id` is the slide's id in the deck, for links to it (#slide=id). */
-  slides: { id?: number; layout: LayoutId; doc: Doc; notes: string; notesKept?: NotesKept; transition?: Transition; anims?: Anim[]; comments?: PinnedComment[]; background?: Background; hideGraphics?: boolean; hidden?: boolean; hf?: SlideHF; canvas?: CanvasData; part?: CanvasPart; refs?: string[]; refLook?: Partial<RefLook>; refList?: RefListSpec; zotero?: SlideZotero }[];
+  slides: { id?: number; layout: LayoutId; doc: Doc; notes: string; notesKept?: NotesKept; notesLook?: NotesLook; transition?: Transition; anims?: Anim[]; comments?: PinnedComment[]; background?: Background; hideGraphics?: boolean; hidden?: boolean; hf?: SlideHF; canvas?: CanvasData; part?: CanvasPart; refs?: string[]; refLook?: Partial<RefLook>; refList?: RefListSpec; zotero?: SlideZotero }[];
   /** A design (Design mode): marked so it opens in Design mode again. */
   design?: boolean;
   /** The deck's sections, in order (none when left out). */
@@ -441,6 +443,17 @@ export function swapBox(b: Rect): Rect {
   return { x1: mx - hw, y1: my - hh, x2: mx + hw, y2: my + hh };
 }
 
+/**
+ * Bullets Arial doesn't have, in Wingdings as PowerPoint writes them (read back as the characters
+ * they show: pptx-read's bulletChar), so PowerPoint shows the same arrow or tick (laptop bench pp-538).
+ */
+const WINGDINGS_BULLETS: Record<string, string> = { '➢': 'Ø', '✓': 'ü', '☑': 'þ', '➔': 'è', '❑': 'q', '❖': 'v', '◆': 'u' };
+
+/** A bullet's PowerPoint markup: in Arial, or in Wingdings for those Arial lacks. */
+export function bulletXml(ch: string): string {
+  const w = WINGDINGS_BULLETS[ch];
+  return w ? `<a:buFont typeface="Wingdings" pitchFamily="2" charset="2"/><a:buChar char="${xml(w)}"/>` : `<a:buFont typeface="Arial"/><a:buChar char="${xml(ch)}"/>`;
+}
 /** A caption's paragraphs as PowerPoint paragraphs. */
 export function paragraphsXml(c: Caption, explicit: { size: number; font: string } | null, defaultSize: number, measure: Measure, hlink?: LinkXml, clr: ColourXml = srgbXml): string {
   const paras = splitParagraphs(c.runs);
@@ -469,7 +482,7 @@ export function paragraphsXml(c: Caption, explicit: { size: number; font: string
       attrs.push(`marL="${emu(textLeft)}"`, `indent="${ps.cont ? 0 : emu(markLeft - textLeft)}"`);
       if (level) attrs.push(`lvl="${level}"`);
       if (ps.cont) inner += '<a:buNone/>';
-      else if (ps.list === 'bullet') inner += `<a:buFont typeface="Arial"/><a:buChar char="${xml(m ?? '•')}"/>`;
+      else if (ps.list === 'bullet') inner += bulletXml(m ?? '•');
       else if (ps.numType && autoNumLabel(ps.numType, 1)) {
         // PowerPoint's own numbering, kept
         const n = lists[i].n ?? 1;
@@ -762,7 +775,7 @@ class Writer {
       }
       if (s.notes.trim()) {
         const np = `ppt/notesSlides/notesSlide${i + 1}.xml`;
-        pkg.add(np, this.notesSlide(s.notes, np, s.notesKept), CT.notes);
+        pkg.add(np, this.notesSlide(s.notes, np, s.notesKept, s.notesLook), CT.notes);
         pkg.relate(np, REL.notesMaster, '../notesMasters/notesMaster1.xml');
         pkg.relate(np, REL.slide, `../slides/slide${i + 1}.xml`);
         pkg.relate(path, REL.notesSlide, `../notesSlides/notesSlide${i + 1}.xml`);
@@ -1184,7 +1197,7 @@ class Writer {
     }
     // a ChemDraw object from PowerPoint goes back as one, which opens in ChemDraw (with the drawing as made here kept beside it),
     // and so does every structure when structures are saved as ChemDraw objects
-    const prog = was?.prog ?? (this.opts.chemdrawObjects && part.atoms.size ? CHEMDRAW_PROG : undefined);
+    const prog = was?.prog ?? (this.opts.chemdrawObjects && part.atoms.size ? chemdrawProg() : undefined);
     const cdx = prog ? chemdrawCdxOf(cdxml) : null;
     // (the drawing rides inside the SVG too, for programs that drop PowerPoint's tags)
     const svgBytes = new TextEncoder().encode(svgWithDrawing(pic.svg, cdxml, box));
@@ -1196,7 +1209,7 @@ class Writer {
     mark(sel, id);
     const smiles = await this.opts.smiles?.(part).catch(() => null) ?? null;
     const alt = contentsAlt(part.contents()) ?? structureAltText(smiles);
-    if (cdx) out.push(this.chemdrawObject(path, cdx, prog!, id, png, svg, pic.box, tags, alt));
+    if (cdx) out.push(this.chemdrawObject(path, cdx, prog!, id, png, svg, pic.box, tags, alt, (pic as DrawingPicture).emf));
     else out.push(picXml(id, `Structure ${id - 1}`, png, svg, pic.box, null, tags, undefined, alt));
   }
 
@@ -1215,10 +1228,10 @@ class Writer {
    * double-click in PowerPoint opens it in ChemDraw; until then PowerPoint shows its picture.
    */
   private oleObjects = 0;
-  private chemdrawObject(path: string, cdx: Uint8Array, prog: string, id: number, png: string, svg: string, box: Rect, tags: string, alt?: string): string {
+  private chemdrawObject(path: string, cdx: Uint8Array, prog: string, id: number, png: string, svg: string, box: Rect, tags: string, alt?: string, emf?: Uint8Array): string {
     const part = `ppt/embeddings/oleObject${++this.oleObjects}.bin`;
     this.pkg.defaultType('bin', OLE_TYPE);
-    this.pkg.add(part, chemdrawObject(cdx, prog));
+    this.pkg.add(part, chemdrawObject(cdx, prog, emf ? { emf, w: box.x2 - box.x1, h: box.y2 - box.y1 } : null));
     const rid = this.pkg.relate(path, OLE_REL, fromPpt(path, part));
     const w = emu(box.x2 - box.x1), h = emu(box.y2 - box.y1);
     return `<p:graphicFrame><p:nvGraphicFramePr><p:cNvPr id="${id}" name="Object ${id - 1}"${alt ? ` descr="${xmlAttr(alt)}"` : ''}/><p:cNvGraphicFramePr><a:graphicFrameLocks noChangeAspect="1"/></p:cNvGraphicFramePr>` +
@@ -1711,9 +1724,16 @@ class Writer {
   // ---------------------------------------------------------------- notes
 
   /** A slide's notes page: its notes as PowerPoint had them while they are unchanged, else as plain paragraphs. */
-  private notesSlide(text: string, path: string, kept?: NotesKept): string {
+  private notesSlide(text: string, path: string, kept?: NotesKept, look?: NotesLook): string {
     const body = kept && kept.text === text ? kept.xml.replace(/__REL_(\d+)__/g, (_m, n: string) => (kept.rels[Number(n)] ? this.keptRel(path, kept.rels[Number(n)]) : '')) : null;
-    const paras = text.split('\n').map((t) => (t ? `<a:p><a:r><a:rPr ${lang} dirty="0"/><a:t>${xml(t)}</a:t></a:r></a:p>` : `<a:p><a:endParaRPr ${lang} dirty="0"/></a:p>`)).join('');
+    const paras = notesParagraphs(text, look).map((p) => {
+      const pPr = p.bullet ? '<a:pPr marL="171450" indent="-171450"><a:buFont typeface="Arial"/><a:buChar char="•"/></a:pPr>' : '';
+      const runs = p.runs.map((r) => {
+        const look = `${r.bold ? ' b="1"' : ''}${r.italic ? ' i="1"' : ''}${r.underline ? ' u="sng"' : ''}${r.strike ? ' strike="sngStrike"' : ''}`;
+        return `<a:r><a:rPr ${lang}${look} dirty="0"/><a:t>${xml(r.text)}</a:t></a:r>`;
+      }).join('');
+      return `<a:p>${pPr}${runs || `<a:endParaRPr ${lang} dirty="0"/>`}</a:p>`;
+    }).join('');
     return `${HEAD}<p:notes ${XMLNS}><p:cSld><p:spTree>${GROUP}` +
       `<p:sp><p:nvSpPr><p:cNvPr id="2" name="Slide Image Placeholder 1"/><p:cNvSpPr><a:spLocks noGrp="1" noRot="1" noChangeAspect="1"/></p:cNvSpPr><p:nvPr><p:ph type="sldImg"/></p:nvPr></p:nvSpPr><p:spPr/></p:sp>` +
       `<p:sp><p:nvSpPr><p:cNvPr id="3" name="Notes Placeholder 2"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph type="body" idx="1"/></p:nvPr></p:nvSpPr><p:spPr/>` +

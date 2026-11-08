@@ -23,10 +23,11 @@ const LOOKS: { id: GeomLook | '2d'; name: string; tip: string }[] = [
 const FIG = { w: 200, h: 160 };
 
 /**
- * Ask how species `name`'s geometry is drawn, starting from `view` (`look`: the diagram's 3-D
- * look, for what the view doesn't set). Null when cancelled.
+ * Ask how species `name`'s geometry is drawn, starting from `view` (`look`: the diagram's own
+ * look, 3-D or 2-D, for what the view doesn't set). Null when cancelled.
  */
-export function askGeomView(name: string, atoms: QmAtom[], bonds: QmBond[], view: GeomView, look: GeomLook): Promise<GeomViewChoice | null> {
+export function askGeomView(name: string, atoms: QmAtom[], bonds: QmBond[], view: GeomView, diagramLook: GeomLook | '2d'): Promise<GeomViewChoice | null> {
+  const look: GeomLook = diagramLook === '2d' ? 'ball' : diagramLook;
   return new Promise((resolve) => {
     let v: GeomView = { ...view, hidden: [...(view.hidden ?? [])], faded: [...(view.faded ?? [])] };
     const ts = bonds.some((b) => b.partial);
@@ -70,7 +71,7 @@ export function askGeomView(name: string, atoms: QmAtom[], bonds: QmBond[], view
     fade.value = String(Math.round((v.fade ?? 0.6) * 100));
 
     // the look, as chips
-    const styleOf = (): GeomLook | '2d' => v.style ?? look;
+    const styleOf = (): GeomLook | '2d' => v.style ?? diagramLook;
     const looks = $<HTMLDivElement>('.gv-looks');
     for (const l of LOOKS) {
       const b = Object.assign(document.createElement('button'), { type: 'button', textContent: l.name, title: l.tip, className: 'gv-look' });
@@ -103,7 +104,7 @@ export function askGeomView(name: string, atoms: QmAtom[], bonds: QmBond[], view
         ? 'Drawn as a 2-D structure by its level (shown here in lines). Hiding atoms works on it; fading and turning are for the 3-D looks.'
         : 'Drag to rotate it (Shift+drag rotates in the page plane; arrow keys also rotate). The box shows the space available at its level.';
       ghosts = new Set(v.hidden);
-      const pv: GeomView = { ...v, style: flat ? 'wire' : v.style ?? look, rot: rotation(), hidden: [], faded: [...new Set([...(v.faded ?? []), ...ghosts])] };
+      const pv: GeomView = { ...v, style: flat ? 'wire' : styleOf() as GeomLook, rot: rotation(), hidden: [], faded: [...new Set([...(v.faded ?? []), ...ghosts])] };
       const spec = geomSpec(atoms, bonds, pv, look);
       const view = { ...spec.view, zoom: fittingZoom(spec, spec.view, FIG.w, FIG.h) };
       shown = crystalShapes(spec, view);

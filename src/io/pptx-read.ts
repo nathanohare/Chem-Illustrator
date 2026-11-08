@@ -59,6 +59,8 @@ import { readTransition, readTiming, readMediaTiming, type Transition, type Anim
 import { mediaMime } from '../deck/media';
 import { readChart } from './office-chart';
 import { freshBox, sameBoxData, sizedBox, type ChartBox } from '../sheet/chart-box';
+import { cleanLook, type RunLook } from '../sheet/rich-text';
+import { NOTE_BULLET, notesLookOf, type NotesLook } from '../deck/notes-look';
 import { chartBoxPng } from '../render/chart-box-paint';
 import { canvasTag, readCanvasTag, withCameraMoves, type CanvasData } from '../deck/canvas';
 import { slidePrint, type CanvasKeep } from '../deck/canvas-export';
@@ -71,7 +73,7 @@ const GEO_BY_PRST = new Map(GEOS.filter((g) => g.prst).map((g) => [g.prst!, g.id
 /** PowerPoint shapes that come into slides as plain boxes and ovals (with their text beside them as text boxes). */
 const PLAIN_PRST = new Set(['rect', 'roundRect', 'ellipse', 'snip1Rect', 'flowChartProcess', 'flowChartAlternateProcess']);
 
-export interface PptxSlide extends SlideRefs { layout: LayoutId; contents: Contents; notes: string; notesKept?: NotesKept; transition?: Transition; anims?: Anim[]; comments?: PinnedComment[]; background?: Background; hideGraphics?: boolean; hidden?: boolean; hf?: SlideHF; canvas?: CanvasData }
+export interface PptxSlide extends SlideRefs { layout: LayoutId; contents: Contents; notes: string; notesKept?: NotesKept; notesLook?: NotesLook; transition?: Transition; anims?: Anim[]; comments?: PinnedComment[]; background?: Background; hideGraphics?: boolean; hidden?: boolean; hf?: SlideHF; canvas?: CanvasData }
 
 /** How a slide made from a canvas slide's keyframe was marked when saved, and the print of what it holds now. */
 interface PartRead { uid: string; index: number; count: number; print: string; now: string; keep?: CanvasKeep }
@@ -1038,21 +1040,49 @@ class Reader {
     return phs.includes('title') ? 'title-only' : 'blank';
   }
 
-  /** A slide's speaker notes: their text, and PowerPoint's text body with its formatting, to save back while they are unchanged. */
-  private notes(path: string): { notes: string; notesKept?: NotesKept } {
+  /**
+   * A slide's speaker notes: their text (a bulleted paragraph starting "• "), their bold, italic
+   * and underlined words, and PowerPoint's text body with its formatting, to save back while
+   * they are unchanged.
+   */
+  private notes(path: string): { notes: string; notesKept?: NotesKept; notesLook?: NotesLook } {
     const np = this.r.relOfType(path, REL.notesSlide);
     const n = this.part(np);
     if (!n || !np) return { notes: '' };
     const body = kids(n.tree, 'sp').find((sp) => phOf(sp)?.type === 'body');
-    const notes = body ? this.plain(body).replace(/\s+$/, '') : '';
     const tx = kid(body, 'txBody');
+    const { text, looks } = this.notesText(tx);
+    const notes = text.replace(/\s+$/, '');
     if (!notes || !tx) return { notes };
+    const look = notesLookOf(notes, looks.slice(0, notes.length));
+    const withLook = look ? { notesLook: look } : {};
     // (worth keeping when there is more to it than plain paragraphs)
     const plainOnly = kids(tx, 'p').every((p) => kids(p).every((k) => (k.localName === 'r' && kids(kid(k, 'rPr')).length === 0 && ![...(kid(k, 'rPr')?.attributes ?? [])].some((a) => !['lang', 'dirty', 'altLang', 'smtClean'].includes(a.localName))) || k.localName === 'endParaRPr'));
-    if (plainOnly) return { notes };
+    if (plainOnly) return { notes, ...withLook };
     const rels: KeptRel[] = [];
     const xml = this.keepXml(np, tx, rels);
-    return xml === null ? { notes } : { notes, notesKept: { text: notes, xml, rels } };
+    return xml === null ? { notes, ...withLook } : { notes, notesKept: { text: notes, xml, rels }, ...withLook };
+  }
+
+  /** Notes' text and each character's look: a paragraph with a bullet character starts "• ". */
+  private notesText(tx: Element | null): { text: string; looks: RunLook[] } {
+    let text = '';
+    const looks: RunLook[] = [];
+    const add = (t: string, l: RunLook) => { text += t; for (let i = 0; i < t.length; i++) looks.push(l); };
+    kids(tx, 'p').forEach((p, i) => {
+      if (i) add('\n', {});
+      const pPr = kid(p, 'pPr');
+      const parts = kids(p).filter((k) => k.localName === 'r' || k.localName === 'fld' || k.localName === 'br');
+      if (kid(pPr, 'buChar') && !kid(pPr, 'buNone') && parts.length) add(NOTE_BULLET, {});
+      for (const k of parts) {
+        if (k.localName === 'br') { add('\n', {}); continue; }
+        const r = kid(k, 'rPr');
+        const on = (a: string) => r?.getAttribute(a) === '1' || r?.getAttribute(a) === 'true';
+        const u = r?.getAttribute('u'), st = r?.getAttribute('strike');
+        add(kid(k, 't')?.textContent ?? '', cleanLook({ bold: on('b') || undefined, italic: on('i') || undefined, underline: (u && u !== 'none') || undefined, strike: (st && st !== 'noStrike') || undefined }));
+      }
+    });
+    return { text, looks };
   }
 
   /** Everything in a shape tree (a slide, or a group). */
@@ -1767,6 +1797,17 @@ class Reader {
     return out;
   }
 
+  /**
+   * A box or oval with text typed into it (PowerPoint's default shape, filled or outlined, not a
+   * text box): a design shape, so its text stays in it when saved again rather than becoming a
+   * text box laid over a box (laptop bench pp-538).
+   */
+  private textInShape(sp: Element, spPr: Element | null): boolean {
+    if (kid(sp, 'nvSpPr', 'cNvSpPr')?.getAttribute('txBox') === '1' || !this.plain(sp).trim()) return false;
+    const look = this.look(sp, spPr);
+    return !!(look.fill || look.line);
+  }
+
   private shape(s: Part, layout: Part | null, sp: Element, t: Xf, doc: Doc): void {
     const ph = phOf(sp);
     if (ph && SKIP_PH.has(ph.type)) return; // slide numbers, footers and dates come from the master
@@ -1784,7 +1825,7 @@ class Reader {
     if (!ph) {
       // a design shape saved here, or a PowerPoint shape that is one (in designs, boxes and ovals too)
       const geoTag = this.tagsOf(s.path, kid(sp, 'nvSpPr', 'nvPr'))[TAG.geo];
-      if (geoTag || (GEO_BY_PRST.has(prst) && (this.design || !PLAIN_PRST.has(prst) || fancyFill(spPr)))) {
+      if (geoTag || (GEO_BY_PRST.has(prst) && (this.design || !PLAIN_PRST.has(prst) || fancyFill(spPr) || this.textInShape(sp, spPr)))) {
         if (this.geoShape(sp, spPr, prst, box, geoTag, doc, s.path)) return;
       }
     }

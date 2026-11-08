@@ -30,7 +30,7 @@ import { DEFAULT_THEME, type WorkbookTheme } from '../sheet/themes';
 import { themeXml } from './xlsx-view';
 import { facesToEmbed, newGuid, obfuscate, type FontSource } from './font-embed';
 import { fromDataUrl } from '../render/images';
-import { CHEMDRAW_PROG, chemdrawObject, embeddedPart, OLE_REL, OLE_TYPE } from './ole-object';
+import { chemdrawProg, chemdrawObject, embeddedPart, OLE_REL, OLE_TYPE } from './ole-object';
 import { BULLETS, fitParas, listInfo, paraCount, samePara, schemeOf, splitParagraphs, type ListInfo } from '../text/paragraphs';
 import { BOX_PAD, COL_GAP, COMPOUND, END_FORMAT, FOOT_FORMAT, columnsOf, contentsPrint, OBJECT_CHAR, SHADOWS, charStylesOf, watermarkPlace, fieldTexts, floatOf, floatGaps, lookExtent, lookOf, noteStyle, objectsInText, pruneObjects, EMPTY_FORM, styleOf, runStyleOf, type CharStyle, type DocObject, type DocText, type Embedded, type FigureFrame, type FigureLook, type HeaderFooter, type HfBody, type HfKey, type NamedStyle, type PageBorder, type PageSetup, type Watermark } from '../document/document';
 import { ACS_LINE, GRID_LINE, bibHang, docCellAlign, shownSize } from '../document/doc-layout';
@@ -64,7 +64,7 @@ import {
 export interface DocxDeps {
   /** A drawing's picture for Word: PNG bytes, an SVG Word shows instead when it can, and its own size in points. */
   /** A drawing's picture: just round what is drawn, or a figure's whole area (`frame`, never cut short of what is drawn). */
-  picture(contents: Contents, style: DocStyle, frame?: FigureFrame): Promise<{ png: Uint8Array; svg?: string; w: number; h: number; x?: number; y?: number } | null>;
+  picture(contents: Contents, style: DocStyle, frame?: FigureFrame): Promise<{ png: Uint8Array; svg?: string; w: number; h: number; x?: number; y?: number; /** The same picture as an EMF, for a ChemDraw object to show until it is opened. */ emf?: Uint8Array } | null>;
   /** A PNG of an SVG picture, for Word versions that can't show SVG (w × h pixels). */
   svgToPng?(svg: string, w: number, h: number): Promise<Uint8Array>;
   /**
@@ -252,9 +252,12 @@ class DocxWriter {
     pkg.relate(main, DOCX_REL.numbering, 'numbering.xml');
     pkg.add('word/numbering.xml', this.numbering(), DOCX_CT.numbering);
     pkg.relate(main, DOCX_REL.settings, 'settings.xml');
-    const settings = (embed: boolean) => `${HEAD}<w:settings xmlns:w="${W_NS}"><w:zoom w:percent="100"/>${this.t.pageColor ? '<w:displayBackgroundShape/>' : ''}${embed ? '<w:embedTrueTypeFonts/><w:saveSubsetFonts/>' : ''}${this.t.track ? '<w:trackRevisions/>' : ''}${protectionXml(this.t.protect)}<w:defaultTabStop w:val="720"/>${hyphenXml(this.t.hyphen)}${allHf(this.t).some((h) => h.oddEven) ? '<w:evenAndOddHeaders/>' : ''}` +
+    // Word's ids for the document, kept from the file or made afresh: without them Word 365 shows
+    // a comment's replies as comments of their own (laptop check 57)
+    const docIds = `<w14:docId w14:val="${this.t.kept?.docIds?.w14 ?? newDocId()}"/><w15:docId w15:val="${this.t.kept?.docIds?.w15 ?? newDocGuid()}"/>`;
+    const settings = (embed: boolean) => `${HEAD}<w:settings xmlns:w="${W_NS}" xmlns:mc="${MC_NS}" xmlns:w14="${W14_NS}" xmlns:w15="${W15_NS}" mc:Ignorable="w14 w15"><w:zoom w:percent="100"/>${this.t.pageColor ? '<w:displayBackgroundShape/>' : ''}${embed ? '<w:embedTrueTypeFonts/><w:saveSubsetFonts/>' : ''}${this.t.track ? '<w:trackRevisions/>' : ''}${protectionXml(this.t.protect)}<w:defaultTabStop w:val="720"/>${hyphenXml(this.t.hyphen)}${allHf(this.t).some((h) => h.oddEven) ? '<w:evenAndOddHeaders/>' : ''}` +
       `<w:characterSpacingControl w:val="doNotCompress"/>${notes}` +
-      `<w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/></w:compat>${this.t.kept?.vars ?? ''}</w:settings>`;
+      `<w:compat><w:compatSetting w:name="compatibilityMode" w:uri="http://schemas.microsoft.com/office/word" w:val="15"/></w:compat>${this.t.kept?.vars ?? ''}${docIds}</w:settings>`;
     pkg.add('word/settings.xml', settings(false), DOCX_CT.settings);
     // our own part: each structure's drawing, and each table as made here
     pkg.relate(main, DOCX_REL.customXml, '../customXml/item1.xml');
@@ -464,7 +467,7 @@ class DocxWriter {
     let out = '';
     for (const id of cmtIds(r.cmt)) {
       const w = this.cmts.get(id);
-      if (!w || this.cmtOpen.has(id) || !this.cmtLeft.get(id)) continue;
+      if (!w || this.cmtOpen.has(id) || (this.cmtLeft.get(id) ?? 0) <= 0) continue;
       this.cmtOpen.add(id);
       for (const x of [w.wid, ...w.replies]) out += `<w:commentRangeStart w:id="${x}"/>`;
     }
@@ -1109,7 +1112,7 @@ class DocxWriter {
     this.model.drawings[id] = { contents: o.contents, w: pic.w, h: pic.h, png: bytesHash(pic.png), cdx: bytesHash(cdx), alt, ...(o.ole ? { ole: o.ole } : {}) };
     const size = shownSize({ w: pic.w, h: pic.h }, o.scale ?? 1, this.textW);
     const img = this.media(main, pic.png, 'png');
-    return this.objectXml(main, { bytes: chemdrawObject(cdx, prog), type: OLE_TYPE, rel: OLE_REL, path: 'oleObject{n}.bin' }, prog, img, { w: pic.w, h: pic.h }, size, rPr, false, alt);
+    return this.objectXml(main, { bytes: chemdrawObject(cdx, prog, pic.emf ? { emf: pic.emf, w: pic.w, h: pic.h } : null), type: OLE_TYPE, rel: OLE_REL, path: 'oleObject{n}.bin' }, prog, img, { w: pic.w, h: pic.h }, size, rPr, false, alt);
   }
 
   private oleCount = 0;
@@ -1121,7 +1124,7 @@ class DocxWriter {
     // a structure saved as a ChemDraw object: one that came from a ChemDraw object, or any when
     // structures are saved as ChemDraw objects (in the line only, and not turned: as Word keeps objects)
     if (o.kind === 'drawing' && !floatOf(o) && !o.rot && !o.flipH && !o.flipV && !o.frame && !lookOf(o)) {
-      const prog = o.ole ?? (this.deps.chemdrawObjects && o.contents.atoms.length ? CHEMDRAW_PROG : undefined);
+      const prog = o.ole ?? (this.deps.chemdrawObjects && o.contents.atoms.length ? chemdrawProg() : undefined);
       const got = prog ? await this.chemdrawDrawing(main, id, o, prog, rPr) : null;
       if (got) return got;
     }
@@ -2003,4 +2006,14 @@ function changedCml(t: DocText): Map<number, string> {
     out.set(i, writeCml(o.contents, o.c4w.guid, parts[i].xml));
   }
   return out;
+}
+
+/** A new id for a Word document (settings' w14:docId): eight hex digits, below 80000000 as Word's are. */
+function newDocId(): string {
+  return (1 + Math.floor(Math.random() * 0x7ffffffe)).toString(16).toUpperCase().padStart(8, '0');
+}
+/** A new GUID for a Word document (settings' w15:docId), in braces as Word writes it. */
+function newDocGuid(): string {
+  const hex = (n: number) => Array.from({ length: n }, () => Math.floor(Math.random() * 16).toString(16).toUpperCase()).join('');
+  return `{${hex(8)}-${hex(4)}-4${hex(3)}-${'89AB'[Math.floor(Math.random() * 4)]}${hex(3)}-${hex(12)}}`;
 }

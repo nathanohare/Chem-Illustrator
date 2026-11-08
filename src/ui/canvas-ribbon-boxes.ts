@@ -8,6 +8,18 @@
 import { FloatBox } from './float-box';
 import { problemCount, type FileProblems } from './mode-problems';
 
+/** A label's words without its markup (sub/sup tags): every character between < and > goes, and so does any stray bracket. */
+export function plainText(html: string): string {
+  let out = '';
+  let inTag = false;
+  for (const ch of html) {
+    if (ch === '<') inTag = true;
+    else if (ch === '>') inTag = false;
+    else if (!inTag) out += ch;
+  }
+  return out;
+}
+
 const CHEVRON = '<svg viewBox="0 0 12 12" width="10" height="10" aria-hidden="true"><path d="M2.5 4.5L6 8l3.5-3.5" fill="none" stroke="currentColor" stroke-width="1.4" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 const POP_OUT = '<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true"><path d="M3 5.5v7.5h7.5M7 2.5h6.5V9M13.5 2.5L7 9" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round" stroke-linejoin="round"/></svg>';
 export const WARN_ICON = '<svg viewBox="0 0 24 24" width="15" height="15" aria-hidden="true"><path d="M12 2.5L22.5 21h-21z" fill="#f2b01e" stroke="#c98a00" stroke-width="1" stroke-linejoin="round"/><path d="M12 9v6" stroke="#3a2a00" stroke-width="2.2" stroke-linecap="round"/><circle cx="12" cy="18" r="1.25" fill="#3a2a00"/></svg>';
@@ -201,7 +213,7 @@ export class AnalysisBox extends DropBox {
       const k = document.createElement('span');
       k.className = 'cr-an-k';
       k.innerHTML = x.label;
-      k.dataset.short = x.short.replace(/<[^>]*>/g, '').replace(/[<>]/g, '');
+      k.dataset.short = plainText(x.short);
       const n = document.createElement('span');
       n.className = 'cr-an-v';
       n.textContent = x.value;

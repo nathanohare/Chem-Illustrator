@@ -825,6 +825,11 @@ class DocxReader {
     const path = this.pkg.relOfType(this.main, DOCX_REL.settings);
     const vars = path ? this.pkg.xml(path)?.getElementsByTagNameNS('*', 'docVars')[0] : undefined;
     if (vars && vars.children.length) this.kept = { ...this.kept, vars: elementXml(vars).replaceAll(` xmlns:w="${W_NS}"`, '') };
+    // and its ids for the document (Word 2010's and 2013's), which it keeps from save to save
+    const settings = path ? this.pkg.xml(path)?.documentElement : undefined;
+    const idOf = (ns: string, re: RegExp) => { const v = settings?.getElementsByTagNameNS(ns, 'docId')[0]?.getAttributeNS(ns, 'val') ?? ''; return re.test(v) ? v.toUpperCase() : undefined; };
+    const w14 = idOf(W14_NS, /^[0-9A-F]{8}$/i), w15 = idOf(W15_NS, /^\{[0-9A-F]{8}(-[0-9A-F]{4}){3}-[0-9A-F]{12}\}$/i);
+    if (w14 || w15) this.kept = { ...this.kept, docIds: { ...(w14 ? { w14 } : {}), ...(w15 ? { w15 } : {}) } };
   }
 
   /**
@@ -2749,7 +2754,11 @@ class DocxReader {
    * pictures stay (in their line); text boxes and the like inside a cell are left out.
    */
   private textCell(tc: Element, look: CellLook | null = null): TableCell {
-    const { runs, paras } = this.boxText(tc, true, look);
+    const { runs: read, paras } = this.boxText(tc, true, look);
+    // comments on the cell's text go on the whole table (Ctx.cell is off here to keep the cell's
+    // other content), so its runs keep no marks of their own: with both, Word was given the
+    // comment's range twice and called the saved file unreadable (laptop bench wd-551)
+    const runs = read.map((r) => { if (!r.cmt) return r; const { cmt: _, ...rest } = r; return rest; });
     const kept = runs.filter((r) => {
       const o = r.obj !== undefined ? this.objects[r.obj] : undefined;
       if (!o) return true;

@@ -131,7 +131,15 @@ export class SmartPane {
     const p = document.createElement('p');
     p.className = 'sp-note sp-empty';
     p.textContent = 'Select a Smart Scheme to list its species and steps here.';
-    this.el.replaceChildren(p);
+    // its title, to drag the docked list to another edge
+    const head = document.createElement('div');
+    head.className = 'sp-head';
+    const title = Object.assign(document.createElement('span'), { className: 'sp-title', textContent: 'Smart Scheme' });
+    head.append(title);
+    head.title = 'Drag to another edge of the drawing to dock this list there, or off the edge to float it';
+    this.wireDrag(head);
+    this.el.replaceChildren(head, p);
+    this.el.classList.add('sp-none');
   }
 
   constructor(private hooks: SmartPaneHooks) {
@@ -219,6 +227,7 @@ export class SmartPane {
     const s = doc.shapes.get(id);
     const read = readSmart(doc, m, id);
     if (!s?.smart || !read) { this.hide(); return; }
+    this.el.classList.remove('sp-none');
     this.shown = id;
     this.drawnFor = `${id} ${doc.version} ${folded}`;
     this.drawnShape = this.shapeOf(id);
@@ -244,14 +253,13 @@ export class SmartPane {
     // one compact row: the title (drag it to an edge of the drawing to dock the list), the layouts as small pictures, dock and fold
     const head = document.createElement('div');
     head.className = 'sp-head';
-    if (!this.host) {
-      const title = document.createElement('span');
-      title.className = 'sp-title';
-      title.textContent = 'Smart Scheme';
-      head.append(title);
-      head.title = 'Drag to an edge of the drawing to dock this list there, like a toolbox';
-      this.wireDrag(head);
-    }
+    // (docked too: its toolbox's own title bar is hidden while locked, and this is the one to drag)
+    const title = document.createElement('span');
+    title.className = 'sp-title';
+    title.textContent = 'Smart Scheme';
+    head.append(title);
+    head.title = this.host ? 'Drag to another edge of the drawing to dock this list there, or off the edge to float it' : 'Drag to an edge of the drawing to dock this list there, like a toolbox';
+    this.wireDrag(head);
     // how the list works, kept behind an "i" so it doesn't take room in the pane
     const info = document.createElement('span');
     info.className = 'sp-info';
@@ -442,19 +450,23 @@ export class SmartPane {
     head.addEventListener('pointerdown', (e) => {
       if ((e.target as HTMLElement).closest('button') || e.button !== 0) return;
       e.preventDefault();
-      const r = this.el.getBoundingClientRect();
+      // docked, the whole toolbox it sits in follows the pointer
+      const box = this.host?.closest<HTMLElement>('.toolbox') ?? null;
+      const r = (box ?? this.el).getBoundingClientRect();
       const dx = e.clientX - r.left, dy = e.clientY - r.top;
       let moved = false;
       head.setPointerCapture(e.pointerId);
       const move = (m: PointerEvent) => {
         if (!moved && Math.hypot(m.clientX - e.clientX, m.clientY - e.clientY) < 4) return;
         moved = true;
+        if (box) { box.style.transform = `translate(${Math.round(m.clientX - e.clientX)}px, ${Math.round(m.clientY - e.clientY)}px)`; box.style.zIndex = '50'; return; }
         this.el.style.left = `${Math.round(m.clientX - dx)}px`;
         this.el.style.top = `${Math.round(m.clientY - dy)}px`;
       };
       const up = (u: PointerEvent) => {
         head.removeEventListener('pointermove', move);
         head.removeEventListener('pointerup', up);
+        if (box) { box.style.transform = ''; box.style.zIndex = ''; }
         if (!moved) return;
         const w = this.hooks.work();
         const dock = dropTarget(u.clientX, u.clientY, { left: w.left, top: w.top, right: w.right, bottom: w.bottom });

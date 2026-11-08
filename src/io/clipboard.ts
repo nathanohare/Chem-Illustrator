@@ -14,6 +14,7 @@
 
 import { remapFrames, remapStep, type IdMaps } from './remap-refs';
 import { freshGroups } from '../editor/groups';
+import { frameMembers } from '../editor/frames';
 import { pastedTable, tableHtml, tableTsv, type PastedRows } from './table-clip';
 import { invoke, isTauri } from '@tauri-apps/api/core';
 import { Doc, applyBase, type TableData } from '../model';
@@ -51,6 +52,7 @@ export const nativeClipboard = isTauri() && /Windows/i.test(navigator.userAgent)
 
 /** The selected things (everything when `sel` is null) as a drawing of their own. */
 export function extractDrawing(doc: Doc, sel: Selection | null): Doc {
+  if (sel) sel = withFrameMembers(doc, sel);
   const out = new Doc();
   out.style = { ...doc.style };
   out.background = doc.background;
@@ -118,6 +120,24 @@ export function extractDrawing(doc: Doc, sel: Selection | null): Doc {
     }
   });
   out.reserveIds(maxId);
+  return out;
+}
+
+/**
+ * A selection with what its frames hold: an energy diagram (or any framed group) picked by its
+ * frame copies as the diagram, not as its invisible frame alone.
+ */
+function withFrameMembers(doc: Doc, sel: Selection): Selection {
+  if (![...sel.shapes].some((id) => doc.shapes.get(id)?.frame)) return sel;
+  const out: Selection = { atoms: new Set(sel.atoms), bonds: new Set(sel.bonds), captions: new Set(sel.captions), arrows: new Set(sel.arrows), shapes: new Set(sel.shapes) };
+  const todo = [...sel.shapes];
+  while (todo.length) {
+    const f = doc.shapes.get(todo.pop()!)?.frame;
+    if (!f) continue;
+    const m = frameMembers(doc, f);
+    for (const k of ['atoms', 'bonds', 'captions', 'arrows'] as const) for (const id of m[k]) out[k].add(id);
+    for (const id of m.shapes) if (!out.shapes.has(id)) { out.shapes.add(id); todo.push(id); }
+  }
   return out;
 }
 

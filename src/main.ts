@@ -74,6 +74,9 @@ import { writeTiff } from './render/tiff';
 import { itemsToEps } from './render/eps';
 import { Workspace, Tab } from './workspace';
 import { Deck, LayoutId, WIDE, STANDARD, Image as SlideImage, sizeName, SlideSize, slideBackground, slideColours, type SlideSource, contentArea, deckLayouts, type SizeFit } from './deck/deck';
+import { NOTE_BULLET, bulletEdits, notesCharLooks, notesLookOf, type NotesLook } from './deck/notes-look';
+import { RichInput } from './ui/rich-input';
+import type { TextFormat } from './text/format';
 import { shapeMathPicture, shapeMathScale, shapeMathSize } from './deck/equation';
 import { solid } from './deck/background';
 import { pictureFormat } from './ui/picture-dialog';
@@ -112,7 +115,7 @@ import { DARK_PALETTES, darkPaletteNamed, showDarkPage, type DarkPalette } from 
 import { STYLE_PRESETS, applyStyle, presetNamed, restyleContents, sameLook, styleNamed, type StyleMode } from './drawing-styles';
 import { askCleanUpOption } from './ui/cleanup-picker';
 import { looksTangled, turnOption } from './chem/cleanup';
-import { recordPicture, pictureSvg, pictureCanvas, canvasPng, bitmapScale, EXPORT_MAX_SIDE, EXPORT_MAX_PIXELS } from './render/picture';
+import { recordPicture, pictureSvg, pictureEmf, pictureCanvas, canvasPng, bitmapScale, EXPORT_MAX_SIDE, EXPORT_MAX_PIXELS } from './render/picture';
 import { pngWithDpi } from './render/emf-read';
 import { whiteToClear } from './render/background';
 
@@ -260,7 +263,7 @@ import { starAtoms } from './chem/label-tip';
 import { structurePlace } from './sheet/layout';
 // sheet and document files' readers and writers load the first time one is opened or saved
 import type { SheetFileDeps } from './io/sheet-files';
-import { fromEmbedSource, type Embedded } from './io/ole-object';
+import { fromEmbedSource, setInstalledChemdrawProg, type Embedded } from './io/ole-object';
 import { objectPicture, type ObjectPicture } from './render/object-picture';
 import { ACS_1996, BOND_END_CHOICES, bondEndPrefs, DocStyle, docMapLook, MAP_LOOKS, mapLookPrefs, type MapBoxStyle, type MapLook } from './style';
 import { DEFAULT_DEPTH_SHADE, depthShadePrefs } from './render/depth-shade';
@@ -3879,7 +3882,21 @@ let lastOpen = '';
 let lastStats: ReadStats | null = null;
 
 const tabsEl = $<HTMLDivElement>('#tabs');
-const notesBox = $<HTMLTextAreaElement>('#notes');
+// Speaker notes: a box keeping bold, italic and underlined words, and bulleted lines (deck/notes-look.ts)
+const notesBox = new RichInput();
+{
+  const old = $('#notes');
+  notesBox.el.id = 'notes';
+  notesBox.setAttribute('aria-label', 'Speaker notes');
+  notesBox.el.dataset.placeholder = 'Click to add speaker notes';
+  old.replaceWith(notesBox.el);
+}
+/** The notes box shows the slide's notes (with their looks). */
+function showNotes(s: { notes: string; notesLook?: NotesLook } | null | undefined): void {
+  const text = s?.notes ?? '';
+  notesBox.setText(text, notesCharLooks(text, s?.notesLook));
+  notesBox.el.classList.toggle('empty', !text);
+}
 const sizeSel = $<HTMLSelectElement>('#rb-size');
 
 /** View > Window and Colours > Mode Colours: blue for drawings, orange for slides, green for sheets, or the person's own colours. */
@@ -3940,7 +3957,7 @@ const docFiles: DocxDeps = {
     const pic = fb ? { items: drawn?.items ?? [], box: drawn ? { x1: Math.min(fb.x1, drawn.box.x1), y1: Math.min(fb.y1, drawn.box.y1), x2: Math.max(fb.x2, drawn.box.x2), y2: Math.max(fb.y2, drawn.box.y2) } : fb } : drawn;
     if (!pic) return null;
     const png = new Uint8Array(await (await canvasPng(pictureCanvas(d, pic).canvas)).arrayBuffer());
-    return { png, svg: pictureSvg(pic), w: pic.box.x2 - pic.box.x1, h: pic.box.y2 - pic.box.y1, x: pic.box.x1, y: pic.box.y1 };
+    return { png, svg: pictureSvg(pic), w: pic.box.x2 - pic.box.x1, h: pic.box.y2 - pic.box.y1, x: pic.box.x1, y: pic.box.y1, ...(officeStructures.docx === 'chemdraw' ? { emf: pictureEmf(pic) } : {}) };
   },
   svgToPng,
   bakePicture: (p) => fxPng(p, 'baked'),
@@ -4075,13 +4092,15 @@ function pptxOptions(): PptxOptions {
       const pic = recordPicture(d, 1);
       if (!pic) return null;
       const png = new Uint8Array(await (await canvasPng(pictureCanvas(d, pic, PPTX_FALLBACK_DPI).canvas)).arrayBuffer());
-      return { svg: pictureSvg(pic), png, box: pic.box };
+      // (a ChemDraw object keeps an EMF of it, as ChemDraw does, to show until it is opened)
+      return { svg: pictureSvg(pic), png, box: pic.box, ...(officeStructures.pptx === 'chemdraw' ? { emf: pictureEmf(pic) } : {}) };
     },
     svgToPng,
     bakePicture: (p) => fxPng(p, 'baked'),
     fonts: bundledFaces,
     smiles: drawingSmiles,
-    chemdrawObjects: officeStructures.pptx === 'chemdraw',
+    // read when saving (the tab manager keeps these options from the start; Settings ▸ General can change it since)
+    get chemdrawObjects() { return officeStructures.pptx === 'chemdraw'; },
   };
 }
 
@@ -4194,7 +4213,7 @@ function enterTab(tab: Tab, opened: boolean): void {
     masterSeen = deck.master;
     slideList.show(design ? null : deck);
     if (design) showDesignState();
-    notesBox.value = deck.current?.notes ?? '';
+    showNotes(deck.current);
     showSlideState();
   } else { slideList.show(null); showRulers(); }
   animUi?.update();
@@ -4531,7 +4550,7 @@ function slideSwitched(deck: Deck): void {
   if (canvas || onCanvas) editor.fit();
   onCanvas = canvas;
   showCanvasState();
-  notesBox.value = deck.current?.notes ?? '';
+  showNotes(deck.current);
   renderer.repaintAll();
   editor.requestScene();
   editor.clearSelection();
@@ -5283,14 +5302,71 @@ sizeSel.addEventListener('change', () => {
 // Speaker notes are saved with the slide a moment after typing stops (and when the box is left).
 let notesTimer = 0;
 let notesFor: { deck: Deck; slide: unknown } | null = null;
-notesBox.addEventListener('input', () => {
+function notesTyped(): void {
+  notesBox.el.classList.toggle('empty', !notesBox.value);
   const deck = deckNow();
   if (!deck) return;
   if (!notesFor) notesFor = { deck, slide: deck.current };
   clearTimeout(notesTimer);
   notesTimer = window.setTimeout(flushNotes, 500);
-});
+}
+notesBox.addEventListener('input', notesTyped);
 notesBox.addEventListener('blur', () => flushNotes());
+
+/**
+ * Bold, Italic, Underline or Strikethrough (Ctrl+B, I, U, or the ribbon) on the selected notes,
+ * or on what is typed next; or bullets on or off for the lines selected (Ctrl+Shift+L).
+ */
+function formatNotes(f: TextFormat): boolean {
+  if (f.kind === 'toggle' && (f.key === 'bold' || f.key === 'italic' || f.key === 'underline' || f.key === 'strike')) notesBox.toggle(f.key);
+  else if (f.kind === 'list' && f.list === 'bullet') {
+    const start = notesBox.selectionStart, end = notesBox.selectionEnd;
+    const edits = bulletEdits(notesBox.value, start, end);
+    if (!edits.length) return true;
+    for (const e of edits) notesBox.setRangeText(e.insert, e.at, e.at + e.remove);
+    // the selection stays on the same lines
+    const moved = (p: number) => p + edits.filter((e) => e.at <= p).reduce((n, e) => n + e.insert.length - e.remove, 0);
+    notesBox.setSelectionRange(Math.max(0, moved(start)), Math.max(0, moved(end)));
+  } else return false;
+  notesBox.focus();
+  notesTyped();
+  return true;
+}
+/** Commands whose keys work while typing speaker notes. */
+const NOTES_FILE_KEYS = new Set(['save', 'save-as', 'open', 'new', 'new-slides', 'print', 'close-tab', 'next-tab', 'prev-tab', 'autosave']);
+notesBox.addEventListener('keydown', (e) => {
+  const mod = e.ctrlKey || e.metaKey;
+  const key = e.key.toLowerCase();
+  const f: TextFormat | null = mod && !e.altKey && !e.shiftKey && key === 'b' ? { kind: 'toggle', key: 'bold' }
+    : mod && !e.altKey && !e.shiftKey && key === 'i' ? { kind: 'toggle', key: 'italic' }
+      : mod && !e.altKey && !e.shiftKey && key === 'u' ? { kind: 'toggle', key: 'underline' }
+        : mod && !e.altKey && e.shiftKey && key === 'l' ? { kind: 'list', list: 'bullet' } : null;
+  if (f) { e.preventDefault(); e.stopPropagation(); formatNotes(f); return; }
+  // the file's own keys (Save, Save As, Open, Print…) work from the notes too, as in PowerPoint;
+  // the browser's own use of them (Ctrl+Shift+S) would take the keys away from the page
+  const chord = mod ? chordOf(e) : null;
+  const act = chord ? keymap.lookup('command', chord) : undefined;
+  const name = act?.startsWith('command ') ? act.slice(8) : null;
+  if (name && NOTES_FILE_KEYS.has(name)) {
+    e.preventDefault();
+    e.stopPropagation();
+    flushNotes();
+    void command(name);
+    return;
+  }
+  // Enter on a bulleted line: the next line is bulleted too (on an empty one, the bullet goes)
+  // (any other Enter is a plain new line, kept as "\n" rather than the browser's own <div>)
+  if (e.key === 'Enter' && !mod && !e.altKey) {
+    e.preventDefault();
+    const start = notesBox.selectionStart, end = notesBox.selectionEnd, text = notesBox.value;
+    const lineAt = text.lastIndexOf('\n', start - 1) + 1;
+    const lineEnd = text.indexOf('\n', start) < 0 ? text.length : text.indexOf('\n', start);
+    if (e.shiftKey || start !== end || !text.startsWith(NOTE_BULLET, lineAt)) notesBox.setRangeText('\n', start, end, 'end');
+    else if (text.slice(lineAt, lineEnd) === NOTE_BULLET) notesBox.setRangeText('', lineAt, lineEnd, 'end');
+    else notesBox.setRangeText(`\n${NOTE_BULLET}`, start, start, 'end');
+    notesTyped();
+  }
+});
 
 function flushNotes(): void {
   clearTimeout(notesTimer);
@@ -5298,7 +5374,7 @@ function flushNotes(): void {
   notesFor = null;
   if (!f) return;
   const i = f.deck.slides.indexOf(f.slide as Deck['slides'][number]);
-  if (i >= 0) f.deck.setNotes(notesBox.value, i);
+  if (i >= 0) f.deck.setNotes(notesBox.value, i, notesLookOf(notesBox.value, notesBox.charLooks));
 }
 
 /**
@@ -10159,6 +10235,27 @@ const feedback = new FeedbackDialog({
     Computer: computerName(navigator.userAgent),
     Mode: ws.active.mode,
   }),
+  pagePicture: () => {
+    // the drawing on screen, small enough to send (a PNG at screen size, at most 2000 px a side)
+    try {
+      const p = recordPicture(doc, 4);
+      if (!p) return null;
+      const side = Math.max(p.box.x2 - p.box.x1, p.box.y2 - p.box.y1);
+      const dpi = side > 0 ? Math.min(144, Math.max(48, (2000 / side) * 72)) : 96;
+      const c = pictureCanvas(doc, p, dpi).canvas;
+      // on white, so it reads on GitHub's dark pages too
+      const out = document.createElement('canvas');
+      out.width = c.width;
+      out.height = c.height;
+      const g = out.getContext('2d')!;
+      g.fillStyle = '#fff';
+      g.fillRect(0, 0, out.width, out.height);
+      g.drawImage(c, 0, 0);
+      return out.toDataURL('image/png');
+    } catch {
+      return null;
+    }
+  },
 });
 
 /** An error nothing caught: say so, with a button that fills in a problem report about it. */
@@ -10293,6 +10390,8 @@ async function startWordObjects(): Promise<void> {
     }
   });
   for (const e of await invoke<EmbeddedEdit[]>('ole_pending').catch(() => [])) await openEmbedded(e);
+  // the name this computer's ChemDraw answers to, for the ChemDraw objects saved into Office files
+  setInstalledChemdrawProg(await invoke<string | null>('chemdraw_prog_id').catch(() => null));
   let on = await invoke<boolean>('ole_registered').catch(() => false);
   if (on) await invoke('ole_register', { on: true }).catch(() => {});
   else if (!wordObjectsOffered && !(await portableInfo())) {
@@ -14545,7 +14644,8 @@ editor.onFrame = () => {
   if (doc.version !== stereoSeen) { stereoSeen = doc.version; updateStereo(); }
 };
 const slideText = new SlideTextRibbon($('#ribbon'), {
-  format: (f) => editor.formatText(f),
+  // (in the speaker notes: bold, italic, underline, strikethrough and bullets there)
+  format: (f) => (document.activeElement === notesBox.el ? formatNotes(f) || true : editor.formatText(f)),
   look: () => editor.textLook(),
   refocus: () => editor.refocusText(),
   nothing: () => flash('Click into some text, or pick a text box or a shape with text, first.'),
@@ -14701,7 +14801,7 @@ requestAnimationFrame(() => {
 
 // Hooks for the automated speed tests.
 (window as any).__app = { assistant: { items: assistantItems, apply: applyAssistantAction, markStep: markAssistantStep }, doc, editor, renderer, settingsWindow, toolboxes, chem, live, command, setRibbonLook, setPageLook, getPageLook: () => ({ ...pageLook }), addMolfile, keeper, cdxml: (name: string) => writeCdxml(doc, { name, textMeasure: measureText }), openText, picture: (dpi = 150) => { const p = recordPicture(doc, 0); if (!p) return null; const c = pictureCanvas(doc, p, dpi); return { url: c.canvas.toDataURL('image/png'), box: p.box, dpi: c.dpi }; }, stressTest, pasteChemistry, smiles: async (loose = false) => chem.molToSmiles(toMolfile(doc, doc.atoms.keys(), '', { species: allSpecies(doc, editor.measure()) }).molblock, loose), placePicture, sample: sampleMolecule, ws, slideList, get presenter() { return shows?.presenter; }, Doc, keymap, names, get sheetMode() { return sheetMode; }, sheetChem, get docMode() { return docMode; }, loadModes: () => Promise.all([loadSheetMode(), loadDocMode()]), docxBytes: async () => (await import('./io/docx-write')).writeDocx(docMode.file!.t, docFiles),
-  pptxBytes: async () => { const d = deckNow()!; const { writePptx } = await import('./io/pptx-write'); return writePptx({ size: d.size, master: d.master, slides: d.slides.map((s, i) => ({ id: s.id, layout: s.layout, doc: d.docOf(i), notes: s.notes, transition: s.transition, anims: s.anims, comments: s.comments, canvas: s.canvas })), oleKept: d.oleKept, picKept: d.picKept }, pptxOptions()); } };
+  pptxBytes: async () => { const d = deckNow()!; const { writePptx } = await import('./io/pptx-write'); return writePptx({ size: d.size, master: d.master, slides: d.slides.map((s, i) => ({ id: s.id, layout: s.layout, doc: d.docOf(i), notes: s.notes, notesLook: s.notesLook, transition: s.transition, anims: s.anims, comments: s.comments, canvas: s.canvas })), oleKept: d.oleKept, picKept: d.picKept }, pptxOptions()); } };
 
 // ---------------------------------------------------------------- desktop self-test
 

@@ -24,8 +24,15 @@ const allElements = (f: string) => (f.match(/[A-Z][a-z]?/g) ?? []).every((e) => 
  */
 const REACH = 200;
 
+/**
+ * SMILES with a ring (C1CCNCC1, O=C1CCCC1): one word with a lone digit 1 after an atom. A formula
+ * never writes a count of 1, so its ring digits aren't counts to lower.
+ */
+const RING_SMILES = /^(?=.*[A-Za-z\]%]1(?!\d))[A-Za-z0-9@+\-[\]()=#$/\\%.:*]+$/;
+
 /** The text split into pieces that sit on the line, below it or above it. */
 export function chemPieces(text: string): Piece[] {
+  if (RING_SMILES.test(text)) return text ? [{ text, pos: 'base' }] : [];
   const looks: CharLook[] = Array.from({ length: text.length }, () => ({ pos: 'base' as const, italic: false }));
   const hill = HILL.exec(text);
   if (hill && allElements(hill[1])) {

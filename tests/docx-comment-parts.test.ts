@@ -137,6 +137,27 @@ describe('Word comment threads', () => {
   });
 });
 
+describe('Word document ids', () => {
+  // Word 365 shows a reply as a comment of its own unless settings.xml gives the document's ids
+  // (laptop check 57: adding only w14:docId and w15:docId made the reply thread)
+  it('writes the document ids Word needs to thread replies, and keeps the ones a file has', async () => {
+    const { doc } = await readDocx(wordFile());
+    const files = unzipSync(await writeDocx(doc, deps));
+    const settings = strFromU8(files['word/settings.xml']);
+    expect(settings).toMatch(/<w:settings [^>]*mc:Ignorable="w14 w15"/);
+    const w14 = /<w14:docId w14:val="([0-9A-F]{8})"\/>/.exec(settings)?.[1];
+    expect(w14 && parseInt(w14, 16) < 0x80000000).toBe(true);
+    expect(settings).toMatch(/<w15:docId w15:val="\{[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}\}"\/><\/w:settings>$/);
+    expect(new DOMParser().parseFromString(settings, 'application/xml').getElementsByTagName('parsererror').length).toBe(0);
+    // a file's own ids are written back as they were
+    files['word/settings.xml'] = u8(settings.replace(/w14:val="[0-9A-F]{8}"/, 'w14:val="24062061"').replace(/w15:val="\{[^}]*\}"/, 'w15:val="{73B5A095-1C2D-4E5F-8A9B-0C1D2E3F4A5B}"'));
+    const again = unzipSync(await writeDocx((await readDocx(zipSync(files))).doc, deps));
+    const kept = strFromU8(again['word/settings.xml']);
+    expect(kept).toContain('<w14:docId w14:val="24062061"/>');
+    expect(kept).toContain('<w15:docId w15:val="{73B5A095-1C2D-4E5F-8A9B-0C1D2E3F4A5B}"/>');
+  });
+});
+
 describe('Word building blocks', () => {
   it('keeps the glossary document with its parts and relationship ids', async () => {
     const { doc } = await readDocx(wordFile());

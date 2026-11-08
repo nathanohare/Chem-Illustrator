@@ -163,8 +163,8 @@ const url = process.argv[2] ?? 'http://localhost:5173/';
   // Help > Send Feedback
   await page.evaluate(() => window.__app.command('send-feedback'));
   await page.waitForTimeout(300);
-  await page.keyboard.type('Number compounds in the order the text mentions them');
-  await page.keyboard.press('Tab');
+  await page.locator('dialog.feedback-dialog input[type=text]').fill('Number compounds in the order the text mentions them');
+  await page.locator('dialog.feedback-dialog textarea').first().focus();
   await page.keyboard.type('In Document mode, it would help if compound numbers followed the order the compounds are first mentioned in the text, as journals ask.');
   await shot(page, 'feedback');
   await page.keyboard.press('Escape');
