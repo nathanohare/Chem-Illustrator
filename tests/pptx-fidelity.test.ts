@@ -507,7 +507,7 @@ describe('speaker notes', () => {
 
   it('keep their formatting through a save', async () => {
     const got = readPptx(await withNotes(formatted));
-    expect(got.slides[0].notes).toBe('Mention the yield\nthen the ee');
+    expect(got.slides[0].notes).toBe('Mention the yield\n• then the ee');
     const back = await resave({ ...got, slides: got.slides.map((s) => ({ ...s })) });
     const notes = Object.keys(files(back)).find((k) => /notesSlides\/notesSlide\d+\.xml$/.test(k))!;
     const xml = part(back, notes);

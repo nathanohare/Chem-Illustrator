@@ -74,6 +74,9 @@ import { writeTiff } from './render/tiff';
 import { itemsToEps } from './render/eps';
 import { Workspace, Tab } from './workspace';
 import { Deck, LayoutId, WIDE, STANDARD, Image as SlideImage, sizeName, SlideSize, slideBackground, slideColours, type SlideSource, contentArea, deckLayouts, type SizeFit } from './deck/deck';
+import { NOTE_BULLET, bulletEdits, notesCharLooks, notesLookOf, type NotesLook } from './deck/notes-look';
+import { RichInput } from './ui/rich-input';
+import type { TextFormat } from './text/format';
 import { shapeMathPicture, shapeMathScale, shapeMathSize } from './deck/equation';
 import { solid } from './deck/background';
 import { pictureFormat } from './ui/picture-dialog';
@@ -3879,7 +3882,21 @@ let lastOpen = '';
 let lastStats: ReadStats | null = null;
 
 const tabsEl = $<HTMLDivElement>('#tabs');
-const notesBox = $<HTMLTextAreaElement>('#notes');
+// Speaker notes: a box keeping bold, italic and underlined words, and bulleted lines (deck/notes-look.ts)
+const notesBox = new RichInput();
+{
+  const old = $('#notes');
+  notesBox.el.id = 'notes';
+  notesBox.setAttribute('aria-label', 'Speaker notes');
+  notesBox.el.dataset.placeholder = 'Click to add speaker notes';
+  old.replaceWith(notesBox.el);
+}
+/** The notes box shows the slide's notes (with their looks). */
+function showNotes(s: { notes: string; notesLook?: NotesLook } | null | undefined): void {
+  const text = s?.notes ?? '';
+  notesBox.setText(text, notesCharLooks(text, s?.notesLook));
+  notesBox.el.classList.toggle('empty', !text);
+}
 const sizeSel = $<HTMLSelectElement>('#rb-size');
 
 /** View > Window and Colours > Mode Colours: blue for drawings, orange for slides, green for sheets, or the person's own colours. */
@@ -4195,7 +4212,7 @@ function enterTab(tab: Tab, opened: boolean): void {
     masterSeen = deck.master;
     slideList.show(design ? null : deck);
     if (design) showDesignState();
-    notesBox.value = deck.current?.notes ?? '';
+    showNotes(deck.current);
     showSlideState();
   } else { slideList.show(null); showRulers(); }
   animUi?.update();
@@ -4532,7 +4549,7 @@ function slideSwitched(deck: Deck): void {
   if (canvas || onCanvas) editor.fit();
   onCanvas = canvas;
   showCanvasState();
-  notesBox.value = deck.current?.notes ?? '';
+  showNotes(deck.current);
   renderer.repaintAll();
   editor.requestScene();
   editor.clearSelection();
@@ -5284,14 +5301,57 @@ sizeSel.addEventListener('change', () => {
 // Speaker notes are saved with the slide a moment after typing stops (and when the box is left).
 let notesTimer = 0;
 let notesFor: { deck: Deck; slide: unknown } | null = null;
-notesBox.addEventListener('input', () => {
+function notesTyped(): void {
+  notesBox.el.classList.toggle('empty', !notesBox.value);
   const deck = deckNow();
   if (!deck) return;
   if (!notesFor) notesFor = { deck, slide: deck.current };
   clearTimeout(notesTimer);
   notesTimer = window.setTimeout(flushNotes, 500);
-});
+}
+notesBox.addEventListener('input', notesTyped);
 notesBox.addEventListener('blur', () => flushNotes());
+
+/**
+ * Bold, Italic, Underline or Strikethrough (Ctrl+B, I, U, or the ribbon) on the selected notes,
+ * or on what is typed next; or bullets on or off for the lines selected (Ctrl+Shift+L).
+ */
+function formatNotes(f: TextFormat): boolean {
+  if (f.kind === 'toggle' && (f.key === 'bold' || f.key === 'italic' || f.key === 'underline' || f.key === 'strike')) notesBox.toggle(f.key);
+  else if (f.kind === 'list' && f.list === 'bullet') {
+    const start = notesBox.selectionStart, end = notesBox.selectionEnd;
+    const edits = bulletEdits(notesBox.value, start, end);
+    if (!edits.length) return true;
+    for (const e of edits) notesBox.setRangeText(e.insert, e.at, e.at + e.remove);
+    // the selection stays on the same lines
+    const moved = (p: number) => p + edits.filter((e) => e.at <= p).reduce((n, e) => n + e.insert.length - e.remove, 0);
+    notesBox.setSelectionRange(Math.max(0, moved(start)), Math.max(0, moved(end)));
+  } else return false;
+  notesBox.focus();
+  notesTyped();
+  return true;
+}
+notesBox.addEventListener('keydown', (e) => {
+  const mod = e.ctrlKey || e.metaKey;
+  const key = e.key.toLowerCase();
+  const f: TextFormat | null = mod && !e.altKey && !e.shiftKey && key === 'b' ? { kind: 'toggle', key: 'bold' }
+    : mod && !e.altKey && !e.shiftKey && key === 'i' ? { kind: 'toggle', key: 'italic' }
+      : mod && !e.altKey && !e.shiftKey && key === 'u' ? { kind: 'toggle', key: 'underline' }
+        : mod && !e.altKey && e.shiftKey && key === 'l' ? { kind: 'list', list: 'bullet' } : null;
+  if (f) { e.preventDefault(); e.stopPropagation(); formatNotes(f); return; }
+  // Enter on a bulleted line: the next line is bulleted too (on an empty one, the bullet goes)
+  // (any other Enter is a plain new line, kept as "\n" rather than the browser's own <div>)
+  if (e.key === 'Enter' && !mod && !e.altKey) {
+    e.preventDefault();
+    const start = notesBox.selectionStart, end = notesBox.selectionEnd, text = notesBox.value;
+    const lineAt = text.lastIndexOf('\n', start - 1) + 1;
+    const lineEnd = text.indexOf('\n', start) < 0 ? text.length : text.indexOf('\n', start);
+    if (e.shiftKey || start !== end || !text.startsWith(NOTE_BULLET, lineAt)) notesBox.setRangeText('\n', start, end, 'end');
+    else if (text.slice(lineAt, lineEnd) === NOTE_BULLET) notesBox.setRangeText('', lineAt, lineEnd, 'end');
+    else notesBox.setRangeText(`\n${NOTE_BULLET}`, start, start, 'end');
+    notesTyped();
+  }
+});
 
 function flushNotes(): void {
   clearTimeout(notesTimer);
@@ -5299,7 +5359,7 @@ function flushNotes(): void {
   notesFor = null;
   if (!f) return;
   const i = f.deck.slides.indexOf(f.slide as Deck['slides'][number]);
-  if (i >= 0) f.deck.setNotes(notesBox.value, i);
+  if (i >= 0) f.deck.setNotes(notesBox.value, i, notesLookOf(notesBox.value, notesBox.charLooks));
 }
 
 /**
@@ -14567,7 +14627,8 @@ editor.onFrame = () => {
   if (doc.version !== stereoSeen) { stereoSeen = doc.version; updateStereo(); }
 };
 const slideText = new SlideTextRibbon($('#ribbon'), {
-  format: (f) => editor.formatText(f),
+  // (in the speaker notes: bold, italic, underline, strikethrough and bullets there)
+  format: (f) => (document.activeElement === notesBox.el ? formatNotes(f) || true : editor.formatText(f)),
   look: () => editor.textLook(),
   refocus: () => editor.refocusText(),
   nothing: () => flash('Click into some text, or pick a text box or a shape with text, first.'),
@@ -14723,7 +14784,7 @@ requestAnimationFrame(() => {
 
 // Hooks for the automated speed tests.
 (window as any).__app = { assistant: { items: assistantItems, apply: applyAssistantAction, markStep: markAssistantStep }, doc, editor, renderer, settingsWindow, toolboxes, chem, live, command, setRibbonLook, setPageLook, getPageLook: () => ({ ...pageLook }), addMolfile, keeper, cdxml: (name: string) => writeCdxml(doc, { name, textMeasure: measureText }), openText, picture: (dpi = 150) => { const p = recordPicture(doc, 0); if (!p) return null; const c = pictureCanvas(doc, p, dpi); return { url: c.canvas.toDataURL('image/png'), box: p.box, dpi: c.dpi }; }, stressTest, pasteChemistry, smiles: async (loose = false) => chem.molToSmiles(toMolfile(doc, doc.atoms.keys(), '', { species: allSpecies(doc, editor.measure()) }).molblock, loose), placePicture, sample: sampleMolecule, ws, slideList, get presenter() { return shows?.presenter; }, Doc, keymap, names, get sheetMode() { return sheetMode; }, sheetChem, get docMode() { return docMode; }, loadModes: () => Promise.all([loadSheetMode(), loadDocMode()]), docxBytes: async () => (await import('./io/docx-write')).writeDocx(docMode.file!.t, docFiles),
-  pptxBytes: async () => { const d = deckNow()!; const { writePptx } = await import('./io/pptx-write'); return writePptx({ size: d.size, master: d.master, slides: d.slides.map((s, i) => ({ id: s.id, layout: s.layout, doc: d.docOf(i), notes: s.notes, transition: s.transition, anims: s.anims, comments: s.comments, canvas: s.canvas })), oleKept: d.oleKept, picKept: d.picKept }, pptxOptions()); } };
+  pptxBytes: async () => { const d = deckNow()!; const { writePptx } = await import('./io/pptx-write'); return writePptx({ size: d.size, master: d.master, slides: d.slides.map((s, i) => ({ id: s.id, layout: s.layout, doc: d.docOf(i), notes: s.notes, notesLook: s.notesLook, transition: s.transition, anims: s.anims, comments: s.comments, canvas: s.canvas })), oleKept: d.oleKept, picKept: d.picKept }, pptxOptions()); } };
 
 // ---------------------------------------------------------------- desktop self-test
 

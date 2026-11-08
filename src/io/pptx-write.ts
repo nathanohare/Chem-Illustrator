@@ -33,6 +33,7 @@ import { contentsAlt, titleOverlaps, roughCaptionBox } from '../accessibility';
 import type { Selection } from '../editor/editor';
 import { Package, NS, REL, emu, xml, xmlAttr, hex6, MediaFiles, structureAltText, bytesHash } from './ooxml';
 import { SLIDE_SIZE_TYPES } from '../deck/deck';
+import { notesParagraphs, type NotesLook } from '../deck/notes-look';
 import { appPropsXml, corePropsXml, writeKeptParts, type KeptParts } from './kept-parts';
 import { olePrint, picturePrint, svgWithDrawing, type KeptOle, type KeptPicture } from './ole-kept';
 import { facesToEmbed, toEot, type FontSource } from './font-embed';
@@ -217,7 +218,7 @@ export interface DeckData {
   size: SlideSize;
   master: Master;
   /** `id` is the slide's id in the deck, for links to it (#slide=id). */
-  slides: { id?: number; layout: LayoutId; doc: Doc; notes: string; notesKept?: NotesKept; transition?: Transition; anims?: Anim[]; comments?: PinnedComment[]; background?: Background; hideGraphics?: boolean; hidden?: boolean; hf?: SlideHF; canvas?: CanvasData; part?: CanvasPart; refs?: string[]; refLook?: Partial<RefLook>; refList?: RefListSpec; zotero?: SlideZotero }[];
+  slides: { id?: number; layout: LayoutId; doc: Doc; notes: string; notesKept?: NotesKept; notesLook?: NotesLook; transition?: Transition; anims?: Anim[]; comments?: PinnedComment[]; background?: Background; hideGraphics?: boolean; hidden?: boolean; hf?: SlideHF; canvas?: CanvasData; part?: CanvasPart; refs?: string[]; refLook?: Partial<RefLook>; refList?: RefListSpec; zotero?: SlideZotero }[];
   /** A design (Design mode): marked so it opens in Design mode again. */
   design?: boolean;
   /** The deck's sections, in order (none when left out). */
@@ -635,7 +636,7 @@ class Writer {
       }
       if (s.notes.trim()) {
         const np = `ppt/notesSlides/notesSlide${i + 1}.xml`;
-        pkg.add(np, this.notesSlide(s.notes, np, s.notesKept), CT.notes);
+        pkg.add(np, this.notesSlide(s.notes, np, s.notesKept, s.notesLook), CT.notes);
         pkg.relate(np, REL.notesMaster, '../notesMasters/notesMaster1.xml');
         pkg.relate(np, REL.slide, `../slides/slide${i + 1}.xml`);
         pkg.relate(path, REL.notesSlide, `../notesSlides/notesSlide${i + 1}.xml`);
@@ -1569,9 +1570,16 @@ class Writer {
   // ---------------------------------------------------------------- notes
 
   /** A slide's notes page: its notes as PowerPoint had them while they are unchanged, else as plain paragraphs. */
-  private notesSlide(text: string, path: string, kept?: NotesKept): string {
+  private notesSlide(text: string, path: string, kept?: NotesKept, look?: NotesLook): string {
     const body = kept && kept.text === text ? kept.xml.replace(/__REL_(\d+)__/g, (_m, n: string) => (kept.rels[Number(n)] ? this.keptRel(path, kept.rels[Number(n)]) : '')) : null;
-    const paras = text.split('\n').map((t) => (t ? `<a:p><a:r><a:rPr ${lang} dirty="0"/><a:t>${xml(t)}</a:t></a:r></a:p>` : `<a:p><a:endParaRPr ${lang} dirty="0"/></a:p>`)).join('');
+    const paras = notesParagraphs(text, look).map((p) => {
+      const pPr = p.bullet ? '<a:pPr marL="171450" indent="-171450"><a:buFont typeface="Arial"/><a:buChar char="•"/></a:pPr>' : '';
+      const runs = p.runs.map((r) => {
+        const look = `${r.bold ? ' b="1"' : ''}${r.italic ? ' i="1"' : ''}${r.underline ? ' u="sng"' : ''}${r.strike ? ' strike="sngStrike"' : ''}`;
+        return `<a:r><a:rPr ${lang}${look} dirty="0"/><a:t>${xml(r.text)}</a:t></a:r>`;
+      }).join('');
+      return `<a:p>${pPr}${runs || `<a:endParaRPr ${lang} dirty="0"/>`}</a:p>`;
+    }).join('');
     return `${HEAD}<p:notes ${XMLNS}><p:cSld><p:spTree>${GROUP}` +
       `<p:sp><p:nvSpPr><p:cNvPr id="2" name="Slide Image Placeholder 1"/><p:cNvSpPr><a:spLocks noGrp="1" noRot="1" noChangeAspect="1"/></p:cNvSpPr><p:nvPr><p:ph type="sldImg"/></p:nvPr></p:nvSpPr><p:spPr/></p:sp>` +
       `<p:sp><p:nvSpPr><p:cNvPr id="3" name="Notes Placeholder 2"/><p:cNvSpPr><a:spLocks noGrp="1"/></p:cNvSpPr><p:nvPr><p:ph type="body" idx="1"/></p:nvPr></p:nvSpPr><p:spPr/>` +
