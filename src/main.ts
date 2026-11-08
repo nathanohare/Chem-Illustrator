@@ -154,6 +154,7 @@ import { StylePanel, tidyStyle } from './ui/style-panel';
 import { installCombos } from './ui/combo';
 import { installFontList, registerBundledFonts, bundledFaces, pdfFonts } from './fonts';
 import { applyRibbonIcons } from './ui/ribbon-icons';
+import { iconSet, setIconSet } from './ui/icon-swap';
 import { applyIconSet } from './ui/icon-set';
 import { RibbonLive } from './ui/ribbon-live';
 import { installRibbonFlyouts } from './ui/ribbon-flyout';
@@ -10526,12 +10527,18 @@ async function personalPreferences(): Promise<void> {
       help: 'Off, a counterion typed without its charge is still read as that ion, and flagged until the charge is added.' },
     { name: 'saltGroups', label: 'Group each with the structure or ion of opposite charge next to it, as one salt', type: 'checkbox', value: String(chemText.saltGroups), inline: (v) => saltSwatch(v === 'true', doc.style),
       help: 'Grouped, the two count as one salt: one formula and mass, and a SMILES with both parts.' },
+    { name: 'iconsHeading', label: 'Icons', type: 'heading', value: '' },
+    { name: 'iconSet', label: 'Icon set', value: iconSet(), short: true, options: [
+      { value: 'new', label: 'New: one style in every mode' },
+      { value: 'classic', label: 'Classic: the simple line icons, closest to ChemDraw' }],
+      help: 'Classic brings back the icons the toolboxes and ribbons had before the redesign. Buttons that had only words keep their new pictures either way.' },
   ], { ok: 'Save' });
   if (!r) return;
   enterFinishesText = r.enterFinishes === 'enter';
   setWarnLook(r.warnLook as Settings['warnLook']);
   chemText.ionCharges = r.ionCharges === 'true';
   chemText.saltGroups = r.saltGroups === 'true';
+  setIconSet(r.iconSet === 'classic' ? 'classic' : 'new');
   editor.aids = { ...editor.aids, angle: r.aidAngle === 'true', length: r.aidLength === 'true', hints: r.aidHints === 'true', look: r.aidLook === 'box' || r.aidLook === 'solid' ? r.aidLook : 'plain', units: r.aidUnits === 'px' || r.aidUnits === 'mm' ? r.aidUnits : 'in' };
   const look = parseAlkylLook(r.alkylLook);
   const changed = look !== alkylPrefs.look;
@@ -10622,6 +10629,7 @@ function currentSettings(): Settings {
     density,
     shadows,
     iconLook,
+    iconSet: iconSet(),
     shapeInk: shapeInkNow,
     oneColumnTools,
     toolCells,
@@ -10864,6 +10872,7 @@ function applySettings(s: Settings): void {
   setDensity(s.density);
   setShadows(s.shadows);
   setIconLook(s.iconLook);
+  setIconSet(s.iconSet);
   setShapesInk(s.shapeInk);
   setOneColumnTools(s.oneColumnTools);
   setToolCells(s.toolCells);
@@ -12100,6 +12109,8 @@ buildSelectGalleries();
 buildColourGalleries();
 applyRibbonIcons();
 applyIconSet();
+// the new icon set until the settings say otherwise (Settings ▸ Preferences ▸ Icon set)
+setIconSet('new');
 installRibbonFlyouts();
 
 const stylePanel = new StylePanel($('#style-section'), $('#style-body'), doc, () => editor.sel, () => editor.changed());
@@ -13795,7 +13806,7 @@ const SETTINGS_PAGES: SettingsPage[] = [
   { id: 'general', title: 'General', words: 'backup back up copy move settings file new computer install reinstall export import groups selecting click outline linked text above below ask whole page tracked changes reviewer name start view recent files chemdraw objects ole word powerpoint docx pptx save structures pictures svg png compatibility', open: generalPreferences },
   { id: 'analysis', title: 'Analysis', words: 'analysis panel rows reorder hide show bench properties density boiling melting point vapor pressure flash refractive index lab calculation calculations mmol mass volume solution molarity ribbon box attached descriptors decimal places units celsius fahrenheit kelvin pubchem name hrms elemental', open: () => analysisSettingsPage(analysisHost) },
   ...nmrHere ? [{ id: 'nmr', title: 'NMR Prediction', words: 'nmr prediction predict spectrum spectra proton carbon 1h 13c ppm range width solvent cdcl3 spectrometer frequency mhz quality fast balanced accurate automatic selection', open: nmrSettings }] : [],
-  { id: 'preferences', title: 'Preferences', words: 'personal personalize habits enter return key finish text tool box new line alt option escape esc taste alkyl isomer prefix prefixes italic dash hyphen raised superscript tbu t-bu ipr i-pr nbu sbu ibu tert-butyl isopropyl problems warnings marks red box circle pointer cursor angle length units pixels px millimeters mm inches readout hints modifier shift alt ctrl keys counterions ions salt bf4 nbu4 charges group', open: personalPreferences },
+  { id: 'preferences', title: 'Preferences', words: 'personal personalize habits enter return key finish text tool box new line alt option escape esc taste alkyl isomer prefix prefixes italic dash hyphen raised superscript tbu t-bu ipr i-pr nbu sbu ibu tert-butyl isopropyl problems warnings marks red box circle pointer cursor angle length units pixels px millimeters mm inches readout hints modifier shift alt ctrl keys counterions ions salt bf4 nbu4 charges group icon icons icon set classic chemdraw new pictures toolbox', open: personalPreferences },
   { id: 'drawing', title: 'Drawing', words: 'bond ends round rounded square caps mitre corners methyl me ch3 axial chirality ra sa helicity charges circled ammonium nh4 r groups numbers superscript regular text eta hapto delocalized mechanism arrows reroute wrap around block path gap tail head origin target intermediate check arrows', open: drawingPreferences },
   { id: 'style', perFile: true, title: 'Drawing Style', words: 'bond length line width font journal acs rsc wiley elsevier thieme hash spacing margin arrow text reagents conditions above below size smaller reaction arrows gap fit alignment line up structures plus scheme', open: drawingStyleDialog },
   { id: 'hotkeys', title: 'Keyboard Shortcuts', words: 'keys keyboard shortcuts import export reset', open: () => hotkeysDialog.open() },

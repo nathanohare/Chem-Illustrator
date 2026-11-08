@@ -118,6 +118,8 @@ export interface Settings {
   shadows: 'light' | 'strong' | 'off';
   /** The icons' colours (View > Window and Colours > Icon Colours): gray with one part in the mode's colour, or a colour for each kind of command as Office does. */
   iconLook: 'mode' | 'kind';
+  /** Which drawings the icons use (Settings ▸ Preferences ▸ Icon set): the new set, one style in every mode, or Classic, the simple line icons the Canvas toolboxes had (closest to ChemDraw's). */
+  iconSet: 'new' | 'classic';
   /** The Shapes menu's pictures: neutral (black on light, white on dark) or in the mode's colour (View > Window and Colours > Icon Colours). */
   shapeInk: 'neutral' | 'accent';
   /** Toolboxes docked at a side show in one column in Slides, Sheet, Document and Design tabs (View > Toolboxes). */
@@ -288,7 +290,7 @@ export const SLIDE_PANE_MIN = 120, SLIDE_PANE_MAX = 480, NOTES_MIN = 36, NOTES_M
 export const DEFAULT_SETTINGS: Settings = {
   hotkeys: {}, keepHotspotOnBond: true, stickyHotspot: false, fixedLength: true, fixedAngles: true, devTools: false, showRoles: true,
   chemTyping: true, stereoItalic: true, boldNumbers: false, autoLinks: true, linkCtrlClick: true, spellCheck: true, replacements: DEFAULT_TYPING.replacements, dictionary: [],
-  modeColours: DEFAULT_MODE_COLOURS, nicknames: {}, templates: [], splitWidth: 0.38, slidePaneWidth: 212, notesHeight: 84, slideNotes: true, scrollBars: true, ribbonCollapsed: false, ribbonAutoFold: false, tabsInMenu: true, uiScale: 1, titleBar: typeof navigator !== 'undefined' && /Mac/.test(navigator.platform || navigator.userAgent) ? 'system' : 'app', page: { name: 'letter', w: 540, h: 720, grow: true }, welcomed: false, textBar: 'docked', appTheme: 'darkgray', density: 'cozy', shadows: 'light', iconLook: 'mode', shapeInk: 'neutral', oneColumnTools: false, toolCells: 'off', canvasRibbon: 'classic', startView: true, enterFinishesText: false, offerFigures: true, groupTips: true, toolTips: true, touchMode: 'auto', penSketch: false,
+  modeColours: DEFAULT_MODE_COLOURS, nicknames: {}, templates: [], splitWidth: 0.38, slidePaneWidth: 212, notesHeight: 84, slideNotes: true, scrollBars: true, ribbonCollapsed: false, ribbonAutoFold: false, tabsInMenu: true, uiScale: 1, titleBar: typeof navigator !== 'undefined' && /Mac/.test(navigator.platform || navigator.userAgent) ? 'system' : 'app', page: { name: 'letter', w: 540, h: 720, grow: true }, welcomed: false, textBar: 'docked', appTheme: 'darkgray', density: 'cozy', shadows: 'light', iconLook: 'mode', iconSet: 'new', shapeInk: 'neutral', oneColumnTools: false, toolCells: 'off', canvasRibbon: 'classic', startView: true, enterFinishesText: false, offerFigures: true, groupTips: true, toolTips: true, touchMode: 'auto', penSketch: false,
   citeStyle: DEFAULT_STYLE, citeOptions: {}, methylStyle: 'Me', axialStyle: 'RaSa', circledCharges: false, ionCharges: false, saltGroups: false, groupClick: 'group', groupOutline: true, rerouteArrows: true, arrowProducts: true, arrowStartGap: null, arrowEndGap: null, superscriptR: true, superscriptRText: false, alkylLook: 'typed', warnLook: 'box', bondEnds: DEFAULT_BOND_ENDS, mapLook: 'grey', mapBox: { ...DEFAULT_MAP_BOX }, depthShade: { ...DEFAULT_DEPTH_SHADE }, linkSide: 'keep', slideTemplate: null, slideThemes: [], askWholeDrawing: true, palettes: [], toolboxes: defaultToolboxes(), ribbons: {}, quickBar: null,
   myStyles: [], modeStyles: {}, darkPage: false, darkPalette: 'Graphite', darkPalettes: [],
   guides: { slides: true, design: true },
@@ -361,6 +363,7 @@ export function parseSettings(text: string | null | undefined): Settings {
   else if (r.density === 'compact') s.density = 'cozy';
   if (r.shadows === 'light' || r.shadows === 'strong' || r.shadows === 'off') s.shadows = r.shadows;
   if (r.iconLook === 'mode' || r.iconLook === 'kind') s.iconLook = r.iconLook;
+  if (r.iconSet === 'new' || r.iconSet === 'classic') s.iconSet = r.iconSet;
   if (r.shapeInk === 'neutral' || r.shapeInk === 'accent') s.shapeInk = r.shapeInk;
   if (typeof r.toolCells === 'string' && ['off', 'grid', 'raised', 'both'].includes(r.toolCells)) s.toolCells = r.toolCells as Settings['toolCells'];
   if (typeof r.oneColumnTools === 'boolean') s.oneColumnTools = r.oneColumnTools;
