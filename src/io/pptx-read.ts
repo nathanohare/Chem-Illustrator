@@ -37,7 +37,7 @@ import { dataUrl, imageSize } from '../render/images';
 import { knownShape, tidyFx } from '../render/picture-fx';
 import { applyColorMods, dmlFraction, hslHex, linearHex } from './dml-color';
 import { readPictureFx } from './picture-xml';
-import { layoutText, caretPos, ASCENT } from '../text/layout';
+import { layoutText, caretPos, ASCENT, PPT_SINGLE } from '../text/layout';
 import { Master, SlideSize, LayoutId, type TemplateArt, type ArtLayer, type KeptRel, type KeptXmlPart, type NotesKept, defaultMaster, textStyles, slideDrawingStyle, slideBackground, slideColours, hasLayout, newLayoutId, deckLayouts, type LayoutDef, type PlaceholderBox, type SectionCount, type DeckSettings, type SlideHF, type DateFormat, showsNumber, showsFooter, showsDate } from '../deck/deck';
 import { backgroundColour, isPlain, sameBackground, type Background } from '../deck/background';
 import { readFill, readOneFill, type FillContext } from './pptx-background';
@@ -2650,7 +2650,7 @@ class Reader {
     const full = base ? { ...c, runs: out.map((r) => ({ ...base, ...dropUndefined(r) }) as TextRun) } : c;
     if (!wrapNone || ph) c.wrap = Math.max(1, w);
     else {
-      const natural = layoutText(full, sizeFor, arialMeasure).boxWidth;
+      const natural = layoutText({ ...full, single: PPT_SINGLE }, sizeFor, arialMeasure).boxWidth;
       if (justify !== 'left' || natural > w) c.wrap = Math.max(w, natural);
     }
     const numCol = Number(bp('numCol') ?? 1);
@@ -2673,7 +2673,8 @@ class Reader {
         if (!c.paras) delete c.paras;
       }
     }
-    const lay = layoutText({ ...full, wrap: c.wrap }, sizeFor, arialMeasure);
+    // (lines spaced as PowerPoint spaces them)
+    const lay = layoutText({ ...full, wrap: c.wrap, single: PPT_SINGLE }, sizeFor, arialMeasure);
     const first = lay.lines[0] ? lay.lines[0].ascent / ASCENT : sizeFor;
     const anchor = bp('anchor') ?? 't';
     const room = box.y2 - box.y1 - tI - bI;

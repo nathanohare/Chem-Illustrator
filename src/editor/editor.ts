@@ -6812,9 +6812,11 @@ export class Editor {
       redraw: () => this.requestOverlay(),
       enterFinishes: () => this.enterFinishesText(c?.ph ? 'other' : 'text'),
     };
+    // (on a slide, lines spaced as PowerPoint spaces them, as they are drawn)
+    const lines = this.r.slideLines();
     const initial = c
-      ? { runs: applyBase(c.runs, base), paras: c.paras, justify: c.justify, wrap: c.wrap, width: c.width, lineHeight: c.lineHeight, lineSpacing: c.lineSpacing, cols: c.cols, colGap: c.colGap, boxH: c.boxH, fit: c.fit }
-      : { runs: [], justify: opts?.justify ?? 'left' as const, wrap };
+      ? { runs: applyBase(c.runs, base), paras: c.paras, justify: c.justify, wrap: c.wrap, width: c.width, lineHeight: c.lineHeight, lineSpacing: c.lineSpacing, cols: c.cols, colGap: c.colGap, boxH: c.boxH, fit: c.fit, ...lines }
+      : { runs: [], justify: opts?.justify ?? 'left' as const, wrap, ...lines };
     const ed = new CaptionEditor(host, at, initial, defaults, (res) => {
       if (this.captionEd === ed) this.captionEd = null;
       if (id !== null) hide(null);
@@ -7104,7 +7106,7 @@ export class Editor {
     const wrap = Math.max(4, g.area.x2 - g.area.x1);
     // a turned shape's text is typed turned with it
     const rot = shapeTurn(s), mid = shapeMid(s);
-    const ed = new CaptionEditor(host, turnAbout({ x: g.x, y: g.y }, mid, rot), { runs: s.text?.runs ?? [], paras: s.text?.paras, justify: s.textAlign ?? 'center', wrap }, {}, (res) => {
+    const ed = new CaptionEditor(host, turnAbout({ x: g.x, y: g.y }, mid, rot), { runs: s.text?.runs ?? [], paras: s.text?.paras, justify: s.textAlign ?? 'center', wrap, ...this.r.slideLines() }, {}, (res) => {
       if (this.captionEd === ed) this.captionEd = null;
       this.r.geoEdit = null;
       const cur = doc.shapes.get(id);

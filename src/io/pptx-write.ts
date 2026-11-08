@@ -16,7 +16,7 @@ import { Doc, Caption, Shape, TextRun, ParaStyle, Arrow, applyBase, PICTURE_SHAD
 import { bakedPart, tidyFx } from '../render/picture-fx';
 import { blipEffectsXml, pictureGeomXml } from './picture-xml';
 import { turnAbout, type Rect, type Vec } from '../geom';
-import { layoutText, ASCENT, FONT_STACK, type Measure } from '../text/layout';
+import { layoutText, ASCENT, FONT_STACK, PPT_SINGLE, type Measure } from '../text/layout';
 import { fitParas, listInfo, autoNumLabel, splitParagraphs } from '../text/paragraphs';
 import { formulaParts, plainText } from '../richtext';
 import { officeTarget, slideOfLink } from '../links';
@@ -1476,7 +1476,8 @@ class Writer {
   private text(path: string, c: Caption, id: number, layout: LayoutId, styles: ReturnType<typeof textStyles>, phCount: Record<string, number>, doc: Doc, more: Record<string, string> = {}): string {
     const base = c.ph ? styles[c.ph] : undefined;
     const size0 = c.runs[0]?.size ?? base?.size ?? doc.style.captionSize;
-    const lay = layoutText(c.ph ? { ...c, runs: applyBase(c.runs, base) } : c, base?.size ?? doc.style.captionSize, this.measure);
+    // (lines spaced as PowerPoint spaces them)
+    const lay = layoutText({ ...(c.ph ? { ...c, runs: applyBase(c.runs, base) } : c), single: PPT_SINGLE }, base?.size ?? doc.style.captionSize, this.measure);
     const firstSize = lay.lines[0] ? lay.lines[0].ascent / ASCENT : size0;
     // the box: the placeholder's own, or around the text, moved so PowerPoint's first baseline is ours
     const top = c.y - PPT_ASCENT * firstSize;
