@@ -294,11 +294,13 @@ describe('features left out (X16)', () => {
     ],
   });
 
-  it('names controls, connections, query tables, background pictures, macro sheets and XML maps on opening', async () => {
+  it('names controls, query tables, background pictures, macro sheets and XML maps on opening', async () => {
     const { warnings } = await readXlsx(file());
     const list = warnings.find((w) => w.startsWith('Not shown here'));
     expect(list).toBeDefined();
-    for (const item of ['2 form controls (buttons, check boxes, lists)', '1 ActiveX control', '2 data connections', '1 query table\'s link to the data it was imported from',
+    // (the data connections are kept: tests/xlsx-excel-kept.test.ts; the query table's link isn't, as its header cell doesn't name its column)
+    expect(list).not.toContain('data connection');
+    for (const item of ['2 form controls (buttons, check boxes, lists)', '1 ActiveX control', '1 query table\'s link to the data it was imported from',
       '1 sheet background picture', '1 Excel 4 macro sheet (opened as an ordinary sheet)', 'XML maps']) expect(list).toContain(item);
   });
 });

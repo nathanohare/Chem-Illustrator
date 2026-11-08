@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
 //
 // Excel files saved here as real Excel showed them (Office file audit, laptop checks in Excel 365):
-// row heights written back as the file gave them, without asking Excel to work every formula out
+// a table Power Query fills keeps its link to the query (the workbook's data connections, the
+// table's query table and its columns' ids), so Excel can still refresh it; row heights written back as the file gave them, without asking Excel to work every formula out
 // again when nothing has changed them (after which Excel fits rows again); and Excel 365's #SPILL!
 // and #CALC! cells, which it writes as rich values, not counted as pictures placed in cells.
 
@@ -114,5 +115,79 @@ describe('row heights as Excel showed them (X21)', () => {
       workbook: (list) => `<workbook xmlns="${MAIN}" xmlns:r="${R}"><sheets>${list}</sheets><calcPr calcId="191029" fullCalcOnLoad="1"/></workbook>`,
     }))).book;
     expect(calcPr(await writeXlsx(book, pictures))).toBe('<calcPr calcId="191029" fullCalcOnLoad="1"/>');
+  });
+});
+
+describe('a table Power Query fills (P3, X16)', () => {
+  const SHEET = 'xl/worksheets/sheet1.xml';
+  const CONNECTIONS = `<connections xmlns="${MAIN}"><connection id="1" keepAlive="1" name="Query - Assays" description="Connection to the 'Assays' query in the workbook." type="5" refreshedVersion="8" background="1" saveData="1">` +
+    '<dbPr connection="Provider=Microsoft.Mashup.OleDb.1;Data Source=$Workbook$;Location=Assays;Extended Properties=&quot;&quot;" command="SELECT * FROM [Assays]"/></connection></connections>';
+  const MODEL = `<connections xmlns="${MAIN}" xmlns:x15="http://schemas.microsoft.com/office/spreadsheetml/2010/11/main"><connection id="1" name="ThisWorkbookDataModel" type="5" refreshedVersion="8" background="1">` +
+    '<dbPr connection="Data Model Connection" command="Model" commandType="1"/><extLst><ext uri="{DE250136-89BD-433C-8126-D09CA5730AF9}"><x15:connection id="" model="1"/></ext></extLst></connection></connections>';
+  // (a column the query no longer gives was taken out in Excel: the ids go 1, 3, 4)
+  const QUERY = `<queryTable xmlns="${MAIN}" name="ExternalData_1" autoFormatId="16" applyNumberFormats="0" applyBorderFormats="0" applyFontFormats="0" applyPatternFormats="0" applyAlignmentFormats="0" applyWidthHeightFormats="0" connectionId="1">` +
+    '<queryTableRefresh nextId="5"><queryTableFields count="3"><queryTableField id="1" name="Compound" tableColumnId="1"/><queryTableField id="3" name="Yield" tableColumnId="3"/><queryTableField id="4" name="Mass" tableColumnId="4"/></queryTableFields>' +
+    '<queryTableDeletedFields count="1"><deletedField name="Notes"/></queryTableDeletedFields></queryTableRefresh></queryTable>';
+  const TABLE = `<table xmlns="${MAIN}" id="1" name="Assays" displayName="Assays" ref="A1:C3" tableType="queryTable" totalsRowShown="0"><autoFilter ref="A1:C3"/>` +
+    '<tableColumns count="3"><tableColumn id="1" uniqueName="1" name="Compound" queryTableFieldId="1"/><tableColumn id="3" uniqueName="3" name="Yield" queryTableFieldId="3"/>' +
+    '<tableColumn id="4" uniqueName="4" name="Mass" queryTableFieldId="4"/></tableColumns><tableStyleInfo name="TableStyleMedium2" showFirstColumn="0" showLastColumn="0" showRowStripes="1" showColumnStripes="0"/></table>';
+  const cells = '<sheetData>' +
+    '<row r="1"><c r="A1" t="inlineStr"><is><t>Compound</t></is></c><c r="B1" t="inlineStr"><is><t>Yield</t></is></c><c r="C1" t="inlineStr"><is><t>Mass</t></is></c></row>' +
+    '<row r="2"><c r="A2" t="inlineStr"><is><t>2a</t></is></c><c r="B2"><v>0.81</v></c><c r="C2"><v>120.5</v></c></row>' +
+    '<row r="3"><c r="A3" t="inlineStr"><is><t>2b</t></is></c><c r="B3"><v>0.64</v></c><c r="C3"><v>134.2</v></c></row>' +
+    '</sheetData><tableParts count="1"><tablePart r:id="rId1"/></tableParts>';
+  const file = (connections = CONNECTIONS) => excelBook([['Data', cells]], {
+    workbook: (list) => `<workbook xmlns="${MAIN}" xmlns:r="${R}"><sheets>${list}</sheets><definedNames><definedName name="ExternalData_1" localSheetId="0" hidden="1">Data!$A$1:$C$3</definedName></definedNames></workbook>`,
+    parts: [
+      { path: 'xl/tables/table1.xml', from: SHEET, rel: `${R}/table`, target: '../tables/table1.xml', xml: TABLE, type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.table+xml' },
+      { path: 'xl/queryTables/queryTable1.xml', from: 'xl/tables/table1.xml', rel: `${R}/queryTable`, target: '../queryTables/queryTable1.xml', xml: QUERY, type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.queryTable+xml' },
+      { path: 'xl/connections.xml', rel: `${R}/connections`, xml: connections, type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.connections+xml' },
+    ],
+  });
+  const tableOut = (bytes: Uint8Array) => part(bytes, 'xl/tables/table1.xml');
+
+  it('keeps the connection, the query table and the table\'s link to it, and says nothing of them on opening', async () => {
+    const { book, warnings } = await readXlsx(file());
+    expect(warnings.join(' ')).not.toMatch(/connection|query/);
+    const saved = await writeXlsx(book, pictures);
+    expect(part(saved, 'xl/connections.xml')).toBe(CONNECTIONS);
+    expect(part(saved, 'xl/_rels/workbook.xml.rels')).toContain('relationships/connections" Target="connections.xml"');
+    expect(part(saved, '[Content_Types].xml')).toContain('PartName="/xl/connections.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.connections+xml"');
+    const table = tableOut(saved);
+    expect(table).toMatch(/^<\?xml[^>]*>\s*<table [^>]*ref="A1:C3" tableType="queryTable"/);
+    expect(table).toContain('<tableColumn id="1" uniqueName="1" name="Compound" queryTableFieldId="1"/><tableColumn id="3" uniqueName="3" name="Yield" queryTableFieldId="3"/><tableColumn id="4" uniqueName="4" name="Mass" queryTableFieldId="4"/>');
+    expect(part(saved, 'xl/tables/_rels/table1.xml.rels')).toContain('relationships/queryTable" Target="../queryTables/queryTable1.xml"');
+    expect(part(saved, 'xl/queryTables/queryTable1.xml')).toBe(QUERY);
+    expect(part(saved, '[Content_Types].xml')).toContain('PartName="/xl/queryTables/queryTable1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.queryTable+xml"');
+    expect(part(saved, 'xl/workbook.xml')).toContain('<definedName name="ExternalData_1" localSheetId="0" hidden="1">Data!$A$1:$C$3</definedName>');
+    // (our own part doesn't hold a second copy)
+    expect(part(saved, 'customXml/item1.xml')).not.toContain('queryTableField');
+    // and again from this program's own file
+    const again = await writeXlsx((await readXlsx(saved)).book, pictures);
+    expect(tableOut(again)).toContain('tableType="queryTable"');
+    expect(part(again, 'xl/queryTables/queryTable1.xml')).toBe(QUERY);
+    expect(part(again, 'xl/connections.xml')).toBe(CONNECTIONS);
+  });
+
+  it('lets the table\'s link go when its place or columns change here', async () => {
+    for (const change of ['rows', 'name'] as const) {
+      const { book } = await readXlsx(file());
+      const s = book.sheets[0];
+      if (change === 'rows') book.edit('resize', () => s.setTables([{ ...s.tables[0], range: { ...s.tables[0].range, r2: 3 } }]));
+      else book.edit('type', () => s.setInput(0, 1, 'Yield (%)'));
+      const saved = await writeXlsx(book, pictures);
+      expect(tableOut(saved), change).not.toContain('queryTable');
+      expect(tableOut(saved), change).toContain('<tableColumn id="2" name="');
+      expect(unzipSync(saved)['xl/queryTables/queryTable1.xml'], change).toBeUndefined();
+      expect(unzipSync(saved)['xl/tables/_rels/table1.xml.rels'], change).toBeUndefined();
+    }
+  });
+
+  it('leaves out connections to a Data Model, and says so', async () => {
+    const { book, warnings } = await readXlsx(file(MODEL));
+    expect(warnings.find((w) => w.startsWith('Not shown here'))).toMatch(/1 data connection.*1 query table's link/);
+    const saved = await writeXlsx(book, pictures);
+    expect(unzipSync(saved)['xl/connections.xml']).toBeUndefined();
+    expect(tableOut(saved)).not.toContain('queryTable');
   });
 });

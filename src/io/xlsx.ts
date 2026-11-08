@@ -41,7 +41,7 @@ import { chartXml, chartAnchorXml, readChartXml, CT_CHART, REL_CHART, C_NS, CX_N
 import { Chart, chartData, seenChartId, newChartId, sameChartData, isChartEx } from '../sheet/chart';
 import { dashboardStandIn } from './xlsx-dashboard';
 import { Dashboard, seenTileId } from '../sheet/dashboard';
-import { condFormatsXml, dxfXml, tableXml, readDxfs, readCondFormats, readTable, sameRules } from './xlsx-format';
+import { condFormatsXml, dxfXml, tableXml, readDxfs, readCondFormats, readTable, sameRules, queryHolds } from './xlsx-format';
 import type { CondFormat, CfLook } from '../sheet/conditional';
 import { seenCondFormatId } from '../sheet/conditional';
 import { TableDef, tableColumnNames, seenTableId } from '../sheet/table-styles';
@@ -62,7 +62,7 @@ import { type CompoundCard } from '../sheet/compound';
 import { type Query, seenQueryId } from '../sheet/query';
 import { keepFileValues, fileValues, type FileValue } from './xlsx-cached';
 import { readRichValues, writeRichParts, richMetadataXml, keepPointers, pointerOf, richValueKinds } from './xlsx-rich';
-import { LeftOut } from './xlsx-left-out';
+import { LeftOut, connectionsKept, queryTableOf, CT_QUERY_TABLE, REL as KEPT_FEATURE_REL } from './xlsx-left-out';
 export { applyTint };
 
 /** Pictures of structures for Excel (the app draws them; tests use stand-ins). */
@@ -600,6 +600,9 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
   let imageNo = 0, drawingNo = 0, tableNo = 0, chartNo = 0, notesNo = 0, pivotNo = 0;
   const pivotCaches: string[] = [];
   let anyDynamic = false;
+  // the data connections kept from the file, and the query tables written that use them
+  const connectionsKept = !!book.kept?.trees?.some((t) => t.type === KEPT_FEATURE_REL.connections);
+  const queryParts = new Set<string>();
   // formulas, which Excel is asked to work out again on opening (unless they have the values Excel saved)
   let anyFormula = false;
   // calls to defined names (LAMBDA ones) are dynamic array formulas in Excel
@@ -631,7 +634,8 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
     const path = `xl/worksheets/sheet${si + 1}.xml`;
     const ms: ModelSheet = { name: s.name, id: si + 1, cells: [], defs: [...s.colDefs].map(([col, def]) => ({ col, def })), chemCols: [], filter: s.filter };
     if (s.condFormats.length) ms.condFormats = s.condFormats;
-    if (s.tables.length) ms.tables = s.tables;
+    // (a query table's part is in the file already)
+    if (s.tables.length) ms.tables = s.tables.map(({ query: _query, ...t }) => t);
     if (s.charts.length && !own.dashboard) ms.charts = s.charts;
     if (own.dashboard) ms.dashboard = own.dashboard;
     if (s.dataTables.length) ms.dataTables = s.dataTables;
@@ -881,8 +885,15 @@ async function writeBook(book: Workbook, deps: XlsxPictures, opts: { macros?: bo
         })
         : null;
       const tpath = `xl/tables/table${tableNo}.xml`;
-      pkg.add(tpath, HEAD + tableXml(t, tableNo, tableNames.get(t)!, totals, af), CT.table);
+      // a table a data query fills: its query table, as the file had it (once, and with the workbook's connections kept)
+      const withQuery = connectionsKept && queryHolds(t, tableNames.get(t)!) && !queryParts.has(t.query!.xml);
+      pkg.add(tpath, HEAD + tableXml(withQuery ? t : { ...t, query: undefined }, tableNo, tableNames.get(t)!, totals, af), CT.table);
       tableIds.push(pkg.relate(path, RELS.table, `../tables/table${tableNo}.xml`));
+      if (withQuery) {
+        queryParts.add(t.query!.xml);
+        pkg.add(`xl/queryTables/queryTable${queryParts.size}.xml`, t.query!.xml, CT_QUERY_TABLE);
+        pkg.relate(tpath, KEPT_FEATURE_REL.queryTable, `../queryTables/queryTable${queryParts.size}.xml`);
+      }
     }
     // PivotTables: a cache (the records) and a pivot table part for each, refreshed when Excel opens them
     for (const pt of standIn ? [] : s.pivots) {
@@ -1454,14 +1465,17 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
   if (Object.keys(excelStyles).length) book.excelStyles = excelStyles;
   const activeTab = Number(kid(root, 'bookViews', 'workbookView')?.getAttribute('activeTab') ?? 0);
   if (sheetEls.some((s) => s.getAttribute('state') === 'hidden' || s.getAttribute('state') === 'veryHidden')) notKept.add('hidden sheets (shown here)');
-  leftOut.workbook(pkg, wbPath, sheetEls.map((el) => rels.get(rAttr(el, 'id') ?? '')?.type ?? ''));
+  // data connections (Power Query's), kept whole with the query tables of the tables they fill
+  const keepConnections = connectionsKept(pkg, wbPath);
+  leftOut.workbook(pkg, wbPath, sheetEls.map((el) => rels.get(rAttr(el, 'id') ?? '')?.type ?? ''), keepConnections);
+  const keptQueries = new Set<string>();
   const definedNames = kids(kid(root, 'definedNames'), 'definedName');
   const nameSet = new Set(definedNames.map((d) => (d.getAttribute('name') ?? '').toUpperCase()));
   const nameCase = new Map(definedNames.map((d) => [(d.getAttribute('name') ?? '').toUpperCase(), d.getAttribute('name') ?? '']));
 
   if (model?.drawingStyle) book.drawingStyle = { ...book.drawingStyle, ...model.drawingStyle };
   // other programs' data (custom XML, custom properties, add-ins' settings), to save back
-  book.kept = readKeptParts(pkg, { main: wbPath, ours: (r) => r.namespaceURI === MODEL_NS, theme: true });
+  book.kept = readKeptParts(pkg, { main: wbPath, ours: (r) => r.namespaceURI === MODEL_NS, theme: true, ...(keepConnections ? { trees: [KEPT_FEATURE_REL.connections] } : {}) });
   if (book.kept?.theme) book.kept.theme.look = JSON.stringify(workbookTheme);
   // links to other workbooks (formulas reading [1]Sheet1!A1), kept as they are to save back in the same order
   for (const ref of kids(kid(root, 'externalReferences'), 'externalReference')) {
@@ -1758,8 +1772,17 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
       for (const r of pkg.rels(path!).values()) {
         if (r.type !== RELS.table) continue;
         const td = pkg.xml(r.target);
-        const got = td ? readTable(td, tables.length + 1) : null;
+        const queryPath = keepConnections ? queryTableOf(pkg, r.target) : null;
+        const got = td ? readTable(td, tables.length + 1, queryPath ? pkg.text(queryPath) : null) : null;
         if (!got) continue;
+        // (a query table's link holds while the header cells name its columns as its part does, as they do in Excel's files)
+        if (got.table.query) {
+          const R = got.table.range;
+          const heads: string[] = [];
+          for (let c = R.c1; c <= R.c2; c++) heads.push(String(raw.get(keyOf(R.r1, c)) ?? ''));
+          if (queryHolds(got.table, tableColumnNames(heads))) keptQueries.add(r.target);
+          else delete got.table.query;
+        }
         const mine = ms?.tables?.find((t) => t.name === got.table.name && sameRange(t.range, got.table.range) && t.range.r2 === got.table.range.r2);
         if (mine) seenTableId(mine.id);
         tables.push(mine ? { ...got.table, id: mine.id, ...(mine.custom ? { custom: mine.custom } : {}), ...(got.table.style === 'none' && mine.style !== 'none' ? { style: mine.style } : {}) } : got.table);
@@ -1856,7 +1879,7 @@ export async function readXlsx(bytes: Uint8Array, _deps?: Partial<XlsxPictures>)
       const sheetRelList = [...pkg.rels(path!).values()];
       const relOf = (type: string) => sheetRelList.find((r) => r.type === type)?.target;
       const commentsPath = relOf(NOTES_REL.comments), vmlPath = relOf(NOTES_REL.vml), threadedPath = relOf(NOTES_REL.threaded);
-      leftOut.sheet(pkg, path!, ws, vmlPath ? pkg.text(vmlPath) : null);
+      leftOut.sheet(pkg, path!, ws, vmlPath ? pkg.text(vmlPath) : null, (t) => keptQueries.has(t));
       if (commentsPath || threadedPath) {
         const notes = readNotes(commentsPath ? pkg.xml(commentsPath) : null, shownNotes(vmlPath ? pkg.text(vmlPath) : null), threadedPath ? pkg.xml(threadedPath) : null, personsDoc);
         for (const [k, n] of notes) s.setNote(rowOf(k), colOf(k), n);

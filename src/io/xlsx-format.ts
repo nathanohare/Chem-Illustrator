@@ -96,21 +96,34 @@ export function condFormatsXml(rules: CondFormat[], dxf: (l: CfLook) => number):
  */
 const columnName = (n: string) => xml(n.replace(/_(?=x[0-9A-Fa-f]{4}_)/g, '_x005F_').replace(/[\u0000-\u001F]/g, (c) => `_x${c.charCodeAt(0).toString(16).padStart(4, '0')}_`));
 
-/** A table part. `names` are the header texts (as written in the header cells); `totals` what each totals-row cell holds. */
+/** A table's link to the data query that fills it, while the table is in the place and has the columns it had in the file. */
+export const queryHolds = (t: TableDef, names: string[]): boolean =>
+  !!t.query && t.header && rangeName(t.range) === t.query.ref && names.length === t.query.columns.length && names.every((n, i) => n === t.query!.columns[i].name);
+
+/**
+ * A table part. `names` are the header texts (as written in the header cells); `totals` what each
+ * totals-row cell holds. A table a data query fills (TableDef.query) is written as one while
+ * queryHolds.
+ */
 export function tableXml(t: TableDef, id: number, names: string[], totals: (string | { formula: string } | null)[] | null, autoFilter: string): string {
   const R = t.range;
+  // a table a query fills: its columns' ids, as its query table part refers to them
+  const query = queryHolds(t, names) ? t.query! : null;
   const columns = names.map((n, i) => {
     const tot = totals?.[i];
     // a calculated column's formula, which Excel fills new rows with
     const calc = t.columns?.find((c) => c.name.toLowerCase() === n.toLowerCase())?.calc ?? '';
-    const head = `<tableColumn id="${i + 1}" name="${columnName(n)}"`;
+    const q = query?.columns[i];
+    const head = q
+      ? `<tableColumn id="${xml(q.id)}"${q.uniqueName !== undefined ? ` uniqueName="${xml(q.uniqueName)}"` : ''} name="${columnName(n)}"${q.fieldId !== undefined ? ` queryTableFieldId="${xml(q.fieldId)}"` : ''}`
+      : `<tableColumn id="${i + 1}" name="${columnName(n)}"`;
     if (!tot) return calc ? `${head}>${calc}</tableColumn>` : `${head}/>`;
     if (typeof tot === 'string') return calc ? `${head} totalsRowLabel="${xml(tot)}">${calc}</tableColumn>` : `${head} totalsRowLabel="${xml(tot)}"/>`;
     return `${head} totalsRowFunction="custom">${calc}<totalsRowFormula>${xml(tot.formula.replace(/^=/, ''))}</totalsRowFormula></tableColumn>`;
   }).join('');
   const info = tableStyleXml(t);
   return `<table xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" id="${id}" name="${xml(t.name)}" displayName="${xml(t.name)}" ref="${rangeName(R)}"` +
-    `${t.header ? '' : ' headerRowCount="0"'}${t.totals ? ' totalsRowCount="1"' : ' totalsRowShown="0"'}>` +
+    `${query ? ' tableType="queryTable"' : ''}${t.header ? '' : ' headerRowCount="0"'}${t.totals ? ' totalsRowCount="1"' : ' totalsRowShown="0"'}>` +
     // (a table without a header row has no filter buttons)
     (t.header ? autoFilter + (t.sortState ?? '') : '') +
     `<tableColumns count="${names.length}">${columns}</tableColumns>${info}</table>`;
@@ -259,8 +272,11 @@ export function readCondFormats(ws: Element, dxfs: CfLook[], colour: (el: Elemen
   return { rules: found.map((f) => f.cf), skipped };
 }
 
-/** A table part: the table, and its filter element (for the sheet's filter). */
-export function readTable(doc: Document, id: number): { table: TableDef; autoFilter: Element | null } | null {
+/**
+ * A table part: the table, and its filter element (for the sheet's filter). `query` is the query
+ * table part of a table a data query fills (Excel's tableType="queryTable"), when it can be kept.
+ */
+export function readTable(doc: Document, id: number, query?: string | null): { table: TableDef; autoFilter: Element | null } | null {
   const t = doc.documentElement;
   const range = parseRange(t.getAttribute('ref') ?? '');
   if (!range) return null;
@@ -287,6 +303,13 @@ export function readTable(doc: Document, id: number): { table: TableDef; autoFil
   if (columns.some((c) => c.calc) || !table.header) table.columns = columns;
   const sort = kid(t, 'sortState');
   if (sort) table.sortState = mainXml(sort);
+  if (query && t.getAttribute('tableType') === 'queryTable' && table.header) {
+    const attr = (c: Element, name: string) => c.getAttribute(name) ?? undefined;
+    table.query = {
+      xml: query, ref: rangeName(range),
+      columns: kids(kid(t, 'tableColumns'), 'tableColumn').map((c, i) => ({ name: columns[i].name, id: c.getAttribute('id') ?? String(i + 1), uniqueName: attr(c, 'uniqueName'), fieldId: attr(c, 'queryTableFieldId') })),
+    };
+  }
   return { table, autoFilter: kid(t, 'autoFilter') };
 }
 
