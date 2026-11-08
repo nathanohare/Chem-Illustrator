@@ -112,6 +112,44 @@ function star(w: number, h: number, n: number, inner: number | null): [number, n
 }
 
 /** Scale an outline drawn in a 0…1 square to w × h. */
+// ---------------------------------------------------------------- glassware pieces (unit box)
+
+/** The open top of a neck at x, from its flared lip at `top` down to where the lip ends: `out` is -1 for the left wall, 1 for the right; the lip reaches fx out and fy down. Starts the path. */
+function lipDown(x: number, out: -1 | 1, top = 0, fx = 0.035, fy = fx): GeoStep[] {
+  return [['M', x + out * fx, top], ['L', x, top + fy]];
+}
+
+/** The same lip, climbing the wall at x to the top (ends the wall). */
+function lipUp(x: number, out: -1 | 1, top = 0, fx = 0.035, fy = fx): GeoStep[] {
+  return [['L', x, top + fy], ['L', x + out * fx, top]];
+}
+
+/** A liquid's level across an elliptical bulb, at height y. */
+function chord(cx: number, cy: number, rx: number, ry: number, y: number): GeoStep[] {
+  const d = rx * Math.sqrt(Math.max(0, 1 - ((y - cy) / ry) ** 2));
+  return [['M', cx - d, y], ['L', cx + d, y]];
+}
+
+/** A stopcock on a vertical stem: a barrel (half-width rw, half-height rh) round it and a key to the right. */
+function stopcock(cx: number, cy: number, rw: number, rh: number, reach: number): GeoStep[] {
+  return [
+    ...poly([[cx - rw, cy - rh], [cx + rw, cy - rh], [cx + rw, cy + rh], [cx - rw, cy + rh]]),
+    ['M', cx + rw, cy], ['L', cx + rw + reach, cy], ['M', cx + rw + reach, cy - 1.6 * rh], ['L', cx + rw + reach, cy + 1.6 * rh],
+  ];
+}
+
+/** Where a cubic Bézier (four points) crosses height y, as x (by sampling: close enough for a liquid level). */
+function cubicXAtY(p: [number, number][], y: number): number {
+  let best = p[0][0], err = Infinity;
+  for (let i = 0; i <= 200; i++) {
+    const t = i / 200, u = 1 - t;
+    const k = [u * u * u, 3 * u * u * t, 3 * u * t * t, t * t * t];
+    const py = k.reduce((a, c, j) => a + c * p[j][1], 0);
+    if (Math.abs(py - y) < err) { err = Math.abs(py - y); best = k.reduce((a, c, j) => a + c * p[j][0], 0); }
+  }
+  return best;
+}
+
 function scaled(steps: GeoStep[], w: number, h: number): GeoStep[] {
   return steps.map((s) => {
     if (s[0] === 'Z') return s;
@@ -235,77 +273,137 @@ export const GEOS: GeoDef[] = [
   },
   // ---- action buttons: a click in the slide show goes where the button says (Shape.link)
   ...actionButtons(),
-  // ---- lab equipment (outlines; text goes beside them more often than in them)
+  // ---- lab equipment (outlines; text goes beside them more often than in them). Each has a
+  // flared lip where glass is open, a liquid level where it holds something, and stopcocks drawn
+  // as a barrel and key, so a row of them reads as one set at any line width.
   {
     id: 'labRbf', name: 'Round-bottom flask', group: 'Lab equipment', outline: true, size: [54, 72], keywords: 'rbf flask reaction',
     draw: (w, h) => {
-      // a neck, and a round bulb from where the neck meets it on the left, round the bottom, to the right
+      // a neck with a lip, and a round bulb from where the neck meets it on the left, round the bottom, to the right
       // the bulb is as wide as the box and round at the usual size (54 × 72)
-      const rx = 0.48, ry = 0.36, cy = 1 - ry - 0.005, nx = 0.11;
+      const rx = 0.47, ry = 0.35, cy = 1 - ry - 0.008, nx = 0.1;
       const t = Math.asin(nx / rx);
       const y0 = cy - ry * Math.cos(t);
       return {
-        body: scaled([['M', 0.5 - nx, 0], ['L', 0.5 - nx, y0], ...arc(0.5, cy, rx, ry, -Math.PI / 2 - t, -Math.PI / 2 + t - 2 * Math.PI).slice(1), ['L', 0.5 + nx, 0]], w, h),
-        lines: scaled([['M', 0.5 - nx - 0.04, 0], ['L', 0.5 + nx + 0.04, 0]], w, h),
+        body: scaled([...lipDown(0.5 - nx, -1), ['L', 0.5 - nx, y0], ...arc(0.5, cy, rx, ry, -Math.PI / 2 - t, -Math.PI / 2 + t - 2 * Math.PI).slice(1), ...lipUp(0.5 + nx, 1)], w, h),
+        lines: scaled(chord(0.5, cy, rx, ry, cy + 0.3 * ry), w, h),
       };
     },
     text: [0.2, 0.5, 0.8, 0.9],
   },
   {
+    id: 'labRbf3', name: 'Three-neck flask', group: 'Lab equipment', outline: true, size: [72, 72], keywords: 'three neck 3-neck round bottom flask reaction',
+    draw: (w, h) => {
+      const cx = 0.5, cy = 0.6, rx = 0.4, ry = 0.38;
+      const at = (x: number) => -Math.acos((x - cx) / rx);
+      const yAt = (x: number) => cy + ry * Math.sin(at(x));
+      const side = 0.14;
+      return {
+        body: scaled([
+          ...lipDown(0.18, -1, side), ...arc(cx, cy, rx, ry, at(0.18), at(0.82) - 2 * Math.PI), ...lipUp(0.82, 1, side),
+          ...lipDown(0.72, -1, side), ['L', 0.72, yAt(0.72)], ...arc(cx, cy, rx, ry, at(0.72), at(0.56)).slice(1), ...lipUp(0.56, 1),
+          ...lipDown(0.44, -1), ['L', 0.44, yAt(0.44)], ...arc(cx, cy, rx, ry, at(0.44), at(0.28)).slice(1), ...lipUp(0.28, 1, side),
+        ], w, h),
+        lines: scaled(chord(cx, cy, rx, ry, cy + 0.35 * ry), w, h),
+      };
+    },
+    text: [0.2, 0.55, 0.8, 0.9],
+  },
+  {
     id: 'labErlenmeyer', name: 'Erlenmeyer flask', group: 'Lab equipment', outline: true, size: [54, 72], keywords: 'conical flask',
-    draw: (w, h) => ({
-      body: scaled([['M', 0.39, 0], ['L', 0.39, 0.33], ['L', 0.04, 0.92], ['C', 0.0, 0.99, 0.03, 1, 0.1, 1], ['L', 0.9, 1], ['C', 0.97, 1, 1.0, 0.99, 0.96, 0.92], ['L', 0.61, 0.33], ['L', 0.61, 0]], w, h),
-      lines: scaled([['M', 0.35, 0], ['L', 0.65, 0], ['M', 0.3, 0.7], ['L', 0.42, 0.7], ['M', 0.25, 0.8], ['L', 0.37, 0.8]], w, h),
-    }),
+    draw: (w, h) => {
+      const level = 0.72, x = 0.39 - ((level - 0.33) / 0.59) * 0.35;
+      return {
+        body: scaled([...lipDown(0.39, -1), ['L', 0.39, 0.33], ['L', 0.04, 0.92], ['C', 0.0, 0.99, 0.03, 1, 0.1, 1], ['L', 0.9, 1], ['C', 0.97, 1, 1.0, 0.99, 0.96, 0.92], ['L', 0.61, 0.33], ...lipUp(0.61, 1)], w, h),
+        lines: scaled([['M', x, level], ['L', 1 - x, level]], w, h),
+      };
+    },
     text: [0.2, 0.6, 0.8, 0.95],
+  },
+  {
+    id: 'labFilterFlask', name: 'Filter flask', group: 'Lab equipment', outline: true, size: [64, 72], keywords: 'buchner side arm vacuum filtration suction flask',
+    draw: (w, h) => {
+      const level = 0.8, x = 0.33 - ((level - 0.3) / 0.6) * 0.28;
+      return {
+        body: scaled([
+          ...lipDown(0.33, -1), ['L', 0.33, 0.3], ['L', 0.05, 0.9], ['C', 0.02, 0.98, 0.04, 1, 0.1, 1], ['L', 0.74, 1], ['C', 0.8, 1, 0.82, 0.98, 0.79, 0.9],
+          ['L', 0.51, 0.3], ['L', 0.51, 0.22], ['L', 0.98, 0.22], ['M', 0.98, 0.15], ['L', 0.51, 0.15], ...lipUp(0.51, 1),
+        ], w, h),
+        lines: scaled([['M', x, level], ['L', 0.84 - x, level], ['M', 0.9, 0.13], ['L', 0.9, 0.24]], w, h),
+      };
+    },
+    text: [0.15, 0.6, 0.7, 0.95],
   },
   {
     id: 'labBeaker', name: 'Beaker', group: 'Lab equipment', outline: true, size: [54, 64], keywords: 'glass',
     draw: (w, h) => ({
-      body: scaled([['M', 0.02, 0], ['L', 0.1, 0.06], ['L', 0.1, 0.95], ['C', 0.1, 0.99, 0.12, 1, 0.16, 1], ['L', 0.84, 1], ['C', 0.88, 1, 0.9, 0.99, 0.9, 0.95], ['L', 0.9, 0]], w, h),
-      lines: scaled([['M', 0.72, 0.3], ['L', 0.9, 0.3], ['M', 0.78, 0.45], ['L', 0.9, 0.45], ['M', 0.72, 0.6], ['L', 0.9, 0.6], ['M', 0.78, 0.75], ['L', 0.9, 0.75]], w, h),
+      body: scaled([['M', 0.02, 0], ['L', 0.1, 0.06], ['L', 0.1, 0.95], ['C', 0.1, 0.99, 0.12, 1, 0.16, 1], ['L', 0.84, 1], ['C', 0.88, 1, 0.9, 0.99, 0.9, 0.95], ['L', 0.9, 0.04], ['L', 0.94, 0]], w, h),
+      lines: scaled([['M', 0.1, 0.45], ['L', 0.9, 0.45], ['M', 0.72, 0.25], ['L', 0.9, 0.25], ['M', 0.78, 0.6], ['L', 0.9, 0.6], ['M', 0.72, 0.75], ['L', 0.9, 0.75]], w, h),
     }),
     text: [0.15, 0.4, 0.7, 0.95],
   },
   {
     id: 'labVial', name: 'Vial', group: 'Lab equipment', outline: true, size: [30, 64], keywords: 'sample bottle',
     draw: (w, h) => ({
-      body: scaled([['M', 0.12, 0.22], ['L', 0.12, 0.95], ['C', 0.12, 0.99, 0.16, 1, 0.22, 1], ['L', 0.78, 1], ['C', 0.84, 1, 0.88, 0.99, 0.88, 0.95], ['L', 0.88, 0.22], ['Z']], w, h),
-      lines: scaled([['M', 0.2, 0.22], ['L', 0.2, 0], ['L', 0.8, 0], ['L', 0.8, 0.22], ['M', 0.2, 0.07], ['L', 0.8, 0.07], ['M', 0.2, 0.14], ['L', 0.8, 0.14]], w, h),
+      body: scaled([['M', 0.14, 0.2], ['L', 0.14, 0.95], ['C', 0.14, 0.99, 0.18, 1, 0.24, 1], ['L', 0.76, 1], ['C', 0.82, 1, 0.86, 0.99, 0.86, 0.95], ['L', 0.86, 0.2], ['Z']], w, h),
+      lines: scaled([
+        ['M', 0.1, 0.2], ['L', 0.1, 0.03], ['C', 0.1, 0.01, 0.12, 0, 0.15, 0], ['L', 0.85, 0], ['C', 0.88, 0, 0.9, 0.01, 0.9, 0.03], ['L', 0.9, 0.2], ['Z'],
+        ['M', 0.32, 0.04], ['L', 0.32, 0.16], ['M', 0.5, 0.04], ['L', 0.5, 0.16], ['M', 0.68, 0.04], ['L', 0.68, 0.16],
+        ['M', 0.14, 0.62], ['L', 0.86, 0.62],
+      ], w, h),
     }),
     text: [0.15, 0.4, 0.85, 0.9],
   },
   {
     id: 'labTestTube', name: 'Test tube', group: 'Lab equipment', outline: true, size: [22, 72], keywords: 'tube',
     draw: (w, h) => ({
-      body: [['M', 0.1 * w, 0], ['L', 0.1 * w, h - 0.4 * w], ...arc(w / 2, h - 0.4 * w, 0.4 * w, 0.4 * w, Math.PI, 0).slice(1), ['L', 0.9 * w, 0]],
-      lines: [['M', 0, 0], ['L', w, 0]],
+      body: [['M', 0, 0], ['L', 0.1 * w, 0.03 * h], ['L', 0.1 * w, h - 0.4 * w], ...arc(w / 2, h - 0.4 * w, 0.4 * w, 0.4 * w, Math.PI, 0).slice(1), ['L', 0.9 * w, 0.03 * h], ['L', w, 0]],
+      lines: [['M', 0.1 * w, 0.62 * h], ['L', 0.9 * w, 0.62 * h]],
     }),
     text: [0.1, 0.4, 0.9, 0.9],
   },
   {
     id: 'labSepFunnel', name: 'Separatory funnel', group: 'Lab equipment', outline: true, size: [44, 90], keywords: 'extraction workup',
-    draw: (w, h) => ({
-      body: scaled([['M', 0.42, 0], ['L', 0.42, 0.08], ['C', 0.1, 0.12, 0.0, 0.3, 0.12, 0.45], ['L', 0.46, 0.78], ['L', 0.46, 1], ['L', 0.54, 1], ['L', 0.54, 0.78], ['L', 0.88, 0.45], ['C', 1.0, 0.3, 0.9, 0.12, 0.58, 0.08], ['L', 0.58, 0]], w, h),
-      lines: scaled([['M', 0.36, 0], ['L', 0.64, 0], ['M', 0.3, 0.86], ['L', 0.7, 0.86], ['M', 0.3, 0.84], ['L', 0.3, 0.88], ['M', 0.7, 0.84], ['L', 0.7, 0.88]], w, h),
-    }),
-    text: [0.2, 0.2, 0.8, 0.5],
+    draw: (w, h) => {
+      // a pear-shaped bulb (the same curve on each side), a stopper, a stopcock and the boundary between the layers
+      const left: [number, number][] = [[0.05, 0.37], [0.08, 0.49], [0.3, 0.63], [0.47, 0.72]];
+      const xb = cubicXAtY(left, 0.47);
+      return {
+        body: scaled([
+          ...lipDown(0.42, -1, 0.06), ['L', 0.42, 0.1], ['C', 0.14, 0.13, 0.02, 0.25, 0.05, 0.37], ['C', 0.08, 0.49, 0.3, 0.63, 0.47, 0.72], ['L', 0.47, 1],
+          ['L', 0.53, 0.97], ['L', 0.53, 0.72], ['C', 0.7, 0.63, 0.92, 0.49, 0.95, 0.37], ['C', 0.98, 0.25, 0.86, 0.13, 0.58, 0.1], ...lipUp(0.58, 1, 0.06),
+        ], w, h),
+        lines: scaled([
+          ['M', 0.44, 0.07], ['L', 0.44, 0.03], ['C', 0.44, 0.0, 0.56, 0.0, 0.56, 0.03], ['L', 0.56, 0.07],
+          ['M', xb, 0.47], ['L', 1 - xb, 0.47],
+          ...stopcock(0.5, 0.82, 0.11, 0.022, 0.14),
+        ], w, h),
+      };
+    },
+    text: [0.2, 0.2, 0.8, 0.45],
   },
   {
     id: 'labCondenser', name: 'Condenser', group: 'Lab equipment', outline: true, size: [36, 108], keywords: 'reflux water jacket liebig',
     draw: (w, h) => ({
-      body: scaled([['M', 0.3, 0.12], ['L', 0.7, 0.12], ['L', 0.7, 0.88], ['L', 0.3, 0.88], ['Z']], w, h),
-      lines: scaled([['M', 0.42, 0], ['L', 0.42, 1], ['M', 0.58, 0], ['L', 0.58, 1], ['M', 0.7, 0.2], ['L', 1, 0.2], ['M', 0.7, 0.25], ['L', 1, 0.25], ['M', 0.3, 0.75], ['L', 0, 0.75], ['M', 0.3, 0.8], ['L', 0, 0.8]], w, h),
+      body: scaled([['M', 0.3, 0.15], ['C', 0.3, 0.13, 0.32, 0.12, 0.36, 0.12], ['L', 0.64, 0.12], ['C', 0.68, 0.12, 0.7, 0.13, 0.7, 0.15], ['L', 0.7, 0.85], ['C', 0.7, 0.87, 0.68, 0.88, 0.64, 0.88], ['L', 0.36, 0.88], ['C', 0.32, 0.88, 0.3, 0.87, 0.3, 0.85], ['Z']], w, h),
+      lines: scaled([
+        ['M', 0.38, 0], ['L', 0.42, 0.015], ['L', 0.42, 1], ['M', 0.62, 0], ['L', 0.58, 0.015], ['L', 0.58, 1],
+        ['M', 0.7, 0.18], ['L', 0.98, 0.18], ['M', 0.7, 0.24], ['L', 0.98, 0.24], ['M', 0.3, 0.76], ['L', 0.02, 0.76], ['M', 0.3, 0.82], ['L', 0.02, 0.82],
+      ], w, h),
     }),
     text: [0.3, 0.3, 0.7, 0.7],
   },
   {
     id: 'labColumn', name: 'Chromatography column', group: 'Lab equipment', outline: true, size: [30, 108], keywords: 'flash silica purification',
     draw: (w, h) => ({
-      body: scaled([['M', 0.2, 0], ['L', 0.2, 0.82], ['L', 0.44, 0.88], ['L', 0.44, 1], ['L', 0.56, 1], ['L', 0.56, 0.88], ['L', 0.8, 0.82], ['L', 0.8, 0]], w, h),
-      lines: scaled([['M', 0.1, 0], ['L', 0.9, 0], ['M', 0.2, 0.4], ['L', 0.8, 0.4], ['M', 0.2, 0.78], ['L', 0.8, 0.78], ['M', 0.25, 0.92], ['L', 0.75, 0.92]], w, h),
+      body: scaled([...lipDown(0.22, -1, 0, 0.08, 0.02), ['L', 0.22, 0.8], ['L', 0.44, 0.86], ['L', 0.44, 1], ['L', 0.56, 1], ['L', 0.56, 0.86], ['L', 0.78, 0.8], ...lipUp(0.78, 1, 0, 0.08, 0.02)], w, h),
+      lines: scaled([
+        // the solvent above, a layer of sand, the silica and sand under it
+        ['M', 0.22, 0.1], ['L', 0.78, 0.1], ['M', 0.22, 0.3], ['L', 0.78, 0.3], ['M', 0.22, 0.34], ['L', 0.78, 0.34], ['M', 0.22, 0.74], ['L', 0.78, 0.74],
+        ...stopcock(0.5, 0.92, 0.14, 0.017, 0.2),
+      ], w, h),
     }),
-    text: [0.2, 0.45, 0.8, 0.75],
+    text: [0.2, 0.36, 0.8, 0.72],
   },
   {
     id: 'labTlc', name: 'TLC plate', group: 'Lab equipment', size: [44, 72], keywords: 'thin layer chromatography rf',
@@ -338,8 +436,21 @@ export const GEOS: GeoDef[] = [
   },
   {
     id: 'labFunnel', name: 'Funnel', group: 'Lab equipment', outline: true, size: [54, 64], keywords: 'filter filtration',
-    draw: (w, h) => ({ body: scaled([['M', 0, 0], ['L', 0.44, 0.55], ['L', 0.44, 1], ['L', 0.56, 1], ['L', 0.56, 0.55], ['L', 1, 0]], w, h), lines: scaled([['M', 0, 0], ['L', 1, 0]], w, h) }),
+    draw: (w, h) => ({
+      body: scaled([['M', 0.02, 0], ['L', 0.44, 0.55], ['L', 0.44, 0.97], ['L', 0.56, 1], ['L', 0.56, 0.55], ['L', 0.98, 0]], w, h),
+      // the folded filter paper
+      lines: scaled([['M', 0.02, 0], ['L', 0.98, 0], ['M', 0.12, 0.06], ['L', 0.5, 0.5], ['L', 0.88, 0.06]], w, h),
+    }),
     text: [0.2, 0.05, 0.8, 0.4],
+  },
+  {
+    id: 'labBuchner', name: 'Büchner funnel', group: 'Lab equipment', outline: true, size: [54, 64], keywords: 'buchner buechner vacuum filtration suction filter',
+    draw: (w, h) => ({
+      body: scaled([['M', 0.02, 0], ['L', 0.02, 0.3], ['C', 0.02, 0.34, 0.06, 0.36, 0.12, 0.38], ['L', 0.42, 0.5], ['L', 0.44, 0.6], ['L', 0.44, 1], ['L', 0.56, 0.96], ['L', 0.56, 0.6], ['L', 0.58, 0.5], ['L', 0.88, 0.38], ['C', 0.94, 0.36, 0.98, 0.34, 0.98, 0.3], ['L', 0.98, 0]], w, h),
+      // the perforated plate, with its holes
+      lines: scaled([['M', 0.02, 0.24], ['L', 0.98, 0.24], ...[0.2, 0.35, 0.5, 0.65, 0.8].flatMap((x): GeoStep[] => [['M', x, 0.24], ['L', x, 0.3]])], w, h),
+    }),
+    text: [0.1, 0.02, 0.9, 0.22],
   },
 ];
 
