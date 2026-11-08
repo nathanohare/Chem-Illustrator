@@ -18,6 +18,7 @@ import { readPageTag } from '../page-grid';
 import { DocStyle, MAP_LOOKS, mapBoxStyle, type MapLook } from '../style';
 import { elementNumber, hasImplicitH, implicitHydrogens, SYMBOLS } from '../chem/elements';
 import { addNicknames, labelBonds, labelSpec, layoutLabel } from '../chem/labels';
+import { writeMark, type MarkPos } from '../chem/label-marks';
 import { ringBonds, ringsThroughBond } from '../chem/aromatic';
 import { DEG } from '../geom';
 import { chordLocal, ellipseArcPoints, headBend, swapHalf } from '../objects';
@@ -1943,12 +1944,16 @@ export function labelLookOf(runs: TextRun[], text: string): { supDigits?: boolea
   const raisedDigits = runs.length > 1 && runs[runs.length - 1].sup && /^\d+$/.test(runs[runs.length - 1].text);
   if (raisedDigits) out.supDigits = true;
   else if (/^R\d+$/.test(text)) out.supDigits = false;
+  // bold and underline that only some of the label has (all of it is the label's own face)
+  const someBold = runs.some((r) => r.bold) && (mixed || !runs.every((r) => r.bold));
+  const someUnder = runs.some((r) => r.underline) && !runs.every((r) => r.underline);
   let marks = '', any = false;
   runs.forEach((r, k) => {
     for (const _ of r.text) {
       const raisedR = raisedDigits && k === runs.length - 1;
       // (in a label of mixed styles, a run in bold or out of formula style stays as it is: a 28 in bold is no subscript)
-      const m = r.sup && !raisedR ? (r.italic ? '*' : '^') : r.sub ? (r.italic ? ',' : '_') : r.italic ? '/' : mixed && r.bold ? '!' : mixed && !r.formula ? '=' : '.';
+      const pos: MarkPos = r.sup && !raisedR ? 'up' : r.sub ? 'down' : mixed && !r.formula && (r.bold || !r.italic) ? 'line' : 'auto';
+      const m = writeMark({ pos, italic: !!r.italic, bold: someBold && !!r.bold, underline: someUnder && !!r.underline });
       if (m !== '.') any = true;
       marks += m;
     }

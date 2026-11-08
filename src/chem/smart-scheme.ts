@@ -194,11 +194,17 @@ export function markupRuns(text: string, like?: TextRun): TextRun[] {
 }
 
 /** Pieces of text, each plain, subscript or superscript, as caption runs (keeping the font, size and colour of `like`). */
-export type TextPart = { text: string; sub?: boolean; sup?: boolean };
-export function partsRuns(parts: TextPart[], like?: TextRun): TextRun[] {
+export type TextPart = { text: string; sub?: boolean; sup?: boolean; bold?: boolean; italic?: boolean; underline?: boolean };
+/**
+ * Pieces as runs in the look of `like` (the text's first run). With `ownLooks`, bold, italic and
+ * underline come with each piece (the n of n-BuLi in italics, typed in the Smart Scheme pane),
+ * not from the first run.
+ */
+export function partsRuns(parts: TextPart[], like?: TextRun, ownLooks = false): TextRun[] {
   const base: Partial<TextRun> = like ? { ...like } : {};
   delete base.sub; delete base.sup; delete base.text; delete base.formula;
-  const out = parts.filter((p) => p.text).map((p) => ({ ...base, text: p.text, ...(p.sub ? { sub: true } : p.sup ? { sup: true } : {}) }) as TextRun);
+  if (ownLooks) { delete base.bold; delete base.italic; delete base.underline; }
+  const out = parts.filter((p) => p.text).map((p) => ({ ...base, text: p.text, ...(p.sub ? { sub: true } : p.sup ? { sup: true } : {}), ...(p.bold ? { bold: true } : {}), ...(p.italic ? { italic: true } : {}), ...(p.underline ? { underline: true } : {}) }) as TextRun);
   return out.length ? out : [{ ...base, text: '' } as TextRun];
 }
 
@@ -448,16 +454,16 @@ function removeItem(doc: Doc, it: Item): void {
 
 /** Retype slot `k` (only a slot that is one text box). Call inside an edit. */
 export function setSlotText(doc: Doc, m: Measure, frameId: number, k: number, text: string): boolean {
-  return setSlotRuns(doc, m, frameId, k, chemRuns(text));
+  return setSlotRuns(doc, m, frameId, k, chemRuns(text), false);
 }
 
 /** Retype slot `k` with formatted text, as the species list's rows give it. Call inside an edit. */
-export function setSlotRuns(doc: Doc, m: Measure, frameId: number, k: number, parts: TextPart[]): boolean {
+export function setSlotRuns(doc: Doc, m: Measure, frameId: number, k: number, parts: TextPart[], ownLooks = true): boolean {
   const read = readSmart(doc, m, frameId);
   const id = read?.slots[k]?.caption;
   const c = id !== undefined ? doc.captions.get(id) : undefined;
   if (!c || !partsPlain(parts).trim()) return false;
-  doc.updateCaption(c.id, { runs: partsRuns(parts, c.runs[0]) });
+  doc.updateCaption(c.id, { runs: partsRuns(parts, c.runs[0], ownLooks) });
   return true;
 }
 
@@ -646,11 +652,11 @@ export function stepText(doc: Doc, l: SmartLink, part: StepPart): string {
  * when one is added or taken away. Call inside an edit.
  */
 export function setStepText(doc: Doc, m: Measure, frameId: number, k: number, part: StepPart, text: string): boolean {
-  return setStepRuns(doc, m, frameId, k, part, chemRuns(text.trim()));
+  return setStepRuns(doc, m, frameId, k, part, chemRuns(text.trim()), false);
 }
 
 /** Retype a step's conditions with formatted text, as the species list's rows give it. Call inside an edit. */
-export function setStepRuns(doc: Doc, m: Measure, frameId: number, k: number, part: StepPart, parts: TextPart[]): boolean {
+export function setStepRuns(doc: Doc, m: Measure, frameId: number, k: number, part: StepPart, parts: TextPart[], ownLooks = true): boolean {
   const read = readSmart(doc, m, frameId);
   const l = read?.links[k];
   if (!read || !l) return false;
@@ -660,7 +666,7 @@ export function setStepRuns(doc: Doc, m: Measure, frameId: number, k: number, pa
   const trimmed = parts.map((p) => ({ ...p })).filter((p) => p.text);
   if (trimmed.length) { trimmed[0].text = trimmed[0].text.trimStart(); trimmed[trimmed.length - 1].text = trimmed[trimmed.length - 1].text.trimEnd(); }
   const t = partsPlain(trimmed).trim();
-  if (c && t) { doc.updateCaption(c.id, { runs: partsRuns(trimmed, c.runs[0]) }); return true; }
+  if (c && t) { doc.updateCaption(c.id, { runs: partsRuns(trimmed, c.runs[0], ownLooks) }); return true; }
   if (!c && !t) return false;
   const step = { ...(l.arrow.step ?? roles(read.slots[l.from], read.slots[l.to], l)) };
   const f = doc.shapes.get(frameId)!.frame!;

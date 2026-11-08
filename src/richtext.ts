@@ -84,6 +84,24 @@ export function deleteRange(runs: TextRun[], start: number, end: number): TextRu
   return replaceRange(runs, start, end, []);
 }
 
+/**
+ * The runs with their text changed to `text` (typed in a plain box, such as the Outline View):
+ * the characters that stayed keep their look (the italic n of n-BuLi), and new ones take the look
+ * of the character before them.
+ */
+export function retextRuns(runs: TextRun[], text: string, fallback: RunStyle = {}): TextRun[] {
+  const was = plainText(runs);
+  if (was === text) return runs;
+  if (!text) return [];
+  let p = 0;
+  const max = Math.min(was.length, text.length);
+  while (p < max && was[p] === text[p]) p++;
+  let q = 0;
+  while (q < max - p && was[was.length - 1 - q] === text[text.length - 1 - q]) q++;
+  const like = charStyle(runs, p - 1) ?? charStyle(runs, was.length - q) ?? (runs[0] ? styleOf(runs[0]) : fallback);
+  return replaceRange(runs, p, was.length - q, [{ ...like, text: text.slice(p, text.length - q) }].filter((r) => r.text));
+}
+
 /** Style of the character at an offset, or null past the end. */
 function charStyle(runs: TextRun[], i: number): RunStyle | null {
   let at = 0;
