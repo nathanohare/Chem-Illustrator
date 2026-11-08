@@ -1,12 +1,12 @@
-# Presentation (slideshow)
+# Presentation (Slideshow)
 
 This page covers Presentation mode: building a deck, the slide master and templates, chemistry on slides, pictures, transitions and animations, presenting, printing handouts and saving for PowerPoint.
 
-![A slide deck in Chem Illustrator](../images/slides.png)
+![A slide deck in Chemweave](../images/slides.png)
 
 ## Starting a deck
 
-Click **+** at the end of the tab strip and pick **Presentation (slideshow)**, or choose **File ▸ New ▸ Presentation**. While a deck is showing, Ctrl+N starts another one. Each open file has its own tab: Ctrl+Tab moves between tabs and Ctrl+W closes one.
+Click **+** at the end of the tab strip and pick **Presentation (Slideshow)**, or choose **File ▸ New ▸ Presentation**. While a deck is showing, Ctrl+N starts another one. Each open file has its own tab: Ctrl+Tab moves between tabs and Ctrl+W closes one.
 
 The Presentation ribbon has PowerPoint's tabs: **Home** (slides, sections, font, paragraph), **Insert** (pictures, text boxes, tables, shapes), **Design & Transitions** (size, templates, slide master, layouts, drawing style, format background, and the transitions between slides), **Animations**, **Slide Show**, **Review** and **View** (Normal, Slide Sorter, Slide Master, Edit Layouts, Themes). The **Presentation** submenus of the **Edit**, **View**, **Insert** and **Format** menus hold the same commands.
 
@@ -150,7 +150,9 @@ Backgrounds are saved as PowerPoint's own, so PowerPoint (and LibreOffice) shows
 
 ## Design templates
 
-**Design & Transitions** tab ▸ **Templates…** (or **Format ▸ Presentation ▸ Slide Templates…**) offers 21 ready-made looks in three groups: **Light**, **Dark title slide** and **Bright**. Picking one changes the fonts, colors, background and the shapes behind every slide. Your text, structures and pictures stay where they are, and Undo puts the old look back.
+**File ▸ New ▸ Presentation** opens a new deck with a window over it of the same themes, and two starter decks under **Teaching** (a **Lecture** and a **Problem session** with question and answer slides for worked mechanisms); click outside the window to keep the deck as it is. Turn the window off with the checkbox at its bottom, or in **Settings ▸ Preferences ▸ New Files**.
+
+**Design & Transitions** tab ▸ **Templates…** (or **Format ▸ Presentation ▸ Slide Templates…**) offers 51 ready-made looks in seven groups: **Light**, **Dark title slide**, **Bright**, **Minimal**, **Bold**, **Classic** and **Chemistry**. Picking one changes the fonts, colors, background and the shapes behind every slide. Your text, structures and pictures stay where they are, and Undo puts the old look back.
 
 Check **Also start new presentations with the template I pick** to make it the starting look for new decks. You can change any part of a template afterwards with **Slide Master…**.
 

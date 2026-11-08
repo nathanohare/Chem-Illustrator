@@ -577,7 +577,7 @@ class Writer {
     const masterRel = pkg.relate(P, REL.slideMaster, 'slideMasters/slideMaster1.xml');
     // a PowerPoint template's own theme (its artwork's colors and styles refer to it), else ours
     const keptTheme = deck.master.art?.theme ? this.keptTheme(deck.master) : null;
-    pkg.add('ppt/theme/theme1.xml', keptTheme ?? theme(deck.master, deck.master.template || 'Chem Illustrator'), CT.theme);
+    pkg.add('ppt/theme/theme1.xml', keptTheme ?? theme(deck.master, deck.master.template || 'Chemweave'), CT.theme);
     if (keptTheme) this.artIds.theme = true;
     pkg.relate('ppt/slideMasters/slideMaster1.xml', REL.theme, '../theme/theme1.xml');
     // layouts first, so the master can list them
@@ -1722,14 +1722,15 @@ export function groupXml(id: number, name: string, box: Rect, kids: string, nvPr
 function decorXml(sh: DecorShape, id: number): string {
   const nv = (name: string) => `<p:nvSpPr><p:cNvPr id="${id}" name="${name} ${id}"/><p:cNvSpPr/><p:nvPr userDrawn="1"/></p:nvSpPr>`;
   const solid = (c: string) => `<a:solidFill><a:srgbClr val="${hex6(c)}"/></a:solidFill>`;
-  if (sh.kind === 'tri') {
+  if (sh.kind === 'tri' || sh.kind === 'poly') {
     const xs = sh.pts.map((q) => q[0]), ys = sh.pts.map((q) => q[1]);
     const box = { x1: Math.min(...xs), y1: Math.min(...ys), x2: Math.max(...xs), y2: Math.max(...ys) };
     const W = box.x2 - box.x1, H = box.y2 - box.y1;
     const pt = ([x, y]: [number, number]) => `<a:pt x="${emu(x - box.x1)}" y="${emu(y - box.y1)}"/>`;
     const path = `<a:moveTo>${pt(sh.pts[0])}</a:moveTo>${sh.pts.slice(1).map((q) => `<a:lnTo>${pt(q)}</a:lnTo>`).join('')}<a:close/>`;
-    return `<p:sp>${nv('Triangle')}<p:spPr>${xfrm(box)}<a:custGeom><a:avLst/><a:gdLst/><a:ahLst/><a:cxnLst/><a:rect l="0" t="0" r="r" b="b"/>` +
-      `<a:pathLst><a:path w="${emu(W)}" h="${emu(H)}">${path}</a:path></a:pathLst></a:custGeom>${solid(sh.color)}<a:ln><a:noFill/></a:ln></p:spPr></p:sp>`;
+    return `<p:sp>${nv(sh.kind === 'poly' ? 'Hexagon' : 'Triangle')}<p:spPr>${xfrm(box)}<a:custGeom><a:avLst/><a:gdLst/><a:ahLst/><a:cxnLst/><a:rect l="0" t="0" r="r" b="b"/>` +
+      `<a:pathLst><a:path w="${emu(W)}" h="${emu(H)}">${path}</a:path></a:pathLst></a:custGeom>` +
+      (sh.kind === 'poly' ? `<a:noFill/><a:ln w="${emu(sh.width)}">${solid(sh.color)}</a:ln>` : `${solid(sh.color)}<a:ln><a:noFill/></a:ln>`) + '</p:spPr></p:sp>';
   }
   if (sh.kind === 'line') {
     return `<p:cxnSp><p:nvCxnSpPr><p:cNvPr id="${id}" name="Line ${id}"/><p:cNvCxnSpPr/><p:nvPr userDrawn="1"/></p:nvCxnSpPr>` +
@@ -2008,13 +2009,13 @@ function theme(m: Master, name: string): string {
   const fmt = (inner: string) => `<a:solidFill><a:schemeClr val="phClr">${inner}</a:schemeClr></a:solidFill>`;
   const ln = (w: number) => `<a:ln w="${w}" cap="flat" cmpd="sng" algn="ctr"><a:solidFill><a:schemeClr val="phClr"/></a:solidFill><a:prstDash val="solid"/><a:miter lim="800000"/></a:ln>`;
   return `${HEAD}<a:theme xmlns:a="${NS.a}" name="${xml(name)}"><a:themeElements>` +
-    `<a:clrScheme name="Chem Illustrator"><a:dk1><a:srgbClr val="${hex6(m.textColor)}"/></a:dk1><a:lt1><a:srgbClr val="FFFFFF"/></a:lt1>` +
+    `<a:clrScheme name="Chemweave"><a:dk1><a:srgbClr val="${hex6(m.textColor)}"/></a:dk1><a:lt1><a:srgbClr val="FFFFFF"/></a:lt1>` +
     `<a:dk2><a:srgbClr val="1D2330"/></a:dk2><a:lt2><a:srgbClr val="EEF0F3"/></a:lt2>` +
     accents.map((c, i) => `<a:accent${i + 1}><a:srgbClr val="${c}"/></a:accent${i + 1}>`).join('') +
     `<a:hlink><a:srgbClr val="${hex6(HLINK_COLOUR)}"/></a:hlink><a:folHlink><a:srgbClr val="954F72"/></a:folHlink></a:clrScheme>` +
-    `<a:fontScheme name="Chem Illustrator"><a:majorFont><a:latin typeface="${xml(m.titleFont)}"/><a:ea typeface=""/><a:cs typeface=""/></a:majorFont>` +
+    `<a:fontScheme name="Chemweave"><a:majorFont><a:latin typeface="${xml(m.titleFont)}"/><a:ea typeface=""/><a:cs typeface=""/></a:majorFont>` +
     `<a:minorFont><a:latin typeface="${xml(m.bodyFont)}"/><a:ea typeface=""/><a:cs typeface=""/></a:minorFont></a:fontScheme>` +
-    `<a:fmtScheme name="Chem Illustrator"><a:fillStyleLst>${fmt('')}${fmt('<a:tint val="50000"/>')}${fmt('<a:shade val="80000"/>')}</a:fillStyleLst>` +
+    `<a:fmtScheme name="Chemweave"><a:fillStyleLst>${fmt('')}${fmt('<a:tint val="50000"/>')}${fmt('<a:shade val="80000"/>')}</a:fillStyleLst>` +
     `<a:lnStyleLst>${ln(6350)}${ln(12700)}${ln(19050)}</a:lnStyleLst>` +
     `<a:effectStyleLst><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle><a:effectStyle><a:effectLst/></a:effectStyle></a:effectStyleLst>` +
     `<a:bgFillStyleLst>${fmt('')}${fmt('<a:tint val="95000"/>')}${fmt('<a:shade val="90000"/>')}</a:bgFillStyleLst></a:fmtScheme>` +

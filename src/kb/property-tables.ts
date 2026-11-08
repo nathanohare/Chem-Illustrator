@@ -42,10 +42,9 @@ export const PKA_TABLE: KbTable = {
     { key: 'name', label: 'Compound' },
     { key: 'pka', label: 'pKa (as recorded)', prose: true },
     { key: 'formula', label: 'Formula' },
-    { key: 'cas', label: 'CAS' },
   ],
   rows: SAFETY_RECORDS.filter((r) => r.pka && /\d/.test(r.pka.text)).map((r): Record<string, Cell> => ({
-    cid: r.cid, name: r.name, pka: cut(r.pka!.text, 200), formula: r.formula, cas: r.cas, smiles: r.smiles,
+    cid: r.cid, name: r.name, pka: cut(r.pka!.text, 200), formula: r.formula, smiles: r.smiles,
   })).sort((a, b) => String(a.name).localeCompare(String(b.name))),
   sources: [{ label: 'Hazardous Substances Data Bank, via PubChem', url: 'https://pubchem.ncbi.nlm.nih.gov/source/hsdb' }],
   links: pubchem,

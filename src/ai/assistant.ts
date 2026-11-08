@@ -49,7 +49,7 @@ export type AssistantMode = 'drawing' | 'slides' | 'design' | 'sheet' | 'documen
 /** What the model is told about itself and how to answer. */
 export function systemPrompt(mode: AssistantMode): string {
   return [
-    'You are the assistant inside Chem Illustrator, a chemical drawing program used by synthetic organic chemists.',
+    'You are the assistant inside Chemweave, a chemical drawing program used by synthetic organic chemists.',
     `The person is working in ${mode === 'drawing' ? 'a Canvas (a chemical drawing)' : mode === 'document' ? 'a Document (like Word)' : mode === 'slides' ? 'a Presentation' : mode === 'sheet' ? 'a Spreadsheet' : 'a Design page'}.`,
     'You see only what is listed under CONTEXT; you cannot see anything else on their computer.',
     'Answer briefly and precisely, as an experienced chemist would. Use IUPAC names and conventions; say so when you are unsure.',

@@ -7,8 +7,8 @@ import {
   type DiagramColours, type DiagramData,
 } from '../design/diagrams';
 import { iconsLoaded, loadIcons } from '../design/icons';
-import type { Doc } from '../model';
 import { colourButton } from './colour-picker';
+import type { Doc } from '../model';
 
 /** How the last diagram looked, so a new one starts the same way. */
 let lastLook: Pick<DiagramData, 'colours' | 'accent' | 'rounded' | 'shadow'> & { layout: string } = { ...DIAGRAM_DEFAULTS, layout: 'process' };
@@ -18,8 +18,8 @@ export interface DiagramDialogOptions {
   preview(d: DiagramData): string;
   /** New diagrams' size as a part of each layout's usual size (smaller in documents). */
   scale: number;
-  /** The drawing it goes in: the accent colour is picked from its colours and your palettes, as in the Style panel. */
-  doc?: Doc;
+  /** The drawing the diagram goes in: when given, the accent is chosen from its color menu (its colors and your palettes), as in the Style panel. */
+  drawing?: Doc;
 }
 
 /** Ask for a diagram: a new one, or `editing` with its text and look to change. */
@@ -69,18 +69,23 @@ export function askDiagram(editing: DiagramData | null, o: DiagramDialogOptions)
     hIn.value = String(Math.round(look.h));
     rounded.checked = look.rounded;
     shadow.checked = look.shadow;
-    // the drawing's colour menu (its colours, your palettes, More colours…) in place of the plain colour box
-    if (o.doc) {
-      const doc = o.doc;
-      accent.hidden = true;
-      const swap = () => {
-        const b = colourButton(doc, accent.value, (v) => { if (!v) return; accent.value = v; swap(); later(); }, { autoLabel: 'Default blue', autoSwatch: DIAGRAM_DEFAULTS.accent });
-        b.classList.add('dg-accent');
-        accent.parentElement!.querySelector('.dg-accent')?.remove();
-        accent.after(b);
-      };
-      swap();
-    }
+    // with a drawing, the accent box becomes that drawing's color button (its colors, your palettes, More Colors…)
+    const drawing = o.drawing;
+    const putAccentButton = (): void => {
+      if (!drawing) return;
+      const holder = accent.parentElement!;
+      holder.querySelector('.dg-accent')?.remove();
+      const btn = colourButton(drawing, accent.value, (picked) => {
+        if (!picked) return;
+        accent.value = picked;
+        putAccentButton();
+        later();
+      }, { autoLabel: 'Default blue', autoSwatch: DIAGRAM_DEFAULTS.accent });
+      btn.classList.add('dg-accent');
+      accent.after(btn);
+    };
+    accent.hidden = !!drawing;
+    putAccentButton();
     // a layout's sample text is replaced by the next layout's sample until the text is changed
     let sample = !editing;
     text.addEventListener('input', () => { sample = false; later(); });
@@ -91,8 +96,8 @@ export function askDiagram(editing: DiagramData | null, o: DiagramDialogOptions)
       rounded: rounded.checked, shadow: shadow.checked,
       ...(Number(size.value) > 0 ? { size: Number(size.value) } : {}),
       w: Math.max(40, Number(wIn.value) || look.w), h: Math.max(30, Number(hIn.value) || look.h),
-      // the room kept for structures in its items stays (it is worked out again after the change)
-      ...(editing?.figs ? { figs: editing.figs } : {}),
+      // spaces held for structures carry over; the next refit works them out again
+      ...(editing?.figs && { figs: editing.figs }),
     });
 
     // the layouts, by kind, each a button with a small picture of it

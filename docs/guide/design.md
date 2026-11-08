@@ -1,4 +1,4 @@
-# Design (TOC graphic, abstract, poster, figure)
+# Design (Posters, Graphical abstracts, Figures)
 
 This page covers Design mode: single-page graphics such as TOC graphics, graphical abstracts, posters, flowcharts and workup schemes, and how to export them for a journal.
 
@@ -79,14 +79,14 @@ Insert a PNG or JPEG (a logo, say), select it, and click **Remove white…** in 
 
 **Insert** ▸ **Diagram…** (a **Diagram** button on the Design, Presentation and Document ribbons) draws a diagram from lines of text, as PowerPoint's SmartArt does. Type one item per line; press <kbd>Tab</kbd> to move a line a level down (under the line above it) and <kbd>Shift+Tab</kbd> to move it back up. The picture on the right shows how it will look as you type.
 
-There are 26 layouts in eight kinds:
+The 26 layouts come in eight kinds:
 
 | Kind | Layouts |
 |---|---|
-| List | Block list, vertical bullet list, horizontal bullet list, honeycomb (hexagons fitted together), icon list |
-| Process | Basic process, chevron process, vertical process, staircase, bending process (circles along a band that bends over one and under the next), circles on an arrow, swimlane flowchart, equation (A + B → C) |
-| Timeline | Timeline (points spaced evenly), timeline with dates, Gantt chart |
-| Cycle | Basic cycle (circles joined by curved arrows), segmented ring, radial |
+| List | Block list, vertical bullet list, horizontal bullet list, honeycomb (six-sided cells packed together), icon list |
+| Process | Basic process, chevron process, vertical process, staircase, bending process (circles strung on a ribbon that loops over one and under the next), circles on an arrow, swimlane (cross-functional) flowchart, equation (A + B → C) |
+| Timeline | Timeline (evenly spaced points), timeline with dates (placed to scale), Gantt chart |
+| Cycle | Basic cycle (circles linked by curved arrows), segmented ring (one segment per item), radial |
 | Hierarchy | Hierarchy (top down) and horizontal hierarchy (left to right) |
 | Relationship | Venn, target |
 | Matrix | Matrix (four quarters, with an item in the middle if you indent four under it) |
@@ -94,27 +94,27 @@ There are 26 layouts in eight kinds:
 
 Lines under an item show as bullets in its shape (or under it, in the list and chevron layouts). Formulas get their subscripts as you type them (CO2, ArB(OH)2), and `_` and `^` make other sub- and superscripts. In the icon list each item gets an icon that matches its words; put an icon's name in square brackets in front to choose it yourself, for example `[flask-round-bottom] Synthesis`.
 
-Each layout takes as many items as you type. In the bending process and circles on an arrow, the lines under an item are its caption, outside its circle. A line of just `[]` is an item with no words, a place for a structure.
+Each layout takes as many items as you type. In the bending process and circles on an arrow, the lines under an item caption its circle from outside. A line holding only `[]` is an item without words: an empty place for a structure.
 
-Three layouts take more from each line, as Visio's templates do:
+Three layouts read more than words from each line:
 
-- **Swimlane flowchart** (a cross-functional flowchart): write each step as `Lane: step`, for example `Analyst: Crude NMR`. Each lane is a band with its name down the left, and the steps run left to right in the order you write them, each in its lane, joined by arrows (elbowed where they cross to another lane). A step without a lane stays in the lane of the step before; a line of just `Lane:` sets a lane's place before its first step. A step ending in `?` is drawn as a decision diamond, and steps called **Start** or **End** as start and end shapes.
-- **Gantt chart:** write each task as `Task: Feb – Apr 2026`, and a milestone as `Task: Jul 2026`. Each task gets a row with a bar over its dates, under a scale of months; a milestone is a diamond. Indent tasks under a heading with no dates and the heading gets a thin summary bar across them all.
-- **Timeline with dates:** the same lines, placed by their dates along a line: spans of time as bars above it (stacked where they overlap), milestones as diamonds on it with their names below.
+- **Swimlane flowchart** (cross-functional flowchart): start each line with its lane and a colon, for example `Facility: Run HRMS`. Every lane is a band across the diagram with its name in a cell at the left; the steps go left to right in the order written, each in its own lane, joined by arrows that bend where they move to another lane. A line with no lane stays in the last lane named, and a line of just `Lane:` fixes where a lane goes before it has any steps. A step ending in `?` becomes a decision diamond, and **Start** or **End** a terminator.
+- **Gantt chart:** end each line with a colon and its dates, `Coupling: Apr – May 2026`, or a single date for a milestone. Every line is a row; tasks get a bar across their dates under a time scale, milestones a diamond. A heading with no dates and tasks indented under it gets a thinner summary bar spanning them.
+- **Timeline with dates:** the same kind of lines, placed to scale along a line: spans as bars above it (stacked where they would overlap) and milestones as diamonds on it, named underneath. With no dates at all it is the ordinary timeline.
 
-Dates can be months (`Mar`, `March 2026`, `2026-03`), quarters (`Q2 2026`), days (`14 Mar 2026`, `Mar 14`, `2026-03-14`) or numbered steps (`Week 3`, `Day 10`, `Week 1 – 4`). A range runs from the start of the first to the end of the last, written with `–`, `-` or `to` between. A date without a year takes the year of the one before it, and a range that would run backwards (`Nov – Feb`) runs into the next year. Words typed into a step's or task's shape go back into the text, keeping its lane and dates.
+A date can be a month (`Mar`, `March 2026`, `2026-03`), a quarter (`Q3`, `Q3 2026`), a day (`14 Mar 2026`, `Mar 14`, `2026-03-14`) or a counted step (`Week 3`, `Day 10`). Join two with a dash, `to`, `until` or `through` for a range, which runs from the start of the first to the end of the last; `3 – 7 Mar` and `Week 2 – 5` work too. A date with no year borrows one from the other end of its range or from the line above, and a range that would run backwards (`Nov – Feb`) carries on into the next year. The time scale is marked in days, weeks, months, quarters or years, whichever fits. Retyping a step's or task's words in its shape keeps its lane or dates.
 
 Below the text, choose the colors (the accent color, shades of it, colorful, light, outline only, black and white for journals, or grays), the accent color itself (from the drawing's colors, your palettes, or **More colors…** for any color), rounded corners and a shadow. The text is made as big as fits, the same size in every shape; type a size to fix it.
 
-### Structures in a diagram
+### Holding structures in a diagram
 
-Draw or drop a structure so its middle is in an item's shape, and it belongs to that item:
+A structure whose middle lies inside an item's shape is held by that item:
 
-- The item keeps room for it, with the item's words underneath, and the whole diagram grows, keeping its shape, until every item's structure fits.
-- The structure is centered in its item, and moves with the diagram. It stays an ordinary structure: edit it with the drawing tools and hotkeys, and the diagram makes room as it grows.
-- Drag it out of the diagram and the item lets it go.
+- The item makes space for it at the top, with the item's words below, and the diagram grows (keeping its proportions) until every held structure fits.
+- The structure is centered in that space and moves with the diagram, while staying an ordinary structure you edit with the drawing tools; the space follows its size.
+- Dragging it outside the diagram releases it.
 
-A diagram resized smaller than its structures need is drawn again just big enough to hold them. The room is saved with the diagram, so it opens the same way in a PowerPoint file.
+Resizing a diagram smaller than its structures need draws it again just large enough. The spaces are saved with the diagram, so it opens the same way from a PowerPoint file.
 
 Once it is placed:
 

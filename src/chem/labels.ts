@@ -6,6 +6,8 @@ import type { Atom, Doc } from '../model';
 import { doubleBondGap } from '../style';
 import { SYMBOLS, elementNumber, hasImplicitH, implicitHydrogens, lowestValence, maxValence, valenceOfBonds } from './elements';
 import { LIGANDS } from './ligands';
+import { rNumberDigits, rNumberPrefs } from './r-numbers';
+import { anyMarks, readMark, withMark } from './label-marks';
 
 /**
  * Abbreviations, each written as SMILES whose first atom is the one bonded to the structure.
@@ -165,6 +167,8 @@ export interface Token {
   charge: string;
   /** The count was written out (so "Ar1" keeps its 1). */
   explicit?: boolean;
+  /** An R group's number (the 1 of R1 or OR1, not the 2 of NR2): raised when Settings ▸ Drawing says so. */
+  rNum?: boolean;
   /** Where the token, its count and its charge start in the label text. */
   at?: number;
   countAt?: number;
@@ -177,6 +181,7 @@ export interface Token {
  */
 export function tokenize(label: string): Token[] {
   const out: Token[] = [];
+  let rDigits: Set<number> | undefined;
   let i = 0;
   while (i < label.length) {
     const rest = label.slice(i);
@@ -238,19 +243,20 @@ export function tokenize(label: string): Token[] {
       i += 1;
     }
     tok.at = start;
+    if (tok.kind === 'generic' && /\d$/.test(tok.text) && (rDigits ??= new Set(rNumberDigits(label))).has(start + tok.text.length - 1)) tok.rNum = true;
     out.push(tok);
   }
   return out;
 }
 
 /** Text of one token as displayed, split into normal, subscript and superscript parts. */
-export interface Piece { text: string; sub?: boolean; sup?: boolean; italic?: boolean; bold?: boolean; /** Where it starts in the label text. */ at?: number }
+export interface Piece { text: string; sub?: boolean; sup?: boolean; italic?: boolean; bold?: boolean; underline?: boolean; /** Where it starts in the label text. */ at?: number }
 
 /**
- * Raised and lowered characters set by hand in a label, one mark per character of its text:
- * "^" superscript, "_" subscript, "=" on the line, "/" in italics (the t of tBu, by the alkyl
- * look), "*" raised and "," lowered in italics, "!" on the line in bold, anything else as the
- * label would show it.
+ * The look set by hand on each character of a label, one mark per character of its text: where
+ * it sits (raised, lowered, on the line or as the label puts it) and whether it is in italics
+ * (the t of tBu, by the alkyl look, or by hand), bold or underlined. See label-marks.ts: "^"
+ * superscript, "_" subscript, "=" on the line, "/" in italics, "." as the label would show it.
  */
 export type LabelMarks = string;
 
@@ -259,7 +265,9 @@ function tokenPieces(t: Token, supDigits = false, marks?: LabelMarks): Piece[] {
   const up = supDigits && t.kind !== 'el';
   const m = t.kind === 'generic' ? /^(.*?\D)(\d+)$/.exec(t.text) : null;
   const at = t.at;
-  const p: Piece[] = m ? [{ text: m[1], at }, { text: m[2], sub: !up, sup: up, at: at === undefined ? undefined : at + m[1].length }] : [{ text: t.text, at }];
+  // (an R group's own number goes up by the setting, wherever it is in the label: OR¹, CO₂R¹)
+  const rUp = up || (!!t.rNum && rNumberPrefs.superscriptR);
+  const p: Piece[] = m ? [{ text: m[1], at }, { text: m[2], sub: !rUp, sup: rUp, at: at === undefined ? undefined : at + m[1].length }] : [{ text: t.text, at }];
   if (t.count > 1 || t.explicit) p.push({ text: String(t.count), sub: !up, sup: up, at: t.countAt });
   if (t.charge) p.push({ text: t.charge.replace('-', '−'), sup: true, at: t.chargeAt });
   return marks ? markPieces(p, marks) : p;
@@ -267,16 +275,16 @@ function tokenPieces(t: Token, supDigits = false, marks?: LabelMarks): Piece[] {
 
 /**
  * How the n-, i-, s- and t- of alkyl groups (tBu, iPr, nBu, sBu, iBu) are written, from
- * Settings ▸ Preferences: as typed, or one of four looks (no dash or a dash, upright or in
- * italics). The look is given to labels and text as they are typed, and to what is already in a
+ * Settings ▸ Preferences: as typed, or one of five looks (no dash or a dash, upright or in
+ * italics, or raised in italics with no dash: ᵗBu). The look is given to labels and text as they are typed, and to what is already in a
  * drawing when asked; it is kept in the text (the dash) and the label marks (the italics).
  */
-export type AlkylLook = 'typed' | 'plain' | 'italic' | 'dash' | 'both';
-export const ALKYL_LOOKS: AlkylLook[] = ['typed', 'plain', 'italic', 'dash', 'both'];
+export type AlkylLook = 'typed' | 'plain' | 'italic' | 'dash' | 'both' | 'raised';
+export const ALKYL_LOOKS: AlkylLook[] = ['typed', 'plain', 'italic', 'dash', 'both', 'raised'];
 export const alkylPrefs: { look: AlkylLook } = { look: 'typed' };
-/** What a look asks for: the prefix in italics or not, and a dash after it or not (null: as typed). */
-export function alkylWants(look: AlkylLook = alkylPrefs.look): { italic: boolean; dash: boolean } | null {
-  return look === 'typed' ? null : { italic: look === 'italic' || look === 'both', dash: look === 'dash' || look === 'both' };
+/** What a look asks for: the prefix in italics or not, a dash after it or not, and raised or not (ᵗBu; null: as typed). */
+export function alkylWants(look: AlkylLook = alkylPrefs.look): { italic: boolean; dash: boolean; sup: boolean } | null {
+  return look === 'typed' ? null : { italic: look === 'italic' || look === 'both' || look === 'raised', dash: look === 'dash' || look === 'both', sup: look === 'raised' };
 }
 
 /**
@@ -320,12 +328,13 @@ export function styleLabel(label: string, marks?: LabelMarks, look: AlkylLook = 
     const had = at.get(i);
     if (had === undefined) { text += label[i]; m += was[i]; continue; }
     text += label[i];
-    m += want.italic ? '/' : was[i] === '/' ? '.' : was[i];
+    // (raised for ᵗBu; a prefix raised by an earlier look comes back down)
+    m += withMark(was[i], { italic: want.italic, ...(want.sup ? { pos: 'up' as const } : readMark(was[i]).pos === 'up' ? { pos: 'auto' as const } : {}) });
     const dash = dashFree(label, i) ? want.dash : had;
     if (dash && !had) { text += '-'; m += '.'; }
     else if (!dash && had) i++;
   }
-  return { label: text, ...(/[\^_=/*,!]/.test(m) ? { marks: m } : {}) };
+  return { label: text, ...(anyMarks(m) ? { marks: m } : {}) };
 }
 
 /** Pieces with the hand-set marks applied, split where a mark changes how a character sits. */
@@ -334,29 +343,28 @@ export function markPieces(pieces: Piece[], marks: LabelMarks): Piece[] {
   for (const p of pieces) {
     if (p.at === undefined) { out.push(p); continue; }
     [...p.text].forEach((ch, k) => {
-      const m = marks[p.at! + k];
-      const up = m === '^' || m === '*', down = m === '_' || m === ',';
-      const sup = up ? true : down || m === '=' || m === '!' ? false : !!p.sup;
-      const sub = down ? true : up || m === '=' || m === '!' ? false : !!p.sub;
-      const bold = m === '!';
-      const italic = m === '/' || m === '*' || m === ',' || !!p.italic;
+      const m = readMark(marks[p.at! + k]);
+      const sup = m.pos === 'up' ? true : m.pos === 'auto' ? !!p.sup : false;
+      const sub = m.pos === 'down' ? true : m.pos === 'auto' ? !!p.sub : false;
+      const bold = m.bold || !!p.bold;
+      const italic = m.italic || !!p.italic;
+      const underline = m.underline || !!p.underline;
       const last = out[out.length - 1];
-      if (k > 0 && last && !!last.sup === sup && !!last.sub === sub && !!last.italic === italic && !!last.bold === bold) last.text += ch;
-      else out.push({ text: ch, at: p.at! + k, ...(sup ? { sup } : {}), ...(sub ? { sub } : {}), ...(italic ? { italic } : {}), ...(bold ? { bold } : {}) });
+      if (k > 0 && last && !!last.sup === sup && !!last.sub === sub && !!last.italic === italic && !!last.bold === bold && !!last.underline === underline) last.text += ch;
+      else out.push({ text: ch, at: p.at! + k, ...(sup ? { sup } : {}), ...(sub ? { sub } : {}), ...(italic ? { italic } : {}), ...(bold ? { bold } : {}), ...(underline ? { underline } : {}) });
     });
   }
   return out;
 }
 
-/** Whether a typed label shows R numbers raised (R¹, R¹²): set from the preferences. */
-export const labelPrefs = { superscriptR: true };
+/** Whether labels show R numbers raised (R¹, OR¹², CO₂R¹): set from Settings ▸ Drawing (the same object as rNumberPrefs). */
+export const labelPrefs = rNumberPrefs;
 
-/** Is this label one whose number goes up by itself (a single R and a number, as R1 or R12)? */
-export const isNumberedR = (label: string | null): boolean => !!label && /^R\d+$/.test(label);
 
 /** How an atom's label raises its characters: R numbers (from the file, or by the preference) and marks set by hand. */
 export function labelLook(a: { label: string | null; supDigits?: boolean; labelMarks?: string; centred?: boolean; stacked?: 'up' | 'down'; stackedLoose?: boolean }): { supDigits: boolean; marks?: LabelMarks; centred?: boolean; stacked?: 'up' | 'down'; stackedLoose?: boolean } {
-  const supDigits = a.supDigits ?? (labelPrefs.superscriptR && isNumberedR(a.label));
+  // (R numbers go up by the setting token by token; this is the label's own, from its file)
+  const supDigits = a.supDigits ?? false;
   return { supDigits, ...(a.labelMarks && a.label ? { marks: a.labelMarks } : {}), ...(a.centred ? { centred: true } : {}), ...(a.stacked ? { stacked: a.stacked } : {}), ...(a.stacked && a.stackedLoose ? { stackedLoose: true } : {}) };
 }
 
@@ -428,6 +436,8 @@ export interface GlyphRun {
   italic?: boolean;
   /** Set in bold, when the rest of the label needn't be. */
   bold?: boolean;
+  /** Underlined. */
+  underline?: boolean;
   /** Where its text starts in the label text (none for automatic hydrogens and the charge). */
   at?: number;
 }
@@ -442,7 +452,9 @@ export interface LabelLayout {
   bold?: boolean;
 }
 
-export type Measure = (text: string, size: number) => number;
+/** Width of label text at a size; `look` says when a piece is bold or italic by hand (wider or slanted). */
+export type Measure = (text: string, size: number, look?: { bold?: boolean; italic?: boolean }) => number;
+const lookArg = (p: Piece) => (p.bold || p.italic ? { ...(p.bold ? { bold: true } : {}), ...(p.italic ? { italic: true } : {}) } : undefined);
 
 export const SUB_SCALE = 0.75;
 export const CAP = 0.716; // Arial cap height as a fraction of the font size
@@ -547,13 +559,13 @@ export function layoutLabel(spec: LabelSpec, bondDirs: LabelBond[], size: number
   const baseline = (CAP * size) / 2;
   const subSize = size * SUB_SCALE;
 
-  const pieceWidth = (p: Piece) => measure(p.text, p.sub || p.sup ? subSize : size);
+  const pieceWidth = (p: Piece) => measure(p.text, p.sub || p.sup ? subSize : size, lookArg(p));
   const pushPieces = (pieces: Piece[], x: number): number => {
     for (const p of pieces) {
       const s = p.sub || p.sup ? subSize : size;
       const dy = baseline + (p.sub ? size * 0.22 : p.sup ? -size * 0.42 : 0);
-      const w = measure(p.text, s);
-      runs.push({ text: p.text, dx: x, dy, size: s, ...(p.italic ? { italic: true } : {}), ...(p.bold ? { bold: true } : {}), ...(p.at !== undefined ? { at: p.at } : {}) });
+      const w = measure(p.text, s, lookArg(p));
+      runs.push({ text: p.text, dx: x, dy, size: s, ...(p.italic ? { italic: true } : {}), ...(p.bold ? { bold: true } : {}), ...(p.underline ? { underline: true } : {}), ...(p.at !== undefined ? { at: p.at } : {}) });
       boxes.push({ x1: x, y1: dy - CAP * s, x2: x + w, y2: dy + (p.sub ? 0.1 * s : 0) });
       x += w;
     }

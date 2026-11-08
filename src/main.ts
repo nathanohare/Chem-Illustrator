@@ -21,7 +21,7 @@ import { RibbonEditor } from './ui/ribbon-editor';
 import { readRibbons, applyRibbon, type RibbonInfo, type RibbonsPrefs } from './ui/ribbon-custom';
 import { editPalettes, getPalettes, onPalettes, setPalettes, useDrawingColours, usePaletteMenus } from './ui/palette-ui';
 import { Doc, Atom, Bond, type BondDisplay, type Arrow, PARTIAL, Caption, Shape, type TextRun, outsideValence, Contents, CHIRAL_FLAGS, PICTURE_STYLES, type PictureLook, type Attachment, type HighlightStyle, type ShapeMath, PAPER, keepOnPage, type PageSetup, type PageWalls } from './model';
-import { Renderer, measureText, forgetTextWidths } from './render/renderer';
+import { Renderer, measureText, forgetTextWidths, WARN_LOOKS, type WarnLook } from './render/renderer';
 import { Editor, TOOLS, ringsWereFilled, setMarkTint, type HighlightToggle, type Selection } from './editor/editor';
 import { LENGTH_UNITS, setAidTint } from './editor/cursor-aids';
 import { BUILT_IN_LOOKS, type HighlightLookPreset } from './ui/highlight-looks';
@@ -41,7 +41,14 @@ import { casHtml, casRuns, type CasState } from './ui/cas-panel';
 import { pubchemHtml, pubchemRuns, type PubChemState } from './ui/pubchem-panel';
 import { paragraphPages } from './document/doc-file';
 import { reviewAuthor, setReviewAuthor } from './document/revisions';
-import { analysisHtml, adductHtml, ionInfo, formulaHtml, electronsHtml, analysisRuns, withRepeats, polymerHtml, descriptorRuns, DEFAULT_DESCRIPTORS, nameHtml, type RepeatUnit, type NameState } from './ui/analysis-panel';
+import { NMR_SOLVENTS, NmrPanel } from './ui/nmr-panel';
+import { compareMode, nmrQuality, nmrSpectrumMhz, setCompareMode, setNmrQuality, setNmrSpectrumMhz } from './ui/nmr-spectrum';
+import { nmrAutoPredict, nmrRange, peakLabels, setNmrAutoPredict, setNmrRange, setPeakLabels } from './ui/nmr-settings';
+import { analysisPrefs, setAnalysisPrefs, onAnalysisPrefs, parseAnalysisPrefs, calcOf, nextCalcId, type AnalysisPrefs } from './chem/analysis-prefs';
+import { newCalc } from './chem/bench';
+import { dragRow } from './ui/row-drag';
+import { askLabCalc, analysisSettingsPage, analysisSettingsAt, placeCalc, type AnalysisSettingsHost } from './ui/analysis-settings';
+import { analysisHtml, benchValues, ribbonRow, formulaHtml, electronsHtml, analysisRuns, withRepeats, polymerHtml, descriptorRuns, newDescriptors, nameHtml, type RepeatUnit, type NameState } from './ui/analysis-panel';
 import { attachedAtoms, attachWhereItIs, defaultGap, nearestStructure, placeAttached, structureSig } from './editor/attached';
 import { repeatGroups, lipDirection } from './chem/polymer';
 import { rGroupsOf, substituted, rowNumbers, parseRows, rGroupCells, type RowMass } from './chem/rgroup';
@@ -147,6 +154,7 @@ import { StylePanel, tidyStyle } from './ui/style-panel';
 import { installCombos } from './ui/combo';
 import { installFontList, registerBundledFonts, bundledFaces, pdfFonts } from './fonts';
 import { applyRibbonIcons } from './ui/ribbon-icons';
+import { iconSet, setIconSet } from './ui/icon-swap';
 import { applyIconSet } from './ui/icon-set';
 import { RibbonLive } from './ui/ribbon-live';
 import { installRibbonFlyouts } from './ui/ribbon-flyout';
@@ -170,7 +178,7 @@ import { withoutCharge } from './chem/formula';
 import { ORBITAL_KINDS, ORBITAL_LOOKS, angleOfDir, openDirection, orbitalAtom, orbitalShapes, orbitalsAmong, putOrbital, readAngle, readOrbital, redrawOrbital, takenDirections, type OrbitalKind, type OrbitalLook, type OrbitalSpec } from './chem/orbitals';
 import { BATCH_FORMATS, BATCH_INPUTS, readBatchFile, smilesLine, uniqueName, writeBatchItem, type BatchDeps, type BatchFormat } from './io/batch-convert';
 import { zipSync } from 'fflate';
-import { labelsOf, schemePrefs, setSchemePrefs, SPACING, type SchemePrefs } from './chem/scheme-layout';
+import { clampSchemeDistance, labelsOf, SCHEME_LIMITS, schemePrefs, setSchemePrefs, SPACING, type SchemeDistance, type SchemePrefs } from './chem/scheme-layout';
 import { plainText, savableChar } from './richtext';
 import { buildTextToolbox, type TextToolboxHooks } from './ui/text-toolbox';
 import { buildTextBar } from './ui/text-bar';
@@ -189,7 +197,7 @@ import { NicknameChooser } from './ui/nickname-chooser';
 import { ask, askChoice, type Field } from './ui/ask';
 import { ACTION_LINKS, geoShapeStyle } from './design/geo';
 import { BuildHint } from './ui/build-hint';
-import { alkylPreview, bondEndSwatch, chargeSwatch, cursorAidSwatch, mechanismPreview, methylSwatch, navigationPreview, schemePreview, pageGridPreview, readingPreview, stylePreview } from './ui/settings-previews';
+import { alkylSwatch, bondEndSwatch, chargeSwatch, counterionSwatch, cursorAidSwatch, mechanismPreview, methylSwatch, problemSwatch, saltSwatch, navigationPreview, schemePreview, pageGridPreview, readingPreview, stylePreview } from './ui/settings-previews';
 import { AUTO_STEPS_DEFAULTS, markPieces, stepAnims, stepClicks, stepPieces, type AutoStepsOptions, type StepPiece } from './deck/auto-steps';
 import { UpdateUI } from './ui/update-ui';
 import { canUpdate, appVersion, portableInfo, STAGE, STAGE_NOTE, UPDATE_CHANNELS, type UpdateChannel } from './updates';
@@ -197,9 +205,9 @@ import { computerName } from './feedback';
 import { guideSpot } from './ui/guide-spot';
 import type { GuideWindow, GuideHeading } from './ui/guide-window';
 import { SettingsWindow, type SettingsHost, type SettingsPage } from './ui/settings-window';
-import { fileTypesPage, FILE_TYPES } from './ui/file-types-page';
+import { fileTypesPage, FILE_TYPES, APPS_PAGE_TITLE } from './ui/file-types-page';
 import { watchRibbons, fitRibbons, setRibbonCollapsed, ribbonCollapsed, addLookToggle, repaintArrows } from './ui/ribbon-fit';
-import { CanvasRibbon } from './ui/canvas-ribbon';
+import { CANVAS_TABS, CanvasRibbon } from './ui/canvas-ribbon';
 import { AnalysisBox, WarningsBox } from './ui/canvas-ribbon-boxes';
 import { placeTitleBar, titleBarPlace } from './ui/title-bar';
 import { canScaleUi, setUiScale, stepUiScale, uiScale, UI_SCALES } from './ui/ui-scale';
@@ -242,6 +250,8 @@ import { preferredStyle, setPreferredStyle } from './document/cite-styles';
 import { layoutTable } from './table';
 import { SheetChem } from './sheet/sheet-chem';
 import { structureDoc, structureMolfile } from './sheet/structure-doc';
+import { cellName, colOf, rowOf } from './sheet/refs';
+import { checkDrawings, type PlacedDrawing } from './ui/mode-problems';
 import { StructurePictures } from './ui/structure-pictures';
 import { LabelTooltip } from './ui/label-tooltip';
 import { ToolTip } from './ui/tool-tip';
@@ -261,7 +271,8 @@ import { AccessibilityPane, askAltText } from './ui/accessibility-pane';
 import type { PreflightPane } from './ui/preflight-pane';
 import { shapeBox } from './objects';
 import { SlideComparePane } from './ui/slide-compare';
-import { pickFileTemplate } from './ui/file-templates';
+import { documentCategories, sheetCategories, slideCategories } from './ui/file-templates';
+import { showTemplateWindow, closeTemplateWindow } from './ui/template-window';
 import type { PastedRows } from './io/table-clip';
 import { Keeper } from './keep/keeper';
 import { choose as chooseButtons, notice } from './ui/keep-ui';
@@ -289,7 +300,7 @@ import { placeRead } from './recognise/check';
 import { Diagnostics, catchErrors, errorReport, formatEntry, stamp, type LogEntry, type UnexpectedClose } from './diagnostics';
 import { keepStore, getText, putText } from './keep/store';
 import { Library, storePlace, folderPlace, readPlaceChoice, writePlaceChoice, LIBRARY_FILE } from './library/library-store';
-import { noteMentions, type LibCompound } from './library/library';
+import { compoundBySmiles, newId, noteMentions, type LibCompound, type LibSpectrum } from './library/library';
 import { fetchPubmed, type ZoteroLink } from './library/online';
 import { structuresIn, foundInContents, foundInDocument, foundInWorkbook, foundInFile, type Found, type Spot, type FileReaders } from './library/structures';
 import { parseIndex, indexText } from './library/file-index';
@@ -332,6 +343,9 @@ const showLabCalculator = later(() => import('./ui/lab-calc-dialog'), 'showLabCa
 // with a notice offering to report them through Send Feedback. The desktop app (not the iPad, whose
 // apps the system ends whenever it likes) also notices when it stopped without closing last time.
 const iPadApp = isTauri() && /Mac/.test(navigator.platform) && navigator.maxTouchPoints > 1;
+// NMR prediction is a desktop feature: its data (about 48 MB) is past what the browser version may
+// download, and the iPad app leaves it out (the builds for both drop public/nmr).
+const nmrHere = (isTauri() && !iPadApp) || import.meta.env.DEV;
 // (one copy of the desktop app runs at a time, so a marker left by another stopped, however recent)
 const diagnostics = new Diagnostics({ store: keepStore(), markers: isTauri() && !iPadApp, oneCopy: true });
 // (shown once the page has finished setting up: an error while it starts can come before the notice can show)
@@ -470,6 +484,12 @@ const SHAPES: PaletteDef = {
     { name: 'shape-freeform', title: 'Freeform: click each point (drag to curve through it); click the first point to close, double-click to end open' },
   ],
 };
+// The Freeform pen stays in the desktop app only for now: in a browser it is left out of the
+// toolbox and can't be picked at all, until it works better there (kept in `npm run dev` to work on it)
+if (!isTauri() && !import.meta.env.DEV) {
+  SHAPES.items = SHAPES.items.filter((t) => t.name !== 'shape-freeform');
+  delete TOOLS['shape-freeform'];
+}
 
 const BRACKETS: PaletteDef = {
   palette: 'brackets',
@@ -709,6 +729,8 @@ const toolbar = new Toolbar($<HTMLDivElement>('#tools'), TOOL_GROUPS, (name) => 
 /** The Canvas ribbon's Font and Paragraph groups: their rows, filled once the text hooks are made (further down). */
 let canvasTextRows: { font: HTMLElement; paragraph: HTMLElement } | null = null;
 let canvasFont: { refresh(): void } | null = null;
+// (NMR prediction is desktop only: its ribbon groups are left out elsewhere)
+if (!nmrHere) for (const t of CANVAS_TABS) t.groups = t.groups.filter((g) => g.name !== 'NMR');
 const canvasRibbon = new CanvasRibbon({
   command: (cmd) => { command(cmd); },
   pickTool: (name) => pickTool(name),
@@ -1505,7 +1527,7 @@ function diagramSvg(d: DiagramData): string {
 async function smartDiagram(id: number | null): Promise<void> {
   finishTyping();
   const now = id !== null ? doc.shapes.get(id)?.diagram ?? null : null;
-  const got = await askDiagram(now, { preview: diagramSvg, scale: deckNow() ? 1 : 0.7, doc });
+  const got = await askDiagram(now, { drawing: doc, preview: diagramSvg, scale: deckNow() ? 1 : 0.7 });
   if (got) editor.putDiagramAt(got, pasteCentre(), now ? id! : undefined, deckNow()?.size);
 }
 editor.onDiagram = (id) => void smartDiagram(id);
@@ -1514,7 +1536,7 @@ editor.onDiagram = (id) => void smartDiagram(id);
 async function documentDiagram(contents: Contents | null): Promise<Contents | null> {
   const d = structureDoc(contents ?? { atoms: [], bonds: [], captions: [], arrows: [], shapes: [] }, docStyle());
   const frame = [...d.shapes.values()].find((s) => s.diagram);
-  const got = await askDiagram(frame?.diagram ?? null, { preview: diagramSvg, scale: 0.75, doc: d });
+  const got = await askDiagram(frame?.diagram ?? null, { drawing: d, preview: diagramSvg, scale: 0.75 });
   if (!got) return null;
   d.edit(frame ? 'Change Diagram' : 'Diagram', () => putDiagram(d, POINTS, got, frame ? { x: Math.min(frame.x1, frame.x2), y: Math.min(frame.y1, frame.y2) } : { x: 0, y: 0 }, frame?.id));
   return d.contents();
@@ -2369,6 +2391,50 @@ async function editTorsion(id: number): Promise<void> {
 // ------------------------------------------------------------------ name to structure
 
 const names = new NameReader(new URL('opsin/opsin-data.dat', document.baseURI).href);
+const nmrPanel = new NmrPanel({
+  unavailable: nmrHere ? undefined : `Predicted NMR spectra are in the desktop app for Windows, Mac and Linux. <a href="https://github.com/nathanohare/Chem-Illustrator/releases/latest" target="_blank" rel="noopener">Download it</a>.`,
+  url: new URL('nmr/nmr-hose.dat', document.baseURI).href, measuredUrl: new URL('nmr/nmr-measured.dat', document.baseURI).href, netUrl: new URL('nmr/nmr-net.dat', document.baseURI).href, splitUrl: new URL('nmr/nmr-ch2split.json', document.baseURI).href, fpUrl: new URL('nmr/nmr-fp.dat', document.baseURI).href,
+  graph: (molblock) => chem.namerGraph(molblock),
+  conformers: (molblock) => model3d.build(molblock, 30),
+  redraw: () => editor.requestOverlay(),
+  copy: (text) => navigator.clipboard.writeText(text),
+  flash: (text) => flash(text),
+  copyPicture: (png) => navigator.clipboard.write([new ClipboardItem({ 'image/png': new Blob([png as Uint8Array<ArrayBuffer>], { type: 'image/png' }) })]),
+  placePicture: (png) => placePicture(png, 'image/png', null),
+  importedTables: () => getText(keepStore(), KB_IMPORTED_KEY).catch(() => null),
+  saveSpectra: (molblock, entries) => saveSpectraToLibrary(molblock, entries),
+  savedReports: async (molblock) => {
+    const [w] = await weighMolfiles([molblock]);
+    if (!w) return [];
+    const c = compoundBySmiles((await useLibrary()).now, w.smiles);
+    return (c?.spectra ?? []).filter((x) => x.kind === 'measured').sort((a, b) => b.saved - a.saved).map((x) => x.text);
+  },
+});
+
+/** NMR ▸ Save to Library: adds the structure to the Compound Library if needed and keeps the peak reports with it. */
+async function saveSpectraToLibrary(molblock: string, entries: Omit<LibSpectrum, 'id' | 'saved'>[]): Promise<void> {
+  const lib = await useLibrary();
+  const [w] = await weighMolfiles([molblock]);
+  if (!w) { flash('This structure could not be read for the Compound Library.'); return; }
+  const { addStructures } = await import('./ui/compound-library');
+  const now = Date.now();
+  const t = ws.mainOf(ws.active);
+  let id = '', kept = 0;
+  lib.change((l0) => {
+    const l = addStructures(l0, [{ molfile: molblock, smiles: w.smiles, formula: w.formula, mw: w.mw }], t.ref.kind === 'path' ? t.ref.path : '', now).lib;
+    const c = compoundBySmiles(l, w.smiles);
+    if (!c) return l0;
+    id = c.id;
+    const have = c.spectra ?? [];
+    const fresh = entries.filter((e) => !have.some((h) => h.kind === e.kind && h.text === e.text)).map((e) => ({ ...e, id: newId('s'), saved: now }));
+    kept = fresh.length;
+    return { ...l, compounds: l.compounds.map((x) => (x.id === c.id ? { ...x, spectra: [...have, ...fresh], modified: now } : x)) };
+  });
+  if (!id) { flash('This structure could not be added to the Compound Library.'); return; }
+  const what = entries.length > 1 ? 'predicted and measured spectra' : 'predicted spectrum';
+  flash(kept ? `Saved the ${what} to the Compound Library.` : `The ${what} ${entries.length > 1 ? 'are' : 'is'} already saved in the Compound Library.`, 5000,
+    { label: 'Show', run: () => void openCompoundLibrary([id]) });
+}
 let namesReady = false;
 
 // ------------------------------------------------------------------ structure to name
@@ -2536,6 +2602,8 @@ function addNamed(got: { mb: string; attach: number[] }, x: number, y: number, t
 let structuresLocked = false;
 /** The start view shows on the empty drawing the program opens with (Settings > General). */
 let startView = true;
+/** Settings ▸ Preferences ▸ New Files: the template window opens over a new document, spreadsheet or presentation. */
+let templatesOnNew: Settings['templatesOnNew'] = { document: true, sheet: true, slides: true };
 /** Settings ▸ Preferences: Enter finishes text typed with the Text tool, Alt+Enter starts a new line. */
 let enterFinishesText = false;
 /** Settings ▸ Preferences: a document whose structures aren't figures offers to make them figures on opening. */
@@ -3020,12 +3088,14 @@ async function cleanUpChoices(): Promise<void> {
  */
 /** Scheme settings as typed in Settings ▸ Schemes. */
 function schemeFrom(got: Record<string, string>): Partial<SchemePrefs> {
-  const len = (v: string | undefined) => { const n = Number(v); return !v || v.trim() === '' || !isFinite(n) || n < 0 ? null : Math.min(500, n); };
+  const len = (k: SchemeDistance) => { const v = got[k]; return !v || v.trim() === '' ? null : clampSchemeDistance(k, Number(v)) ?? null; };
+  const align = (v: string | undefined) => (v === 'left' || v === 'center' || v === 'right' ? v : null);
   return {
-    structGap: len(got.structGap), plusGap: len(got.plusGap), textGap: len(got.textGap), lead: len(got.lead), headGap: len(got.headGap),
+    structGap: len('structGap'), plusGap: len('plusGap'), textGap: len('textGap'), textGapBelow: len('textGapBelow'), lead: len('lead'), headGap: len('headGap'),
     // (its size and font are the drawing style's now: Settings > Drawing Style)
     textSize: null,
-    textAlign: got.textAlign === 'left' || got.textAlign === 'right' ? got.textAlign : 'center',
+    textAlign: align(got.textAlign) ?? 'center',
+    textAlignBelow: align(got.textAlignBelow),
     helpers: got.helpers === 'true', fit: got.fit === 'true', sameLength: got.sameLength === 'true',
   };
 }
@@ -3036,18 +3106,23 @@ async function schemeSettings(): Promise<void> {
   const bond = doc.style.bondLength;
   const pt = (v: number | null) => (v === null ? '' : String(v));
   const auto = (frac: number) => `${Math.round(frac * bond * 10) / 10} pt`;
+  const aligns = [{ value: 'left', label: 'Left' }, { value: 'center', label: 'Center' }, { value: 'right', label: 'Right' }];
+  /** A distance box, kept from 0 to its limit. */
+  const dist = (name: SchemeDistance, label: string, placeholder: string): Field => ({ name, label, value: pt(p[name] ?? null), type: 'number', unit: 'pt', placeholder, min: 0, max: SCHEME_LIMITS[name] });
   const got = await ask('Scheme Settings', [
-    { name: 'structGap', label: 'Gap between arrow and structures', value: pt(p.structGap), type: 'number', unit: 'pt', placeholder: auto(SPACING.gap) },
-    { name: 'plusGap', label: 'Space either side of +', value: pt(p.plusGap), type: 'number', unit: 'pt', placeholder: auto(SPACING.plus) },
+    dist('structGap', 'Gap between arrow and structures', auto(SPACING.gap)),
+    dist('plusGap', 'Space either side of +', auto(SPACING.plus)),
     { name: 'helpers', label: 'Show + boxes above and below new arrows', value: String(p.helpers), type: 'checkbox' },
-    { name: 'textAlign', label: 'Text alignment', value: p.textAlign, options: [{ value: 'left', label: 'Left' }, { value: 'center', label: 'Center' }, { value: 'right', label: 'Right' }] },
-    { name: 'textGap', label: 'Gap between arrow and text', value: pt(p.textGap), type: 'number', unit: 'pt', placeholder: auto(SPACING.conditions) },
+    { name: 'textAlign', label: 'Text alignment above the arrow', value: p.textAlign, options: aligns },
+    dist('textGap', 'Gap between arrow and text above', auto(SPACING.conditions)),
+    { name: 'textAlignBelow', label: 'Text alignment below the arrow', value: p.textAlignBelow ?? '', options: [{ value: '', label: 'Same as above' }, ...aligns] },
+    dist('textGapBelow', 'Gap between arrow and text below', 'Same as above'),
     { name: 'fit', label: 'Fit arrow length to its text (moves the products)', value: String(p.fit), type: 'checkbox' },
     { name: 'sameLength', label: 'Clean Up Reaction makes arrows the same length', value: String(p.sameLength), type: 'checkbox' },
-    { name: 'lead', label: 'Arrow before the text starts', value: pt(p.lead), type: 'number', unit: 'pt', placeholder: auto(SPACING.overhang) },
-    { name: 'headGap', label: 'Space between text and arrowhead', value: pt(p.headGap), type: 'number', unit: 'pt', placeholder: auto(SPACING.overhang) },
+    dist('lead', 'Arrow before the text starts', auto(SPACING.overhang)),
+    dist('headGap', 'Space between text and arrowhead', auto(SPACING.overhang)),
   ], { ok: 'Save', note: 'Used when you type text beside an arrow, and by Clean Up Reaction and Arrange Scheme. These are the usual values for every file; a drawing style can have its own (Drawing Style ▸ Reaction arrows, with a preview), and those win. The text\'s size and font are in Drawing Style too. Leave a distance blank to scale it with the bond length. Existing schemes change when you next clean them up.',
-    preview: { title: 'Preview', below: true, draw: (v) => schemePreview(doc.style, schemeFrom(v)) } });
+    preview: { title: 'Preview', below: true, draw: (v, focus) => schemePreview(doc.style, schemeFrom(v), undefined, focus) } });
   if (!got) return;
   setSchemePrefs(schemeFrom(got));
   storeSettings();
@@ -3137,7 +3212,7 @@ async function addTiedText(role: 'label' | 'caption'): Promise<void> {
 
 // ---------------------------------------------------------------- text boxes read as chemistry
 
-/** Settings ▸ Drawing: what happens to an ion typed as text. */
+/** Settings ▸ Preferences: what happens to an ion typed as text. */
 const chemText = { ionCharges: false, saltGroups: false };
 
 /** The selected text boxes that are read as chemistry. */
@@ -3197,7 +3272,7 @@ function captionTyped(id: number): void {
     editor.changed();
     sp = captionSpecies(doc, doc.captions.get(id)!, m);
     if (!sp) return;
-    flash(`Added the ${sign} charge of ${sp.name ?? sp.body}. Undo (Ctrl+Z) to take it off, or turn this off in Settings ▸ Drawing.`, 6000);
+    flash(`Added the ${sign} charge of ${sp.name ?? sp.body}. Undo (Ctrl+Z) to take it off, or turn this off in Settings ▸ Preferences.`, 6000);
   }
   if (chemText.saltGroups && sp.charge) groupCounterion(id, sp.charge);
 }
@@ -3233,7 +3308,7 @@ function groupCounterion(id: number, charge: number): void {
   const sel = { atoms: new Set(best.atoms), bonds: new Set<number>(), captions: new Set([id, ...(best.caption !== undefined ? [best.caption] : [])]), arrows: new Set<number>(), shapes: new Set<number>() };
   doc.edit('Group salt', () => groupSelection(doc, sel));
   editor.changed();
-  flash('Grouped the counterion with its partner as one salt. Undo (Ctrl+Z) to keep them apart, or turn this off in Settings ▸ Drawing.', 6000);
+  flash('Grouped the counterion with its partner as one salt. Undo (Ctrl+Z) to keep them apart, or turn this off in Settings ▸ Preferences.', 6000);
 }
 editor.onCaptionDone = captionTyped;
 
@@ -3916,6 +3991,8 @@ const ws: Workspace = new Workspace(doc, {
   remember: (path) => rememberFile(path),
   rememberHandle: (handle) => { if (canKeepHandles()) void keepHandle(handle, recentFiles).then(rememberFile, () => {}); },
   leave: (tab) => {
+    // the template window belongs to the new file it opened over
+    closeTemplateWindow();
     // letters still being written with the pen go into this tab's drawing
     editor.sketcher.flush();
     finishTab();
@@ -4081,6 +4158,8 @@ function enterTab(tab: Tab, opened: boolean): void {
   applyModeColours(tab.mode, modeColours);
   for (const el of document.querySelectorAll<HTMLElement>('.slides-only')) el.hidden = !slides;
   canvasRibbon.show(!deck && !sheet && !words && !design);
+  fileChecksKey = '';
+  placeProblemsBox();
   // another tab: back to Normal view
   if (sorterOn) {
     sorterOn = false;
@@ -4838,6 +4917,8 @@ async function newDesign(): Promise<void> {
   if (t === 'blank') {
     const size = await pickDesignSize('New Design: page size');
     if (size) ws.newDesign(size);
+  } else if (t && 'blank' in t) {
+    ws.newDesign(t.blank);
   } else if (t) {
     ws.newDesign(templateSize(t), (d) => fillTemplate(d, t));
     editor.fit();
@@ -5424,9 +5505,8 @@ tabList.addEventListener('click', () => {
 tabAdd.addEventListener('click', () => {
   const [x, y] = menuAt(tabAdd);
   showContextMenu(x, y, [
-    { cmd: 'new', label: 'Canvas (chemistry)' }, { cmd: 'new-slides', label: 'Presentation (slideshow)' },
-    { cmd: 'new-sheet', label: 'Spreadsheet (tables, charts, dashboards)' }, { cmd: 'new-document', label: 'Document (text)' }, { cmd: 'new-design', label: 'Design (TOC graphic, abstract, poster, figure)' },
-    { cmd: 'new-from-template', label: 'Document or Spreadsheet from Template…' },
+    { cmd: 'new', label: 'Canvas (Chemistry)' }, { cmd: 'new-slides', label: 'Presentation (Slideshow)' },
+    { cmd: 'new-sheet', label: 'Spreadsheet (Tables, Charts, and Dashboards)' }, { cmd: 'new-document', label: 'Document (Text document)' }, { cmd: 'new-design', label: 'Design (Posters, Graphical abstracts, Figures)' },
   ], { run: (cmd) => void command(cmd), key: commandKey });
 });
 tabsEl.replaceChildren(tabLeft, tabStrip, tabRight, tabList, tabAdd);
@@ -5526,7 +5606,7 @@ function dragTab(e: PointerEvent, el: HTMLElement, t: Tab): void {
 
 let lastTitle = '';
 function updateTitle(): void {
-  const t = `${ws.active.dirty ? '• ' : ''}${ws.active.name} – Chem Illustrator`;
+  const t = `${ws.active.dirty ? '• ' : ''}${ws.active.name} – Chemweave`;
   if (t === lastTitle) return;
   lastTitle = t;
   document.title = t;
@@ -6565,7 +6645,7 @@ async function drawingStyleDialog(): Promise<void> {
   const got = await editDrawingStyle({
     current, own: ownStyles, kindPlural: STYLE_KINDS[mode].plural, where: STYLE_KINDS[mode].where,
     isDefault: modeStyleFor(mode) === current.name, hasStructures,
-    preview: (st) => stylePreview(st),
+    preview: (st, focus) => stylePreview(st, undefined, undefined, focus),
   });
   if (!got || ws.active !== tab) return;
   ownStyles = got.own;
@@ -7987,7 +8067,7 @@ function modeLoaded(mode: 'sheet' | 'document'): void {
 
 /** Sheet or document mode's code didn't load (a broken install, or the web version gone offline). */
 function modeFailed(err: unknown): void {
-  void showError(`This part of Chem Illustrator could not be loaded: ${String(err)}. Restart it and try again.`);
+  void showError(`This part of Chemweave could not be loaded: ${String(err)}. Restart it and try again.`);
 }
 
 // both load in idle time soon after start-up, so the first sheet or document opens at once
@@ -8152,7 +8232,7 @@ window.addEventListener('keydown', (e) => {
 /** Menu commands that work the same whatever shows. */
 const ANY_TAB = new Set(['references', 'compound-library', 'knowledge-base', 'ligand-library', 'toolbox-text', 'toolbox-guides', 'insert-compound', 'add-to-compound-library', 'library-location', 'find-structure-files', 'new-from-template', 'check-accessibility', 'format-painter', 'insert-symbol', 'edit-palettes', 'preferences', 'export-settings', 'import-settings', 'customize-ribbon', 'toolbox-main', 'toolbox-structure', 'toolbox-arrange', 'toolbox-templates', 'toolbox-colours', 'toolbox-highlight', 'toolbox-custom', 'toolbox-schemes', 'toolbox-diagrams', 'toolbox-tables', 'toolbox-biopolymers', 'toolbox-perspective', 'fold-side', 'customize-toolbox', 'customize-quick-bar', 'lock-toolboxes', 'reset-toolboxes', 'new', 'new-slides', 'new-design', 'new-sheet', 'new-document', 'open', 'save', 'save-as', 'autosave', 'version-history', 'recover-work', 'keep-options', 'close-tab', 'next-tab', 'prev-tab', 'undo', 'redo',
   'drawing-style', 'navigation-settings', 'dark-page', 'dark-colours', 'hotkeys', 'typing-spelling', 'mode-colours', 'dev-tools', ...STRESS_SIZES.map((n) => `stress-${n}`), 'scroll-bars', 'title-bar-in-menu', 'collapse-ribbon', 'ui-scale-in', 'ui-scale-out', 'ui-scale-reset', ...UI_SCALES.map((v) => `ui-scale-${Math.round(v * 100)}`), 'text-bar-docked', 'text-bar-floating', 'text-bar-hidden', 'theme-system', 'theme-light', 'theme-dark', 'theme-darkgray', 'density-snug', 'density-cozy', 'density-normal', 'density-standard', 'density-large', 'shadows-light', 'shadows-strong', 'shadows-off', 'icons-mode', 'icons-kind', 'shape-ink-accent', 'focus-view', 'one-column-tools', 'group-tips', 'tool-tips', 'touch-mode-auto', 'touch-mode-on', 'touch-mode-off', 'atom-keypad', 'pen-sketch', 'show-stereo', 'clipboard-formats', 'split-view', 'command-search', 'next-region', 'prev-region', 'print',
-  'assistant', 'help', 'about', 'user-guide', 'help-here', 'send-feedback', 'report-problem', 'copy-diagnostics', 'open-log-folder', 'open-inspector', 'check-updates']);
+  'assistant', 'help', 'about', 'user-guide', 'help-here', 'send-feedback', 'report-problem', 'support-project', 'copy-diagnostics', 'open-log-folder', 'open-inspector', 'check-updates']);
 
 // ---------------------------------------------------------------- accessibility (Review > Check Accessibility, Alt Text…)
 
@@ -8313,15 +8393,54 @@ const slideCompare = new SlideComparePane({
 });
 deckWatchers.push((d) => slideCompare.deckChanged(d));
 
-/** File > New > New from Template: a document or sheet started from one of our templates. */
-async function newFromTemplate(): Promise<void> {
-  finishTab();
-  const got = await pickFileTemplate(sheetActive() ? 'sheet' : 'document');
-  if (!got) return;
-  if (got.kind === 'sheet') {
-    ws.newSheet(got.template?.make());
-  } else ws.newDocument(got.template?.make());
-  if (got.template) flash(`New ${got.template.name.toLowerCase()}: type over the text in [brackets].`);
+const NEW_KIND_WORDS = { document: 'documents', sheet: 'spreadsheets', slides: 'presentations' } as const;
+
+/**
+ * The template window over the new, blank file just opened (File > New, the + tab menu, the start
+ * view). Picking a template puts it in the blank file's place; a click outside keeps the blank file.
+ */
+function offerTemplates(kind: 'document' | 'sheet' | 'slides', always = false): void {
+  if (!always && !templatesOnNew[kind]) return;
+  const blank = ws.active;
+  if (blank.mode !== kind) return;
+  const showPref = {
+    label: `Show templates when creating new ${NEW_KIND_WORDS[kind]}`,
+    get: () => templatesOnNew[kind],
+    set: (on: boolean) => { templatesOnNew = { ...templatesOnNew, [kind]: on }; storeSettings(); },
+  };
+  const note = 'The new file is open behind this window. Pick a template to start from it, or click anywhere outside the window to keep the blank file. Text in [brackets] says what goes there; type over it.';
+  if (kind === 'document') {
+    showTemplateWindow({ mode: 'document', title: 'New Document', note, remember: 'newDocCategory', showPref, categories: documentCategories((t) => {
+      ws.newDocument(t.make(), blank);
+      flash(`Started from the ${t.name} template: type over the text in [brackets].`);
+    }) });
+  } else if (kind === 'sheet') {
+    showTemplateWindow({ mode: 'sheet', title: 'New Spreadsheet', note, remember: 'newSheetCategory', showPref, categories: sheetCategories((t) => {
+      ws.newSheet(t.make(), blank);
+      flash(`Started from the ${t.name} template: type over the text in [brackets].`);
+    }) });
+  } else {
+    const d = blank.deck;
+    if (!d) return;
+    const fresh = () => ws.active === blank && d.edits === 0;
+    showTemplateWindow({ mode: 'slides', title: 'New Presentation', note: 'The new presentation is open behind this window. Pick a theme or a starter deck, or click anywhere outside the window to keep it as it is. Design ▸ Templates changes the theme later.', remember: 'newSlidesCategory', showPref, categories: slideCategories({
+      master: d.master, size: d.size, mine: slideThemes,
+      paint: (c, m, size, w, h, stacked) => { void import('./ui/slide-templates').then((x) => x.paintTemplate(c, m, size, w, h, stacked)); },
+      useTheme: (t) => {
+        if (!fresh()) { finishTab(); ws.newSlides(); }
+        const deck = deckNow();
+        if (!deck) return;
+        deck.useMaster(applyTemplate(deck.master, t));
+        deck.onSwitch();
+        deck.onChange();
+      },
+      useStarter: (s) => {
+        if (!fresh()) { finishTab(); ws.newSlides(); }
+        deckNow()?.startWith(s.slides);
+        flash(`Started from the ${s.name} deck: type over the text in [brackets].`);
+      },
+    }) });
+  }
 }
 
 /** Review > Compare (slides): another version of this deck, from an open tab or a PowerPoint file, to review slide by slide. */
@@ -8533,7 +8652,7 @@ const COMMANDS: Record<string, () => unknown> = {
   },
   'check-accessibility': () => { finishTyping(); if (accessibility.open) accessibility.refresh(); else accessibility.show(document.querySelector<HTMLElement>('[data-cmd="check-accessibility"]:not([hidden])')); },
   'alt-text': () => { finishTyping(); void drawingAltText(); },
-  'new-slides': () => { finishTab(); ws.newSlides(); },
+  'new-slides': () => { finishTab(); ws.newSlides(); offerTemplates('slides'); },
   'new-design': () => newDesign(),
   'design-size': () => designSize(),
   'connector-tool': () => { finishTyping(); editor.setTool('connector'); },
@@ -8569,9 +8688,10 @@ const COMMANDS: Record<string, () => unknown> = {
   'shape-back': () => restack('back'),
   'shape-forward': () => restack('forward'),
   'shape-backward': () => restack('backward'),
-  'new-sheet': () => { finishTab(); ws.newSheet(); },
-  'new-document': () => { finishTab(); ws.newDocument(); },
-  'new-from-template': () => { void newFromTemplate(); },
+  'new-sheet': () => { finishTab(); ws.newSheet(); offerTemplates('sheet'); },
+  'new-document': () => { finishTab(); ws.newDocument(); offerTemplates('document'); },
+  // (no longer in the menus: kept for buttons people put on their ribbon or quick bar)
+  'new-from-template': () => { const k = sheetActive() ? 'sheet' : 'document'; finishTab(); if (k === 'sheet') ws.newSheet(); else ws.newDocument(); offerTemplates(k, true); },
   open: () => ws.open(),
   save: () => { finishTab(); return ws.save(focusTab()); },
   'save-as': () => { finishTab(); return ws.saveAs(focusTab()); },
@@ -8881,11 +9001,13 @@ const COMMANDS: Record<string, () => unknown> = {
   'user-guide': () => void guide.open(),
   'help-here': () => { const at = guideSpot(menuMode(), editor.tool.kind); void guide.open(at.page, at.anchor); },
   'send-feedback': () => feedback.open(),
-  about: () => void appVersion().then((v) => ask('About Chem Illustrator', [], {
+  'support-project': () => openWebPage(SPONSOR_PAGE),
+  about: () => void appVersion().then((v) => ask('About Chemweave', [], {
     noCancel: true,
     note: `${STAGE_NOTE} Version ${v === 'web' ? 'for the browser' : v} (${STAGE.toLowerCase()}). Free software under the GNU General Public License, version 3: `
-      + 'see the license and the source on GitHub (github.com/nathanohare/Chem-Illustrator). ChemDraw is a trademark of Revvity Signals; '
-      + 'Chem Illustrator is not made by or affiliated with Revvity Signals.',
+      + 'see the license and the source on GitHub (github.com/nathanohare/Chem-Illustrator). ChemDraw is a trademark of Revvity Signals Software, Inc. '
+      + 'Microsoft, Word, Excel, PowerPoint and Office are trademarks of the Microsoft group of companies. '
+      + 'Chemweave was formerly called Chem Illustrator, and is not made by, connected with or endorsed by Revvity or Microsoft.',
   })),
   'report-problem': () => feedback.open('problem'),
   'copy-diagnostics': () => copyText(diagnosticsText(), 'Copied the diagnostics: paste them into a bug report or message.'),
@@ -9043,6 +9165,15 @@ const COMMANDS: Record<string, () => unknown> = {
   'diagram-to-shapes': () => editor.ungroupSelectedDiagram() || flash('Select a diagram first.'),
   'edit-energy': () => { const id = editor.selectedEnergy(); if (id === null) flash('Select an energy diagram first.'); else void energyDiagram(id); },
   'animate-reaction': () => animateDialog.open(),
+  'nmr-menu': () => nmrMenu(),
+  'predict-nmr': () => nmrRibbon('predict'),
+  'nmr-1h': () => nmrRibbon('1H'),
+  'nmr-13c': () => nmrRibbon('13C'),
+  'nmr-solvent': () => nmrSolventMenu(),
+  'nmr-window': () => nmrRibbon('window'),
+  'nmr-marks': () => nmrRibbon('marks'),
+  'nmr-check': () => nmrRibbon('check'),
+  'nmr-settings': () => (nmrHere ? settingsWindow.open('nmr') : flash('Predicted NMR spectra are in the desktop app.')),
   'animate-step': () => {
     const arrow = pickedReactionArrow();
     if (arrow === undefined) { flash('Select a reaction arrow first, or use Animate Reaction for the whole scheme.'); return; }
@@ -10014,7 +10145,7 @@ let versionText = canUpdate ? '' : 'Web version';
 void Promise.all([appVersion(), portableInfo()]).then(([v, portable]) => {
   versionText = canUpdate ? `Version ${v} ${STAGE.toLowerCase()}${portable ? ' (portable)' : ''}` : `Web version (${STAGE.toLowerCase()})`;
   diagnostics.version = versionText;
-  if (portable && !portable.writable) flash(`This portable copy can’t write to its “Chem Illustrator Data” folder (a locked or read-only drive), so settings are kept on this computer instead.`, 8000);
+  if (portable && !portable.writable) flash(`This portable copy can’t write to its “Chemweave Data” folder (a locked or read-only drive), so settings are kept on this computer instead.`, 8000);
   const el = document.querySelector('#app-version');
   if (el) el.textContent = versionText;
 });
@@ -10043,7 +10174,7 @@ function errorNotice(e: LogEntry): void {
  */
 function unexpectedCloseNotice(c: UnexpectedClose): void {
   const when = `${stamp(c.beat).slice(11, 16)} on ${stamp(c.beat).slice(0, 10)}`;
-  notice('unexpected-close', 'Chem Illustrator closed unexpectedly last time',
+  notice('unexpected-close', 'Chemweave closed unexpectedly last time',
     `It stopped without closing (last running at ${when}). Reporting it, with the log of what it was doing, helps find the cause.`, [
       { label: 'Report It…', main: true, run: () => feedback.open('problem', errorReport(diagnostics, { closed: c })) },
       { label: 'Dismiss', run: () => {} },
@@ -10054,7 +10185,7 @@ function unexpectedCloseNotice(c: UnexpectedClose): void {
 function diagnosticsText(): string {
   const about = Object.entries(feedback.about()).map(([k, v]) => `${k}: ${v}`).join('\n');
   const log = diagnostics.logText();
-  return `Chem Illustrator diagnostics\n${about}\n\n${log.length > 20_000 ? `…\n${log.slice(-20_000)}` : log}`;
+  return `Chemweave diagnostics\n${about}\n\n${log.length > 20_000 ? `…\n${log.slice(-20_000)}` : log}`;
 }
 
 async function openLogFolder(): Promise<void> {
@@ -10105,6 +10236,7 @@ const fileTypesHost = {
     get: () => invoke<boolean>('ole_registered'),
     set: async (on: boolean) => { await invoke<void>('ole_register', { on }); setWordObjects(on); },
   },
+  figures: { get: () => offerFigures, set: (on: boolean) => { offerFigures = on; storeSettings(); } },
   flash: (msg: string) => flash(msg, 7000),
 };
 let fileTypesOffered = false;
@@ -10137,7 +10269,7 @@ async function openEmbedded(e: EmbeddedEdit): Promise<void> {
 /**
  * Windows: drawings in Word, PowerPoint and Excel that open here when double-clicked. The first
  * time the app starts it registers them (a portable copy leaves the computer alone); after that it
- * keeps the registration pointing at this copy of the app. Settings ▸ File Types turns it off.
+ * keeps the registration pointing at this copy of the app. Settings ▸ Apps and System turns it off.
  */
 async function startWordObjects(): Promise<void> {
   if (platform !== 'windows') return;
@@ -10178,7 +10310,7 @@ async function openOutsideFiles(): Promise<void> {
   await listen<string[]>('open-files', (e) => { for (const p of e.payload) void openRecent(p); });
   for (const p of await invoke<string[]>('launch_files').catch(() => [])) await openRecent(p);
   // the first time the Windows app starts, it joins the chemistry files' "Open with" lists
-  // (never the default: Settings ▸ File Types explains how); a portable copy leaves the computer alone
+  // (never the default: Settings ▸ Apps and System explains how); a portable copy leaves the computer alone
   if (platform === 'windows' && !fileTypesOffered && !(await portableInfo())) {
     fileTypesOffered = true;
     const now = await fileTypesHost.get().catch(() => [] as string[]);
@@ -10188,7 +10320,9 @@ async function openOutsideFiles(): Promise<void> {
 }
 
 /** A mechanism arrow gap typed in Settings ▸ Drawing, in points: null (the usual gap) when blank or not a number. */
-const arrowGap = (v: string | undefined): number | null => { const n = Number(v); return !v || v.trim() === '' || !isFinite(n) || n < 0 ? null : Math.min(50, n); };
+/** The most a mechanism arrow's gap at either end may be, in points. */
+const ARROW_GAP_MAX = 20;
+const arrowGap = (v: string | undefined): number | null => { const n = Number(v); return !v || v.trim() === '' || !isFinite(n) ? null : Math.min(ARROW_GAP_MAX, Math.max(0, n)); };
 
 /** Settings ▸ Drawing: how structures are written and drawn, set once rather than per structure. */
 async function drawingPreferences(): Promise<void> {
@@ -10199,48 +10333,36 @@ async function drawingPreferences(): Promise<void> {
       help: 'Labels on biaryls and allenes follow the choice at once. Ra is the same as M, and Sa as P.' },
     { name: 'charges', label: 'Charges from the + and − keys', value: editor.options.circledCharges ? 'circled' : 'plain', options: [{ value: 'plain', label: 'In the label' }, { value: 'circled', label: 'In a circle' }], inline: (v) => chargeSwatch(v === 'circled', doc.style),
       help: 'Charges already drawn keep their look; the circle tools on the Object toolbox always draw a circled charge.' },
-    { name: 'ionCharges', label: 'Add charges to common counterions typed as text (BF4 becomes BF4⁻, NBu4 becomes NBu4⁺)', type: 'checkbox', value: String(chemText.ionCharges),
-      help: 'Off, a counterion typed without its charge is still read as that ion, and flagged until the charge is added.' },
-    { name: 'saltGroups', label: 'Group a counterion typed as text with the structure or ion of opposite charge next to it, as one salt', type: 'checkbox', value: String(chemText.saltGroups),
-      help: 'Grouped, the two count as one salt: one formula and mass, and a SMILES with both parts.' },
     { name: 'bondEnds', label: 'Ends of bond lines', value: String(bondEndPrefs.round), options: BOND_END_CHOICES.map((c) => ({ value: String(c.value), label: c.label })), inline: (v) => bondEndSwatch(Number(v)),
       help: 'How round the free ends of bonds are, on screen and in pictures and prints. Anything but Round also gives ring corners and chain bends a sharp, mitred point.' },
-    { name: 'supR', label: 'R groups numbered R1, R12… show the number raised (R¹, R¹²)', type: 'checkbox', value: String(labelPrefs.superscriptR),
-      help: 'Longer labels (OR1, CO2R1) and labels from files are left as they are.' },
-    { name: 'reroute', label: 'Mechanism arrows automatically wrap around structures that block their path', type: 'checkbox', value: String(editor.options.rerouteArrows),
-      help: 'Arrows you bent by hand stay as they are.' },
-    { name: 'arrowProducts', label: 'Offer Draw Next Intermediate and Check Arrows (Chemistry ▸ Mechanism Arrows): curved arrows read as electrons moving, checked, and the structure they make drawn', type: 'checkbox', value: String(editor.options.arrowProducts),
-      help: 'Off takes both commands out of the menus. The arrows themselves are drawn as before.' },
-    { name: 'startGap', label: 'Gap between a mechanism arrow\'s start and its atom or lone pair', value: arrowGaps.start === null ? '' : String(arrowGaps.start), type: 'number', unit: 'pt', placeholder: 'Automatic' },
-    { name: 'endGap', label: 'Gap between a mechanism arrow\'s head and its atom', value: arrowGaps.end === null ? '' : String(arrowGaps.end), type: 'number', unit: 'pt', placeholder: 'Automatic',
-      help: 'Measured from the atom\'s label (or a bare carbon\'s corner) or the lone pair\'s dots. Leave blank for the usual gap, which grows with the bond length. New arrows, and arrows stuck to a structure, use it when they are next drawn; Clean Up Arrow redraws the selected ones now.' },
+    { name: 'supR', label: 'Automatically superscript number(s) immediately following an "R" in chemically interpreted text', type: 'checkbox', value: String(labelPrefs.superscriptR) },
+    { name: 'supRText', label: 'Also superscript them in regular text, as each word is typed', type: 'checkbox', value: String(labelPrefs.plainText) },
     { name: 'haptoDeloc', label: 'Draw η³, η⁵ and η⁶ ligands on a metal delocalized (a circle in the ring, an arc over an allyl)', type: 'checkbox', value: String(haptoLook.delocalized),
       help: 'Only the look: the bonds stay as drawn for SMILES and saving. Chemistry ▸ Structure ▸ Kekulé Form for η Ligand switches one back.' },
-    { name: 'aidAngle', label: 'Show the angle beside the pointer while drawing bonds, arrows and lines', type: 'checkbox', value: String(editor.aids.angle) },
-    { name: 'aidLength', label: 'Show the length there too, in', type: 'checkbox', value: String(editor.aids.length),
-      beside: { name: 'aidUnits', label: 'Length units', value: editor.aids.units, options: LENGTH_UNITS },
-      help: 'Pixels are counted at 100 % zoom (96 to the inch); inches are written as decimals.' },
-    { name: 'aidLook', label: 'How the angle and hints look', value: editor.aids.look, options: [{ value: 'plain', label: 'Plain blue words' }, { value: 'box', label: 'Blue words on a pale box' }, { value: 'solid', label: 'White words on a blue box' }], inline: (v) => cursorAidSwatch(v === 'box' || v === 'solid' ? v : 'plain') },
-    { name: 'aidHints', label: 'Show what Shift, Alt and Ctrl do beside the pointer', type: 'checkbox', value: String(editor.aids.hints),
-      help: 'While dragging, the keys that change what the tool does are listed in blue (the one held in bold). With the button up they show as a key is held.' },
-  ], { ok: 'Save', preview: { title: 'Mechanism arrows', draw: (v) => mechanismPreview({ start: arrowGap(v.startGap), end: arrowGap(v.endGap) }, doc.style) } });
+    { name: 'mechanism', label: 'Mechanism Arrows', type: 'heading', value: '' },
+    { name: 'reroute', label: 'Mechanism arrows automatically wrap around structures that block their path', type: 'checkbox', value: String(editor.options.rerouteArrows),
+      help: 'Arrows you bent by hand stay as they are.' },
+    { name: 'arrowProducts', label: 'Offer Draw Next Intermediate and Check Arrows (Chemistry ▸ Mechanism Arrows)', type: 'checkbox', value: String(editor.options.arrowProducts),
+      help: 'Both read the curved arrows as electrons moving: Check Arrows checks them, and Draw Next Intermediate draws the structure they make. Off takes both commands out of the menus; the arrows themselves are drawn as before.' },
+    { name: 'startGap', label: 'Gap between tail of an arrow and its origin', value: arrowGaps.start === null ? '' : String(arrowGaps.start), type: 'number', unit: 'pt', placeholder: 'Automatic', min: 0, max: ARROW_GAP_MAX },
+    { name: 'endGap', label: 'Gap between head of an arrow and its target', value: arrowGaps.end === null ? '' : String(arrowGaps.end), type: 'number', unit: 'pt', placeholder: 'Automatic', min: 0, max: ARROW_GAP_MAX,
+      help: 'Both gaps are measured from the atom\'s label (or a bare carbon\'s corner) or the lone pair\'s dots. Leave blank for the usual gap, which grows with the bond length. New arrows, and arrows stuck to a structure, use them when they are next drawn; Clean Up Arrow redraws the selected ones now.' },
+  ], { ok: 'Save', preview: { title: 'Mechanism arrows', draw: (v, focus) => mechanismPreview({ start: arrowGap(v.startGap), end: arrowGap(v.endGap) }, doc.style, undefined, focus) } });
   if (!r) return;
   editor.options.circledCharges = r.charges === 'circled';
-  chemText.ionCharges = r.ionCharges === 'true';
-  chemText.saltGroups = r.saltGroups === 'true';
   editor.options.rerouteArrows = r.reroute === 'true';
   editor.options.arrowProducts = r.arrowProducts === 'true';
   showArrowProducts();
   arrowGaps.start = arrowGap(r.startGap);
   arrowGaps.end = arrowGap(r.endGap);
   if ((r.haptoDeloc === 'true') !== haptoLook.delocalized) { haptoLook.delocalized = r.haptoDeloc === 'true'; renderer.invalidate(doc); editor.requestScene(); }
-  editor.aids = { ...editor.aids, angle: r.aidAngle === 'true', length: r.aidLength === 'true', hints: r.aidHints === 'true', look: r.aidLook === 'box' || r.aidLook === 'solid' ? r.aidLook : 'plain', units: r.aidUnits === 'px' || r.aidUnits === 'mm' ? r.aidUnits : 'in' };
   const ends = Number(r.bondEnds);
   if (isFinite(ends) && ends !== bondEndPrefs.round) {
     bondEndPrefs.round = ends;
     doc.allDirty = true;
     editor.requestScene();
   }
+  labelPrefs.plainText = r.supRText === 'true';
   if (labelPrefs.superscriptR !== (r.supR === 'true')) {
     labelPrefs.superscriptR = r.supR === 'true';
     doc.allDirty = true;
@@ -10304,7 +10426,7 @@ function convertDeckChemdraw(deck: Deck): void {
 
 /** Settings ▸ General: how structures are saved in Word and PowerPoint files. */
 const STRUCTURES_AS = [{ value: 'pictures', label: 'Pictures (SVG and PNG)' }, { value: 'chemdraw', label: 'ChemDraw objects' }];
-const STRUCTURES_AS_HELP = 'ChemDraw objects open in ChemDraw when double-clicked in Word or PowerPoint, on computers that have ChemDraw; elsewhere they show as pictures. Pictures (SVG and PNG) look the same in every program, including Google Docs, LibreOffice and Keynote. Either way, Chem Illustrator opens them again as editable drawings. ChemDraw objects that came in with a file stay ChemDraw objects.';
+const STRUCTURES_AS_HELP = 'ChemDraw objects open in ChemDraw when double-clicked in Word or PowerPoint, on computers that have ChemDraw; elsewhere they show as pictures. Pictures (SVG and PNG) look the same in every program, including Google Docs, LibreOffice and Keynote. Either way, Chemweave opens them again as editable drawings. ChemDraw objects that came in with a file stay ChemDraw objects.';
 
 /** Settings ▸ General: selecting, groups, linked text, and your name on tracked changes. */
 async function generalPreferences(): Promise<void> {
@@ -10385,25 +10507,100 @@ function setWarnLook(look: Settings['warnLook']): void {
   editor.requestScene?.();
 }
 
+/** Settings ▸ NMR Prediction (desktop app only). */
+async function nmrSettings(): Promise<void> {
+  const r1 = nmrRange('1H'), r13 = nmrRange('13C'), pk = peakLabels();
+  const r = await ask('NMR Prediction', [
+    { name: 'auto', label: 'Predict NMR as soon as a structure is selected', type: 'checkbox', value: String(nmrAutoPredict()),
+      help: 'Off: the NMR section of the Analysis panel stays closed until you open it (or click Predict NMR on the Canvas ribbon), so selecting things stays quick. On: it opens and predicts with every selection, as long as you left it open.' },
+    { name: 'quality', label: 'Predict spectra with', value: nmrQuality(), options: [
+      { value: 'fast', label: 'Fast: first-order multiplets' }, { value: 'balanced', label: 'Balanced: exact simulation of up to 8 coupled protons' },
+      { value: 'accurate', label: 'Accurate: 3-D conformers, up to 10 coupled protons' }],
+      help: 'Accurate also predicts both shifts of diastereotopic CH2 protons and couplings from the 3-D shape; it takes a few seconds per structure. The Spectrum window\'s dropdown changes the same setting.' },
+    { name: 'solvent', label: 'Solvent', value: nmrPanel.solvent, options: NMR_SOLVENTS.map((x) => ({ value: x, label: x })) },
+    { name: 'mhz', label: 'Spectrometer frequency', value: String(nmrSpectrumMhz()), options: [300, 400, 500, 600, 800].map((m) => ({ value: String(m), label: `${m} MHz` })) },
+    { name: 'h1lo', label: '1H spectrum from', type: 'number', value: String(r1.lo), unit: 'ppm',
+      help: 'The spectrum is drawn over this range (−0.5 to 10 ppm unless you change it) and widens by itself when a peak falls outside it.' },
+    { name: 'h1hi', label: '1H spectrum to', type: 'number', value: String(r1.hi), unit: 'ppm' },
+    { name: 'c13lo', label: '13C spectrum from', type: 'number', value: String(r13.lo), unit: 'ppm',
+      help: 'The spectrum is drawn over this range (−5 to 200 ppm unless you change it) and widens by itself when a peak falls outside it.' },
+    { name: 'c13hi', label: '13C spectrum to', type: 'number', value: String(r13.hi), unit: 'ppm' },
+    { name: 'compare', label: 'Show a pasted report against the prediction', value: compareMode(), options: [
+      { value: 'inverted', label: 'Inverted: measured above, predicted mirrored below' }, { value: 'stacked', label: 'Stacked: one above the other, both upright' }, { value: 'overlay', label: 'Overlay: both on one baseline' }],
+      help: 'Check Data in the Spectrum window. Its Inverted, Stacked and Overlay buttons change the same setting.' },
+    { name: 'plLabel', label: 'Peak labels: atoms', type: 'checkbox', value: String(pk.label),
+      help: 'What the Spectrum window (and its pictures) writes over each predicted peak. Atoms are named as in the list\'s Atoms column.' },
+    { name: 'plShift', label: 'Peak labels: chemical shift (a range for m)', type: 'checkbox', value: String(pk.shift) },
+    { name: 'plMult', label: 'Peak labels: multiplicity', type: 'checkbox', value: String(pk.mult) },
+    { name: 'plCount', label: 'Peak labels: number of H', type: 'checkbox', value: String(pk.count) },
+    { name: 'plJ', label: 'Peak labels: J values', type: 'checkbox', value: String(pk.j) },
+    { name: 'plHover', label: 'Peak labels: show only the first part; hovering a peak shows the rest', type: 'checkbox', value: String(pk.hover) },
+    { name: 'plSize', label: 'Peak label size', type: 'number', value: String(pk.size), unit: 'px' },
+    { name: 'plPlace', label: 'Peak labels go', value: pk.place, options: [
+      { value: 'above', label: 'Above each peak, one part per line' }, { value: 'top', label: 'Along the top on one line, with a line down to the peak' }, { value: 'upright', label: 'Upright over each peak' }] },
+  ], { ok: 'Save' });
+  if (!r) return;
+  setNmrAutoPredict(r.auto === 'true');
+  if (r.compare === 'inverted' || r.compare === 'stacked' || r.compare === 'overlay') setCompareMode(r.compare);
+  if (r.quality === 'fast' || r.quality === 'balanced' || r.quality === 'accurate') setNmrQuality(r.quality);
+  if ((NMR_SOLVENTS as readonly string[]).includes(r.solvent)) nmrPanel.solvent = r.solvent;
+  if (Number(r.mhz) > 0) setNmrSpectrumMhz(Number(r.mhz));
+  const bad: string[] = [];
+  for (const [nuc, lo, hi] of [['1H', r.h1lo, r.h1hi], ['13C', r.c13lo, r.c13hi]] as const) {
+    const a = Number(lo), b = Number(hi);
+    if (lo.trim() === '' || hi.trim() === '' || !Number.isFinite(a) || !Number.isFinite(b) || a >= b) { bad.push(nuc); continue; }
+    setNmrRange(nuc, a, b);
+  }
+  const size = Number(r.plSize);
+  setPeakLabels({ label: r.plLabel === 'true', shift: r.plShift === 'true', mult: r.plMult === 'true', count: r.plCount === 'true', j: r.plJ === 'true', hover: r.plHover === 'true',
+    size: size >= 6 && size <= 24 ? size : pk.size, place: r.plPlace === 'top' || r.plPlace === 'upright' ? r.plPlace : 'above' });
+  if (bad.length) flash(`The ${bad.join(' and ')} range was kept as it was: the first number has to be lower than the second.`, 6000);
+  nmrPanel.settingsChanged(document.getElementById('analysis-body'));
+}
+
 async function personalPreferences(): Promise<void> {
   const alt = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent) ? 'Option+Enter' : 'Alt+Enter';
   const r = await ask('Preferences', [
     { name: 'enterFinishes', label: 'Finish typing text from the Text tool with', value: enterFinishesText ? 'enter' : 'esc',
       options: [{ value: 'esc', label: 'Esc (Enter starts a new line), as in ChemDraw' }, { value: 'enter', label: `Enter (${alt} starts a new line)` }],
       help: 'Everywhere you draw: Canvas, structures in documents and spreadsheets, and text boxes on slides. Ctrl+Enter always finishes, and Shift+Enter always breaks the line.' },
-    { name: 'alkylLook', label: 'Alkyl groups written as', value: alkylPrefs.look, options: ALKYL_LOOK_CHOICES,
-      help: 'Applies to the n-, i-, s- and t- prefixes of Pr and Bu anywhere in labels or text (OtBu, N(iPr)2). New labels use it when you finish typing; you\'ll be asked about existing ones. A dash is never added or removed where it would read as an element (PtBu3).' },
-    { name: 'warnLook', label: 'Mark problems on the drawing with', value: renderer.warnLook, options: [
+    { name: 'alkylLook', label: 'Auto format alkyl isomer prefixes', value: alkylPrefs.look, options: ALKYL_LOOK_CHOICES, short: true, inline: (v) => alkylSwatch(parseAlkylLook(v)),
+      help: 'The n-, i-, s- and t- of Pr and Bu anywhere in labels or text: OtBu, N(iPr)2, Si(iPr)3, nBu, sBu and P(t-Bu)2 all follow the look picked. New labels use it when you finish typing; you\'ll be asked about existing ones. A dash is never added or removed where it would read as an element (PtBu3).' },
+    { name: 'warnLook', label: 'Mark problems on the drawing with', value: renderer.warnLook, short: true, inline: (v) => problemSwatch((WARN_LOOKS as readonly string[]).includes(v) ? v as WarnLook : 'box', doc.style), options: [
       { value: 'box', label: 'A thin red box' }, { value: 'soft', label: 'A soft red disc' }, { value: 'circle', label: 'A red circle' },
       { value: 'dashed', label: 'A dashed red circle' }, { value: 'corners', label: 'Red corner marks' }],
-      help: 'Atoms with too many bonds, labels that can\'t be read and other problems the Warnings box lists. Clear Show on drawing (Warnings) to hide the marks.' },
-    { name: 'offerFigures', label: 'Offer to make structures figures when opening a document', type: 'checkbox', value: String(offerFigures),
-      help: 'A bar over the pages offers Make Figures when a document\'s structures aren\'t figures yet (a Word file from ChemDraw, for one). Don\'t Ask for This File on the bar turns it off for one document. Make All Structures Figures… stays on a structure\'s right-click menu either way.' },
-  ], { ok: 'Save', preview: { title: 'Alkyl groups', draw: (v) => alkylPreview(parseAlkylLook(v.alkylLook)) } });
+      help: 'Atoms with too many bonds, labels that can\'t be read, a bond drawn on its own (as in the picture) and other problems the Warnings box lists. Clear Show on drawing (Warnings) to hide the marks.' },
+    { name: 'pointer', label: 'Pointer While Drawing', type: 'heading', value: '' },
+    { name: 'aidAngle', label: 'Show the angle beside the pointer while drawing bonds, arrows and lines', type: 'checkbox', value: String(editor.aids.angle) },
+    { name: 'aidLength', label: 'Show the length there too, in', type: 'checkbox', value: String(editor.aids.length),
+      beside: { name: 'aidUnits', label: 'Length units', value: editor.aids.units, options: LENGTH_UNITS },
+      help: 'Pixels are counted at 100 % zoom (96 to the inch); inches are written as decimals.' },
+    { name: 'aidLook', label: 'How the angle and hints look', value: editor.aids.look, short: true, options: [{ value: 'plain', label: 'Plain blue words' }, { value: 'box', label: 'Blue words on a pale box' }, { value: 'solid', label: 'White words on a blue box' }], inline: (v) => cursorAidSwatch(v === 'box' || v === 'solid' ? v : 'plain') },
+    { name: 'aidHints', label: 'Show what Shift, Alt and Ctrl do beside the pointer', type: 'checkbox', value: String(editor.aids.hints),
+      help: 'While dragging, the keys that change what the tool does are listed in blue (the one held in bold). With the button up they show as a key is held.' },
+    { name: 'newFiles', label: 'New Files', type: 'heading', value: '', help: 'A window of templates opens over the new, blank file. Click outside it to keep the blank file; the checkbox at its bottom turns it off too.' },
+    { name: 'tplDocument', label: 'Show templates when creating new documents', type: 'checkbox', value: String(templatesOnNew.document) },
+    { name: 'tplSheet', label: 'Show templates when creating new spreadsheets', type: 'checkbox', value: String(templatesOnNew.sheet) },
+    { name: 'tplSlides', label: 'Show templates when creating new presentations', type: 'checkbox', value: String(templatesOnNew.slides) },
+    { name: 'counterions', label: 'Counterions Typed as Text', type: 'heading', value: '' },
+    { name: 'ionCharges', label: 'Add their charges (BF₄ becomes BF₄⁻, NBu₄ becomes NBu₄⁺)', type: 'checkbox', value: String(chemText.ionCharges), inline: (v) => counterionSwatch(v === 'true', doc.style),
+      help: 'Off, a counterion typed without its charge is still read as that ion, and flagged until the charge is added.' },
+    { name: 'saltGroups', label: 'Group each with the structure or ion of opposite charge next to it, as one salt', type: 'checkbox', value: String(chemText.saltGroups), inline: (v) => saltSwatch(v === 'true', doc.style),
+      help: 'Grouped, the two count as one salt: one formula and mass, and a SMILES with both parts.' },
+    { name: 'iconsHeading', label: 'Icons', type: 'heading', value: '' },
+    { name: 'iconSet', label: 'Icon set', value: iconSet(), short: true, options: [
+      { value: 'new', label: 'New: one style in every mode' },
+      { value: 'classic', label: 'Classic: the simple line icons, closest to ChemDraw' }],
+      help: 'Classic brings back the icons the toolboxes and ribbons had before the redesign. Buttons that had only words keep their new pictures either way.' },
+  ], { ok: 'Save' });
   if (!r) return;
   enterFinishesText = r.enterFinishes === 'enter';
-  offerFigures = r.offerFigures === 'true';
   setWarnLook(r.warnLook as Settings['warnLook']);
+  chemText.ionCharges = r.ionCharges === 'true';
+  chemText.saltGroups = r.saltGroups === 'true';
+  templatesOnNew = { document: r.tplDocument === 'true', sheet: r.tplSheet === 'true', slides: r.tplSlides === 'true' };
+  setIconSet(r.iconSet === 'classic' ? 'classic' : 'new');
+  editor.aids = { ...editor.aids, angle: r.aidAngle === 'true', length: r.aidLength === 'true', hints: r.aidHints === 'true', look: r.aidLook === 'box' || r.aidLook === 'solid' ? r.aidLook : 'plain', units: r.aidUnits === 'px' || r.aidUnits === 'mm' ? r.aidUnits : 'in' };
   const look = parseAlkylLook(r.alkylLook);
   const changed = look !== alkylPrefs.look;
   alkylPrefs.look = look;
@@ -10413,10 +10610,11 @@ async function personalPreferences(): Promise<void> {
 
 const ALKYL_LOOK_CHOICES: { value: AlkylLook; label: string }[] = [
   { value: 'typed', label: 'As typed' },
-  { value: 'plain', label: 'tBu, iPr' },
-  { value: 'italic', label: 'tBu, iPr with the t and i in italics' },
-  { value: 'dash', label: 't-Bu, i-Pr' },
-  { value: 'both', label: 't-Bu, i-Pr with the t and i in italics' },
+  { value: 'plain', label: 'tBu' },
+  { value: 'italic', label: 'tBu, italic t' },
+  { value: 'dash', label: 't-Bu' },
+  { value: 'both', label: 't-Bu, italic t' },
+  { value: 'raised', label: 'ᵗBu, raised italic t' },
 ];
 const parseAlkylLook = (v: string | undefined): AlkylLook => (ALKYL_LOOKS.includes(v as AlkylLook) ? v as AlkylLook : 'typed');
 
@@ -10492,6 +10690,7 @@ function currentSettings(): Settings {
     density,
     shadows,
     iconLook,
+    iconSet: iconSet(),
     shapeInk: shapeInkNow,
     oneColumnTools,
     toolCells,
@@ -10499,6 +10698,7 @@ function currentSettings(): Settings {
     startView,
     enterFinishesText,
     offerFigures,
+    templatesOnNew: { ...templatesOnNew },
     page: defaultPage,
     welcomed,
     groupTips: labelTips.enabled,
@@ -10536,6 +10736,7 @@ function currentSettings(): Settings {
     cursorAids: { ...editor.aids },
     haptoDelocalized: haptoLook.delocalized,
     superscriptR: labelPrefs.superscriptR,
+    superscriptRText: labelPrefs.plainText,
     alkylLook: alkylPrefs.look,
     warnLook: renderer.warnLook,
     bondEnds: bondEndPrefs.round,
@@ -10582,6 +10783,7 @@ function currentSettings(): Settings {
     recentFiles,
     recentSymbols,
     scheme: { ...schemePrefs },
+    analysis: structuredClone(analysisPrefs()),
     newman: structuredClone(newmanPrefs),
     keep: keepPrefs,
     highlightLooks: ownLooks,
@@ -10595,7 +10797,7 @@ function currentSettings(): Settings {
 
 /** Save every setting in one file, to keep or to use on another computer. */
 async function exportSettings(say: (text: string) => void = flash): Promise<void> {
-  const target = await saveFileDialog('Chem Illustrator settings.json', SETTINGS_FILE).catch((e) => { say(String(e)); return null; });
+  const target = await saveFileDialog('Chemweave settings.json', SETTINGS_FILE).catch((e) => { say(String(e)); return null; });
   if (!target) return;
   await writeFile(target.ref, target.name, exportText(currentSettings()), SETTINGS_FILE).then(
     () => say(`Saved every setting in ${target.name}. Import it on another computer (Edit > Settings File > Import Settings) to set that one up the same.`),
@@ -10608,7 +10810,7 @@ async function importSettingsFile(say: (text: string) => void = flash): Promise<
   const got = await openFileDialog([SETTINGS_FILE]).catch((e) => { say(String(e)); return null; });
   if (!got) return;
   const read = importSettings(got.text, currentSettings());
-  if (!read) { say(`${got.name} isn't a Chem Illustrator settings file (use one saved with Export Settings).`); return; }
+  if (!read) { say(`${got.name} isn't a Chemweave settings file (use one saved with Export Settings).`); return; }
   applySettings(read.settings);
   storeSettings();
   say(read.only === 'hotkeys' ? `Using the keys from ${got.name}.` : `Now using the settings from ${got.name}: shortcuts, toolboxes, preferences, templates, abbreviations, styles and palettes. Recent files are unchanged.`);
@@ -10679,7 +10881,7 @@ const hotkeysDialog = new HotkeysDialog({
     set: (v) => { editor.options.stickyHotspot = v; storeSettings(); },
   },
   exportKeys: async () => {
-    const target = await saveFileDialog('Chem Illustrator hotkeys.json', KEYMAP_FILE).catch((e) => { hotkeysDialog.say(String(e)); return null; });
+    const target = await saveFileDialog('Chemweave hotkeys.json', KEYMAP_FILE).catch((e) => { hotkeysDialog.say(String(e)); return null; });
     if (!target) return;
     const text = JSON.stringify({ app: 'Chem Illustrator', kind: 'hotkeys', version: 1, hotkeys: keymap.overrides() }, null, 2) + '\n';
     await writeFile(target.ref, target.name, text, KEYMAP_FILE).then(
@@ -10709,6 +10911,7 @@ function applySettings(s: Settings): void {
   editor.options.fixedAngles = s.fixedAngles;
   editor.showRoles = s.showRoles;
   setSchemePrefs(s.scheme);
+  setAnalysisPrefs(s.analysis);
   newmanPrefs = structuredClone(s.newman);
   $('[data-cmd="show-roles"]')?.setAttribute('aria-checked', String(s.showRoles));
   showDevTools(s.devTools);
@@ -10731,11 +10934,13 @@ function applySettings(s: Settings): void {
   setDensity(s.density);
   setShadows(s.shadows);
   setIconLook(s.iconLook);
+  setIconSet(s.iconSet);
   setShapesInk(s.shapeInk);
   setOneColumnTools(s.oneColumnTools);
   setToolCells(s.toolCells);
   setRibbonLook(s.canvasRibbon);
   startView = s.startView;
+  templatesOnNew = { ...s.templatesOnNew };
   enterFinishesText = s.enterFinishesText;
   offerFigures = s.offerFigures;
   showGroupTips(s.groupTips);
@@ -10772,6 +10977,7 @@ function applySettings(s: Settings): void {
   editor.aids = { ...s.cursorAids };
   haptoLook.delocalized = s.haptoDelocalized;
   labelPrefs.superscriptR = s.superscriptR;
+  labelPrefs.plainText = s.superscriptRText;
   alkylPrefs.look = s.alkylLook;
   setWarnLook(s.warnLook);
   bondEndPrefs.round = s.bondEnds;
@@ -11045,9 +11251,103 @@ async function fragmentAt(p: { x: number; y: number }, q: { x: number; y: number
 let analysisTimer = 0;
 /** The structures last analysed, for the panel's buttons. */
 let lastAnalysis: { results: FragmentResult[]; frags: Set<number>[]; molblocks: string[] } | null = null;
-const adductSel = $<HTMLSelectElement>('#analysis-adduct');
-adductSel.innerHTML = COMMON_ADDUCTS.map((a) => `<option>${a}</option>`).join('');
-adductSel.addEventListener('change', () => scheduleAnalysis(true));
+/** The ion for m/z, the isotope pattern and the HRMS text: picked in the m/z row of the Analysis panel. */
+const adductSel = { value: COMMON_ADDUCTS[0] };
+$('#analysis-body').addEventListener('change', (e) => {
+  const t = e.target as HTMLElement;
+  if (!(t instanceof HTMLSelectElement) || !t.matches('select[data-adduct]')) return;
+  adductSel.value = t.value;
+  scheduleAnalysis(true);
+});
+/** A structure's bench values: PubChem's measured ones if it has been looked up, else estimates. */
+function benchOf(r: FragmentResult) {
+  const st = r.smiles ? pubchemStates.get(r.smiles) : undefined;
+  return benchValues(r, st?.kind === 'found' ? st.c : null);
+}
+
+/** The panel's customize mode (its gear): a check box and grip on every row, for quick changes. */
+let analysisCustomize = false;
+const CUSTOMIZE_BAR = `<div class="an-editbar"><b>Customize</b><span class="info-icon" tabindex="0" role="img" title="Drag rows by their grips to reorder them; untick to hide. Settings ▸ Analysis has the rest: decimal places, units, lab calculations, the ribbon box and attached descriptors." aria-label="About customizing">i</span><span class="sp"></span><button type="button" data-analysis-settings="rows">More Settings…</button><button type="button" data-analysis-reset title="Put the rows back as they first were">Reset</button><button type="button" class="primary" data-analysis-done>Done</button></div>`;
+
+function setAnalysisCustomize(on: boolean): void {
+  analysisCustomize = on;
+  document.querySelector('#analysis-gear')?.classList.toggle('on', on);
+  document.querySelector('#analysis-gear')?.setAttribute('aria-pressed', String(on));
+  scheduleAnalysis(true);
+}
+
+/** Change the Analysis settings (from the panel or Settings ▸ Analysis) and keep them. */
+function changeAnalysisPrefs(edit: (p: AnalysisPrefs) => void): void {
+  const p = structuredClone(analysisPrefs());
+  edit(p);
+  setAnalysisPrefs(p);
+  storeSettings();
+}
+// whatever changes them, the panel and the ribbon box show them
+onAnalysisPrefs(() => scheduleAnalysis(true));
+
+$('#analysis-gear').addEventListener('click', () => setAnalysisCustomize(!analysisCustomize));
+$('#analysis-body').addEventListener('change', (e) => {
+  const t = e.target as HTMLElement;
+  if (!(t instanceof HTMLInputElement) || !t.dataset.show) return;
+  const key = t.dataset.show;
+  changeAnalysisPrefs((p) => { const r = p.rows.find((x) => x.key === key); if (r) r.on = t.checked; });
+});
+$('#analysis-body').addEventListener('pointerdown', (e) => {
+  const grip = (e.target as HTMLElement).closest<HTMLElement>('[data-grip]');
+  const row = grip?.closest<HTMLElement>('[data-row]');
+  const frag = row?.closest<HTMLElement>('.frag');
+  if (!grip || !row || !frag) return;
+  const rows = () => [...frag.querySelectorAll<HTMLElement>('[data-row]')];
+  dragRow(e as PointerEvent, row, rows, (from, to) => {
+    const keys = rows().map((x) => x.dataset.row!);
+    const moving = keys[from];
+    changeAnalysisPrefs((p) => {
+      const item = p.rows.find((x) => x.key === moving);
+      if (!item) return;
+      p.rows = p.rows.filter((x) => x !== item);
+      // before the row it was dropped above, or after the last one shown
+      const before = to < keys.length ? p.rows.findIndex((x) => x.key === keys[to]) : p.rows.findIndex((x) => x.key === keys[keys.length - 1]) + 1;
+      p.rows.splice(before < 0 ? p.rows.length : before, 0, item);
+    });
+  });
+});
+$('#analysis-body').addEventListener('click', (e) => {
+  const t = e.target as HTMLElement;
+  if (t.closest('[data-analysis-done]')) { setAnalysisCustomize(false); return; }
+  if (t.closest('[data-analysis-reset]')) { changeAnalysisPrefs((p) => { p.rows = parseAnalysisPrefs({ calcs: p.calcs }).rows; }); return; }
+  const settings = t.closest<HTMLElement>('[data-analysis-settings]');
+  if (settings) { analysisSettingsAt(settings.dataset.analysisSettings === 'descriptors' ? 'descriptors' : 'rows'); settingsWindow.open('analysis'); return; }
+  const calc = t.closest<HTMLElement>('[data-analysis-calc]');
+  if (calc) { void editLabCalc(calc.dataset.analysisCalc === 'new' ? null : calc.dataset.analysisCalc!); }
+});
+
+/** Add Lab Calculation… (or edit one): its amount and what to show, then it is a row of the panel. */
+async function editLabCalc(id: string | null): Promise<void> {
+  const p = analysisPrefs();
+  const was = id ? calcOf(p, `calc:${id}`) : undefined;
+  const got = await askLabCalc(was ?? newCalc(nextCalcId(p)), analysisSample(), (r) => benchOf(r), p);
+  if (!got) return;
+  changeAnalysisPrefs((q) => placeCalc(q, got));
+}
+/** The structure last analysed, for previews of lab calculations and descriptors. */
+const analysisSample = () => lastAnalysis?.results.find((r) => !r.error && r.mw > 0) ?? null;
+/** Settings ▸ Analysis works on the same settings as the panel's Customize, so the two always agree. */
+const analysisHost: AnalysisSettingsHost = {
+  prefs: analysisPrefs,
+  apply: (p) => { setAnalysisPrefs(p); storeSettings(); },
+  sample: analysisSample,
+  bench: (r) => benchOf(r),
+  adduct: () => adductSel.value,
+  name: (r) => { const s = nameStates.get(r.smiles); return s?.kind === 'found' ? s.name : null; },
+};
+
+/** Starts the offline namer a few seconds after the first structure is analysed, so names come without asking. */
+let namerTimer = 0;
+function startNamerSoon(): void {
+  if (namerTimer || namer.ready) return;
+  namerTimer = window.setTimeout(() => { namer.start().then(() => scheduleAnalysis(true), () => { /* stays unnamed; tried again next session */ }); }, 3000);
+}
 /** What PubChem had on each structure looked up this session, by SMILES. */
 const pubchemStates = new Map<string, PubChemState>();
 
@@ -11096,6 +11396,33 @@ function showAnalysisList(): void {
   } else if (sideIsFolded()) command('fold-side');
 }
 
+/** The NMR commands on the Canvas ribbon: bring the Analysis list into view, then act on the first structure's NMR section (once the panel has it). */
+function nmrRibbon(act: Parameters<NmrPanel['ribbon']>[0]): void {
+  if (!nmrHere) { flash('Predicted NMR spectra are in the desktop app for Windows, Mac and Linux.'); return; }
+  showAnalysisList();
+  let tries = 0;
+  const go = () => {
+    if (nmrPanel.ribbon(act)) return;
+    if (++tries < 30) { setTimeout(go, 100); return; }
+    flash('Select a structure to predict its NMR spectrum.');
+  };
+  go();
+}
+
+/** Home > NMR: its commands in a menu under the button. */
+function nmrMenu(): void {
+  const b = document.querySelector<HTMLElement>('#canvas-ribbon [data-cmd="nmr-menu"]');
+  const r = b?.getBoundingClientRect() ?? new DOMRect(200, 120, 0, 0);
+  popupMenu(r.left, r.bottom + 2, [['Predict NMR', () => nmrRibbon('predict')], ['Spectrum Window', () => nmrRibbon('window')], ['Show on Drawing', () => nmrRibbon('marks')], ['Check Data…', () => nmrRibbon('check')], null, ['NMR Settings…', () => command('nmr-settings')]]);
+}
+
+/** Chemistry > NMR > Solvent…: the solvents in a menu under the button. */
+function nmrSolventMenu(): void {
+  const b = document.querySelector<HTMLElement>('#canvas-ribbon [data-cmd="nmr-solvent"]');
+  const r = b?.getBoundingClientRect() ?? new DOMRect(200, 120, 0, 0);
+  popupMenu(r.left, r.bottom + 2, NMR_SOLVENTS.map((x) => [`${x === nmrPanel.solvent ? '✓ ' : ''}${x}`, () => nmrRibbon({ solvent: x })] as [string, () => void]));
+}
+
 /** Chemistry > Look Up > Find CAS RN (and the right-click menu): the structure picked, its CAS RN shown in the Analysis panel. */
 async function findCasChosen(): Promise<void> {
   const f = chosenStructures()[0];
@@ -11139,6 +11466,9 @@ async function lookUpChosen(): Promise<void> {
   $('#analysis-body .pubchem')?.scrollIntoView({ block: 'nearest' });
 }
 
+/** Where Help ▸ Support Chemweave goes: the GitHub Sponsors page. */
+const SPONSOR_PAGE = 'https://github.com/sponsors/nathanohare';
+
 /** A web page, in the computer's browser. */
 function openWebPage(url: string): void {
   if (isTauri()) void import('@tauri-apps/plugin-opener').then(({ openUrl }) => openUrl(url)).catch((e) => flash(`Couldn't open the browser: ${e}`));
@@ -11149,10 +11479,6 @@ $('#analysis-body').addEventListener('click', (e) => {
   const t = e.target as HTMLElement;
   const page = t.closest<HTMLElement>('[data-pubchem-page]');
   if (page) { e.preventDefault(); openWebPage(compoundPage(Number(page.dataset.pubchemPage))); return; }
-  const nm = t.closest<HTMLButtonElement>('button[data-name]');
-  if (nm && lastAnalysis) { const k = Number(nm.dataset.name); const r = lastAnalysis.results[k]; if (r?.smiles && lastAnalysis.molblocks[k]) void nameForPanel(r.smiles, lastAnalysis.molblocks[k]); return; }
-  const calc = t.closest<HTMLButtonElement>('button[data-calc]');
-  if (calc && lastAnalysis) { const r = lastAnalysis.results[Number(calc.dataset.calc)]; if (r && !r.error) void showLabCalculator({ mw: r.mw, label: r.formula }); return; }
   const findBtn = t.closest<HTMLButtonElement>('button[data-cas]');
   if (findBtn && lastAnalysis) { const r = lastAnalysis.results[Number(findBtn.dataset.cas)]; if (r?.smiles) void findCas(r.smiles, casStates.has(r.smiles)); return; }
   const look = t.closest<HTMLButtonElement>('button[data-pubchem]');
@@ -11174,15 +11500,14 @@ $('#analysis-body').addEventListener('click', (e) => {
     flash('Added the CAS RN under the structure; it follows it. Double-click to edit.');
     return;
   }
-  if (kind === 'pcname' || kind === 'pccas' || kind === 'pchaz' || kind === 'name') {
+  if (kind === 'pcname' || kind === 'pccas' || kind === 'pchaz') {
     const st = r && pubchemStates.get(r.smiles);
-    const named = kind === 'name' && r ? nameStates.get(r.smiles) : undefined;
-    const runs = kind === 'name' ? (named?.kind === 'found' ? nameRuns(named.name) : null) : st?.kind === 'found' ? pubchemRuns(kind, st.c) : null;
+    const runs = st?.kind === 'found' ? pubchemRuns(kind, st.c) : null;
     if (!runs || !frag) return;
     // tied to the structure like Add Caption's, so it follows it; edit or retype it like any text
     // (the structure stays selected, so the panel stays open for the other buttons)
     const m = editor.measure();
-    doc.edit(kind === 'pcname' || kind === 'name' ? 'Name caption' : kind === 'pccas' ? 'CAS caption' : 'Hazards caption', () => {
+    doc.edit(kind === 'pcname' ? 'Name caption' : kind === 'pccas' ? 'CAS caption' : 'Hazards caption', () => {
       const c = doc.addCaption({ x: 0, y: 0, runs, justify: 'center', attach: { atoms: [...frag], side: 'below', gap: defaultGap(doc), shift: 0, role: 'caption' } });
       placeAttached(doc, c, m);
     });
@@ -11232,6 +11557,16 @@ async function weigh(atoms: Set<number>): Promise<FragmentResult | null> {
   return r && !r.error ? r : null;
 }
 
+/** A structure's checked systematic name for its descriptors (the namer starts if need be), or null when it has none. */
+async function descriptorName(atoms: Set<number>, r: FragmentResult | null): Promise<string | null> {
+  if (!r?.smiles) return null;
+  const ex = toMolfile(doc, atoms, '');
+  if (ex.generic.length) return null;
+  if (!namer.ready) flash('Loading the namer for the Name line (first time only)…', 15000);
+  const s = await nameOf(r.smiles, ex.molblock).catch(() => null);
+  return s?.kind === 'found' ? s.name : null;
+}
+
 /**
  * Chemistry > Attach Descriptors (and the Analysis panel's button): the formula and masses under
  * each structure, tied to it. They follow it, and are worked out again when it changes; the Style
@@ -11242,13 +11577,15 @@ async function attachDescriptors(frags = chosenStructures()): Promise<void> {
   if (!chem.ready) { flash('The chemistry engine is still loading. Try again in a moment.'); return; }
   const made: number[] = [];
   const weighed = await Promise.all(frags.map((f) => weigh(f)));
+  const show = newDescriptors();
+  const names = show.includes('name') ? await Promise.all(frags.map((f, i) => descriptorName(f, weighed[i]))) : [];
   doc.edit('Attach descriptors', () => {
     frags.forEach((f, i) => {
       const r = weighed[i];
       if (!r) return;
       const adduct = adductSel.value;
-      const runs = descriptorRuns(r, DEFAULT_DESCRIPTORS, adduct);
-      const attach: Attachment = { atoms: [...f], side: 'below', gap: defaultGap(doc), shift: 0, role: 'descriptors', show: [...DEFAULT_DESCRIPTORS], adduct, sig: structureSig(doc, f) };
+      const runs = descriptorRuns(r, show, adduct, analysisPrefs(), benchOf(r), names[i]);
+      const attach: Attachment = { atoms: [...f], side: 'below', gap: defaultGap(doc), shift: 0, role: 'descriptors', show, adduct, sig: structureSig(doc, f) };
       const c = doc.addCaption({ x: 0, y: 0, runs, justify: 'center', attach });
       placeAttached(doc, c, editor.measure());
       made.push(c.id);
@@ -11277,11 +11614,12 @@ async function refreshDescriptors(): Promise<void> {
         if (!atoms.size || sig === a.sig) continue;
         const version = doc.version;
         const r = await weigh(atoms);
+        const name = (a.show ?? newDescriptors()).includes('name') ? await descriptorName(atoms, r) : null;
         // something else changed meanwhile: look again from the start
         if (doc.version !== version) { descriptorAgain = true; break; }
         const now = doc.captions.get(c.id);
         if (!r || !now?.attach) continue;
-        doc.amend('Descriptors', () => doc.updateCaption(c.id, { runs: descriptorRuns(r, now.attach!.show ?? DEFAULT_DESCRIPTORS, now.attach!.adduct ?? adductSel.value), attach: { ...now.attach!, sig } }));
+        doc.amend('Descriptors', () => doc.updateCaption(c.id, { runs: descriptorRuns(r, now.attach!.show ?? newDescriptors(), now.attach!.adduct ?? adductSel.value, analysisPrefs(), benchOf(r), name), attach: { ...now.attach!, sig } }));
         editor.changed();
       }
     } while (descriptorAgain);
@@ -11397,19 +11735,34 @@ async function runAnalysis(force: boolean): Promise<void> {
   if (seq !== analysisSeq) return;
   lastAnalysis = { results, frags, molblocks: exports.map((e) => e.molblock) };
   // once the namer is running, every structure analysed gets its name without asking
-  if (namer.ready) results.forEach((r, i) => { if (!r.error && r.smiles && !polymers[i] && !rGroupNames(frags[i]).length && !nameStates.has(r.smiles)) void nameForPanel(r.smiles, exports[i].molblock); });
+  const prefs = analysisPrefs();
+  const nameShown = prefs.autoName && prefs.rows.some((x) => x.key === 'name' && x.on);
+  if (nameShown && results.some((r) => !r.error && r.smiles)) startNamerSoon();
+  // measured bench values: looked up by themselves only when Settings ▸ Analysis says so (it sends the SMILES)
+  if (prefs.autoPubchem) results.forEach((r, i) => { if (!r.error && r.smiles && !polymers[i] && !rGroupNames(frags[i]).length && !pubchemStates.has(r.smiles)) void lookUpOnPubChem(r.smiles); });
+  if (namer.ready && nameShown) results.forEach((r, i) => { if (!r.error && r.smiles && !polymers[i] && !rGroupNames(frags[i]).length && !nameStates.has(r.smiles)) void nameForPanel(r.smiles, exports[i].molblock); });
   saySelection(results);
   // the ribbon's Analysis box: the first structure's formula (and how many more), weight, exact mass and m/z
   const firstAt = results.findIndex((r) => !r.error && r.formula);
   const first = firstAt >= 0 ? results[firstAt] : null;
-  const firstIon = first && !polymers[firstAt] && !rGroupNames(frags[firstAt]).length ? ionInfo(first, adductSel.value) : null;
+  // its lines are the ones Settings ▸ Analysis (or the box's own settings) chose; a structure with R groups or repeat units has only its formula
+  const plain = first && !polymers[firstAt] && !rGroupNames(frags[firstAt]).length;
+  const firstBench = first && plain ? benchOf(first) : {};
+  const boxRow = (key: string) => (first && plain ? ribbonRow(key, first, adductSel.value, prefs, firstBench) : null);
   analysisBox.set(first ? {
     formula: formulaHtml(first.formula) + (results.length > 1 ? ` <span class="muted">+${results.length - 1}</span>` : ''),
-    mw: first.mw.toFixed(2),
-    exact: first.exact.toFixed(4),
-    ion: firstIon ? { label: adductHtml(firstIon.adduct.label), mz: firstIon.mz.toFixed(4) } : null,
+    rows: prefs.ribbon.lines.map(boxRow),
+    simple: boxRow(prefs.ribbon.simple),
   } : null);
-  panel.innerHTML = results.map((r, i) => polymers[i] ? polymerHtml(r, polymers[i]!) : analysisHtml(r, i, adductSel.value, { stereo: r.error ? '' : stereoSummary(frags[i]), unknown: exports[i].unknownLabels, electrons: frags[i].size ? electronsHtml(countElectrons(doc, frags[i].values().next().value!)) : '', rGroups: rGroupNames(frags[i]), name: r.error || !r.smiles || rGroupNames(frags[i]).length ? '' : nameHtml(nameStates.get(r.smiles) ?? { kind: 'idle' }, i), pubchem: r.error || !r.smiles ? '' : pubchemHtml(pubchemStates.get(r.smiles) ?? { kind: 'idle' }, i), cas: r.error || !r.smiles ? undefined : casHtml(casStateOf(r.smiles), i) })).join('');
+  panel.innerHTML = results.map((r, i) => polymers[i] ? polymerHtml(polymers[i]!) : analysisHtml(r, i, adductSel.value, { prefs, bench: benchOf(r), customize: analysisCustomize, ions: COMMON_ADDUCTS, stereo: r.error ? '' : stereoSummary(frags[i]), unknown: exports[i].unknownLabels, electrons: frags[i].size ? electronsHtml(countElectrons(doc, frags[i].values().next().value!)) : '', rGroups: rGroupNames(frags[i]), name: r.error || !r.smiles || rGroupNames(frags[i]).length ? '' : nameHtml(nameStates.get(r.smiles) ?? { kind: 'idle' }), pubchem: r.error || !r.smiles ? '' : pubchemHtml(pubchemStates.get(r.smiles) ?? { kind: 'idle' }, i), cas: r.error || !r.smiles ? undefined : casHtml(casStateOf(r.smiles), i) })).join('');
+  if (analysisCustomize) panel.insertAdjacentHTML('afterbegin', CUSTOMIZE_BAR);
+  const nmrOn = prefs.rows.some((x) => x.key === 'nmr' && x.on);
+  nmrPanel.attach(panel, results.map((r, i) => (!nmrOn || r.error || !r.smiles || polymers[i] || rGroupNames(frags[i]).length ? null : { molblock: exports[i].molblock, map: exports[i].map })));
+  // the NMR section goes where its row is in the order
+  for (const frag of panel.querySelectorAll<HTMLElement>(':scope > .frag')) {
+    const slot = frag.querySelector('.an-nmr-slot'), nmr = frag.querySelector(':scope > details.nmr');
+    if (slot && nmr) slot.replaceWith(nmr);
+  }
   updatePanels();
 }
 
@@ -11653,7 +12006,7 @@ function updateWarnings(): void {
   }
   const ignored = checks.ignoredCount() + [...doc.captions.values()].filter((c) => c.ignoreWarnings).length;
   $('#warnings-count').textContent = list.length ? String(list.length) : '';
-  warningsBox.set(list.length);
+  warningsBox.set(list.length, doc.atoms.size > 0);
   const MAX = 100;
   // the same problem in many places is one row, with how many
   const groups = groupWarnings(list);
@@ -11698,6 +12051,58 @@ function updateWarnings(): void {
     editor.changed();
   });
 }
+
+/** The Problems box's ribbon in each mode (the Canvas's is canvasRibbon's row of tabs). */
+const PROBLEMS_RIBBON: Partial<Record<Tab['mode'], string>> = { slides: '#ribbon', design: '#design-ribbon', sheet: '#sheet-ribbon', document: '#doc-ribbon' };
+/** A drawing made from a document's or a cell's structure, kept while that structure is (they are never changed in place). */
+const checkedDocs = new WeakMap<object, Doc>();
+
+/** Every drawing in a file that is not a Canvas, with where it is, for the Problems box. */
+function placedDrawings(tab: Tab): PlacedDrawing[] {
+  const t = ws.mainOf(tab);
+  const out: PlacedDrawing[] = [];
+  const docFor = (c: Contents, style: DocStyle) => {
+    let d = checkedDocs.get(c);
+    if (!d) checkedDocs.set(c, (d = structureDoc(c, style)));
+    return d;
+  };
+  if (t.deck) t.deck.slides.forEach((_, i) => out.push({ where: t.mode === 'design' ? 'Design' : `Slide ${i + 1}`, doc: t.deck!.docOf(i) }));
+  else if (t.document) {
+    let n = 0;
+    for (const id of usedObjects(t.document.t)) {
+      const o = t.document.t.objects[id];
+      if (o?.kind === 'drawing' && o.contents.atoms.length) out.push({ where: `Drawing ${++n}`, doc: docFor(o.contents, t.document.t.drawingStyle) });
+    }
+  } else if (t.book) {
+    for (const sh of t.book.sheets) for (const [key, c] of sh.cells) if (c.structure) out.push({ where: `${sh.name}!${cellName(rowOf(key), colOf(key))}`, doc: docFor(c.structure.contents, t.book.drawingStyle) });
+  }
+  return out;
+}
+
+/** The Problems box goes on the ribbon showing, in every mode; outside the Canvas it checks the file's structures (grayed out when it has none). */
+function placeProblemsBox(): void {
+  const tab = ws.active;
+  const sel = PROBLEMS_RIBBON[tab.mode];
+  const gear = sel ? document.querySelector(`${sel} > .rb-tabs > .rb-gear`) : null;
+  if (!gear) { canvasRibbon.tabEnd.append(warningsBox.button); warningsBox.setFile(null); return; }
+  if (warningsBox.button.nextElementSibling !== gear) gear.before(warningsBox.button);
+  checkFileProblems();
+}
+
+let fileChecksKey = '';
+/** Outside the Canvas: check the file's structures again (each slide's, cell's or drawing's checks are kept, so only what changed is redone). */
+function checkFileProblems(): void {
+  const tab = ws.active;
+  if (!PROBLEMS_RIBBON[tab.mode]) return;
+  const list = placedDrawings(tab);
+  // (nothing to redo while the same drawings are there unchanged)
+  const key = list.map((d) => `${d.where}:${d.doc.version}:${d.doc.atoms.size}`).join('|');
+  if (key === fileChecksKey && warningsBox.button.isConnected) return;
+  fileChecksKey = key;
+  warningsBox.setFile(checkDrawings(list), tab.mode === 'document' || tab.mode === 'sheet' ? 'Double-click a structure to open it in the drawing tools, where each problem is marked.' : 'Each problem is marked on its slide.');
+}
+// (a few seconds after a change is soon enough: a slide, cell or document gives no word of its own)
+setInterval(() => { if (!document.hidden && PROBLEMS_RIBBON[ws.active.mode]) checkFileProblems(); }, 2500);
 
 /** Chemistry > Check Structure: go to the next problem after the one selected. */
 /** Draw Next Intermediate and Check Arrows in the menus, or not (Settings ▸ Drawing). */
@@ -11822,6 +12227,8 @@ buildSelectGalleries();
 buildColourGalleries();
 applyRibbonIcons();
 applyIconSet();
+// the new icon set until the settings say otherwise (Settings ▸ Preferences ▸ Icon set)
+setIconSet('new');
 installRibbonFlyouts();
 
 const stylePanel = new StylePanel($('#style-section'), $('#style-body'), doc, () => editor.sel, () => editor.changed());
@@ -12179,7 +12586,7 @@ function drawingMenu(): MenuItem[] {
       ...metalMenu(),
       { label: 'Structure', items: [
         { cmd: 'clean-up-options' }, null,
-        { cmd: 'stereo-labels' }, { cmd: 'aromatic-circles' }, { cmd: 'chain-ends' }, { cmd: 'explicit-h' }, null,
+        { cmd: 'stereo-labels' }, { cmd: 'aromatic-circles' }, { cmd: 'explicit-h' }, null,
         { cmd: 'contract-label' }, { cmd: 'expand-label' }, { cmd: 'expand-label-full' }, { cmd: 'join' }, null,
         { cmd: 'hapto-bond' }, { cmd: 'split-hapto' }, { cmd: 'hapto-kekule' }, null,
         { cmd: 'enhanced-stereo' }, { cmd: 'chiral-flag' }, { cmd: 'repeat-group' }, { cmd: 'rgroup-table' }, null,
@@ -12799,7 +13206,7 @@ const BOX_TITLES: Record<string, string> = {
 const cmds = (list: (string | null)[]) => list.map((c) => (c ? `cmd:${c}` : 'sep'));
 const BOX_ITEMS: Record<string, readonly string[]> = {
   main: MAIN_ITEMS,
-  structure: cmds(['clean-up', 'clean-up-options', 'add-frame', 'fill-rings', 'highlight', 'remove-highlight', null, 'chain-ends', 'explicit-h', 'aromatic-circles', 'stereo-labels', null, 'add-id-label', 'add-caption', 'attach-descriptors', 'number-compounds', null, 'contract-label', 'expand-label', 'expand-label-full', 'hapto-bond', 'name-to-structure']),
+  structure: cmds(['clean-up', 'clean-up-options', 'add-frame', 'fill-rings', 'highlight', 'remove-highlight', null, 'aromatic-circles', 'stereo-labels', null, 'add-id-label', 'add-caption', 'attach-descriptors', 'number-compounds', null, 'contract-label', 'expand-label', 'expand-label-full', 'hapto-bond', 'name-to-structure']),
   arrange: cmds(['align-left', 'align-hcenter', 'align-right', 'align-top', 'align-vcenter', 'align-bottom', null, 'distribute-h', 'distribute-v', 'arrange-row', 'arrange-column', 'arrange-grid', null, 'flip-h', 'flip-v', 'rotate-cw', 'rotate-ccw', null, 'shape-front', 'shape-back']),
   highlight: [...cmds(['highlight', 'remove-highlight', null, 'smooth-highlight', 'centre-highlight', 'soft-highlight', 'outline-highlight', 'shadow-highlight', 'glow-highlight', null, 'save-highlight-look']), 'w:looks'],
   custom: defaultToolboxes().custom,
@@ -12884,6 +13291,11 @@ function buildBox(body: HTMLElement, id: string, vertical: boolean): void {
   }
 }
 
+/** The side panel's ×, found once and kept (while the side panel is hidden it is out of the page, where a lookup can't find it). */
+function sideFold(): HTMLButtonElement {
+  const f = sideFold as typeof sideFold & { el?: HTMLButtonElement };
+  return (f.el ??= $<HTMLButtonElement>('#side-fold'));
+}
 /** The toolboxes laid out by the app itself (the rest show buttons chosen in Customize Toolboxes). */
 const SPECIAL_BOXES: Record<string, (body: HTMLElement, vertical: boolean) => void> = {
   templates: (body, vertical) => {
@@ -12945,7 +13357,7 @@ const SPECIAL_BOXES: Record<string, (body: HTMLElement, vertical: boolean) => vo
   // The side panel (Style, Warnings, Analysis; Format in documents, Cell in sheets) is a toolbox,
   // docked at the right to start with. Its arrow goes with it, so it shows even when the title bar is
   // locked away.
-  details: (body) => { body.before($('#side-fold')); body.append(sideContent); },
+  details: (body) => { body.before(sideFold()); body.append(sideContent); },
   text: (body, vertical) => { textToolbox = buildTextToolbox(body, vertical, textToolboxHooks); },
   guides: (body, vertical) => { guidesToolbox = buildGuidesToolbox(body, vertical, guidesToolboxHooks); },
   // the Smart Scheme species list, docked (it floats beside the scheme otherwise)
@@ -13201,12 +13613,12 @@ function tickToolboxes(): void {
 function placeSidePanel(): void {
   const folded = sideIsFolded();
   $('.toolbox[data-id="details"]')?.classList.toggle('collapsed', folded);
-  const fold = $('#side-fold');
+  const fold = sideFold();
   fold.textContent = '×';
   fold.title = 'Close the side panel (Ctrl+Alt+B, or the panel button at the bottom right, opens it again)';
   fold.setAttribute('aria-label', fold.title);
 }
-$('#side-fold').addEventListener('click', () => command('fold-side'));
+sideFold().addEventListener('click', () => command('fold-side'));
 $('#status-side').addEventListener('click', () => command('fold-side'));
 
 /** Below this window width the side panel folds by itself, so the drawing keeps its room. */
@@ -13515,8 +13927,10 @@ watchRibbons((on) => { ribbonChosen = on; storeSettings(); });
 addLookToggle(canvasRibbon.el, { simple: () => ribbonLook === 'simple', toggle: () => { setRibbonLook(ribbonLook === 'simple' ? 'classic' : 'simple'); storeSettings(); } });
 const SETTINGS_PAGES: SettingsPage[] = [
   { id: 'general', title: 'General', words: 'backup back up copy move settings file new computer install reinstall export import groups selecting click outline linked text above below ask whole page tracked changes reviewer name start view recent files chemdraw objects ole word powerpoint docx pptx save structures pictures svg png compatibility', open: generalPreferences },
-  { id: 'preferences', title: 'Preferences', words: 'personal personalize habits enter return key finish text tool box new line alt option escape esc taste alkyl prefix italic dash hyphen tbu t-bu ipr i-pr nbu sbu ibu tert-butyl isopropyl', open: personalPreferences },
-  { id: 'drawing', title: 'Drawing', words: 'bond ends round rounded square caps mitre corners methyl me ch3 axial chirality ra sa helicity charges circled ammonium nh4 r groups superscript mechanism arrows reroute wrap around block path gap arrow width arrowhead head size length units pixels px millimeters mm inches angle readout look box plain solid pointer cursor hints modifier shift alt ctrl keys', open: drawingPreferences },
+  { id: 'analysis', title: 'Analysis', words: 'analysis panel rows reorder hide show bench properties density boiling melting point vapor pressure flash refractive index lab calculation calculations mmol mass volume solution molarity ribbon box attached descriptors decimal places units celsius fahrenheit kelvin pubchem name hrms elemental', open: () => analysisSettingsPage(analysisHost) },
+  ...nmrHere ? [{ id: 'nmr', title: 'NMR Prediction', words: 'nmr prediction predict spectrum spectra proton carbon 1h 13c ppm range width solvent cdcl3 spectrometer frequency mhz quality fast balanced accurate automatic selection', open: nmrSettings }] : [],
+  { id: 'preferences', title: 'Preferences', words: 'personal personalize new files templates template window show templates habits enter return key finish text tool box new line alt option escape esc taste alkyl isomer prefix prefixes italic dash hyphen raised superscript tbu t-bu ipr i-pr nbu sbu ibu tert-butyl isopropyl problems warnings marks red box circle pointer cursor angle length units pixels px millimeters mm inches readout hints modifier shift alt ctrl keys counterions ions salt bf4 nbu4 charges group icon icons icon set classic chemdraw new pictures toolbox', open: personalPreferences },
+  { id: 'drawing', title: 'Drawing', words: 'bond ends round rounded square caps mitre corners methyl me ch3 axial chirality ra sa helicity charges circled ammonium nh4 r groups numbers superscript regular text eta hapto delocalized mechanism arrows reroute wrap around block path gap tail head origin target intermediate check arrows', open: drawingPreferences },
   { id: 'style', perFile: true, title: 'Drawing Style', words: 'bond length line width font journal acs rsc wiley elsevier thieme hash spacing margin arrow text reagents conditions above below size smaller reaction arrows gap fit alignment line up structures plus scheme', open: drawingStyleDialog },
   { id: 'hotkeys', title: 'Keyboard Shortcuts', words: 'keys keyboard shortcuts import export reset', open: () => hotkeysDialog.open() },
   { id: 'typing', title: 'Text and Spelling', words: 'typing spelling dictionary autocorrect replacements chemistry formulas subscripts', open: () => typingDialog.open() },
@@ -13531,7 +13945,7 @@ const SETTINGS_PAGES: SettingsPage[] = [
   { id: 'autosave', title: 'AutoSave and Recovery', words: 'autosave recovery versions backup copies shared folders onedrive', open: () => keeper.optionsCommand() },
   { id: 'ai', title: 'AI Model', words: 'ai artificial intelligence claude anthropic chatgpt gpt openai gemini google ollama openrouter api key llm model link connect', open: () => aiSettings() },
   { id: 'online', title: 'Online', words: 'pubchem internet names lookup updates check version privacy stable latest channel beta', open: onlinePreferences },
-  { id: 'files', actions: true, title: 'File Types', words: 'open with default app explorer finder associations cdxml cdx mol sdf docx pptx xlsx double-click', open: () => fileTypesPage(fileTypesHost) },
+  { id: 'files', actions: true, title: APPS_PAGE_TITLE, words: 'file types open with default app apps system computer device other programs explorer finder associations cdxml cdx mol sdf docx pptx xlsx double-click word powerpoint excel objects ole make figures offer documents', open: () => fileTypesPage(fileTypesHost) },
 ];
 // Apply on a Settings page uses its settings and keeps them. Pages about the open file (Drawing
 // Style) apply to that file; their Set as Default is for new files too.
@@ -13640,6 +14054,7 @@ editor.underlay = (ctx) => {
   if (p && pageLook.grid) paintPages(ctx, pageLook, renderer, p, pageExtent(p, doc.bounds()), pagesInUse(p), dark.on, dark.on ? null : darkSurround);
   else paintTint(ctx, orientPrefs, renderer, doc.bounds(), doc.style.labelSize * 1.5 + doc.style.bondLength);
 };
+editor.overlayTop = (ctx) => nmrPanel.drawMarks(ctx, renderer.view.scale, (id) => doc.atoms.get(id), (id) => doc.neighbors(id), getComputedStyle(document.documentElement).getPropertyValue('--accent').trim() || '#0e7c86');
 // Fit on an empty drawing shows its first page
 editor.emptyArea = () => { const p = gridPage(); return p ? { x1: 0, y1: 0, x2: p.w, y2: p.h } : null; };
 // nothing is drawn or moved past a fixed edge of the page grid
@@ -14271,7 +14686,6 @@ for (const id of ['#ribbon', '#design-ribbon']) {
   });
 }
 // the Beta mark beside the program's name says what beta means here
-$('#stage-badge').addEventListener('click', () => command('about'));
 
 renderTabs();
 updateTitle();

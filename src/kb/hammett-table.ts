@@ -58,5 +58,5 @@ export const HAMMETT_TABLE: KbTable = {
   picture: (row: Record<string, Cell>) => groupPicture(String(row.id)),
   drawOn: 'c1ccccc1',
   rows: HAMMETT.map(rowOf),
-  sources: [HANSCH_1991, { label: 'Original papers for each value: the Original source column (as cited in Tables I and V)' }, { label: 'Names, SMILES, drawings and order by Chem Illustrator' }],
+  sources: [HANSCH_1991, { label: 'Original papers for each value: the Original source column (as cited in Tables I and V)' }, { label: 'Names, SMILES, drawings and order by Chemweave' }],
 };

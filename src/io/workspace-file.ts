@@ -5,7 +5,7 @@
 
 import type { FileType } from './files';
 
-export const WORKSPACE: FileType = { description: 'Chem Illustrator workspace', extension: 'ciworkspace', mime: 'application/json' };
+export const WORKSPACE: FileType = { description: 'Chemweave workspace', extension: 'ciworkspace', mime: 'application/json' };
 
 export interface WorkspaceEntry {
   /** The file: a name or path relative to the workspace file's folder, or a full path. */

@@ -94,7 +94,7 @@ export function parseOfficeOwner(bytes: Uint8Array): Holder | null {
 /** Who has it open, in words: "Sam on LAB-PC (in LibreOffice)". */
 export function holderText(h: Holder): string {
   const where = h.host ? ` on ${h.host}` : '';
-  const app = h.by === 'office' ? ' (in Word, Excel or PowerPoint)' : h.by === 'libreoffice' ? ' (in LibreOffice)' : ' (in Chem Illustrator)';
+  const app = h.by === 'office' ? ' (in Word, Excel or PowerPoint)' : h.by === 'libreoffice' ? ' (in LibreOffice)' : ' (in Chemweave)';
   return `${h.user || 'someone'}${where}${app}${h.since ? `, since ${h.since}` : ''}`;
 }
 

@@ -438,7 +438,7 @@ export function rtfText(t: string): string {
 export async function writeRtf(t: DocText, deps: RtfDeps = {}): Promise<Uint8Array> {
   const w = new RtfWriter(t, deps);
   const body = await w.body();
-  const s = `{\\rtf1\\ansi\\ansicpg1252\\deff0\\uc1\n${w.fontTable()}\n${w.colorTable()}\n${w.styleSheet()}\n{\\*\\generator Chem Illustrator;}\n` +
+  const s = `{\\rtf1\\ansi\\ansicpg1252\\deff0\\uc1\n${w.fontTable()}\n${w.colorTable()}\n${w.styleSheet()}\n{\\*\\generator Chemweave;}\n` +
     `\\paperw${twip(t.page.w)}\\paperh${twip(t.page.h)}\\margl${twip(t.page.left)}\\margr${twip(t.page.right)}\\margt${twip(t.page.top)}\\margb${twip(t.page.bottom)}\n${body}}`;
   const out = new Uint8Array(s.length);
   for (let i = 0; i < s.length; i++) out[i] = s.charCodeAt(i) & 0xff;

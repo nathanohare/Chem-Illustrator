@@ -1,15 +1,15 @@
 // A dashboard sheet on screen: its tiles on a grid, each drawn from the workbook's tables with
 // the slicers applied. Tiles are moved by dragging and resized by their corner, snapping to the
-// grid; clicking slicer buttons, or a bar, slice or Sankey node or band of a chart, filters every
-// tile fed by the same table (the chart clicked shows what it picked, the rest faded).
+// grid. Slicer buttons filter every tile fed by the same table, and so does a click on a chart's
+// bar, slice, Sankey node or band, or treemap box (the chart clicked keeps it lit, the rest faded).
 
 import type { Sheet, Workbook, Structure } from '../sheet/workbook';
 import {
   Dashboard, Tile, KpiTile, TableTile, SlicerTile, GalleryTile, TextTile, ChartTile,
-  resolveSource, filterMask, joinMasks, pickMask, shownRows, kpiValue, distinctValues, columnOf, slicerText, AGGREGATE_NAMES, sourceName, groupSeries,
+  resolveSource, tileMask, unionMasks, chartPickMask, shownRows, kpiValue, distinctValues, columnOf, slicerText, AGGREGATE_NAMES, sourceName, groupSeries,
 } from '../sheet/dashboard';
 import { chartData } from '../sheet/chart';
-import { drawChart, partHit, samePick, type ChartHits } from '../render/chart-draw';
+import { drawChart, hitPart, picksEqual, type ChartHits, type ClickPart } from '../render/chart-draw';
 import { formatValue } from '../sheet/numfmt';
 import { isError } from '../sheet/values';
 
@@ -31,7 +31,11 @@ export interface DashHost {
   key(e: KeyboardEvent): boolean;
 }
 
-type Drag = { id: number; how: 'move' | 'size'; x0: number; y0: number; orig: Tile; pointer: number; moved: boolean; el: HTMLElement; target: EventTarget | null };
+interface Drag {
+  id: number; how: 'move' | 'size'; x0: number; y0: number; orig: Tile; pointer: number; moved: boolean; el: HTMLElement;
+  /** What the press began on (a chart's canvas, for a click on it). */
+  downOn: EventTarget | null;
+}
 
 export class DashboardView {
   readonly el: HTMLDivElement;
@@ -124,8 +128,8 @@ export class DashboardView {
     const bottom = Math.max(4, ...d.tiles.map((t) => t.y + t.h));
     this.page.style.height = `${g.gap + bottom * (g.rowH + g.gap) + 40}px`;
     const els = d.tiles.map((t) => {
-      // each tile is filtered by the slicers and by every chart's pick but its own
-      const mask = filterMask(wb, d, t.id);
+      // the slicers filter each tile, and so does every chart's pick but the tile's own
+      const mask = tileMask(wb, d, t.id);
       const el = document.createElement('div');
       el.className = `dash-tile dash-tile-${t.kind}${t.id === this.picked ? ' picked' : ''}`;
       el.dataset.id = String(t.id);
@@ -141,7 +145,7 @@ export class DashboardView {
       size.title = 'Drag to resize';
       el.append(head, body, size);
       el.addEventListener('pointerdown', (e) => this.onDown(e, t, el, (e.target as HTMLElement) === size ? 'size' : 'move'));
-      el.addEventListener('dblclick', (e) => { if (!(e.target as HTMLElement).closest('button') && !this.onTreemap(e)) this.host.open(t); });
+      el.addEventListener('dblclick', (e) => { if (!(e.target as Element).closest('button')) this.host.open(t); });
       el.addEventListener('contextmenu', (e) => { e.preventDefault(); this.pick(t.id); this.host.contextMenu(e.clientX, e.clientY); });
       try {
         this.fill(t, head, body, mask, g);
@@ -186,71 +190,41 @@ export class DashboardView {
     const dpr = window.devicePixelRatio || 1;
     c.width = Math.round(w * dpr); c.height = Math.round(h * dpr);
     c.style.width = `${w}px`; c.style.height = `${h}px`;
-    c.classList.add('dash-pickable');
+    c.className = 'dash-pickable';
     const ctx = c.getContext('2d')!;
     ctx.setTransform(dpr * z, 0, 0, dpr * z, 0, 0);
-    const data = (m: Map<Sheet, Set<number>>) => groupSeries(chartData(wb, wb.sheet, chart, m), chart.kind, t.group);
-    // its own pick shows as a highlight over everything else it shows
-    const lit = t.pick?.length ? data(joinMasks(mask, pickMask(wb, this.dashboard!, undefined, t.id))) : undefined;
-    const hits = drawChart(ctx, chart, data(mask), chart.w, chart.h, lit);
-    this.hits.set(c, { tile: t.id, hits });
+    const dataOf = (rowsOut: Map<Sheet, Set<number>>) => groupSeries(chartData(wb, wb.sheet, chart, rowsOut), chart.kind, t.group);
+    // the tile's own pick isn't a filter on it: it is drawn lit over the rest of what it shows
+    const shown = t.pick?.length ? dataOf(unionMasks(mask, chartPickMask(wb, this.dashboard!, undefined, t.id))) : undefined;
+    this.drawn.set(c, { tile: t.id, hits: drawChart(ctx, chart, dataOf(mask), chart.w, chart.h, shown) });
     body.append(c);
   }
 
-  /** Where each chart tile drew its parts (for clicks on them). */
-  private hits = new WeakMap<HTMLCanvasElement, { tile: number; hits: ChartHits }>();
-
-  /** The chart tile a canvas draws, and the part of it under the pointer. */
-  private chartPart(canvas: HTMLCanvasElement, e: MouseEvent): { t: ChartTile; part: ReturnType<typeof partHit> } | null {
-    const got = this.hits.get(canvas);
-    const t = got && this.dashboard?.tiles.find((x) => x.id === got.tile);
-    if (!got || !t || t.kind !== 'chart') return null;
-    const r = canvas.getBoundingClientRect(), z = this.host.zoom;
-    return { t, part: partHit(got.hits, (e.clientX - r.left) / z, (e.clientY - r.top) / z) };
-  }
+  /** Where each chart tile's canvas drew its parts, for clicks on them. */
+  private drawn = new WeakMap<HTMLCanvasElement, { tile: number; hits: ChartHits }>();
 
   /**
-   * A click on a chart: its bar, slice, Sankey node or band, or treemap box filters the other
-   * tiles; clicking it again, or clicking away from the chart's parts, shows everything again. A
-   * decomposition tree's node is expanded (or closed up) and filters by what it stands for; a
-   * treemap's trail of categories drills back up.
+   * A click on a chart tile's canvas. A treemap box or decomposition tree node that leads somewhere
+   * opens the chart up to it, or back up, and filters the other tiles by it. Any other part filters
+   * them by what it stands for, and clicking it again, or clicking no part, takes the filter off.
    */
-  private chartClick(canvas: HTMLCanvasElement, e: PointerEvent): void {
-    const got = this.chartPart(canvas, e);
-    if (!got) return;
-    const { t, part } = got;
-    // a second click on the same treemap box drills into it, putting back the pick the first changed
-    // (the tile is drawn afresh after each click, so the browser's own double-click never comes)
-    const last = this.lastClick, now = e.timeStamp;
-    this.lastClick = { tile: t.id, at: now, x: e.clientX, y: e.clientY, before: t.pick };
-    if (t.chart.kind === 'treemap' && part?.drill?.length && last && last.tile === t.id && now - last.at < 450 && Math.hypot(e.clientX - last.x, e.clientY - last.y) < 6) {
-      this.lastClick = null;
-      this.update(t.id, { chart: { ...t.chart, path: part.drill }, pick: last.before } as Partial<ChartTile>, 'Drill down');
+  private clickChart(canvas: HTMLCanvasElement, e: PointerEvent): void {
+    const got = this.drawn.get(canvas);
+    const t = got && this.dashboard?.tiles.find((x): x is ChartTile => x.id === got.tile && x.kind === 'chart');
+    if (!got || !t) return;
+    const r = canvas.getBoundingClientRect(), z = this.host.zoom;
+    const part: ClickPart | null = hitPart(got.hits, (e.clientX - r.left) / z, (e.clientY - r.top) / z);
+    if (part?.drill) {
+      const to = part.drill;
+      const { path: _from, ...closed } = t.chart;
+      const label = t.chart.kind === 'decomp' ? (to.length ? 'Expand tree' : 'Collapse tree') : to.length > (t.chart.path?.length ?? 0) ? 'Drill down' : 'Drill up';
+      const pick = to.length ? to.map((value, level) => ({ level, value })) : undefined;
+      this.update(t.id, { chart: to.length ? { ...closed, path: to } : closed, pick } as Partial<ChartTile>, label);
       return;
     }
-    if (part?.drill && (t.chart.kind === 'decomp' || !part.pick.length)) {
-      const path = part.drill.length ? part.drill : undefined;
-      const pick = t.chart.kind === 'decomp' && path ? path.map((value, level) => ({ level, value })) : t.pick;
-      const { path: _was, ...chart } = t.chart;
-      this.update(t.id, { chart: path ? { ...chart, path } : chart, pick } as Partial<ChartTile>, t.chart.kind === 'decomp' ? (path ? 'Expand tree' : 'Collapse tree') : 'Drill up');
-      return;
-    }
-    const pick = part?.pick.length ? part.pick : null;
-    if (!pick && !t.pick) return;
-    const next = pick && !samePick(pick, t.pick) ? pick : undefined;
-    this.update(t.id, { pick: next } as Partial<ChartTile>, next ? 'Filter by chart' : 'Clear chart filter');
+    const pick = part?.pick.length && !picksEqual(part.pick, t.pick) ? part.pick : undefined;
+    if (pick || t.pick) this.update(t.id, { pick } as Partial<ChartTile>, pick ? 'Filter by chart' : 'Clear chart filter');
   }
-
-  /** The last click on a chart tile (a second one soon after on a treemap's box drills into it). */
-  private lastClick: { tile: number; at: number; x: number; y: number; before: ChartTile['pick'] } | null = null;
-
-  /** Is a double-click on a treemap (which drills into the box, not open the tile's settings)? */
-  private onTreemap(e: MouseEvent): boolean {
-    const canvas = e.target;
-    if (!(canvas instanceof HTMLCanvasElement) || !canvas.classList.contains('dash-pickable')) return false;
-    return this.chartPart(canvas, e)?.t.chart.kind === 'treemap';
-  }
-
   private kpiTile(t: KpiTile, head: HTMLElement, body: HTMLElement, mask: Map<Sheet, Set<number>>): void {
     const wb = this.host.wb!;
     const v = kpiValue(wb, t, mask);
@@ -431,7 +405,7 @@ export class DashboardView {
     this.el.focus({ preventScroll: true });
     this.pick(t.id);
     el.setPointerCapture(e.pointerId);
-    this.drag = { id: t.id, how, x0: e.clientX, y0: e.clientY, orig: t, pointer: e.pointerId, moved: false, el, target: e.target };
+    this.drag = { id: t.id, how, x0: e.clientX, y0: e.clientY, orig: t, pointer: e.pointerId, moved: false, el, downOn: e.target };
   }
 
   /** Where a dragged tile would land, in grid squares. */
@@ -459,8 +433,11 @@ export class DashboardView {
     const d = this.drag;
     if (!d || e.pointerId !== d.pointer) return;
     this.drag = null;
-    // a click (not a drag) on a chart picks the part under it
-    if (!d.moved) { if (d.target instanceof HTMLCanvasElement && d.target.classList.contains('dash-pickable')) this.chartClick(d.target, e); return; }
+    if (!d.moved) {
+      // a click, not a drag: on a chart, it picks the part under it
+      if (d.downOn instanceof HTMLCanvasElement && d.downOn.classList.contains('dash-pickable')) this.clickChart(d.downOn, e);
+      return;
+    }
     const t = this.dropped(d, e);
     if (t.x !== d.orig.x || t.y !== d.orig.y || t.w !== d.orig.w || t.h !== d.orig.h) this.update(d.id, { x: t.x, y: t.y, w: t.w, h: t.h }, d.how === 'move' ? 'Move tile' : 'Resize tile');
     else this.render();

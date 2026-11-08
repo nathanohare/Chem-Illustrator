@@ -3,6 +3,7 @@
 // plain text, with each line break counting as one.
 
 import type { TextRun } from './model';
+import { rNumberDigits, rNumberPrefs } from './chem/r-numbers';
 
 /** The colour Office gives links (kept here too, as links.ts builds on these functions). */
 const LINK_COLOUR = '#0563c1';
@@ -82,6 +83,24 @@ export function insertText(runs: TextRun[], at: number, text: string, style: Run
 
 export function deleteRange(runs: TextRun[], start: number, end: number): TextRun[] {
   return replaceRange(runs, start, end, []);
+}
+
+/**
+ * The runs with their text changed to `text` (typed in a plain box, such as the Outline View):
+ * the characters that stayed keep their look (the italic n of n-BuLi), and new ones take the look
+ * of the character before them.
+ */
+export function retextRuns(runs: TextRun[], text: string, fallback: RunStyle = {}): TextRun[] {
+  const was = plainText(runs);
+  if (was === text) return runs;
+  if (!text) return [];
+  let p = 0;
+  const max = Math.min(was.length, text.length);
+  while (p < max && was[p] === text[p]) p++;
+  let q = 0;
+  while (q < max - p && was[was.length - 1 - q] === text[text.length - 1 - q]) q++;
+  const like = charStyle(runs, p - 1) ?? charStyle(runs, was.length - q) ?? (runs[0] ? styleOf(runs[0]) : fallback);
+  return replaceRange(runs, p, was.length - q, [{ ...like, text: text.slice(p, text.length - q) }].filter((r) => r.text));
 }
 
 /** Style of the character at an offset, or null past the end. */
@@ -196,6 +215,7 @@ const FORMULA_NO_MARK = /[\s(\[{,.:;]/;
  *   FORMULA_NO_MARK lists or is the start of the text. Before a letter it stays on the line, as a
  *   hyphen does (Red-Al), but a - goes up there when a + comes later in the text (CO2-Na+).
  * - Two or more hyphens are names, not charges, and none goes up (Me-Al-).
+ * - An R group's number goes up when Settings ▸ Drawing says so (R¹, CO₂R¹; not the 2 of NR2).
  * `before` and `after` are the rest of the text, in other runs: ChemDraw reads across them.
  */
 export function formulaParts(text: string, before = '', after = ''): Part[] {
@@ -225,6 +245,8 @@ export function formulaParts(text: string, before = '', after = ''): Part[] {
       else if (prev >= '0' && prev <= '9' ? pos[i - 1] === 'sub' : prev !== undefined && !FORMULA_NO_MARK.test(prev) && prev !== '+' && prev !== '-') pos[i] = 'sub';
     } else raised = false;
   }
+  // R groups' numbers go up by Settings ▸ Drawing (CO₂R¹), not down as counts
+  if (rNumberPrefs.superscriptR) for (const i of rNumberDigits(whole)) pos[i] = 'sup';
   const out: Part[] = [];
   for (let i = before.length; i < before.length + text.length; i++) {
     const last = out[out.length - 1];

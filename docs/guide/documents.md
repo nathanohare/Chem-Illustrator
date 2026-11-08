@@ -1,4 +1,4 @@
-# Document (text)
+# Document (Text document)
 
 This page covers Document mode: writing and formatting text, putting structures, tables and equations in it, captions, compound numbers, references, page layout, tracked changes, and saving as Word or PDF.
 
@@ -6,9 +6,9 @@ This page covers Document mode: writing and formatting text, putting structures,
 
 ## Starting a document
 
-Click **+** at the end of the tab strip and choose **Document (text)**, or choose **File ▸ New ▸ Document**. While a document is showing, Ctrl+N starts another one.
+Click **+** at the end of the tab strip and choose **Document (Text document)**, or choose **File ▸ New ▸ Document**. While a document is showing, Ctrl+N starts another one.
 
-**File ▸ New ▸ New from Template…** starts from one of our own templates: a **Lab report** (aim, scheme, reagent table, procedure, observations, results, safety), **Supporting Information** (title block, contents, general information, procedures with a characterization line to fill in, spectra) or a **Thesis chapter** (numbered sections, a wide binding margin and 1.5 line spacing). Text in [brackets] says what goes there; type over it. The headings are in the Heading styles, so the Navigation pane and Table of Contents pick them up.
+**File ▸ New ▸ Document** opens a blank document with a window of templates over it; click outside the window to keep the blank page, or pick one of our own templates: **Lab and notebook** (lab report, notebook entry, weekly progress report, group meeting minutes), **Papers and SI** (Supporting Information, cover letter to the editor, response to reviewers), **Theses** (thesis chapter, front matter, prospectus), **Grants and fellowships** (research proposal, specific aims page, fellowship personal statement, research statement), **Safety** (SOP, hazard and risk assessment, waste and quench procedure), **Teaching** (lab handout, problem set, exam with answer key) and **Career** (academic CV, cover letter). Text in [brackets] says what goes there; type over it. The headings are in the Heading styles, so the Navigation pane and Table of Contents pick them up. Turn the window off with the checkbox at its bottom, or in **Settings ▸ Preferences ▸ New Files**.
 
 The ribbon has Word's tabs: **Home**, **Insert**, **Design**, **Layout**, **References**, **Review** and **View**, plus a **Table** tab that appears while the caret is in a table. Text flows on to the next page by itself. The status bar at the bottom shows the page and word count; Ctrl+mouse wheel or the − and + buttons zoom, and **Page Width** fits the page to the window.
 
@@ -206,7 +206,7 @@ A Word file with citations made by Zotero, Mendeley (Desktop or Cite) or EndNote
 
 Saving writes the citations back as that program's own, with its item ids, so in Word its **Refresh** (Zotero, Mendeley) or **Update Citations and Bibliography** (EndNote) still works on them. References added here go out with their details: Zotero and Mendeley keep them as items in the document, EndNote adds them to the document's traveling library.
 
-To choose the program for a document made here, use **Save citations for** in **Manage References…**. **Chem Illustrator only** saves the numbers as text that Word shows as they are.
+To choose the program for a document made here, use **Save citations for** in **Manage References…**. **Chemweave only** saves the numbers as text that Word shows as they are.
 
 ### Citing with Zotero
 

@@ -1,4 +1,4 @@
-# Spreadsheet (tables, charts, dashboards)
+# Spreadsheet (Tables, Charts, and Dashboards)
 
 This page covers Spreadsheet mode: cells and formulas, structures in cells, the chemistry functions, formatting, charts and isotope patterns, dashboards, and saving for Excel.
 
@@ -6,9 +6,9 @@ This page covers Spreadsheet mode: cells and formulas, structures in cells, the 
 
 ## Starting a spreadsheet
 
-Click **+** at the end of the tab strip and pick **Spreadsheet (tables, charts, dashboards)**, or choose **File ▸ New ▸ Spreadsheet**. While a spreadsheet is showing, Ctrl+N starts another one.
+Click **+** at the end of the tab strip and pick **Spreadsheet (Tables, Charts, and Dashboards)**, or choose **File ▸ New ▸ Spreadsheet**. While a spreadsheet is showing, Ctrl+N starts another one.
 
-**File ▸ New ▸ New from Template…** offers a **Reaction table** (one row per entry: catalyst, loading, solvent, temperature, time, conversion, yield, ee and dr, with the best yield and its entry found for you) and a **Reagent sheet** (the reagent table below, and a Yield sheet that works out the percent yield from the product's structure and its isolated mass).
+**File ▸ New ▸ Spreadsheet** opens a blank workbook with a window of templates over it; click outside the window to keep the blank workbook, or pick one: **Reactions** (reaction table with the best entry found for you, substrate scope table, 24- and 96-well screening plates shaded by yield, kinetics time course with a chart, k and half-life), **Reagents and stock** (reagent sheet with the percent yield worked out, chemical inventory, stock solution calculator, gas cylinder and solvent still log), **Analysis** (HPLC/GC calibration curve, ee and er from HPLC peak areas, NMR yield with an internal standard, organolithium titration) and **Lab management** (order tracker, instrument booking, group duties rota). Turn the window off with the checkbox at its bottom, or in **Settings ▸ Preferences ▸ New Files**.
 
 Spreadsheets open from .xlsx, .xlsm, .xls and .ods files as well as text and SD files; see [File types](files-and-sharing.md#file-types).
 
@@ -248,19 +248,15 @@ The Insert tab also has **Combo**, **Histogram**, **Box**, **Bubble** and **Rada
 
 All five are saved as Excel's own chart types. Histograms and box charts use the newer chart format of Excel 2016 and later, so older versions of Excel show a note in their place.
 
-### Sankey charts
+### Charts of levels: Sankey, treemap and decomposition tree
 
-**Sankey** on the Insert tab shows rows flowing from one column of categories to the next: aromatic or not, then ring size, then heterocycle class, say. Select the block of cells: the last column of numbers says how much each row carries (leave it out and each row counts once), and every other column is a level, left to right. Each category is a node as tall as all the rows through it, and the bands between nodes are as wide as the rows they carry. A blank cell ends a row's flow at that level. In the panel, each level's **Categories** can be changed, or a level removed. Excel has no Sankey chart, so it gets a bar chart of the same cells; open the file here again and it is a Sankey once more.
+**Sankey**, **Treemap** and **Decomp. tree** on the Insert tab all chart rows that fall into categories at several levels: solvent class, then kind of solvent, then the solvent itself, say. Select the block of cells. If its top row is all text, it names the levels. The rightmost column of numbers is the weight of each row (with no such column, every row counts once), and every other column is a level, from left to right. A row stops at its first blank cell: it counts at the levels before the blank and at none after it.
 
-### Treemaps and decomposition trees
+- **Sankey:** each level is a column of nodes, and each node is as tall as the rows that pass through it. Bands run from each node to the nodes of the next level, as wide as the rows they carry.
+- **Treemap:** a box for each category of the first level, sized by its rows, with a box inside it for each of its categories at the next level, in lighter shades of its color. Select the chart, then click a box to **drill into** it. The chart then shows only what is inside that category, with a trail above it (**All › Halogenated**) whose steps take you back up.
+- **Decomposition tree:** the total, then a bar for each category of the first level, filled to its share. Select the chart, then click a node to **expand** it: a new column splits it by the next level, with lines out to its parts. Click an expanded node again to close it, or click the total to close the whole tree.
 
-**Treemap** and **Decomp. tree** on the Insert tab break the same kind of block of cells down: the last column of numbers says how much each row carries (leave it out and each row counts once), and every other column is a level, from the first to the last. A blank cell ends a row there: it counts in the categories before it, and in none after.
-
-- **Treemap:** a box for each category of the first level, as big as the rows in it, holding a box for each of its categories at the next level, in shades of its color. Pick the chart, then click a box to **drill into** it: the chart shows just what is under that category, with a trail over it (**All › Aromatic**) to click back up.
-- **Decomposition tree:** the total, then the first level's categories as bars, each as long as its share. Pick the chart, then click a node to **expand** it: its rows are split by the next level in a new column, with lines from it to its parts. Click an expanded node to close it up again, or the total to close everything.
-
-The chart's panel says what it is drilled into or expanded to, with a button to go back to the whole. Excel has no decomposition tree, and its treemap can't be drilled into, so both get a bar chart of the same cells; open the file here again and they are as they were, drilled and expanded the same.
-
+In the chart panel, each level's **Categories** can be changed or the level removed, and for a treemap or decomposition tree the panel shows how far it is drilled or expanded, with a button to go back to the whole. Excel has no Sankey chart or decomposition tree, and its treemaps can't be drilled into, so all three are saved for Excel as a bar chart of the same cells. Open the file here again and the chart comes back as it was, drilled or expanded as you left it.
 In the chart panel, each series of a scatter chart has **Sticks** (peaks drawn up or down from zero, as in a mass spectrum) and **Show x (m/z)** to label each peak with its value. You can use these for any spectrum you put in a sheet.
 
 ## Isotope patterns
@@ -286,7 +282,7 @@ A dashboard is a page of tiles that summarize a table: useful for a catalyst scr
 
 | Tile | What it shows |
 |---|---|
-| **Chart** | A chart of a table's columns. **Same labels** combines rows with the same label (average, sum, count…), for one bar per ligand rather than one per reaction. A **Sankey** chart, **treemap** or **decomposition tree** asks which columns are its levels and which says how much each row carries |
+| **Chart** | A chart of a table's columns. **Same labels** combines rows with the same label (average, sum, count…), for one bar per ligand rather than one per reaction. For a **Sankey** chart, **treemap** or **decomposition tree**, you choose the columns for its levels and the column that weighs each row |
 | **Number** | One headline number (KPI): average, sum, median, smallest, largest, standard deviation, or a count; or any formula. A **Target** colors it green or red, and you choose whether higher is better |
 | **Table** | Chosen columns, sortable by clicking a heading; structures are drawn |
 | **Slicer** | A button for each value of a column (catalyst, solvent…). Clicking buttons filters every tile fed by the same table |
@@ -298,8 +294,8 @@ Each new tile asks which table or block of cells to read. For a gallery, the str
 - **Move and resize:** drag a tile, or drag its bottom-right corner. Tiles snap to a grid. With a tile picked, the arrow keys move it, Shift+arrows resize it and Delete removes it.
 - **Settings:** click a tile for its settings in the right-hand panel; click an empty spot, or **Dashboard Settings**, for the dashboard's columns, row height, gap and background.
 - **Slicers:** click more buttons to pick several, and click a picked one again to drop it. Several slicers apply together. The ✕ on a slicer, or **Clear Filters**, shows everything again.
-- **Clicking a chart:** click a bar, a pie slice, a Sankey node or band, or a treemap's box, and every other tile fed by the same table shows only the rows it stands for, as a slicer would (a band stands for the rows running between its two nodes). The chart clicked shows what was picked, with the rest faded. Click it again, or click the chart away from its bars, to show everything again; **Clear Chart Filter** (right-click) and **Clear Filters** do too. The panel lists what each chart is filtering by.
-- **Treemaps and decomposition trees:** double-click a treemap's box to drill into it, and click the trail over it to go back up. Click a decomposition tree's node to expand it: it also filters the other tiles by that node, as PowerBI's does. Click it again to close it up.
+- **Clicking a chart:** click a bar, a pie slice, a Sankey node or band, or a treemap box, and every other tile fed by the same table shows only the rows it stands for, just as a slicer would. A band stands for the rows that run between its two nodes. The chart you clicked keeps what you picked and fades the rest. To show everything again, click the same part again or click the chart where it has no bars; **Clear Chart Filter** on the right-click menu and **Clear Filters** work too. The panel lists what each chart is filtering by.
+- **Treemaps and decomposition trees:** click a treemap box that has categories inside it to drill into it, and click a step of the trail above it to go back up. Click a decomposition tree node to expand it, and click it again to close it. Either way, the other tiles are filtered by the category you opened, as in PowerBI.
 
 ## Links
 

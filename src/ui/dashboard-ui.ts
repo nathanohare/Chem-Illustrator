@@ -5,11 +5,11 @@ import { popupMenu } from './sheet-view';
 import type { SheetView } from './sheet-view';
 import type { SheetCharts } from './sheet-chart-ui';
 import { ask, Field } from './ask';
-import { refText, readRef, CHART_NAMES, ChartKind, isLevelled } from '../sheet/chart';
+import { refText, readRef, CHART_NAMES, ChartKind, hasLevels } from '../sheet/chart';
 import {
   Dashboard, Tile, TileKind, Source, Aggregate, KpiTile, TableTile, SlicerTile, GalleryTile, TextTile, ChartTile,
   AGGREGATE_NAMES, TILE_NAMES, resolveSource, sourceKey, sourceName, columnOf, newTileId, freeSpot, chartOfColumns,
-  levelsOfSource, filtered, unfiltered, pickText, type Resolved,
+  levelChartOfSource, hasFilters, withoutFilters, describePick, type Resolved,
 } from '../sheet/dashboard';
 
 export interface DashUiHost {
@@ -20,7 +20,10 @@ export interface DashUiHost {
 
 type MenuItem = [string, () => void, boolean?] | null;
 /** The kinds of chart a tile takes (the newer kinds need their own data: bin widths, sizes, raw repeat runs). */
-export const DASH_CHART_KINDS: ChartKind[] = ['scatter', 'line', 'column', 'bar', 'area', 'pie', 'sankey', 'treemap', 'decomp'];
+export const DASH_CHART_KINDS: ChartKind[] = [
+  'scatter', 'line', 'column', 'bar', 'area', 'pie',
+  'sankey', 'treemap', 'decomp',
+];
 const KINDS = DASH_CHART_KINDS;
 const AGGS = Object.keys(AGGREGATE_NAMES) as Aggregate[];
 const num = (s: string): number | undefined => (s.trim() !== '' && Number.isFinite(Number(s)) ? Number(s) : undefined);
@@ -129,7 +132,7 @@ export class DashboardUi {
     const base = { id: newTileId(), ...this.place(kind) };
     switch (kind) {
       case 'chart': {
-        if (isLevelled(chartKind)) { await this.addLevels(res, base, chartKind); return; }
+        if (hasLevels(chartKind)) return this.addLevelChart(res, base, chartKind);
         const got = await ask('Add Chart: what it shows', [
           { name: 'kind', label: 'Kind', value: chartKind, options: KINDS.map((k) => ({ value: k, label: CHART_NAMES[k] })) },
           { name: 'x', label: 'Across the bottom (x or labels)', value: res.names[0], options: [{ value: '', label: '(1, 2, 3…)' }, ...cols] },
@@ -140,7 +143,7 @@ export class DashboardUi {
           ...checks('y:', numeric, (n) => n === numeric.find((m) => m !== res.names[0])),
         ], { ok: 'Add', note: 'Check the columns of numbers to chart. Scatter charts always show every row.' });
         if (!got) return;
-        if (isLevelled(got.kind as ChartKind)) { await this.addLevels(res, base, got.kind as ChartKind); return; }
+        if (hasLevels(got.kind as ChartKind)) return this.addLevelChart(res, base, got.kind as ChartKind);
         const ys = picked(got, 'y:');
         if (!ys.length) { this.host.flash('Select at least one column of numbers.'); return; }
         const chart = chartOfColumns(res, got.kind as ChartKind, got.x || undefined, ys, newTileId());
@@ -196,34 +199,32 @@ export class DashboardUi {
     }
   }
 
-  /**
-   * A tile of a chart of levels (Sankey, treemap or decomposition tree): which columns are its
-   * levels (in the table's order), and which says how much each row carries.
-   */
-  private async addLevels(res: Resolved, base: Pick<Tile, 'id' | 'x' | 'y' | 'w' | 'h'>, kind: ChartKind): Promise<void> {
+  /** How each chart of levels reads its columns, and what clicks on it do, for the Add dialog. */
+  private static readonly LEVEL_NOTES: Partial<Record<ChartKind, string>> = {
+    sankey: 'Check the columns for the rows to flow through, in table order: each becomes a column of nodes. On the dashboard, click a node or band to filter the other tiles by it.',
+    treemap: 'Check the columns to break the total down by, in table order: the first makes the big boxes, the next the boxes inside them. On the dashboard, click a box to drill into it and filter the other tiles by it.',
+    decomp: 'Check the columns to split the total by, in table order: each is a level of the tree. On the dashboard, click a node to split it by the next level and filter the other tiles by it, and click it again to close it.',
+  };
+
+  /** A tile with a chart of levels (Sankey chart, treemap or decomposition tree): its level columns, and the column weighing the rows. */
+  private async addLevelChart(res: Resolved, base: Pick<Tile, 'id' | 'x' | 'y' | 'w' | 'h'>, kind: ChartKind): Promise<void> {
     const numeric = res.names.filter((_, i) => res.rows.some((r) => typeof res.sheet.value(r, res.range.c1 + i) === 'number'));
-    const value = numeric[numeric.length - 1];
-    const notes: Partial<Record<ChartKind, string>> = {
-      sankey: 'Check the columns to flow through, in the order they are in the table: each is a column of nodes, left to right. Click a node or band on the dashboard to filter the other tiles by it.',
-      treemap: 'Check the columns to break the total down by, in the order they are in the table: the first gives the big boxes, the next the boxes inside them. Click a box to filter the other tiles by it; double-click it to drill into it.',
-      decomp: 'Check the columns to split the total by, in the order they are in the table: each is a level of the tree. Click a node to split it by the next level (and filter the other tiles by it); click it again to close it up.',
-    };
-    const got = await ask(`Add ${CHART_NAMES[kind]}`, [
-      { name: 'value', label: 'How much each row carries', value: value ?? '', options: [{ value: '', label: 'Each row counts once' }, ...numeric.map((n) => ({ value: n, label: n }))] },
-      ...res.names.map((n) => ({ name: 'l:' + n, label: n, value: String(n !== value && !numeric.includes(n)), type: 'checkbox' as const })),
-    ], { ok: 'Add', note: notes[kind] });
-    if (!got) return;
-    const levels = res.names.filter((n) => got['l:' + n] === 'true' && n !== got.value);
+    const weights = numeric.at(-1) ?? '';
+    const answers = await ask(`Add ${CHART_NAMES[kind]}`, [
+      { name: 'weights', label: 'Weight of each row', value: weights, options: [{ value: '', label: 'Every row counts once' }, ...numeric.map((n) => ({ value: n, label: n }))] },
+      ...res.names.map((n) => ({ name: 'level:' + n, label: n, value: String(!numeric.includes(n)), type: 'checkbox' as const })),
+    ], { ok: 'Add', note: DashboardUi.LEVEL_NOTES[kind] });
+    if (!answers) return;
+    const levels = res.names.filter((n) => n !== answers.weights && answers['level:' + n] === 'true');
     if (!levels.length) { this.host.flash('Select at least one column of categories.'); return; }
-    const chart = levelsOfSource(res, levels, got.value || undefined, newTileId(), kind);
-    const title = kind === 'decomp' ? `${got.value || 'Rows'} by ${levels.join(', ')}` : levels.join(' → ');
-    this.add({ ...base, kind: 'chart', chart, w: Math.min(12, this.dash!.cols), h: kind === 'decomp' ? 7 : 6, title });
+    const chart = levelChartOfSource(res, levels, answers.weights || undefined, newTileId(), kind);
+    const title = kind === 'decomp' ? `${answers.weights || 'Rows'} by ${levels.join(', ')}` : levels.join(' → ');
+    this.add({ ...base, kind: 'chart', chart, title, w: Math.min(12, this.dash!.cols), h: kind === 'decomp' ? 7 : 6 });
   }
 
   clearFilters(): void {
     const d = this.dash;
-    if (!d || !filtered(d)) return;
-    this.set(unfiltered(d), 'Clear filters');
+    if (d && hasFilters(d)) this.set(withoutFilters(d), 'Clear filters');
   }
 
   /** Right-click on the dashboard: the tile's commands, or adding tiles. */
@@ -232,7 +233,7 @@ export class DashboardUi {
     const add: MenuItem[] = (Object.keys(TILE_NAMES) as TileKind[]).map((k) => [`Add ${TILE_NAMES[k]}…`, () => void this.addTile(k)] as MenuItem);
     if (!t) { popupMenu(x, y, [...add, null, ['Clear All Filters', () => this.clearFilters()], ['Dashboard Settings', () => this.focusPanel()]]); return; }
     const items: MenuItem[] = [];
-    if (t.kind === 'chart') items.push(['Clear Chart Filter', () => this.update(t.id, { pick: undefined } as Partial<ChartTile>, 'Clear chart filter'), !!t.pick?.length], ...this.chartItems(t), null);
+    if (t.kind === 'chart') items.push(['Clear Chart Filter', () => this.clearPick(t), !!t.pick?.length], ...this.chartItems(t), null);
     if (t.kind === 'slicer') items.push(['Clear This Slicer', () => this.update(t.id, { selected: undefined } as Partial<SlicerTile>, 'Clear slicer'), !!t.selected?.length], null);
     items.push(
       ['Settings…', () => this.focusPanel()],
@@ -254,22 +255,29 @@ export class DashboardUi {
     if (id === null) { this.host.charts.target = null; return; }
     this.host.charts.target = {
       get: () => (this.dash?.tiles.find((x) => x.id === id && x.kind === 'chart') as ChartTile | undefined)?.chart ?? null,
-      set: (c, label) => {
-        // a decomposition tree filters by the node it is expanded to, so closing it up drops that filter too
-        const was = (this.dash?.tiles.find((x) => x.id === id) as ChartTile | undefined)?.chart.path ?? [];
-        const moved = c.kind === 'decomp' && (c.path ?? []).join('\u0000') !== was.join('\u0000');
-        this.update(id, { chart: c, ...(moved ? { pick: c.path?.length ? c.path.map((value, level) => ({ level, value })) : undefined } : {}) } as Partial<ChartTile>, label);
+      set: (chart, label) => {
+        // a decomposition tree filters by the node it is opened up to, so the filter follows the chart's path
+        const before = (this.dash?.tiles.find((x) => x.id === id) as ChartTile | undefined)?.chart.path ?? [];
+        const after = chart.path ?? [];
+        const follow = chart.kind === 'decomp' && (after.length !== before.length || after.some((v, i) => v !== before[i]));
+        const pick = after.length ? after.map((value, level) => ({ level, value })) : undefined;
+        this.update(id, (follow ? { chart, pick } : { chart }) as Partial<ChartTile>, label);
       },
       remove: () => this.view.dash.remove(id),
     };
   }
 
-  /** The names of a chart tile's levels (its series' header cells), for describing what it picked. */
-  private levelNames(t: ChartTile): string[] {
-    return t.chart.series.map((s) => {
-      const got = s.x ? readRef(this.wb, s.x, this.wb.sheet) : null;
-      return got && got.range.r1 > 0 ? got.sheet.shownText(got.range.r1 - 1, got.range.c1) : '';
+  /** What a chart tile picked, in words, its levels named by the header cells over their categories. */
+  private pickWords(t: ChartTile): string {
+    const names = t.chart.series.map((s) => {
+      const at = s.x ? readRef(this.wb, s.x, this.wb.sheet) : null;
+      return at && at.range.r1 > 0 ? at.sheet.shownText(at.range.r1 - 1, at.range.c1) : '';
     });
+    return describePick(t, names);
+  }
+
+  private clearPick(t: ChartTile): void {
+    this.update(t.id, { pick: undefined } as Partial<ChartTile>, 'Clear chart filter');
   }
 
   focusPanel(): void {
@@ -285,7 +293,7 @@ export class DashboardUi {
     const head = (s: string) => Object.assign(document.createElement('h4'), { textContent: s, className: 'cp-head' });
     const note = (s: string, cls = 'muted small') => Object.assign(document.createElement('p'), { textContent: s, className: cls });
     if (!t) {
-      out.push(note('Click a tile to change it; drag tiles to move them and their corner to resize them. Slicer buttons, and clicking a bar, slice, Sankey band, treemap box or decomposition tree node, filter every tile fed by the same table.'));
+      out.push(note('Click a tile to change it. Drag a tile to move it, or its corner to resize it. Slicer buttons filter every tile fed by the same table, and so does clicking a bar, slice, Sankey node or band, treemap box or decomposition tree node.'));
       out.push(head('Dashboard'));
       out.push(row('Columns', numberBox(d.cols, (v) => v && this.set({ ...d, cols: Math.max(2, Math.min(24, Math.round(v))), tiles: d.tiles.map((x) => ({ ...x, w: Math.min(x.w, Math.max(2, Math.round(v))), x: Math.min(x.x, Math.max(0, Math.round(v) - x.w)) })) }, 'Dashboard columns'))));
       out.push(row('Row height', numberBox(d.rowH, (v) => v && this.set({ ...d, rowH: Math.max(20, v) }, 'Dashboard row height'), '', 'px')));
@@ -296,11 +304,11 @@ export class DashboardUi {
       btns.className = 'cp-buttons';
       for (const k of Object.keys(TILE_NAMES) as TileKind[]) btns.append(button(TILE_NAMES[k], () => void this.addTile(k)));
       out.push(btns);
-      if (filtered(d)) {
+      if (hasFilters(d)) {
         out.push(head('Filters on'));
         for (const x of d.tiles) {
-          if (x.kind === 'slicer' && x.selected?.length) out.push(note(`${x.column}: ${x.selected.join(', ')}`, 'cp-value'));
-          if (x.kind === 'chart' && x.pick?.length) out.push(note(pickText(x, this.levelNames(x)), 'cp-value'));
+          const words = x.kind === 'slicer' && x.selected?.length ? `${x.column}: ${x.selected.join(', ')}` : x.kind === 'chart' && x.pick?.length ? this.pickWords(x) : '';
+          if (words) out.push(note(words, 'cp-value'));
         }
         out.push(rowOf(button('Clear all filters', () => this.clearFilters())));
       }
@@ -329,11 +337,11 @@ export class DashboardUi {
         this.bindChart(t.id);
         // the tile sets the chart's size, background and border, so those rows go
         const tileSets = new Set(['Size', 'Background', 'Border']);
-        if (t.chart.kind !== 'scatter' && !isLevelled(t.chart.kind)) {
+        if (!hasLevels(t.chart.kind) && t.chart.kind !== 'scatter') {
           out.push(row('Same labels', select([['', 'One bar or point per row'], ...(['average', 'sum', 'count', 'median', 'min', 'max'] as Aggregate[]).map((a): [string, string] => [a, `${AGGREGATE_NAMES[a]} of each`])], t.group ?? '', (v) => this.update(t.id, { group: (v as Aggregate) || undefined } as Partial<ChartTile>, 'Combine rows'))));
           if (t.group === 'average' || t.group === 'median') out.push(note('Turn on error bars to show the standard deviation of each label.'));
         }
-        if (t.pick?.length) out.push(note(`Filtering by ${pickText(t, this.levelNames(t))}`, 'cp-value'), rowOf(button('Clear chart filter', () => this.update(t.id, { pick: undefined } as Partial<ChartTile>, 'Clear chart filter'))));
+        if (t.pick?.length) out.push(note(`Filtering by ${this.pickWords(t)}`, 'cp-value'), rowOf(button('Clear Chart Filter', () => this.clearPick(t))));
         out.push(...this.host.charts.panel(t.chart).slice(1).filter((el) => !tileSets.has(el.querySelector(':scope > span')?.textContent ?? '')));
         break;
       }

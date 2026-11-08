@@ -485,10 +485,9 @@ export class Toolboxes {
       f.classList.toggle('locked', locked);
       const fold = f.querySelector<HTMLElement>('.tb-fold');
       if (fold) { fold.textContent = folded ? '▸' : '▾'; fold.title = folded ? `Open ${def.title} out` : `Fold ${def.title} up to its title`; }
-      const tab = f.querySelector<HTMLElement>('.tb-tab');
+      const tab = f.querySelector<HTMLElement>('.tb-tab-fold');
       if (tab) { tab.title = `Fold ${def.title} up to its title`; tab.setAttribute('aria-label', tab.title); }
-      const lock = f.querySelector<HTMLElement>('.tb-lock');
-      if (lock) { lock.innerHTML = lockIcon(locked, 14); lock.title = locked ? `Lock this toolbox's place (locked). Click to unlock it, then drag it by its title. The drawing itself is never locked.` : `Lock this toolbox's place (unlocked: drag it by its title). Click to lock it where it is.`; lock.setAttribute('aria-pressed', String(locked)); }
+      for (const lock of f.querySelectorAll<HTMLElement>(':scope > :is(.tb-head, .tb-tab) > .tb-lock')) { lock.innerHTML = lockIcon(locked, 14); lock.title = locked ? `Lock this toolbox's place (locked). Click to unlock it, then drag it by its title. The drawing itself is never locked.` : `Lock this toolbox's place (unlocked: drag it by its title). Click to lock it where it is.`; lock.setAttribute('aria-pressed', String(locked)); }
       f.dataset.dock = place.dock;
       if (def.id === 'details') f.style.setProperty('--strip-h', `${stripHeight(st, innerHeight)}px`);
       // the drawing tools keep their docked columns when they float, so their title goes above the
@@ -616,12 +615,22 @@ export class Toolboxes {
     head.append(grip, name);
     if (def.info) head.append(infoIcon(def.info, 'tb-info'));
     head.append(lock, fold, close);
-    // a locked docked box hides its title bar, so this slim arrow folds it instead (folded, the title shows again to open it)
-    const tab = document.createElement('button');
-    tab.type = 'button';
+    // a locked docked box hides its title bar, so this slim strip folds it instead (folded, the title
+    // shows again to open it) and keeps its padlock showing: a rail down its left end when docked along
+    // the top or bottom (no row over its buttons), a slim row over them when docked down a side
+    const tab = document.createElement('div');
     tab.className = 'tb-tab';
-    tab.textContent = '▴';
-    tab.addEventListener('click', () => this.fold(def.id, true));
+    const tabLock = document.createElement('button');
+    tabLock.type = 'button';
+    tabLock.className = 'tb-lock';
+    tabLock.addEventListener('click', () => this.setBoxLocked(def.id, !boxLocked(this.hooks.get(), def.id)));
+    const tabFold = document.createElement('button');
+    tabFold.type = 'button';
+    tabFold.className = 'tb-tab-fold';
+    tabFold.textContent = '▴';
+    tabFold.addEventListener('click', () => this.fold(def.id, true));
+    // (the side panel folds by its own button, #side-fold)
+    tab.append(tabLock, ...(def.id === 'details' ? [] : [tabFold]));
     const body = document.createElement('div');
     body.className = 'tb-body';
     f.append(head, tab, body);

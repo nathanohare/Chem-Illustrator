@@ -274,7 +274,7 @@ const P: Record<string, Prop> = {
   ReactionStepObjectsBelowArrow: { tag: 0x0c06, kind: 'ids' },
   ReactionStepAtomMapManual: { tag: 0x0c07, kind: 'ids' },
   ReactionStepAtomMapAuto: { tag: 0x0c08, kind: 'ids' },
-  // object tags (stereo labels, and the paragraph styles Chem Illustrator keeps with a text);
+  // object tags (stereo labels, and the paragraph styles Chemweave keeps with a text);
   // the values are from ChemDraw's files. A String value is stored like any text, a Double as
   // FLOAT64 and a Long as INT32.
   TagType: { tag: 0x0d00, kind: 'enum16', values: { Unknown: 0, Double: 1, Long: 2, String: 3 } },

@@ -1,9 +1,9 @@
 // Charts of sheet data, as Excel makes them: scatter (x–y), line, column, bar, area, pie, combo
-// (columns and lines, with a second value axis), histogram, box and whisker, bubble and radar;
-// and three charts of levels of categories, as PowerBI makes them: a Sankey chart, a treemap
-// (which can be drilled into) and a decomposition tree (which is expanded a node at a time). Their
-// series are their levels: each series' labels are one column of categories, and its numbers (the
-// same column for every level) how much each row carries.
+// (columns and lines, with a second value axis), histogram, box and whisker, bubble and radar.
+// Three more chart levels of categories as PowerBI does: a Sankey chart, a treemap (drilled into a
+// box at a time) and a decomposition tree (expanded a node at a time). In those, each series is a
+// level whose labels are a column of categories, and every level shares one column of numbers,
+// the weight of each row (levels.ts).
 // Each series reads its numbers from cells, so the chart follows the sheet as it changes. A
 // scatter series can carry a fitted line (with its equation and R²) and error bars, for kinetics,
 // calibration curves and the like. Data in rows hidden by a filter is left out, as Excel does by
@@ -16,7 +16,9 @@ import type { Value } from './values';
 import { isError } from './values';
 import type { FitKind } from './fit';
 
-export type ChartKind = 'scatter' | 'line' | 'column' | 'bar' | 'area' | 'pie' | 'combo' | 'histogram' | 'box' | 'bubble' | 'radar' | 'sankey' | 'treemap' | 'decomp';
+export type ChartKind =
+  | 'scatter' | 'line' | 'column' | 'bar' | 'area' | 'pie' | 'combo' | 'histogram' | 'box' | 'bubble' | 'radar'
+  | 'sankey' | 'treemap' | 'decomp';
 export type MarkerShape = 'circle' | 'square' | 'diamond' | 'triangle' | 'cross' | 'none';
 
 export interface SeriesFit {
@@ -125,9 +127,9 @@ export interface Chart {
   /** Radar charts: filled shapes in place of lines with markers. */
   filled?: boolean;
   /**
-   * A treemap: the categories it is drilled into, one for each level from the first (unset: the
-   * whole). A decomposition tree: the node expanded at each level, from the first (unset: just
-   * the total and the first level).
+   * Where a treemap or decomposition tree has been opened up to, as a category for each level
+   * from the first: the box a treemap is drilled into (unset: the whole), or the node expanded at
+   * each level of a decomposition tree (unset: only the total and the first level show).
    */
   path?: string[];
   /** A PivotChart: the id of the PivotTable it charts (its series follow the report when it refreshes). */
@@ -174,9 +176,8 @@ export const onSecondAxis = (s: Series, i: number): boolean => s.secondary ?? i 
 /** Charts Excel keeps in its newer chart part (chartEx, Excel 2016 and later). */
 export const isChartEx = (k: ChartKind): boolean => k === 'histogram' || k === 'box';
 
-/** Charts whose series are levels of categories (Sankey, treemap and decomposition tree), with no axes. */
-export const isLevelled = (k: ChartKind): boolean => k === 'sankey' || k === 'treemap' || k === 'decomp';
-
+/** Sankey charts, treemaps and decomposition trees: their series are levels of categories, and they have no axes. */
+export const hasLevels = (k: ChartKind): boolean => ['sankey', 'treemap', 'decomp'].includes(k);
 /** Charts whose x values are numbers (an axis of values, not of categories). */
 export const isXY = (k: ChartKind): boolean => k === 'scatter' || k === 'bubble';
 
@@ -195,7 +196,9 @@ export const MARKERS: MarkerShape[] = ['circle', 'square', 'diamond', 'triangle'
 export const CHART_NAMES: Record<ChartKind, string> = {
   scatter: 'Scatter (x–y)', line: 'Line', column: 'Column', bar: 'Bar', area: 'Area', pie: 'Pie',
   combo: 'Combo (columns and lines)', histogram: 'Histogram', box: 'Box and whisker', bubble: 'Bubble', radar: 'Radar',
-  sankey: 'Sankey (flows)', treemap: 'Treemap', decomp: 'Decomposition tree',
+  sankey: 'Sankey (flows)',
+  treemap: 'Treemap',
+  decomp: 'Decomposition tree',
 };
 
 let nextChartId = 1;
@@ -206,9 +209,9 @@ export const newChartId = (): number => nextChartId++;
 
 /** Do two charts chart the same cells the same way (so our own copy of a chart can stand in for Excel's)? */
 export function sameChartData(a: Chart, b: Chart): boolean {
-  // Excel has no Sankey chart or decomposition tree, and its treemap can't be drilled: they are
-  // given bars of the same cells (xlsx-chart.ts)
-  const kindOf = (k: ChartKind) => (k === 'bar' || isLevelled(k) ? 'column' : k);
+  // a chart of levels goes to Excel as bars of the same cells (xlsx-chart.ts): Excel draws no
+  // Sankey chart or decomposition tree, and can't drill into a treemap
+  const kindOf = (k: ChartKind) => (k === 'bar' || hasLevels(k) ? 'column' : k);
   if (kindOf(a.kind) !== kindOf(b.kind) || a.series.length !== b.series.length) return false;
   const norm = (t: string | undefined) => (t ?? '').replace(/^=/, '').replace(/'/g, '').toUpperCase();
   return a.series.every((s, i) => norm(s.y) === norm(b.series[i].y) && norm(s.x) === norm(b.series[i].x) && norm(s.size) === norm(b.series[i].size) && !!s.fit === !!b.series[i].fit && (s.fit?.kind ?? '') === (b.series[i].fit?.kind ?? ''));
@@ -254,12 +257,11 @@ export function refValues(wb: Workbook, text: string | undefined, home: Sheet, s
 }
 
 /**
- * What a click on a part of a chart picks (on a dashboard): a category at a level (the level is
- * the series whose labels it is; bars and slices are level 0), or one at each of two levels (a
- * Sankey band, from one level to the next).
+ * The categories a click on a chart picked (on a dashboard), each with the level it belongs to
+ * (the series it is a label of). A bar or a slice is one category at level 0; a Sankey band is
+ * one at each end; a treemap box or tree node is one at each level down to it.
  */
-export type ChartPick = { level: number; value: string }[];
-
+export type CategoryPick = { level: number; value: string }[];
 /** A series made ready to draw. */
 export interface SeriesData {
   name: string;
@@ -278,8 +280,11 @@ export interface SeriesData {
 }
 
 const toNum = (v: Value): number => (typeof v === 'number' && Number.isFinite(v) ? v : NaN);
-/** A cell as a category label on a chart (what a click on a bar, slice or Sankey node picks). */
-export const toLabel = (v: Value): string => (v === null || isError(v) ? '' : typeof v === 'number' ? String(Number(v.toPrecision(10))) : String(v));
+/** A cell as the label of a category (a number to 10 significant figures, an error or empty cell as ''). */
+export function cellLabel(v: Value): string {
+  if (v === null || isError(v)) return '';
+  return typeof v === 'number' ? String(Number(v.toPrecision(10))) : String(v);
+}
 
 /** The series of a chart with their numbers read from the sheets. */
 export function chartData(wb: Workbook, home: Sheet, chart: Chart, leaveOut?: Map<Sheet, Set<number>>): SeriesData[] {
@@ -289,9 +294,9 @@ export function chartData(wb: Workbook, home: Sheet, chart: Chart, leaveOut?: Ma
     const xv = s.x ? refValues(wb, s.x, home, chart.showHidden, leaveOut) ?? [] : null;
     const ys = yv.map(toNum);
     const xs = xv ? xv.map(toNum) : ys.map((_, j) => j + 1);
-    const cats = xv ? xv.map(toLabel) : ys.map((_, j) => String(j + 1));
+    const cats = xv ? xv.map(cellLabel) : ys.map((_, j) => String(j + 1));
     let name = s.name ?? '';
-    if (name.startsWith('=')) name = (refValues(wb, name, home, true) ?? []).map(toLabel).join(' ');
+    if (name.startsWith('=')) name = (refValues(wb, name, home, true) ?? []).map(cellLabel).join(' ');
     const d: SeriesData = { name: name || `Series ${i + 1}`, xs, cats, ys, color: s.color ?? palette[i % palette.length], index: i };
     if (chart.kind === 'bubble') {
       const sz = s.size ? (refValues(wb, s.size, home, chart.showHidden, leaveOut) ?? []).map(toNum) : [];
@@ -325,7 +330,7 @@ export function chartData(wb: Workbook, home: Sheet, chart: Chart, leaveOut?: Ma
  * first column of text gives the categories.
  */
 export function chartFromRange(sheet: Sheet, r: Range, kind: ChartKind): Chart {
-  if (isLevelled(kind)) return levelsFromRange(sheet, r, kind);
+  if (hasLevels(kind)) return levelChartOfRange(sheet, r, kind);
   const isNum = (row: number, col: number) => typeof sheet.value(row, col) === 'number';
   const isText = (row: number, col: number) => typeof sheet.value(row, col) === 'string' && sheet.value(row, col) !== '';
   let header = false;
@@ -365,38 +370,38 @@ export function chartFromRange(sheet: Sheet, r: Range, kind: ChartKind): Chart {
 }
 
 /**
- * A chart of levels (a Sankey chart, treemap or decomposition tree) of a block of cells: the last
- * column of numbers (if any) says how much each row carries, and every other column is a level,
- * left to right (a column of numbers before it, a ring size say, is a level too); without one,
- * each row counts once.
+ * A chart of levels (Sankey chart, treemap or decomposition tree) of the rows `first` to `last`
+ * of a sheet: a series for each column in `levels`, in that order, each sharing the column
+ * `weights` as its numbers (null: every row weighs one). `header`, when set, is the row naming the
+ * levels.
  */
-export function levelsOfColumns(sheetName: string, header: number | null, first: number, last: number, levels: number[], value: number | null, kind: ChartKind = 'sankey'): Chart {
-  const ref = (c: number, r1: number, r2: number) => refText(sheetName, { r1, c1: c, r2, c2: c });
-  const y = ref(value ?? levels[0], first, last);
+export function levelChart(sheetName: string, header: number | null, first: number, last: number, levels: number[], weights: number | null, kind: ChartKind = 'sankey'): Chart {
+  const column = (c: number, from = first, to = last) => refText(sheetName, { r1: from, c1: c, r2: to, c2: c });
+  const y = column(weights ?? levels[0]);
+  const series: Series[] = levels.map((c) => (header === null ? { x: column(c), y } : { name: column(c, header, header), x: column(c), y }));
+  const rightmost = levels.reduce((m, c) => Math.max(m, c), weights ?? 0);
   return {
-    id: nextChartId++,
-    kind,
-    series: levels.map((c) => ({ ...(header !== null ? { name: ref(c, header, header) } : {}), x: ref(c, first, last), y })),
-    x: { grid: false }, y: { grid: false },
-    legend: 'none',
-    at: { row: header ?? first, col: Math.max(...levels, value ?? 0) + 2, dx: 0, dy: 0 },
-    w: 560, h: 340,
+    id: nextChartId++, kind, series,
+    x: { grid: false }, y: { grid: false }, legend: 'none',
+    at: { row: header ?? first, col: rightmost + 2, dx: 0, dy: 0 }, w: 560, h: 340,
   };
 }
 
-function levelsFromRange(sheet: Sheet, r: Range, kind: ChartKind): Chart {
-  const filled = (row: number, col: number) => { const v = sheet.value(row, col); return v !== null && v !== ''; };
-  const header = r.r2 > r.r1 && [...Array(r.c2 - r.c1 + 1).keys()].every((i) => typeof sheet.value(r.r1, r.c1 + i) === 'string' && filled(r.r1, r.c1 + i)) ? r.r1 : null;
-  const first = header !== null ? r.r1 + 1 : r.r1;
-  let value: number | null = null;
-  for (let c = r.c2; c >= r.c1 && value === null; c--) if (columnIsNumbers(sheet, c, first, r.r2)) value = c;
-  // one column only: it is the one level
-  if (value === r.c1 && r.c2 === r.c1) value = null;
-  const levels: number[] = [];
-  for (let c = r.c1; c <= r.c2; c++) if (c !== value) levels.push(c);
-  return { ...levelsOfColumns(sheet.name, header, first, r.r2, levels, value, kind), at: { row: r.r1, col: r.c2 + 2, dx: 0, dy: 0 } };
+/**
+ * A chart of levels of a block of cells. A top row all of text names the levels. The rightmost
+ * column of numbers weighs the rows (with none, or only the one column, every row weighs one), and
+ * each other column is a level, left to right (even one of numbers, ring sizes say).
+ */
+function levelChartOfRange(sheet: Sheet, r: Range, kind: ChartKind): Chart {
+  const cols = Array.from({ length: r.c2 - r.c1 + 1 }, (_, i) => r.c1 + i);
+  const isName = (c: number) => { const v = sheet.value(r.r1, c); return typeof v === 'string' && v !== ''; };
+  const header = r.r2 > r.r1 && cols.every(isName) ? r.r1 : null;
+  const first = header === null ? r.r1 : r.r1 + 1;
+  const numeric = cols.filter((c) => columnIsNumbers(sheet, c, first, r.r2));
+  const weights = cols.length > 1 && numeric.length ? numeric[numeric.length - 1] : null;
+  const chart = levelChart(sheet.name, header, first, r.r2, cols.filter((c) => c !== weights), weights, kind);
+  return { ...chart, at: { row: r.r1, col: r.c2 + 2, dx: 0, dy: 0 } };
 }
-
 /** A chart with every formula reference passed through a change (rows inserted, a sheet renamed). */
 export function mapChartRefs(c: Chart, fn: (formula: string) => string): Chart {
   const m = (t: string | undefined) => (t && t.startsWith('=') ? fn(t) : t);

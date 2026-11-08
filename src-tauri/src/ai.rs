@@ -175,7 +175,7 @@ pub async fn ai_request(
         let _ = rustls::crypto::ring::default_provider().install_default();
     }
     let client = reqwest::Client::builder()
-        .user_agent(concat!("ChemIllustrator/", env!("CARGO_PKG_VERSION")))
+        .user_agent(concat!("Chemweave/", env!("CARGO_PKG_VERSION")))
         .timeout(Duration::from_secs(180))
         // a redirect could carry the key's header to another address
         .redirect(reqwest::redirect::Policy::none())

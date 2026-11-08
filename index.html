@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Cpath d=%22M16 3l11.3 6.5v13L16 29 4.7 22.5v-13z%22 fill=%22none%22 stroke=%22%232f6fdf%22 stroke-width=%222.6%22 stroke-linejoin=%22round%22/%3E%3Cpath d=%22M16 8.5l6.5 3.75M9.5 20l6.5 3.75%22 stroke=%22%232f6fdf%22 stroke-width=%222.2%22 stroke-linecap=%22round%22/%3E%3C/svg%3E" />
-  <title>Chem Illustrator</title>
+  <title>Chemweave</title>
 </head>
 <body class="tabs-in-menu">
   <header>
@@ -15,12 +15,10 @@
     <div class="submenu">
     <button role="menuitem" class="has-sub" aria-haspopup="menu" aria-expanded="false">New</button>
     <div class="menu sub" role="menu" hidden>
-        <button role="menuitem" data-cmd="new-slides">Presentation (slideshow)</button>
-        <button role="menuitem" data-cmd="new-sheet">Spreadsheet (tables, charts, dashboards)</button>
-        <button role="menuitem" data-cmd="new-document">Document (text)</button>
-        <button role="menuitem" data-cmd="new-design">Design (TOC graphic, abstract, poster, figure)…</button>
-    <hr />
-        <button role="menuitem" data-cmd="new-from-template" title="A new document or spreadsheet from a ready-made template: lab report, supporting information, thesis chapter, reaction table, reagent sheet">New from Template…</button>
+        <button role="menuitem" data-cmd="new-slides">Presentation (Slideshow)</button>
+        <button role="menuitem" data-cmd="new-sheet">Spreadsheet (Tables, Charts, and Dashboards)</button>
+        <button role="menuitem" data-cmd="new-document">Document (Text document)</button>
+        <button role="menuitem" data-cmd="new-design">Design (Posters, Graphical abstracts, Figures)…</button>
     </div>
     </div>
         <button role="menuitem" data-cmd="open">Open…</button>
@@ -683,7 +681,6 @@
     <button role="menuitem" data-cmd="attach-descriptors" title="The formula, exact mass and molecular weight under the structure, tied to it: they follow it and update when it changes (choose what is shown in the Style panel)">Attach Descriptors (Formula, Mass)</button>
     <button role="menuitem" data-cmd="add-frame">Add Frame</button>
     <button role="menuitem" data-cmd="number-compounds" title="ID labels under every selected structure (or all of them) in scheme order: choose how they count and where they start; the same structure gets the same ID">Number Compounds…</button>
-    <button role="menuitem" data-cmd="chain-ends">Show/Hide Terminal Methyls</button>
     <button role="menuitem" data-cmd="explicit-h">Show/Hide Explicit Hydrogens</button>
     </div>
     </div>
@@ -823,11 +820,13 @@
         <button role="menuitem" data-cmd="copy-diagnostics" title="Copy the program's version, computer and the errors it wrote down lately, to paste into a bug report or message">Copy Diagnostics</button>
         <button role="menuitem" class="desktop-only" data-cmd="open-log-folder" title="Show the folder with the program's error log (kept on this computer only)" hidden>Open Log Folder</button>
 <hr />
-<button role="menuitem" data-cmd="about">About Chem Illustrator</button>
+<button role="menuitem" data-cmd="support-project" title="Chemweave is free: sponsor its development on GitHub (opens in your browser)">Support Chemweave</button>
+<button role="menuitem" data-cmd="about">About Chemweave</button>
       </div>
     </div>
     <span class="sep"></span>
     <div id="quick-bar" class="quick-bar" role="toolbar" aria-label="Quick Access Toolbar"></div>
+    <span class="sep"></span>
     <div class="menu-wrap dev-only" hidden>
       <button id="btn-developer" aria-haspopup="menu" aria-expanded="false" aria-controls="developer-menu" title="Developer Tools: the stress test and turning them off (View &gt; Developer Tools)">Developer</button>
       <div id="developer-menu" class="menu" role="menu" hidden>
@@ -841,8 +840,7 @@
     </div>
     <div id="tabs" role="tablist" aria-label="Open files"></div>
     <button id="btn-search" type="button" class="search-box" title="Search for a command by name (Alt+Q)"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m15.5 15.5 5 5"/></svg><span>Search</span><kbd>Alt+Q</kbd></button>
-    <h1 class="app-name">Chem Illustrator</h1>
-    <button id="stage-badge" type="button" class="stage-badge" title="Chem Illustrator is still being built: new features arrive often and some things may not work yet. Click for more.">Beta</button>
+    <h1 class="app-name">Chemweave</h1>
   </header>
 
 
@@ -2978,7 +2976,7 @@
       <canvas id="overlay" tabindex="0" role="application" aria-roledescription="drawing" aria-label="Drawing"></canvas>
       <div id="warn-tip" role="tooltip" hidden></div>
       <section id="welcome" class="welcome-card" aria-labelledby="welcome-title" hidden>
-        <h2 id="welcome-title">Welcome to Chem Illustrator</h2>
+        <h2 id="welcome-title">Welcome to Chemweave</h2>
         <ul>
           <li><b>Draw</b>: pick a bond or ring on the left and click the page; drag to aim. Click an atom to grow from it.</li>
           <li><b>Type atoms</b>: point at an atom and press a key (O, N, Cl as <kbd>l</kbd>…). <b>Edit ▸ Keyboard Shortcuts</b> lists them all.</li>
@@ -2991,10 +2989,10 @@
       </section>
       <section id="start-view" class="welcome-card start-view" aria-label="Start" hidden>
         <div class="sv-new">
-          <button type="button" class="sv-mode-slides" data-start="new-slides" data-mode="slides"><span class="sv-icon"></span><span>New Presentation</span><small>slideshow</small></button>
-          <button type="button" class="sv-mode-sheet" data-start="new-sheet" data-mode="sheet"><span class="sv-icon"></span><span>New Spreadsheet</span><small>tables, charts, dashboards</small></button>
-          <button type="button" class="sv-mode-document" data-start="new-document" data-mode="document"><span class="sv-icon"></span><span>New Document</span><small>text</small></button>
-          <button type="button" class="sv-mode-design" data-start="new-design" data-mode="design"><span class="sv-icon"></span><span>New Design</span><small>TOC graphic, abstract, poster, figure</small></button>
+          <button type="button" class="sv-mode-slides" data-start="new-slides" data-mode="slides"><span class="sv-icon"></span><span>New Presentation</span><small>Slideshow</small></button>
+          <button type="button" class="sv-mode-sheet" data-start="new-sheet" data-mode="sheet"><span class="sv-icon"></span><span>New Spreadsheet</span><small>Tables, Charts, and Dashboards</small></button>
+          <button type="button" class="sv-mode-document" data-start="new-document" data-mode="document"><span class="sv-icon"></span><span>New Document</span><small>Text document</small></button>
+          <button type="button" class="sv-mode-design" data-start="new-design" data-mode="design"><span class="sv-icon"></span><span>New Design</span><small>Posters, Graphical abstracts, Figures</small></button>
         </div>
         <div class="sv-recent" hidden><h3>Recent</h3><div class="sv-files"></div></div>
         <p class="welcome-buttons"><button type="button" data-start="open">Open…</button><span class="grow"></span><label class="sv-again"><input type="checkbox" checked> Show at start</label><button type="button" class="primary" data-start="draw">Start drawing</button></p>
@@ -3045,7 +3043,7 @@
       <div id="cell-body"></div>
     </section>
     <section id="analysis-section">
-      <h2>Analysis <label class="check small" title="The ion for m/z, the isotope pattern and the HRMS text">Ion <select id="analysis-adduct"></select></label></h2>
+      <h2>Analysis <button type="button" id="analysis-gear" class="an-icon-btn an-gear" aria-pressed="false" title="Customize: show, hide and reorder what the panel shows (Settings ▸ Analysis has the rest)" aria-label="Customize the Analysis panel"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.2" aria-hidden="true"><circle cx="8" cy="8" r="4.4"/><circle cx="8" cy="8" r="1.6"/><path d="M12.6 8L14.6 8M11.25 11.25L12.67 12.67M8 12.6L8 14.6M4.75 11.25L3.33 12.67M3.4 8L1.4 8M4.75 4.75L3.33 3.33M8 3.4L8 1.4M11.25 4.75L12.67 3.33" stroke-width="2.2"/></svg></button></h2>
       <div id="analysis-body"><p class="muted">Loading the chemistry engine…</p></div>
     </section>
     <section id="speed-section" class="dev-only" hidden>

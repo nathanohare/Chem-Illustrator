@@ -463,10 +463,13 @@ export class Workspace {
     return t;
   }
 
-  /** New sheet (empty, or `book`: File > New > New from Template), in place of an untouched new drawing. */
-  newSheet(book?: Workbook): Tab {
-    const spare = this.active.mode === 'drawing' ? this.spare() : null;
-    const t = this.makeTab('sheet', this.untitled('sheet'));
+  /**
+   * New sheet (empty, or `book`), in place of an untouched new drawing; or, with `instead` (the
+   * blank sheet a template was picked over), in its place and with its name while it is untouched.
+   */
+  newSheet(book?: Workbook, instead?: Tab): Tab {
+    const spare = instead ? this.spare(instead) : this.active.mode === 'drawing' ? this.spare() : null;
+    const t = this.makeTab('sheet', instead && spare ? spare.name : this.untitled('sheet'));
     t.book = book ?? new Workbook();
     const st = this.hooks.newStyle?.('sheet');
     if (st) t.book.drawingStyle = { ...st };
@@ -476,10 +479,13 @@ export class Workspace {
     return t;
   }
 
-  /** New document (empty, or `doc`: File > New > New from Template), in place of an untouched new drawing. */
-  newDocument(doc?: DocText): Tab {
-    const spare = this.active.mode === 'drawing' ? this.spare() : null;
-    const t = this.makeTab('document', this.untitled('document'));
+  /**
+   * New document (empty, or `doc`), in place of an untouched new drawing; or, with `instead` (the
+   * blank document a template was picked over), in its place and with its name while it is untouched.
+   */
+  newDocument(doc?: DocText, instead?: Tab): Tab {
+    const spare = instead ? this.spare(instead) : this.active.mode === 'drawing' ? this.spare() : null;
+    const t = this.makeTab('document', instead && spare ? spare.name : this.untitled('document'));
     const st = this.hooks.newStyle?.('document');
     // (Design > Set as Default: the look new documents start with)
     const design = doc ? null : newDocDesign();
@@ -570,9 +576,9 @@ export class Workspace {
     return () => { const i = this.held.indexOf(tab); if (i >= 0) this.held.splice(i, 1); };
   }
 
-  /** The tab showing, when it is new and untouched (an opened file takes its place). */
-  private spare(): Tab | null {
-    const t = this.active;
+  /** The tab showing (or `t`), when it is new and untouched (an opened file takes its place). */
+  private spare(t: Tab = this.active): Tab | null {
+    if (!this.tabs.includes(t)) return null;
     if (this.held.includes(t) || t.dirty || t.ref.kind !== 'none' || !isNewName(t.name)) return null;
     if (t.mode === 'drawing') return this.host.atoms.size || this.host.captions.size || this.host.arrows.size || this.host.shapes.size ? null : t;
     if (t.mode === 'sheet') return t.book!.edits === 0 ? t : null;

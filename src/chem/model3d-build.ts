@@ -51,6 +51,31 @@ export interface Model3d {
   method?: string;
   /** For a conformer search: how many starting points were relaxed. */
   starts?: number;
+  /** Heavy atoms that are stereocentres, and sp3 CH2 carbons whose two hydrogens are diastereotopic (for the NMR CH2 split). */
+  stereo?: number[];
+  diaCH2?: number[];
+}
+
+/** Stereocentres and diastereotopic CH2 carbons of a molecule (heavy-atom indices, molfile order). */
+export function ch2Flags(mol: Molecule): { stereo: number[]; diaCH2: number[] } {
+  const m = mol.getCompactCopy();
+  m.ensureHelperArrays(Molecule.cHelperCIP);
+  const n = m.getAtoms();
+  const stereo: number[] = [];
+  for (let i = 0; i < n; i++) if (m.getAtomicNo(i) > 1 && m.isAtomStereoCenter(i)) stereo.push(i);
+  // OpenChemLib gives the two hydrogens of a carbon different IDs when they are diastereotopic
+  m.addImplicitHydrogens();
+  const ids = m.getDiastereotopicAtomIDs();
+  m.ensureHelperArrays(Molecule.cHelperNeighbours);
+  const hs = new Map<number, number[]>();
+  for (let k = 0; k < m.getAllAtoms(); k++) {
+    if (m.getAtomicNo(k) !== 1 || !m.getAllConnAtoms(k)) continue;
+    const c = m.getConnAtom(k, 0);
+    hs.set(c, [...(hs.get(c) ?? []), k]);
+  }
+  const diaCH2: number[] = [];
+  for (const [c, l] of hs) if (m.getAtomicNo(c) === 6 && l.length === 2 && m.getAllConnAtoms(c) === 4 && ids[l[0]] !== ids[l[1]]) diaCH2.push(c);
+  return { stereo, diaCH2: diaCH2.sort((p, q) => p - q) };
 }
 
 
@@ -276,5 +301,7 @@ export function buildModel(molblock: string, count: number, seed: number): Model
   if (!shape || !conformers.length) return null;
   // minimising often brings two starting points to the same shape: each is listed once
   const model = describe(shape);
-  return { ...model, conformers: distinct(conformers, model, shape, DEFAULT_SEARCH.rmsd, Infinity), method: 'MMFF94s+' };
+  let flags: { stereo: number[]; diaCH2: number[] } | Record<string, never> = {};
+  try { flags = ch2Flags(mol); } catch { /* the NMR CH2 split is left out */ }
+  return { ...model, ...flags, conformers: distinct(conformers, model, shape, DEFAULT_SEARCH.rmsd, Infinity), method: 'MMFF94s+' };
 }

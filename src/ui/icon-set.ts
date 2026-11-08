@@ -10,6 +10,8 @@
 // Each icon has a hue (what kind of command it is) used by the "Colour" look; the other looks
 // ignore it. No two commands share a drawing.
 
+import { TEXT_ICONS } from './icon-picks';
+
 export type IconHue = 'blue' | 'green' | 'red' | 'amber' | 'purple' | 'teal' | 'gray';
 
 export interface IconDef {
@@ -356,6 +358,41 @@ export function applyIconSet(root: ParentNode = document): void {
     if (pic) { pic.outerHTML = iconSvg(n, 16)!.replace('class="ci-ic"', 'class="ci-ic fp-icon"'); continue; }
     if (b.classList.contains('rb-iconbtn') && b.dataset.set !== n) { b.innerHTML = iconSvg(n, 16)!; b.dataset.set = n; }
   }
+  for (const b of root.querySelectorAll<HTMLElement>('.ribbon button, button#an-views')) addTextIcon(b);
+}
+
+/** A ribbon button's command, as TEXT_ICONS lists them ("sh:fn-cat:Text" for a function category, "#id" for a button known only by its id). */
+export function buttonKey(b: HTMLElement): string {
+  const d = b.dataset;
+  return d.sh ? `sh:${d.sh}${d.cat ? ':' + d.cat : ''}` : d.doc ? 'doc:' + d.doc : d.tr ? 'tr:' + d.tr : d.an ? 'an:' + d.an : d.cmd ?? (b.id ? '#' + b.id : '');
+}
+
+/** A typed stand-in for a picture at the start of a button's name (⟳, ⚙, ☐, ▯▯, ◀, Σ). */
+const STAND_IN = /^\s*(?:[^\p{L}\p{N}\s]+|Σ)\s*/u;
+
+/**
+ * Give a ribbon button that was words only its picture from TEXT_ICONS (picked on the icon
+ * redesign pages), small before its name, or in its large picture's place. A typed stand-in
+ * picture in the name (⟳ Refresh, Next ▶) goes, since the drawing takes its place.
+ */
+function addTextIcon(b: HTMLElement): void {
+  if (b.dataset.textIc) return;
+  const d = TEXT_ICONS[buttonKey(b)];
+  if (!d || b.querySelector(':scope > svg, :scope > .rb-lead')) return;
+  const svg = (size: number) => `<svg class="ci-ic" viewBox="0 0 24 24" width="${size}" height="${size}" aria-hidden="true">${d}</svg>`;
+  const big = b.querySelector<HTMLElement>(':scope > .rb-icon');
+  if (big) {
+    if (big.querySelector('svg')) return;
+    big.innerHTML = svg(24);
+  } else {
+    const words = [...b.childNodes].find((n) => n.nodeType === Node.TEXT_NODE && n.textContent!.trim());
+    if (words) words.textContent = words.textContent!.replace(STAND_IN, '').replace(/\s*[▶◀]\s*$/, '');
+    const lead = document.createElement('span');
+    lead.className = 'rb-lead';
+    lead.innerHTML = svg(16);
+    b.prepend(lead);
+  }
+  b.dataset.textIc = '1';
 }
 
 /** The looks the set can be shown in (Settings > Appearance > Icons). */

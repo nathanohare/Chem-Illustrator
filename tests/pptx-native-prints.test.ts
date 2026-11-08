@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 //
-// What Chem Illustrator keeps in its own PowerPoint tags (text boxes, tables, design shapes,
+// What Chemweave keeps in its own PowerPoint tags (text boxes, tables, design shapes,
 // connectors, charts) is used only while PowerPoint has not changed the slide's own markup under
 // it. Each tag carries a print of that markup as written (native-print.ts): text bolded or
 // recoloured in PowerPoint with its words unchanged, a shape recoloured or changed to another
@@ -190,7 +190,7 @@ describe('a deck saved by a program that drops every tag (LibreOffice)', () => {
       ids.forEach((a, i) => host.addBond(a, ids[(i + 1) % 6], 1));
     });
     const p = unzipSync(await writePptx({ size: d.size, master: d.master, slides: d.slides.map((s, i) => ({ id: i + 1, layout: s.layout, doc: d.docOf(i), notes: s.notes })) }, drawing));
-    expect(readPptx(rezip(p)).warnings.join(' ')).not.toMatch(/leaves out Chem Illustrator/);
+    expect(readPptx(rezip(p)).warnings.join(' ')).not.toMatch(/leaves out Chemweave/);
     // every tag gone, the pictures and their names kept (as LibreOffice 24.2 saves a deck)
     const lost: Parts = {};
     for (const [k, v] of Object.entries(p)) {
@@ -201,12 +201,12 @@ describe('a deck saved by a program that drops every tag (LibreOffice)', () => {
     // the drawing rides inside each structure's SVG: the structures come back
     const back = readPptx(rezip(lost));
     expect(back.slides[1].contents.atoms).toHaveLength(6);
-    expect(back.warnings.join(' ')).toMatch(/leaves out Chem Illustrator's own data.*structures were read from their pictures/);
+    expect(back.warnings.join(' ')).toMatch(/leaves out Chemweave's own data.*structures were read from their pictures/);
     // a deck saved by an older version has no drawing in its SVGs: the structures stay pictures
     const older: Parts = {};
     for (const [k, v] of Object.entries(lost)) older[k] = /\.svg$/.test(k) ? new Uint8Array(strToU8(strFromU8(v).replace(/<metadata>[\s\S]*?<\/metadata>/, ''))) : v;
     const old = readPptx(rezip(older));
     expect(old.slides[1].contents.atoms).toHaveLength(0);
-    expect(old.warnings.join(' ')).toMatch(/leaves out Chem Illustrator's own data.*structures came in as pictures/);
+    expect(old.warnings.join(' ')).toMatch(/leaves out Chemweave's own data.*structures came in as pictures/);
   });
 });

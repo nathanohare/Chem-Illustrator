@@ -200,7 +200,8 @@ describe('drawing the next intermediate from curved arrows', () => {
     expect(errors).toEqual([]);
     const pairs = [...out.shapes.values()].filter((s) => s.symbol === 'LonePair');
     const onO = pairs.filter((s) => dist({ x: (s.x1 + s.x2) / 2, y: (s.y1 + s.y2) / 2 }, out.atoms.get(o)!) < 0.6 * L);
-    const onBr = pairs.filter((s) => dist({ x: (s.x1 + s.x2) / 2, y: (s.y1 + s.y2) / 2 }, out.atoms.get(br)!) < 0.6 * L);
+    // (a pair on the diagonal sits off the corner of Br's label, a little further out)
+    const onBr = pairs.filter((s) => dist({ x: (s.x1 + s.x2) / 2, y: (s.y1 + s.y2) / 2 }, out.atoms.get(br)!) < 0.7 * L);
     expect(onO.length).toBe(2);
     // the drawing shows lone pairs, so the bromide gets the pair it took
     expect(onBr.length).toBe(1);

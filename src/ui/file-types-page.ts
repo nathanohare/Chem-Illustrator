@@ -1,7 +1,9 @@
-// Settings ▸ File Types: which kinds of file the app offers to open from Explorer ("Open with"),
-// and a button to Windows' Default apps page, where the person can make it the default (Windows
-// keeps that choice for the person: no app can make itself the default). On macOS and Linux the
-// installer lists the types, and the page says where to choose the default.
+// Settings ▸ Apps and System: how the app works with the computer and other programs. Which kinds
+// of file it offers to open from Explorer ("Open with"), and a button to Windows' Default apps
+// page, where the person can make it the default (Windows keeps that choice for the person: no
+// app can make itself the default). On macOS and Linux the installer lists the types, and the page
+// says where to choose the default. Then drawings in Word, PowerPoint and Excel, and documents
+// from other programs.
 
 import { addInfo, foldIntoInfo } from './info-tip';
 import { showDialog } from './dialog-host';
@@ -29,16 +31,40 @@ export interface FileTypesHost {
   openDefaults(): Promise<void>;
   /** Drawings in Word, PowerPoint and Excel that open here when double-clicked (Windows). */
   objects: { get(): Promise<boolean>; set(on: boolean): Promise<void> };
+  /** Offer to make structures figures when a document whose structures aren't figures is opened. */
+  figures: { get(): boolean; set(on: boolean): void };
   flash(msg: string): void;
 }
+
+/** The page's title, and its name in the Settings window's list. */
+export const APPS_PAGE_TITLE = 'Apps and System';
 
 export async function fileTypesPage(host: FileTypesHost): Promise<void> {
   const d = document.createElement('dialog');
   d.className = 'ask file-types';
   const form = document.createElement('form');
   const h = document.createElement('h2');
-  h.textContent = 'File Types';
+  h.textContent = APPS_PAGE_TITLE;
   form.append(h);
+  const subhead = (text: string, help?: string) => {
+    const sub = document.createElement('h3');
+    sub.className = 'ask-subhead';
+    sub.textContent = text;
+    if (help) addInfo(sub, help);
+    form.append(sub);
+  };
+  // documents from Word and other programs: on every computer
+  const figRow = document.createElement('label');
+  figRow.className = 'ask-row ask-check';
+  const figBox = document.createElement('input');
+  figBox.type = 'checkbox';
+  const figWas = host.figures.get();
+  figBox.checked = figWas;
+  const figName = document.createElement('span');
+  figName.textContent = 'Offer to make structures figures when opening a document';
+  addInfo(figName, 'A bar over the pages offers Make Figures when a document\'s structures aren\'t figures yet (a Word file from ChemDraw, for one). Don\'t Ask for This File on the bar turns it off for one document. Make All Structures Figures… stays on a structure\'s right-click menu either way.');
+  figRow.append(figBox, figName);
+  const saveFigures = () => { if (figBox.checked !== figWas) host.figures.set(figBox.checked); };
   const note = (text: string) => {
     const p = document.createElement('p');
     p.className = 'muted';
@@ -51,20 +77,27 @@ export async function fileTypesPage(host: FileTypesHost): Promise<void> {
   const done = () => { if (d.open) d.close(); d.remove(); };
 
   if (host.platform !== 'windows') {
+    subhead('File Types');
     note(host.platform === 'web'
       ? 'The web version opens files from File ▸ Open, or dropped on the window. The desktop app can be opened from your files directly.'
       : host.platform === 'mac'
-        ? 'Chem Illustrator is offered for .cdxml, .cdx, .cds, .mol, .sdf, .rxn, .mrv, .ket, .cml, .docx, .pptx and .xlsx files: right-click a file in Finder and choose Open With. To always open a kind of file here, choose File ▸ Get Info in Finder, pick Chem Illustrator under Open with, and click Change All.'
-        : 'Chem Illustrator is offered for .cdxml, .cdx, .cds, .mol, .sdf, .rxn, .mrv, .ket, .cml, .docx, .pptx and .xlsx files in your file manager\'s Open With menu. Your desktop\'s settings (Default Applications) choose which program opens each kind of file.');
+        ? 'Chemweave is offered for .cdxml, .cdx, .cds, .mol, .sdf, .rxn, .mrv, .ket, .cml, .docx, .pptx and .xlsx files: right-click a file in Finder and choose Open With. To always open a kind of file here, choose File ▸ Get Info in Finder, pick Chemweave under Open with, and click Change All.'
+        : 'Chemweave is offered for .cdxml, .cdx, .cds, .mol, .sdf, .rxn, .mrv, .ket, .cml, .docx, .pptx and .xlsx files in your file manager\'s Open With menu. Your desktop\'s settings (Default Applications) choose which program opens each kind of file.');
+    subhead('Documents from Other Programs');
+    form.append(figRow);
+    const cancel = document.createElement('button');
+    cancel.type = 'button';
+    cancel.textContent = 'Cancel';
+    cancel.addEventListener('click', done);
     const ok = document.createElement('button');
     ok.type = 'submit';
     ok.className = 'primary';
-    ok.textContent = 'OK';
-    buttons.append(ok);
+    ok.textContent = 'Save';
+    buttons.append(cancel, ok);
     form.append(buttons);
-    form.addEventListener('submit', (e) => { e.preventDefault(); done(); });
+    form.addEventListener('submit', (e) => { e.preventDefault(); saveFigures(); done(); });
   } else {
-    addInfo(h, 'Checked file types list Chem Illustrator under Open With in Explorer. Your default programs (ChemDraw, Word, PowerPoint, Excel) don\'t change.');
+    subhead('File Types', 'Checked file types list Chemweave under Open With in Explorer. Your default programs (ChemDraw, Word, PowerPoint, Excel) don\'t change.');
     const now = new Set(await host.get().catch(() => [] as string[]));
     const boxes = new Map<string, HTMLInputElement>();
     for (const t of FILE_TYPES) {
@@ -81,7 +114,7 @@ export async function fileTypesPage(host: FileTypesHost): Promise<void> {
     }
     const defaults = document.createElement('p');
     defaults.className = 'ask-help muted';
-    defaults.textContent = 'To open a kind of file here when you double-click it, make Chem Illustrator its default in Windows Settings. Windows asks you to choose there itself; no program is allowed to make itself the default.';
+    defaults.textContent = 'To open a kind of file here when you double-click it, make Chemweave its default in Windows Settings. Windows asks you to choose there itself; no program is allowed to make itself the default.';
     const open = document.createElement('button');
     open.type = 'button';
     open.textContent = 'Choose Defaults in Windows Settings…';
@@ -99,9 +132,10 @@ export async function fileTypesPage(host: FileTypesHost): Promise<void> {
     objRow.append(objBox, objName);
     const objHelp = document.createElement('p');
     objHelp.className = 'ask-help muted';
-    objHelp.textContent = 'Pasted drawings become Chem Illustrator objects: double-click one in Word to edit it here, and Save updates it. Otherwise they paste as pictures (still editable when copied back here). Also in Word under Insert ▸ Object.';
+    objHelp.textContent = 'Pasted drawings become Chemweave objects: double-click one in Word to edit it here, and Save updates it. Otherwise they paste as pictures (still editable when copied back here). Also in Word under Insert ▸ Object.';
     foldIntoInfo(objHelp, objName);
-    form.append(objRow, objHelp);
+    subhead('Word, PowerPoint and Excel');
+    form.append(objRow, objHelp, figRow);
     const cancel = document.createElement('button');
     cancel.type = 'button';
     cancel.textContent = 'Cancel';
@@ -115,10 +149,14 @@ export async function fileTypesPage(host: FileTypesHost): Promise<void> {
     form.addEventListener('submit', async (e) => {
       e.preventDefault();
       const types = [...boxes].filter(([, b]) => b.checked).map(([ext]) => ext);
+      saveFigures();
       try {
         if (objBox.checked !== objWas) await host.objects.set(objBox.checked);
-        await host.set(types);
-        host.flash(types.length ? `Chem Illustrator is now under "Open with" for ${types.map((t) => `.${t}`).join(', ')}.` : 'Chem Illustrator is off every "Open with" list.');
+        // (said only when the list changed)
+        if (types.length !== now.size || types.some((t) => !now.has(t))) {
+          await host.set(types);
+          host.flash(types.length ? `Chemweave is now under "Open with" for ${types.map((t) => `.${t}`).join(', ')}.` : 'Chemweave is off every "Open with" list.');
+        }
       } catch (err) {
         host.flash(String(err));
       }

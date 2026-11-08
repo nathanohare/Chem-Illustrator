@@ -237,3 +237,28 @@ describe('Analysis panel estimates', () => {
     expect(html).toContain('logS (est.)');
   });
 });
+
+describe('Analysis panel ion list and name', () => {
+  it('raises the charge of each ion in the list, and keeps the value as typed', async () => {
+    const { adductText, ionSelectHtml } = await import('../src/ui/analysis-panel');
+    expect(adductText('[M+H]+')).toBe('[M+H]⁺');
+    expect(adductText('[M+2H]2+')).toBe('[M+2H]²⁺');
+    expect(adductText('[M-H]-')).toBe('[M−H]⁻');
+    expect(adductText('[M+H-H2O]+')).toBe('[M+H−H2O]⁺');
+    const html = ionSelectHtml('[M+Na]+', ['[M+H]+', '[M+Na]+']);
+    expect(html).toContain('<option value="[M+Na]+" selected>[M+Na]⁺</option>');
+    // an ion typed elsewhere that isn't in the list is still offered
+    expect(ionSelectHtml('[M+Li]+', ['[M+H]+'])).toContain('value="[M+Li]+" selected');
+  });
+
+  it('writes the name after the formula, not bold, with no SMILES or Calculator button', async () => {
+    const { analysisHtml, nameHtml } = await import('../src/ui/analysis-panel');
+    const name = nameHtml({ kind: 'found', name: 'pyridine' });
+    const html = analysisHtml({ formula: 'C5H5N', exact: 79.0422, mw: 79.1, charge: 0, smiles: 'c1ccncc1' }, 0, '[M+H]+', { name, ions: ['[M+H]+'] });
+    expect(html).toMatch(/<div class="formula"><b>C<sub>5<\/sub>H<sub>5<\/sub>N<\/b><span class="an-iupac"> – <span class="iupac"[^>]*>pyridine<\/span>/);
+    expect(html).not.toContain('c1ccncc1');
+    expect(html).not.toContain('Calculator');
+    expect(html).toContain('select data-adduct');
+    expect(nameHtml({ kind: 'idle' })).toBe('');
+  });
+});

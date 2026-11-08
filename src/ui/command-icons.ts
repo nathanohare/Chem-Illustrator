@@ -57,6 +57,7 @@ export const COMMAND_ICONS: Record<string, string> = {
   'find-cas': svg('<text x="12" y="16" text-anchor="middle" font-size="9" font-weight="700" fill="currentColor" font-family="system-ui">CAS</text>'),
   'pubchem-lookup': svg('<circle cx="10" cy="10" r="6"/><path d="M14.5 14.5l6 6" stroke-linecap="round"/><polygon points="10,7 12.6,8.5 12.6,11.5 10,13 7.4,11.5 7.4,8.5" stroke-width="1.1"/>'),
   'knowledge-base': svg('<path d="M12 6C9 4 5 4 3 5v14c2-1 6-1 9 1 3-2 7-2 9-1V5c-2-1-6-1-9 1z"/><path d="M12 6v14"/>'),
+  'lab-calculator': svg('<rect x="5" y="2.5" width="14" height="19" rx="1.5"/><rect x="7.5" y="5" width="9" height="4" stroke-width="1.2"/><path d="M8.5 12.5h.01M12 12.5h.01M15.5 12.5h.01M8.5 15.5h.01M12 15.5h.01M15.5 15.5h.01M8.5 18.5h.01M12 18.5h.01M15.5 18.5h.01" stroke-width="2.2"/>'),
   'compound-library': svg('<rect x="3" y="4" width="4" height="16"/><rect x="8.5" y="4" width="4" height="16"/><path d="M14.5 5.5l3.8-1 3.2 14.6-3.8 1z"/>'),
   'torsion-chart': svg('<path d="M3 20h18M3 4v16" stroke-width="1.2"/><path d="M4 9c2 9 4 9 6 0s4-9 6 0 3 6 5 4"/>'),
   'newman-projection': svg('<circle cx="12" cy="12" r="6"/><path d="M12 12V3M12 12l-7.8 4.5M12 12l7.8 4.5"/><path d="M12 6l0 0M6.8 9l-4.3-2.5M17.2 9l4.3-2.5M12 18v3.5" />'),
@@ -167,7 +168,15 @@ COMMAND_ICONS['depth-shading-settings'] ??= corner('depth-shading', SLIDERS);
 
 /** Pictures used on the Canvas ribbon only (the toolboxes show these commands by name, beside others like them). */
 export const RIBBON_ONLY_ICONS: Record<string, string> = {
-  'centre-highlight': svg('<path d="M3 9h18M3 15h18" stroke-width="1.6"/><path d="M3 12h18" stroke-width="5" stroke-opacity=".3"/>'),
+  'centre-highlight': svg('<path d="M3 9h18M3 15h18" stroke-width="1.6"/><path d="M3 12h18" stroke-width="5" stroke-opacity=".3"/>'),  'predict-nmr': svg('<path d="M2 20.5h20"/><path d="M3 20h3l1-1.5 1 1.5h3l1.2-14 1.2 14h1.8l1-7 1 7h1.6l.8-3.5.8 3.5H21"/>'),
+  'nmr-menu': svg('<path d="M2 20.5h20"/><path d="M3 20h3l1-1.5 1 1.5h3l1.2-14 1.2 14h1.8l1-7 1 7h1.6l.8-3.5.8 3.5H21"/>'),
+  'nmr-1h': svg('<text x="5" y="10" font-size="8" fill="currentColor" stroke="none" font-family="system-ui,sans-serif">1</text><text x="11" y="19" font-size="14" font-weight="600" fill="currentColor" stroke="none" font-family="system-ui,sans-serif">H</text>'),
+  'nmr-13c': svg('<text x="2" y="10" font-size="8" fill="currentColor" stroke="none" font-family="system-ui,sans-serif">13</text><text x="11" y="19" font-size="14" font-weight="600" fill="currentColor" stroke="none" font-family="system-ui,sans-serif">C</text>'),
+  'nmr-solvent': svg('<path d="M9 3h6M10 3v6l-5 9.5A1.7 1.7 0 0 0 6.5 21h11a1.7 1.7 0 0 0 1.5-2.5L14 9V3"/><path d="M7.2 15h9.6"/>'),
+  'nmr-window': svg('<rect x="2.5" y="4" width="19" height="16" rx="1.5"/><path d="M5 17h3l1.2-8 1.2 8h2l1-4 1 4h4.6"/>'),
+  'nmr-marks': svg('<circle cx="8" cy="12" r="4.5"/><path d="M14 12h7M17.5 8.5v7"/>'),
+  'nmr-check': svg('<path d="M4 12.5l5 5L20 6.5"/>'),
+  'nmr-settings': svg('<circle cx="12" cy="12" r="3.2"/><path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1"/>'),
 };
 
 /** The icon for a command on a toolbox button, if it has one. */

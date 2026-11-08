@@ -357,7 +357,8 @@ export class Renderer {
     if (spec) {
       Object.assign(spec, labelLook(a));
       const weight = labelBold(doc.style, a) ? 'bold' : '';
-      layout = layoutLabel(spec, labelBonds(doc, a), size, (t, s) => measureText(t, s, stack, weight), a.just);
+      // (a piece bold or italic by hand is measured so: a bold Boc doesn't run into the HN after it)
+      layout = layoutLabel(spec, labelBonds(doc, a), size, (t, s, l) => measureText(t, s, stack, [l?.italic && 'italic', (weight || l?.bold) && 'bold'].filter(Boolean).join(' ')), a.just);
       if (weight) layout.bold = true;
       const m = atomMargin(doc.style, a);
       for (const b of layout.boxes) boxes.push({ x1: a.x + b.x1 - m, y1: a.y + b.y1 - m, x2: a.x + b.x2 + m, y2: a.y + b.y2 + m });
@@ -548,7 +549,8 @@ export class Renderer {
       const ds = doc.style, w = bondWidths(ds, b);
       let h = w.lineWidth / 2;
       if (b.order === 1 || b.order === PARTIAL || b.display === 'dative' || (b.order === 1.5 && b.plain && !b.circle) || this.bondInfo(doc, b).pi) {
-        if (b.display === 'dative' || b.display === 'dash' || b.display === 'hash' || b.display === 'hashWedge' || b.display === 'wavy' || b.display === 'wavyWedge' || b.display === 'hydrogen' || b.display === 'ionic') continue;
+        // (a dashed bond starts and ends with a dash, so it meets other lines as a plain one does)
+        if (b.display === 'dative' || b.display === 'hash' || b.display === 'hashWedge' || b.display === 'wavy' || b.display === 'wavyWedge' || b.display === 'hydrogen') continue;
         if (b.display === 'bold') h = w.boldWidth / 2;
         else if (b.display === 'wedge' && b.a2 === a.id) h = wedgeWidth({ ...ds, boldWidth: w.boldWidth }) / 2;
       } else if (b.order === 2 || (b.order === 1.5 && !b.circle && !b.plain)) {
@@ -1027,6 +1029,8 @@ export class Renderer {
           const f = `${r.italic ? 'italic ' : ''}${info.layout.bold || r.bold ? 'bold ' : ''}${r.size}px ${info.stack}`;
           if (f !== curFont) { ctx.font = f; curFont = f; }
           ctx.fillText(r.text, a.x + r.dx, a.y + r.dy);
+          // underlined by hand (Ctrl+U on part of the label)
+          if (r.underline) ctx.fillRect(a.x + r.dx, a.y + r.dy + r.size * 0.12, ctx.measureText(r.text).width, Math.max(0.5, r.size * 0.06));
         }
       } else if (a.charge && a.z === 6 && !a.hideCharge) {
         curFont = this.drawCarbonCharge(ctx, doc, a);
@@ -1255,7 +1259,17 @@ export class Renderer {
       const u = norm(sub(far, at)), n = perp(u);
       ends.push({ id: bid, at, u, h, farPlus: add(far, mul(n, hf)), farMinus: sub(far, mul(n, hf)) });
     }
-    if (ends.length < 2 || !ends.some((x) => x.id === bondId)) return null;
+    if (!ends.some((x) => x.id === bondId)) return null;
+    // the plain and dashed lines ending here, so the band is mitred into them too
+    for (const le of this.joinsAt(doc, atom)) {
+      if (ends.some((x) => x.id === le.id)) continue;
+      const b = doc.bonds.get(le.id), o = b && doc.atoms.get(b.a1 === atom.id ? b.a2 : b.a1);
+      // (a wedge's narrow end, or a hollow wedge's outline, is no straight line to mitre into)
+      if (!b || !o || b.display === 'wedge' || b.display === 'hollowWedge') continue;
+      const n = perp(le.u), far = { x: o.x, y: o.y };
+      ends.push({ id: le.id, at: { x: atom.x, y: atom.y }, u: le.u, h: le.h, farPlus: add(far, mul(n, le.h)), farMinus: sub(far, mul(n, le.h)), line: true });
+    }
+    if (ends.length < 2) return null;
     return joinWideEnds(ends).get(bondId) ?? null;
   }
 
@@ -2737,6 +2751,9 @@ export class Renderer {
       traceSteps(ctx, body);
     }
     ctx.lineWidth = width;
+    // glassware is drawn with round joins and ends (as PowerPoint gets it), so thick lines stay neat at the lips and tips
+    const glass = def.group === 'Lab equipment', join = ctx.lineJoin, cap = ctx.lineCap;
+    if (glass) { ctx.lineJoin = 'round'; ctx.lineCap = 'round'; }
     // soft edges soften the outline away too
     if (width > 0 && !s.softEdge) ctx.stroke();
     if (out.lines && width > 0) {
@@ -2744,6 +2761,7 @@ export class Renderer {
       traceSteps(ctx, moveSteps(out.lines, x, y));
       ctx.stroke();
     }
+    if (glass) { ctx.lineJoin = join; ctx.lineCap = cap; }
     if (s.text && this.geoEdit !== s.id) {
       const g = this.geoText(s);
       if (g) drawLayout(ctx, g.lay, g.x, g.y);

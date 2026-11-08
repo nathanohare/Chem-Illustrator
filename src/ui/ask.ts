@@ -1,6 +1,7 @@
 // Small windows that ask for a value or two (Rotate…, Scale…). The desktop app can't rely on
 // the browser's own prompt boxes, so these are drawn by the page.
 
+import { keepInRange } from './num-range';
 import { previewSlot, showDialog } from './dialog-host';
 import { addInfo } from './info-tip';
 export interface Field {
@@ -9,10 +10,13 @@ export interface Field {
   value: string;
   /** Text after the box, such as a unit. */
   unit?: string;
-  /** A checkbox gives 'true' or 'false'. */
-  type?: 'number' | 'text' | 'textarea' | 'checkbox' | 'color' | 'password';
+  /** A checkbox gives 'true' or 'false'. A heading is a subheading over the fields after it (no box; its help goes in an "i" beside it). */
+  type?: 'number' | 'text' | 'textarea' | 'checkbox' | 'color' | 'password' | 'heading';
   /** Grey example text shown in an empty box. */
   placeholder?: string;
+  /** A number box's range: what is typed outside it is brought back to the nearest end. */
+  min?: number;
+  max?: number;
   /** Pick one of these instead of typing. */
   options?: { value: string; label: string }[];
   /** Offered in a list under a text box, which can still be typed in. */
@@ -21,6 +25,8 @@ export interface Field {
   help?: string;
   /** A small picture of the choice beside the box, drawn again as it changes. */
   inline?: (value: string) => Node;
+  /** A drop-down list only as wide as its choices, with its picture (`inline`) right beside it. */
+  short?: boolean;
   /** A drop-down list of its own on the same row, after the label (a checkbox's units, say); its value comes back under its own name. */
   beside?: { name: string; value: string; options: { value: string; label: string }[]; label: string };
 }
@@ -30,7 +36,8 @@ export interface AskPreview {
   title: string;
   /** Under the fields, rather than in the Settings window's right-hand pane. */
   below?: boolean;
-  draw: (values: Record<string, string>) => Node;
+  /** `focus` names the field being hovered or typed in (a preview can show what it sets). */
+  draw: (values: Record<string, string>, focus?: string) => Node;
 }
 
 /** Buttons in an ask window that act at once rather than when it is saved. */
@@ -72,8 +79,17 @@ export function ask(title: string, fields: Field[], opts: { ok?: string; note?: 
     const inputs = new Map<string, HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement>();
     const inlines: (() => void)[] = [];
     for (const f of fields) {
+      if (f.type === 'heading') {
+        const sub = document.createElement('h3');
+        sub.className = 'ask-subhead';
+        sub.textContent = f.label;
+        if (f.help) addInfo(sub, f.help);
+        form.append(sub);
+        continue;
+      }
       const row = document.createElement('label');
       row.className = 'ask-row';
+      row.dataset.field = f.name;
       const name = document.createElement('span');
       name.className = 'ask-name';
       name.textContent = f.label;
@@ -99,7 +115,10 @@ export function ask(title: string, fields: Field[], opts: { ok?: string; note?: 
       } else {
         const inp = document.createElement('input');
         inp.type = f.type ?? 'text';
-        if (inp.type === 'number') inp.step = 'any';
+        if (inp.type === 'number') {
+          inp.step = 'any';
+          if (f.min !== undefined || f.max !== undefined) keepInRange(inp, f.min ?? -Infinity, f.max ?? Infinity, f.unit);
+        }
         inp.value = f.value;
         if (f.placeholder) inp.placeholder = f.placeholder;
         if (f.suggestions) {
@@ -132,7 +151,14 @@ export function ask(title: string, fields: Field[], opts: { ok?: string; note?: 
         const slot = document.createElement('span');
         slot.className = 'ask-inline';
         slot.setAttribute('aria-hidden', 'true');
-        row.append(slot);
+        if (f.short && f.type !== 'checkbox') {
+          // the list and its picture together, in the boxes' column
+          const pair = document.createElement('span');
+          pair.className = 'ask-pair';
+          input.replaceWith(pair);
+          pair.append(input, slot);
+        } else row.append(slot);
+        if (f.type === 'checkbox') row.classList.add('ask-has-inline');
         const el = input;
         inlines.push(() => slot.replaceChildren(f.inline!(el instanceof HTMLInputElement && el.type === 'checkbox' ? String(el.checked) : el.value)));
       }
@@ -221,14 +247,28 @@ export function ask(title: string, fields: Field[], opts: { ok?: string; note?: 
         form.insertBefore(big, form.querySelector('.ask-row'));
       }
     }
+    // the field being pointed at, or else typed in: the preview can show what it sets
+    let hovered: string | undefined, focused: string | undefined, shownFor: string | undefined;
+    const fieldOf = (t: EventTarget | null) => (t instanceof Element ? (t.closest<HTMLElement>('[data-field]')?.dataset.field) : undefined);
+    const drawBig = () => {
+      shownFor = hovered ?? focused;
+      if (big && opts.preview) big.replaceChildren(opts.preview.draw(values(), shownFor));
+    };
     const redraw = () => {
       for (const f of inlines) f();
-      if (big && opts.preview) big.replaceChildren(opts.preview.draw(values()));
+      drawBig();
     };
     if (inlines.length || big) {
       redraw();
       form.addEventListener('input', redraw);
       form.addEventListener('change', redraw);
+    }
+    if (big) {
+      const moved = () => { if ((hovered ?? focused) !== shownFor) drawBig(); };
+      form.addEventListener('mouseover', (e) => { hovered = fieldOf(e.target); moved(); });
+      form.addEventListener('mouseleave', () => { hovered = undefined; moved(); });
+      form.addEventListener('focusin', (e) => { focused = fieldOf(e.target); moved(); });
+      form.addEventListener('focusout', (e) => { if (!fieldOf(e.relatedTarget)) { focused = undefined; moved(); } });
     }
     const first = form.querySelector<HTMLInputElement | HTMLTextAreaElement>('input:not([type=checkbox]), textarea');
     first?.focus();

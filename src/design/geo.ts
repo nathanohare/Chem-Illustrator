@@ -112,6 +112,44 @@ function star(w: number, h: number, n: number, inner: number | null): [number, n
 }
 
 /** Scale an outline drawn in a 0…1 square to w × h. */
+// ---------------------------------------------------------------- glassware pieces (unit box)
+
+/** The open top of a neck at x, from its flared lip at `top` down to where the lip ends: `out` is -1 for the left wall, 1 for the right; the lip reaches fx out and fy down. Starts the path. */
+function lipDown(x: number, out: -1 | 1, top = 0, fx = 0.035, fy = fx): GeoStep[] {
+  return [['M', x + out * fx, top], ['L', x, top + fy]];
+}
+
+/** The same lip, climbing the wall at x to the top (ends the wall). */
+function lipUp(x: number, out: -1 | 1, top = 0, fx = 0.035, fy = fx): GeoStep[] {
+  return [['L', x, top + fy], ['L', x + out * fx, top]];
+}
+
+/** A liquid's level across an elliptical bulb, at height y. */
+function chord(cx: number, cy: number, rx: number, ry: number, y: number): GeoStep[] {
+  const d = rx * Math.sqrt(Math.max(0, 1 - ((y - cy) / ry) ** 2));
+  return [['M', cx - d, y], ['L', cx + d, y]];
+}
+
+/** A stopcock on a vertical stem: a barrel (half-width rw, half-height rh) round it and a key to the right. */
+function stopcock(cx: number, cy: number, rw: number, rh: number, reach: number): GeoStep[] {
+  return [
+    ...poly([[cx - rw, cy - rh], [cx + rw, cy - rh], [cx + rw, cy + rh], [cx - rw, cy + rh]]),
+    ['M', cx + rw, cy], ['L', cx + rw + reach, cy], ['M', cx + rw + reach, cy - 1.6 * rh], ['L', cx + rw + reach, cy + 1.6 * rh],
+  ];
+}
+
+/** Where a cubic Bézier (four points) crosses height y, as x (by sampling: close enough for a liquid level). */
+function cubicXAtY(p: [number, number][], y: number): number {
+  let best = p[0][0], err = Infinity;
+  for (let i = 0; i <= 200; i++) {
+    const t = i / 200, u = 1 - t;
+    const k = [u * u * u, 3 * u * u * t, 3 * u * t * t, t * t * t];
+    const py = k.reduce((a, c, j) => a + c * p[j][1], 0);
+    if (Math.abs(py - y) < err) { err = Math.abs(py - y); best = k.reduce((a, c, j) => a + c * p[j][0], 0); }
+  }
+  return best;
+}
+
 function scaled(steps: GeoStep[], w: number, h: number): GeoStep[] {
   return steps.map((s) => {
     if (s[0] === 'Z') return s;
@@ -235,77 +273,137 @@ export const GEOS: GeoDef[] = [
   },
   // ---- action buttons: a click in the slide show goes where the button says (Shape.link)
   ...actionButtons(),
-  // ---- lab equipment (outlines; text goes beside them more often than in them)
+  // ---- lab equipment (outlines; text goes beside them more often than in them). Each has a
+  // flared lip where glass is open, a liquid level where it holds something, and stopcocks drawn
+  // as a barrel and key, so a row of them reads as one set at any line width.
   {
     id: 'labRbf', name: 'Round-bottom flask', group: 'Lab equipment', outline: true, size: [54, 72], keywords: 'rbf flask reaction',
     draw: (w, h) => {
-      // a neck, and a round bulb from where the neck meets it on the left, round the bottom, to the right
+      // a neck with a lip, and a round bulb from where the neck meets it on the left, round the bottom, to the right
       // the bulb is as wide as the box and round at the usual size (54 × 72)
-      const rx = 0.48, ry = 0.36, cy = 1 - ry - 0.005, nx = 0.11;
+      const rx = 0.47, ry = 0.35, cy = 1 - ry - 0.008, nx = 0.1;
       const t = Math.asin(nx / rx);
       const y0 = cy - ry * Math.cos(t);
       return {
-        body: scaled([['M', 0.5 - nx, 0], ['L', 0.5 - nx, y0], ...arc(0.5, cy, rx, ry, -Math.PI / 2 - t, -Math.PI / 2 + t - 2 * Math.PI).slice(1), ['L', 0.5 + nx, 0]], w, h),
-        lines: scaled([['M', 0.5 - nx - 0.04, 0], ['L', 0.5 + nx + 0.04, 0]], w, h),
+        body: scaled([...lipDown(0.5 - nx, -1), ['L', 0.5 - nx, y0], ...arc(0.5, cy, rx, ry, -Math.PI / 2 - t, -Math.PI / 2 + t - 2 * Math.PI).slice(1), ...lipUp(0.5 + nx, 1)], w, h),
+        lines: scaled(chord(0.5, cy, rx, ry, cy + 0.3 * ry), w, h),
       };
     },
     text: [0.2, 0.5, 0.8, 0.9],
   },
   {
+    id: 'labRbf3', name: 'Three-neck flask', group: 'Lab equipment', outline: true, size: [72, 72], keywords: 'three neck 3-neck round bottom flask reaction',
+    draw: (w, h) => {
+      const cx = 0.5, cy = 0.6, rx = 0.4, ry = 0.38;
+      const at = (x: number) => -Math.acos((x - cx) / rx);
+      const yAt = (x: number) => cy + ry * Math.sin(at(x));
+      const side = 0.14;
+      return {
+        body: scaled([
+          ...lipDown(0.18, -1, side), ...arc(cx, cy, rx, ry, at(0.18), at(0.82) - 2 * Math.PI), ...lipUp(0.82, 1, side),
+          ...lipDown(0.72, -1, side), ['L', 0.72, yAt(0.72)], ...arc(cx, cy, rx, ry, at(0.72), at(0.56)).slice(1), ...lipUp(0.56, 1),
+          ...lipDown(0.44, -1), ['L', 0.44, yAt(0.44)], ...arc(cx, cy, rx, ry, at(0.44), at(0.28)).slice(1), ...lipUp(0.28, 1, side),
+        ], w, h),
+        lines: scaled(chord(cx, cy, rx, ry, cy + 0.35 * ry), w, h),
+      };
+    },
+    text: [0.2, 0.55, 0.8, 0.9],
+  },
+  {
     id: 'labErlenmeyer', name: 'Erlenmeyer flask', group: 'Lab equipment', outline: true, size: [54, 72], keywords: 'conical flask',
-    draw: (w, h) => ({
-      body: scaled([['M', 0.39, 0], ['L', 0.39, 0.33], ['L', 0.04, 0.92], ['C', 0.0, 0.99, 0.03, 1, 0.1, 1], ['L', 0.9, 1], ['C', 0.97, 1, 1.0, 0.99, 0.96, 0.92], ['L', 0.61, 0.33], ['L', 0.61, 0]], w, h),
-      lines: scaled([['M', 0.35, 0], ['L', 0.65, 0], ['M', 0.3, 0.7], ['L', 0.42, 0.7], ['M', 0.25, 0.8], ['L', 0.37, 0.8]], w, h),
-    }),
+    draw: (w, h) => {
+      const level = 0.72, x = 0.39 - ((level - 0.33) / 0.59) * 0.35;
+      return {
+        body: scaled([...lipDown(0.39, -1), ['L', 0.39, 0.33], ['L', 0.04, 0.92], ['C', 0.0, 0.99, 0.03, 1, 0.1, 1], ['L', 0.9, 1], ['C', 0.97, 1, 1.0, 0.99, 0.96, 0.92], ['L', 0.61, 0.33], ...lipUp(0.61, 1)], w, h),
+        lines: scaled([['M', x, level], ['L', 1 - x, level]], w, h),
+      };
+    },
     text: [0.2, 0.6, 0.8, 0.95],
+  },
+  {
+    id: 'labFilterFlask', name: 'Filter flask', group: 'Lab equipment', outline: true, size: [64, 72], keywords: 'buchner side arm vacuum filtration suction flask',
+    draw: (w, h) => {
+      const level = 0.8, x = 0.33 - ((level - 0.3) / 0.6) * 0.28;
+      return {
+        body: scaled([
+          ...lipDown(0.33, -1), ['L', 0.33, 0.3], ['L', 0.05, 0.9], ['C', 0.02, 0.98, 0.04, 1, 0.1, 1], ['L', 0.74, 1], ['C', 0.8, 1, 0.82, 0.98, 0.79, 0.9],
+          ['L', 0.51, 0.3], ['L', 0.51, 0.22], ['L', 0.98, 0.22], ['M', 0.98, 0.15], ['L', 0.51, 0.15], ...lipUp(0.51, 1),
+        ], w, h),
+        lines: scaled([['M', x, level], ['L', 0.84 - x, level], ['M', 0.9, 0.13], ['L', 0.9, 0.24]], w, h),
+      };
+    },
+    text: [0.15, 0.6, 0.7, 0.95],
   },
   {
     id: 'labBeaker', name: 'Beaker', group: 'Lab equipment', outline: true, size: [54, 64], keywords: 'glass',
     draw: (w, h) => ({
-      body: scaled([['M', 0.02, 0], ['L', 0.1, 0.06], ['L', 0.1, 0.95], ['C', 0.1, 0.99, 0.12, 1, 0.16, 1], ['L', 0.84, 1], ['C', 0.88, 1, 0.9, 0.99, 0.9, 0.95], ['L', 0.9, 0]], w, h),
-      lines: scaled([['M', 0.72, 0.3], ['L', 0.9, 0.3], ['M', 0.78, 0.45], ['L', 0.9, 0.45], ['M', 0.72, 0.6], ['L', 0.9, 0.6], ['M', 0.78, 0.75], ['L', 0.9, 0.75]], w, h),
+      body: scaled([['M', 0.02, 0], ['L', 0.1, 0.06], ['L', 0.1, 0.95], ['C', 0.1, 0.99, 0.12, 1, 0.16, 1], ['L', 0.84, 1], ['C', 0.88, 1, 0.9, 0.99, 0.9, 0.95], ['L', 0.9, 0.04], ['L', 0.94, 0]], w, h),
+      lines: scaled([['M', 0.1, 0.45], ['L', 0.9, 0.45], ['M', 0.72, 0.25], ['L', 0.9, 0.25], ['M', 0.78, 0.6], ['L', 0.9, 0.6], ['M', 0.72, 0.75], ['L', 0.9, 0.75]], w, h),
     }),
     text: [0.15, 0.4, 0.7, 0.95],
   },
   {
     id: 'labVial', name: 'Vial', group: 'Lab equipment', outline: true, size: [30, 64], keywords: 'sample bottle',
     draw: (w, h) => ({
-      body: scaled([['M', 0.12, 0.22], ['L', 0.12, 0.95], ['C', 0.12, 0.99, 0.16, 1, 0.22, 1], ['L', 0.78, 1], ['C', 0.84, 1, 0.88, 0.99, 0.88, 0.95], ['L', 0.88, 0.22], ['Z']], w, h),
-      lines: scaled([['M', 0.2, 0.22], ['L', 0.2, 0], ['L', 0.8, 0], ['L', 0.8, 0.22], ['M', 0.2, 0.07], ['L', 0.8, 0.07], ['M', 0.2, 0.14], ['L', 0.8, 0.14]], w, h),
+      body: scaled([['M', 0.14, 0.2], ['L', 0.14, 0.95], ['C', 0.14, 0.99, 0.18, 1, 0.24, 1], ['L', 0.76, 1], ['C', 0.82, 1, 0.86, 0.99, 0.86, 0.95], ['L', 0.86, 0.2], ['Z']], w, h),
+      lines: scaled([
+        ['M', 0.1, 0.2], ['L', 0.1, 0.03], ['C', 0.1, 0.01, 0.12, 0, 0.15, 0], ['L', 0.85, 0], ['C', 0.88, 0, 0.9, 0.01, 0.9, 0.03], ['L', 0.9, 0.2], ['Z'],
+        ['M', 0.32, 0.04], ['L', 0.32, 0.16], ['M', 0.5, 0.04], ['L', 0.5, 0.16], ['M', 0.68, 0.04], ['L', 0.68, 0.16],
+        ['M', 0.14, 0.62], ['L', 0.86, 0.62],
+      ], w, h),
     }),
     text: [0.15, 0.4, 0.85, 0.9],
   },
   {
     id: 'labTestTube', name: 'Test tube', group: 'Lab equipment', outline: true, size: [22, 72], keywords: 'tube',
     draw: (w, h) => ({
-      body: [['M', 0.1 * w, 0], ['L', 0.1 * w, h - 0.4 * w], ...arc(w / 2, h - 0.4 * w, 0.4 * w, 0.4 * w, Math.PI, 0).slice(1), ['L', 0.9 * w, 0]],
-      lines: [['M', 0, 0], ['L', w, 0]],
+      body: [['M', 0, 0], ['L', 0.1 * w, 0.03 * h], ['L', 0.1 * w, h - 0.4 * w], ...arc(w / 2, h - 0.4 * w, 0.4 * w, 0.4 * w, Math.PI, 0).slice(1), ['L', 0.9 * w, 0.03 * h], ['L', w, 0]],
+      lines: [['M', 0.1 * w, 0.62 * h], ['L', 0.9 * w, 0.62 * h]],
     }),
     text: [0.1, 0.4, 0.9, 0.9],
   },
   {
     id: 'labSepFunnel', name: 'Separatory funnel', group: 'Lab equipment', outline: true, size: [44, 90], keywords: 'extraction workup',
-    draw: (w, h) => ({
-      body: scaled([['M', 0.42, 0], ['L', 0.42, 0.08], ['C', 0.1, 0.12, 0.0, 0.3, 0.12, 0.45], ['L', 0.46, 0.78], ['L', 0.46, 1], ['L', 0.54, 1], ['L', 0.54, 0.78], ['L', 0.88, 0.45], ['C', 1.0, 0.3, 0.9, 0.12, 0.58, 0.08], ['L', 0.58, 0]], w, h),
-      lines: scaled([['M', 0.36, 0], ['L', 0.64, 0], ['M', 0.3, 0.86], ['L', 0.7, 0.86], ['M', 0.3, 0.84], ['L', 0.3, 0.88], ['M', 0.7, 0.84], ['L', 0.7, 0.88]], w, h),
-    }),
-    text: [0.2, 0.2, 0.8, 0.5],
+    draw: (w, h) => {
+      // a pear-shaped bulb (the same curve on each side), a stopper, a stopcock and the boundary between the layers
+      const left: [number, number][] = [[0.05, 0.37], [0.08, 0.49], [0.3, 0.63], [0.47, 0.72]];
+      const xb = cubicXAtY(left, 0.47);
+      return {
+        body: scaled([
+          ...lipDown(0.42, -1, 0.06), ['L', 0.42, 0.1], ['C', 0.14, 0.13, 0.02, 0.25, 0.05, 0.37], ['C', 0.08, 0.49, 0.3, 0.63, 0.47, 0.72], ['L', 0.47, 1],
+          ['L', 0.53, 0.97], ['L', 0.53, 0.72], ['C', 0.7, 0.63, 0.92, 0.49, 0.95, 0.37], ['C', 0.98, 0.25, 0.86, 0.13, 0.58, 0.1], ...lipUp(0.58, 1, 0.06),
+        ], w, h),
+        lines: scaled([
+          ['M', 0.44, 0.07], ['L', 0.44, 0.03], ['C', 0.44, 0.0, 0.56, 0.0, 0.56, 0.03], ['L', 0.56, 0.07],
+          ['M', xb, 0.47], ['L', 1 - xb, 0.47],
+          ...stopcock(0.5, 0.82, 0.11, 0.022, 0.14),
+        ], w, h),
+      };
+    },
+    text: [0.2, 0.2, 0.8, 0.45],
   },
   {
     id: 'labCondenser', name: 'Condenser', group: 'Lab equipment', outline: true, size: [36, 108], keywords: 'reflux water jacket liebig',
     draw: (w, h) => ({
-      body: scaled([['M', 0.3, 0.12], ['L', 0.7, 0.12], ['L', 0.7, 0.88], ['L', 0.3, 0.88], ['Z']], w, h),
-      lines: scaled([['M', 0.42, 0], ['L', 0.42, 1], ['M', 0.58, 0], ['L', 0.58, 1], ['M', 0.7, 0.2], ['L', 1, 0.2], ['M', 0.7, 0.25], ['L', 1, 0.25], ['M', 0.3, 0.75], ['L', 0, 0.75], ['M', 0.3, 0.8], ['L', 0, 0.8]], w, h),
+      body: scaled([['M', 0.3, 0.15], ['C', 0.3, 0.13, 0.32, 0.12, 0.36, 0.12], ['L', 0.64, 0.12], ['C', 0.68, 0.12, 0.7, 0.13, 0.7, 0.15], ['L', 0.7, 0.85], ['C', 0.7, 0.87, 0.68, 0.88, 0.64, 0.88], ['L', 0.36, 0.88], ['C', 0.32, 0.88, 0.3, 0.87, 0.3, 0.85], ['Z']], w, h),
+      lines: scaled([
+        ['M', 0.38, 0], ['L', 0.42, 0.015], ['L', 0.42, 1], ['M', 0.62, 0], ['L', 0.58, 0.015], ['L', 0.58, 1],
+        ['M', 0.7, 0.18], ['L', 0.98, 0.18], ['M', 0.7, 0.24], ['L', 0.98, 0.24], ['M', 0.3, 0.76], ['L', 0.02, 0.76], ['M', 0.3, 0.82], ['L', 0.02, 0.82],
+      ], w, h),
     }),
     text: [0.3, 0.3, 0.7, 0.7],
   },
   {
     id: 'labColumn', name: 'Chromatography column', group: 'Lab equipment', outline: true, size: [30, 108], keywords: 'flash silica purification',
     draw: (w, h) => ({
-      body: scaled([['M', 0.2, 0], ['L', 0.2, 0.82], ['L', 0.44, 0.88], ['L', 0.44, 1], ['L', 0.56, 1], ['L', 0.56, 0.88], ['L', 0.8, 0.82], ['L', 0.8, 0]], w, h),
-      lines: scaled([['M', 0.1, 0], ['L', 0.9, 0], ['M', 0.2, 0.4], ['L', 0.8, 0.4], ['M', 0.2, 0.78], ['L', 0.8, 0.78], ['M', 0.25, 0.92], ['L', 0.75, 0.92]], w, h),
+      body: scaled([...lipDown(0.22, -1, 0, 0.08, 0.02), ['L', 0.22, 0.8], ['L', 0.44, 0.86], ['L', 0.44, 1], ['L', 0.56, 1], ['L', 0.56, 0.86], ['L', 0.78, 0.8], ...lipUp(0.78, 1, 0, 0.08, 0.02)], w, h),
+      lines: scaled([
+        // the solvent above, a layer of sand, the silica and sand under it
+        ['M', 0.22, 0.1], ['L', 0.78, 0.1], ['M', 0.22, 0.3], ['L', 0.78, 0.3], ['M', 0.22, 0.34], ['L', 0.78, 0.34], ['M', 0.22, 0.74], ['L', 0.78, 0.74],
+        ...stopcock(0.5, 0.92, 0.14, 0.017, 0.2),
+      ], w, h),
     }),
-    text: [0.2, 0.45, 0.8, 0.75],
+    text: [0.2, 0.36, 0.8, 0.72],
   },
   {
     id: 'labTlc', name: 'TLC plate', group: 'Lab equipment', size: [44, 72], keywords: 'thin layer chromatography rf',
@@ -338,8 +436,21 @@ export const GEOS: GeoDef[] = [
   },
   {
     id: 'labFunnel', name: 'Funnel', group: 'Lab equipment', outline: true, size: [54, 64], keywords: 'filter filtration',
-    draw: (w, h) => ({ body: scaled([['M', 0, 0], ['L', 0.44, 0.55], ['L', 0.44, 1], ['L', 0.56, 1], ['L', 0.56, 0.55], ['L', 1, 0]], w, h), lines: scaled([['M', 0, 0], ['L', 1, 0]], w, h) }),
+    draw: (w, h) => ({
+      body: scaled([['M', 0.02, 0], ['L', 0.44, 0.55], ['L', 0.44, 0.97], ['L', 0.56, 1], ['L', 0.56, 0.55], ['L', 0.98, 0]], w, h),
+      // the folded filter paper
+      lines: scaled([['M', 0.02, 0], ['L', 0.98, 0], ['M', 0.12, 0.06], ['L', 0.5, 0.5], ['L', 0.88, 0.06]], w, h),
+    }),
     text: [0.2, 0.05, 0.8, 0.4],
+  },
+  {
+    id: 'labBuchner', name: 'Büchner funnel', group: 'Lab equipment', outline: true, size: [54, 64], keywords: 'buchner buechner vacuum filtration suction filter',
+    draw: (w, h) => ({
+      body: scaled([['M', 0.02, 0], ['L', 0.02, 0.3], ['C', 0.02, 0.34, 0.06, 0.36, 0.12, 0.38], ['L', 0.42, 0.5], ['L', 0.44, 0.6], ['L', 0.44, 1], ['L', 0.56, 0.96], ['L', 0.56, 0.6], ['L', 0.58, 0.5], ['L', 0.88, 0.38], ['C', 0.94, 0.36, 0.98, 0.34, 0.98, 0.3], ['L', 0.98, 0]], w, h),
+      // the perforated plate, with its holes
+      lines: scaled([['M', 0.02, 0.24], ['L', 0.98, 0.24], ...[0.2, 0.35, 0.5, 0.65, 0.8].flatMap((x): GeoStep[] => [['M', x, 0.24], ['L', x, 0.3]])], w, h),
+    }),
+    text: [0.1, 0.02, 0.9, 0.22],
   },
 ];
 
@@ -385,85 +496,88 @@ export function sliceDef(id: string): GeoDef {
   };
 }
 
-// ---------------------------------------------------------------- ring pieces and honeycomb cells (diagrams)
+// ---------------------------------------------------------------- ring segments and hexagon cells (diagrams)
 
-const SECTOR = 'sector:';
+// A ring segment's id carries its shape: "sector:<from>:<to>:<hole>", angles in degrees measured
+// clockwise on screen from three o'clock, and the hole's radius as a part of the outer radius
+// (0 makes a pie slice). Saved files keep the id, so the format stays as it is.
+const SECTOR_PREFIX = 'sector:';
+const DEG = Math.PI / 180;
 
-/**
- * A piece of a ring (a segmented ring's segment, a bending band's half turn): from angle `a0` to
- * `a1` (degrees, clockwise on the screen from three o'clock), its inner radius `k` of its outer
- * (0 for a slice of a pie). It is drawn to fill its box, which is the piece's own bounding box.
- */
-export function sectorId(a0: number, a1: number, k: number): string {
-  const q = (v: number) => Math.round(v * 100) / 100;
-  return `${SECTOR}${q(a0)}:${q(a1)}:${Math.round(Math.max(0, Math.min(0.95, k)) * 1000) / 1000}`;
+/** The id of a ring segment from angle `from` to `to` (degrees), its hole `hole` of the outer radius. */
+export function sectorId(from: number, to: number, hole: number): string {
+  const hundredths = (v: number) => Math.round(v * 100) / 100;
+  const holeAt = Math.round(Math.max(0, Math.min(0.95, hole)) * 1000) / 1000;
+  return SECTOR_PREFIX + [hundredths(from), hundredths(to), holeAt].join(':');
 }
 
-export const isSectorId = (id: string | undefined): id is string => !!id && id.startsWith(SECTOR);
-
-/** A sector's angles (radians) and inner radius from its id. */
-function sectorParts(id: string): { a0: number; a1: number; k: number } {
-  const [a, b, c] = id.slice(SECTOR.length).split(':').map(Number);
-  const a0 = isFinite(a) ? a : 0;
-  const a1 = isFinite(b) && b > a0 ? Math.min(b, a0 + 359.9) : a0 + 90;
-  return { a0: (a0 * Math.PI) / 180, a1: (a1 * Math.PI) / 180, k: isFinite(c) ? Math.max(0, Math.min(0.95, c)) : 0.5 };
+export function isSectorId(id: string | undefined): id is string {
+  return id?.startsWith(SECTOR_PREFIX) ?? false;
 }
 
-/** The bounding box of a ring piece round (0, 0) with outer radius 1. */
-export function sectorBox(a0: number, a1: number, k: number): Rect {
-  const pts: Vec[] = [];
-  const at = (r: number, a: number) => pts.push({ x: r * Math.cos(a), y: r * Math.sin(a) });
-  at(1, a0); at(1, a1);
-  if (k > 0) { at(k, a0); at(k, a1); } else pts.push({ x: 0, y: 0 });
-  // the outer arc's furthest points left, right, up and down, where it passes them
-  for (let q = Math.ceil(a0 / (Math.PI / 2) - 1e-9); q * (Math.PI / 2) <= a1 + 1e-9; q++) at(1, q * (Math.PI / 2));
-  return {
-    x1: Math.min(...pts.map((p) => p.x)), y1: Math.min(...pts.map((p) => p.y)),
-    x2: Math.max(...pts.map((p) => p.x)), y2: Math.max(...pts.map((p) => p.y)),
+/** A segment's angles in radians and its hole, read back from its id (with safe values for a damaged one). */
+function readSector(id: string): { a0: number; a1: number; k: number } {
+  const [from, to, hole] = id.slice(SECTOR_PREFIX.length).split(':').map(Number);
+  const start = Number.isFinite(from) ? from : 0;
+  const end = Number.isFinite(to) && to > start ? Math.min(to, start + 359.9) : start + 90;
+  return { a0: start * DEG, a1: end * DEG, k: Number.isFinite(hole) ? Math.min(0.95, Math.max(0, hole)) : 0.5 };
+}
+
+/** The box round a ring segment (angles in radians) centered on (0, 0) with an outer radius of 1. */
+export function sectorBox(from: number, to: number, hole: number): Rect {
+  const xs: number[] = [], ys: number[] = [];
+  const add = (r: number, a: number) => { xs.push(r * Math.cos(a)); ys.push(r * Math.sin(a)); };
+  for (const a of [from, to]) { add(1, a); add(hole, a); }
+  // the outer edge bulges furthest wherever it crosses a quarter turn (right, down, left, up)
+  const quarter = Math.PI / 2;
+  for (let a = Math.ceil(from / quarter - 1e-9) * quarter; a <= to + 1e-9; a += quarter) add(1, a);
+  return { x1: Math.min(...xs), y1: Math.min(...ys), x2: Math.max(...xs), y2: Math.max(...ys) };
+}
+
+/** The library shape for a ring segment, drawn to fill its own box. */
+export function sectorDef(shapeId: string): GeoDef {
+  const { a0, a1, k } = readSector(shapeId);
+  const box = sectorBox(a0, a1, k);
+  const wide = Math.max(1e-6, box.x2 - box.x1), tall = Math.max(1e-6, box.y2 - box.y1);
+  // the words go in a rectangle at the middle of the segment, as long as the segment runs along
+  // the ring and as deep as the ring is thick, turned the way the segment lies; it shrinks until
+  // its corners are all inside (a segment lying slantwise holds less)
+  const mid = (a0 + a1) / 2, rMid = (1 + k) / 2;
+  const along = Math.min(rMid * (a1 - a0), 2 * rMid), deep = 1 - k || 1;
+  const sin = Math.abs(Math.sin(mid)), cos = Math.abs(Math.cos(mid));
+  const cx = rMid * Math.cos(mid), cy = rMid * Math.sin(mid);
+  let half = { x: (0.45 * (sin * along + cos * deep)) / (sin + cos), y: (0.45 * (cos * along + sin * deep)) / (sin + cos) };
+  /** Is a point inside the segment, with a little margin from its curved edges? */
+  const inside = (x: number, y: number): boolean => {
+    const dist = Math.hypot(x, y);
+    if (dist > 0.98 || dist < k + 0.02) return false;
+    const turn = 2 * Math.PI;
+    return (((Math.atan2(y, x) - a0) % turn) + turn) % turn <= a1 - a0;
   };
+  const cornersIn = () => [-1, 1].every((sx) => [-1, 1].every((sy) => inside(cx + sx * half.x, cy + sy * half.y)));
+  for (let tries = 0; tries < 20 && !cornersIn(); tries++) half = { x: 0.9 * half.x, y: 0.9 * half.y };
+  const u = (x: number) => Math.min(1, Math.max(0, (x - box.x1) / wide));
+  const v = (y: number) => Math.min(1, Math.max(0, (y - box.y1) / tall));
+  const hx = Math.max(0.03, half.x), hy = Math.max(0.03, half.y);
+  const draw = (w: number, h: number) => {
+    const sx = w / wide, sy = h / tall, ox = -box.x1 * sx, oy = -box.y1 * sy;
+    const inner: GeoStep[] = k > 0 ? arc(ox, oy, k * sx, k * sy, a1, a0) : [['L', ox, oy]];
+    return { body: [...arc(ox, oy, sx, sy, a0, a1, true), ...inner, ['Z'] as GeoStep] };
+  };
+  return { id: shapeId, name: 'Ring segment', group: 'Basic shapes', size: [100, 100], draw, text: [u(cx - hx), v(cy - hy), u(cx + hx), v(cy + hy)] };
 }
 
-/** The library shape for a ring piece. */
-export function sectorDef(id: string): GeoDef {
-  const { a0, a1, k } = sectorParts(id);
-  const b = sectorBox(a0, a1, k);
-  const bw = Math.max(1e-6, b.x2 - b.x1), bh = Math.max(1e-6, b.y2 - b.y1);
-  // the words (or a structure) round the middle of the piece: along the ring as far as it is long,
-  // across it as far as it is thick, turned to whichever way the piece runs
-  const am = (a0 + a1) / 2, rm = (1 + k) / 2;
-  const along = Math.min(rm * (a1 - a0), 2 * rm), across = (1 - k) || 1;
-  const s = Math.abs(Math.sin(am)), c = Math.abs(Math.cos(am));
-  let hx = 0.45 * (s * along + c * across) / (s + c), hy = 0.45 * (c * along + s * across) / (s + c);
-  const cx = rm * Math.cos(am), cy = rm * Math.sin(am);
-  // made smaller until its corners are all inside the piece (a piece running slantwise holds less)
-  const inside = (x: number, y: number) => {
-    const r = Math.hypot(x, y);
-    let a = Math.atan2(y, x);
-    while (a < a0) a += 2 * Math.PI;
-    return r <= 0.98 && r >= k + 0.02 && a <= a1;
-  };
-  for (let i = 0; i < 20 && ![[-1, -1], [1, -1], [1, 1], [-1, 1]].every(([u, v]) => inside(cx + u * hx, cy + v * hy)); i++) { hx *= 0.9; hy *= 0.9; }
-  hx = Math.max(0.03, hx); hy = Math.max(0.03, hy);
-  const fx = (x: number) => Math.max(0, Math.min(1, (x - b.x1) / bw)), fy = (y: number) => Math.max(0, Math.min(1, (y - b.y1) / bh));
-  return {
-    id, name: 'Ring segment', group: 'Basic shapes', size: [100, 100],
-    draw: (w, h) => {
-      const sx = w / bw, sy = h / bh;
-      const outer = arc(-b.x1 * sx, -b.y1 * sy, sx, sy, a0, a1, true);
-      const inner: GeoStep[] = k > 0 ? arc(-b.x1 * sx, -b.y1 * sy, k * sx, k * sy, a1, a0) : [['L', -b.x1 * sx, -b.y1 * sy]];
-      return { body: [...outer, ...inner, ['Z']] };
-    },
-    text: [fx(cx - hx), fy(cy - hy), fx(cx + hx), fy(cy + hy)],
-  };
-}
-
-/** A honeycomb cell: a regular hexagon with flat top and bottom when its box is 2 wide to √3 high. */
+/** A honeycomb's cell: a hexagon with flat top and bottom, regular when its box is 2 wide by √3 tall. */
 export const HEX_CELL = 'cell:hex';
 
-const hexCellDef: GeoDef = {
-  id: HEX_CELL, name: 'Honeycomb cell', group: 'Basic shapes', size: [80, 69],
-  draw: (w, h) => ({ body: poly([[0.25 * w, 0], [0.75 * w, 0], [w, h / 2], [0.75 * w, h], [0.25 * w, h], [0, h / 2]]) }),
-  text: [0.17, 0.08, 0.83, 0.92],
+const honeycombCellDef: GeoDef = {
+  id: HEX_CELL,
+  name: 'Honeycomb cell',
+  group: 'Basic shapes',
+  size: [80, 69],
+  // the corners from the left one, clockwise; the words keep clear of the slanted sides
+  draw: (w, h) => ({ body: poly([0, 0.25, 0.75, 1, 0.75, 0.25].map((fx, i) => [fx * w, [0.5, 0, 0, 0.5, 1, 1][i] * h])) }),
+  text: [1 / 6, 0.08, 5 / 6, 0.92],
 };
 
 /**
@@ -661,7 +775,7 @@ function penDef(id: string): GeoDef {
 }
 
 /** The shape with this id (an icon for "icon:…"), or the rectangle for one not known (from a newer version). */
-export const geoDef = (id: string | undefined): GeoDef => (isIconId(id) ? iconDef(id) : isSliceId(id) ? sliceDef(id) : isSectorId(id) ? sectorDef(id) : id === HEX_CELL ? hexCellDef : isInkId(id) ? inkDef(id) : isPathId(id) ? pathDef(id) : isPenId(id) ? penDef(id) : GEO_BY_ID.get(id ?? '')) ?? GEO_BY_ID.get('rect')!;
+export const geoDef = (id: string | undefined): GeoDef => (isIconId(id) ? iconDef(id) : isSliceId(id) ? sliceDef(id) : isSectorId(id) ? sectorDef(id) : id === HEX_CELL ? honeycombCellDef : isInkId(id) ? inkDef(id) : isPathId(id) ? pathDef(id) : isPenId(id) ? penDef(id) : GEO_BY_ID.get(id ?? '')) ?? GEO_BY_ID.get('rect')!;
 
 /** The box of an outline's points (control points included: a little generous on curves). */
 export function stepsBox(steps: GeoStep[]): Rect {

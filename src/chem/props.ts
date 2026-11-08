@@ -2,6 +2,7 @@
 // Runs in the chemistry worker (and in tests, with RDKit loaded in Node).
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
+import { girolamiDensity, ringKinds, DENSITY_SMARTS, type DensityGroups } from './density';
 import { formulaFromJson, countsFromJson, hillFormula } from './formula';
 import { SYMBOLS } from './elements';
 import { joback, esolLogS, vapourPressure, fishtine, henryConstant, type JobackResult } from './analysis';
@@ -141,6 +142,8 @@ export interface PanelProps {
   henry: number | null;
   /** Estimated acidic and basic sites. */
   pka: PkaSite[];
+  /** Estimated density as a liquid or solid, g/mL (Girolami); null when it can't be estimated. */
+  density: number | null;
 }
 
 const weightCache = new Map<string, number>();
@@ -183,10 +186,38 @@ export function panelProps(RDKit: any, mol: any): PanelProps {
   } catch {
     pka = [];
   }
+  let density: number | null = null;
+  try {
+    density = girolamiDensity(counts, d.amw, densityGroups(RDKit, mol, json));
+  } catch {
+    density = null;
+  }
   return {
+    density,
     counts, weights, clogp: d.CrippenClogP, mr: d.CrippenMR, tpsa: d.tpsa, hbd: d.lipinskiHBD, hba: d.lipinskiHBA,
     rotb: d.NumRotatableBonds, heavy: d.NumHeavyAtoms, fsp3: d.FractionCSP3, joback: jb,
     logS, vp, henry: vp === null ? null : henryConstant(vp, logS), pka,
+  };
+}
+
+/** The groups and rings Girolami's density estimate counts. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function densityGroups(RDKit: any, mol: any, json: string): DensityGroups {
+  const count = (smarts: string) => {
+    const q = RDKit.get_qmol(smarts);
+    try {
+      const m = mol.get_substruct_matches(q);
+      const list = typeof m === 'string' ? JSON.parse(m) : m;
+      return Array.isArray(list) ? list.length : 0;
+    } finally {
+      q.delete();
+    }
+  };
+  const rings: number[][] = JSON.parse(json).molecules[0].extensions?.find((e: { name: string }) => e.name === 'rdkitRepresentation')?.atomRings ?? [];
+  const k = ringKinds(rings);
+  return {
+    hydroxyl: count(DENSITY_SMARTS.hydroxyl), acid: count(DENSITY_SMARTS.acid), amine: count(DENSITY_SMARTS.amine), amide: count(DENSITY_SMARTS.amide),
+    sulfoxide: count(DENSITY_SMARTS.sulfoxide), sulfone: count(DENSITY_SMARTS.sulfone), loneRings: k.lone, fusedRings: k.fused,
   };
 }
 

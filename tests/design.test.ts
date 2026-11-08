@@ -15,7 +15,8 @@ import { writeCdxml, chemDrawCurves } from '../src/io/cdxml-write';
 import { guideSnap } from '../src/editor/editor';
 import { layerName, reorderLayers } from '../src/ui/layers-panel';
 import { readCdxml } from '../src/io/cdxml';
-import { DESIGN_TEMPLATES, fillTemplate, templateSize } from '../src/design/templates';
+import { DESIGN_TEMPLATES, TEMPLATE_CATEGORIES, WORKUP_LW, fillTemplate, templateSize } from '../src/design/templates';
+import { isIconId } from '../src/design/icons';
 import { whiteToClear } from '../src/render/background';
 
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13, 0x49, 0x48, 0x44, 0x52, 0, 0, 0, 40, 0, 0, 0, 30]);
@@ -364,9 +365,10 @@ describe('design templates', () => {
       const size = templateSize(t);
       const deck = Deck.design(new Doc(), size, (d) => fillTemplate(d, t));
       const doc = deck.docOf(0);
-      expect(doc.shapes.size, t.id).toBe(t.boxes.length);
+      // a template with a page color has a full-page band under its boxes
+      expect(doc.shapes.size, t.id).toBe(t.boxes.length + (t.paper ? 1 : 0));
       for (const s of doc.shapes.values()) {
-        expect(GEO_BY_ID.has(s.geo!), `${t.id} ${s.geo}`).toBe(true);
+        expect(GEO_BY_ID.has(s.geo!) || isIconId(s.geo), `${t.id} ${s.geo}`).toBe(true);
         expect(Math.min(s.x1, s.x2), t.id).toBeGreaterThanOrEqual(0);
         expect(Math.min(s.y1, s.y2), t.id).toBeGreaterThanOrEqual(0);
         expect(Math.max(s.x1, s.x2), t.id).toBeLessThanOrEqual(size.w + 0.01);
@@ -377,6 +379,35 @@ describe('design templates', () => {
         expect(doc.shapes.has(a.from!.shape)).toBe(true);
         expect(doc.shapes.has(a.to!.shape)).toBe(true);
         expect(a.tail).toEqual(gluePoint(doc.shapes.get(a.from!.shape)!, a.from!.port));
+      }
+    }
+  });
+
+  it('has unique ids, a known category for every template, and the categories in the New Design list', () => {
+    const ids = DESIGN_TEMPLATES.map((t) => t.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    const cats = new Set(TEMPLATE_CATEGORIES.map((c) => c.id));
+    for (const t of DESIGN_TEMPLATES) expect(cats.has(t.category), t.id).toBe(true);
+    for (const c of TEMPLATE_CATEGORIES) expect(DESIGN_TEMPLATES.some((t) => t.category === c.id), c.id).toBe(true);
+    expect(DESIGN_TEMPLATES.filter((t) => t.category === 'poster').length).toBe(30);
+  });
+
+  it('draws the workup glassware at a line width in proportion to it, and keeps every piece inside its box', () => {
+    const t = DESIGN_TEMPLATES.find((x) => x.id === 'workup')!;
+    for (const b of t.boxes.filter((x) => x.geo.startsWith('lab'))) expect(b.lw, b.geo).toBe(WORKUP_LW);
+    for (const g of GEOS.filter((x) => x.group === 'Lab equipment')) {
+      const [w, h] = g.size;
+      const o = g.draw(w, h);
+      for (const st of [...o.body, ...(o.lines ?? [])]) {
+        if (st[0] === 'Z') continue;
+        // the points the outline passes through (a curve's control points may lie outside it)
+        const pts = st[0] === 'C' ? [[st[5], st[6]]] : [[st[1], st[2]]];
+        for (const [x, y] of pts) {
+          expect(x, g.id).toBeGreaterThanOrEqual(-0.01 * w);
+          expect(x, g.id).toBeLessThanOrEqual(1.01 * w);
+          expect(y, g.id).toBeGreaterThanOrEqual(-0.01 * h);
+          expect(y, g.id).toBeLessThanOrEqual(1.01 * h);
+        }
       }
     }
   });

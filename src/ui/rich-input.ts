@@ -119,6 +119,8 @@ export class RichInput {
    * nothing is selected. `base`: whether the cell itself has the look.
    */
   toggle(key: ToggleLook, base = false): void {
+    // (the selection as it is now: Ctrl+I can come before the browser says Shift+arrow moved it)
+    this.keepSelection();
     const { start, end } = this.sel;
     if (start === end) {
       const look = this.typing?.at === start ? this.typing.look : this.looks[start - 1] ?? this.looks[start] ?? {};
@@ -132,6 +134,7 @@ export class RichInput {
 
   /** Whether the selected text (or what is typed next) has a look, as the ribbon shows it pressed. */
   has(key: ToggleLook, base = false): boolean {
+    this.keepSelection();
     const { start, end } = this.sel;
     if (start === end) {
       const look = this.typing?.at === start ? this.typing.look : this.looks[start - 1] ?? this.looks[start] ?? {};

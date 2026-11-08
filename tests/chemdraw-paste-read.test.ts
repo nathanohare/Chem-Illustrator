@@ -14,14 +14,15 @@ import { crossingGaps } from '../src/chem/crossing';
 import { Doc } from '../src/model';
 import { labelSpec, layoutLabel } from '../src/chem/labels';
 import { ACS_1996, bondWidths, labelBold } from '../src/style';
+import { CHEMDRAW_DIR, noChemDraw } from './chemdraw-private';
 
-const dir = 'tests/fixtures/chemdraw-clipboard/';
+const dir = CHEMDRAW_DIR + '/';
 const fromChemDraw = () => readCdxml(readFileSync(dir + 'clip-props.cd.cdxml', 'utf8')).doc;
 const fromClipboard = () => readCdxml(cdxToCdxml(new Uint8Array(readFileSync(dir + 'clip-props.cd.cdx')))).doc;
 
 describe('a drawing from ChemDraw', () => {
   for (const [how, read] of [['saved as CDXML', fromChemDraw], ['copied (CDX)', fromClipboard]] as const) {
-    it(`keeps its ring fills, ${how}`, () => {
+    it.skipIf(noChemDraw)(`keeps its ring fills, ${how}`, () => {
       const doc = read();
       const fills = [...doc.shapes.values()].filter((s) => s.kind === 'ring');
       expect(fills.map((s) => s.fillColor).sort()).toEqual(['#bedaff', '#beffbe']);
@@ -33,7 +34,7 @@ describe('a drawing from ChemDraw', () => {
     });
   }
 
-  it('keeps its bold labels, and they stay bold pasted into a drawing with plain labels', () => {
+  it.skipIf(noChemDraw)('keeps its bold labels, and they stay bold pasted into a drawing with plain labels', () => {
     const doc = fromChemDraw();
     expect(doc.style.labelFace).toBe(97);
     const labelled = [...doc.atoms.values()].filter((a) => a.label);
@@ -43,7 +44,7 @@ describe('a drawing from ChemDraw', () => {
     for (const a of doc.atoms.values()) if (a.label) expect(labelBold(ACS_1996, a)).toBe(true);
   });
 
-  it('keeps its hash spacing and wedge widths pasted into a drawing of another style', () => {
+  it.skipIf(noChemDraw)('keeps its hash spacing and wedge widths pasted into a drawing of another style', () => {
     const doc = fromChemDraw();
     const before = [...doc.bonds.values()].map((b) => bondWidths(doc.style, b));
     fitPasted(doc, ACS_1996);
@@ -55,7 +56,7 @@ describe('a drawing from ChemDraw', () => {
     });
   });
 
-  it('keeps the layers of crossing bonds: the gray bonds behind', () => {
+  it.skipIf(noChemDraw)('keeps the layers of crossing bonds: the gray bonds behind', () => {
     const doc = fromChemDraw();
     const gray = [...doc.bonds.values()].filter((b) => b.color === '#808080');
     const black = [...doc.bonds.values()].filter((b) => !b.color);
@@ -79,7 +80,7 @@ describe('phosphine labels', () => {
 });
 
 describe('ring fills from bonds', () => {
-  it('go round the loop in order, and only a closed one', () => {
+  it.skipIf(noChemDraw)('go round the loop in order, and only a closed one', () => {
     const doc = fromChemDraw();
     const fill = [...doc.shapes.values()].find((s) => s.kind === 'ring')!;
     const bonds = [...doc.bonds.values()].filter((b) => fill.ring!.includes(b.a1) && fill.ring!.includes(b.a2)).map((b) => b.id);
@@ -90,7 +91,7 @@ describe('ring fills from bonds', () => {
 });
 
 describe('what ChemDraw says crosses', () => {
-  it('leaves gaps where ChemDraw does, near misses included', () => {
+  it.skipIf(noChemDraw)('leaves gaps where ChemDraw does, near misses included', () => {
     const doc = fromChemDraw();
     const gray = doc.bonds.get(1038)!;
     expect(gray.crossing).toEqual(expect.arrayContaining([1017, 1018, 1025, 1040]));
@@ -101,7 +102,7 @@ describe('what ChemDraw says crosses', () => {
     expect(withList.length).toBeGreaterThan(geometric.length);
   });
 
-  it('are the copies when pasted', () => {
+  it.skipIf(noChemDraw)('are the copies when pasted', () => {
     const src = fromChemDraw();
     const doc = new Doc();
     const sel = insertDrawing(doc, src, { x: 0, y: 0 });
@@ -141,7 +142,7 @@ describe('ChemDraw shapes and highlights', () => {
 });
 
 describe("ChemDraw's own clipboard", () => {
-  it('reads the same as the saved drawing (ChemDraw puts only CDX on it, no CDXML)', () => {
+  it.skipIf(noChemDraw)('reads the same as the saved drawing (ChemDraw puts only CDX on it, no CDXML)', () => {
     const formats = readFileSync(dir + 'from-chemdraw/formats.txt', 'utf8');
     expect(formats).toContain('ChemDraw Interchange Format');
     expect(formats).not.toMatch(/xml/i);
@@ -155,7 +156,7 @@ describe("ChemDraw's own clipboard", () => {
 });
 
 describe('frames pasted from ChemDraw', () => {
-  it('keep their line width in a drawing with thinner lines', () => {
+  it.skipIf(noChemDraw)('keep their line width in a drawing with thinner lines', () => {
     const doc = fromChemDraw();
     const frames = [...doc.shapes.values()].filter((s) => s.kind === 'rect');
     const before = frames.map((s) => s.lineWidth ?? doc.style.lineWidth);

@@ -173,6 +173,10 @@ export interface Compound {
   meltingPoint: string[];
   boilingPoint: string[];
   density: string[];
+  /** More measured values for the bench, as each source writes them. */
+  vaporPressure?: string[];
+  flashPoint?: string[];
+  refractiveIndex?: string[];
 }
 
 /** Everything the Analysis panel shows for a compound, by its PubChem number. */
@@ -181,10 +185,10 @@ export async function pubchemCompound(cid: number, fetchFn: Fetch = fetch): Prom
   const p = props?.PropertyTable?.Properties?.[0] ?? {};
   const syn = (await get(`${PUG}/compound/cid/${cid}/synonyms/JSON`, fetchFn)) as { InformationList?: { Information?: { Synonym?: string[] }[] } } | null;
   const view = (heading: string) => get(`${VIEW}/${cid}/JSON?heading=${encodeURIComponent(heading)}`, fetchFn);
-  const ghs = await view('GHS Classification');
-  const mp = await view('Melting Point');
-  const bp = await view('Boiling Point');
-  const density = await view('Density');
+  // one at a time: PubChem allows five requests a second
+  const got: unknown[] = [];
+  for (const h of ['GHS Classification', 'Melting Point', 'Boiling Point', 'Density', 'Vapor Pressure', 'Flash Point', 'Refractive Index']) got.push(await view(h));
+  const [ghs, mp, bp, density, vp, flash, ri] = got;
   return {
     cid,
     title: typeof p.Title === 'string' ? p.Title : '',
@@ -194,6 +198,9 @@ export async function pubchemCompound(cid: number, fetchFn: Fetch = fetch): Prom
     meltingPoint: readValues(mp),
     boilingPoint: readValues(bp),
     density: readValues(density),
+    vaporPressure: readValues(vp),
+    flashPoint: readValues(flash),
+    refractiveIndex: readValues(ri),
   };
 }
 

@@ -79,11 +79,14 @@ import { plateFrameOf, plateFromBox, putPlate, refitPlates, rfAtY, setMarkAt, tl
 import { drawMo } from '../design/mo';
 import { newmanCentre, newmanFrameOf, putMark, putNewman, refitNewman, type NewmanData } from '../design/newman';
 import { putTorsion, refitTorsion, torsionFrameOf, type TorsionData } from '../design/torsion';
-import { diagramContents, diagramFrameOf, heldLines, putDiagram, refitDiagramFigures, refitDiagrams, ungroupDiagram, type DiagramData } from '../design/diagrams';
+import {
+  diagramContents, diagramFrameOf, heldLines, putDiagram, refitDiagramStructures, refitDiagrams, ungroupDiagram, type DiagramData,
+} from '../design/diagrams';
 import { attachWhereItIs, defaultGap, placeAttached, refitAttached } from './attached';
 import { frameAround, frameBox, frameMembers, refitFrames, defaultPad, thingsInside } from './frames';
 import { atomsBox, Align, Measure, POINTS, Snapshot, type TurnText, units, joinGroups, clearOffset, alignOffsets, distributeOffsets, moveUnit, selectionBox, snapshot, transform, withFrameContents, rotation, mirrorX, mirrorY } from './arrange';
 import { elementNumber, hasImplicitH, implicitHydrogens, SYMBOLS } from '../chem/elements';
+import { anyMarks, isMarkToggle, readMark, styleOfMark, toggleMarks, toggledMark, writeMark, type Mark, type MarkToggle } from '../chem/label-marks';
 import { tokenize, addNicknames, isBuiltInNickname, labelGraph, labelOverValent, labelPieces, labelLook, styleLabel, CAP, SUB_SCALE } from '../chem/labels';
 import {
   Handle, type HandleId, arrowEllipseFrame, arrowHit, shapeHit, arrowHandles, shapeHandles, dragArrowHandle, dragShapeHandle, dragCropHandle, shapeBox, shapeMid, shapeTurn,
@@ -486,7 +489,7 @@ export class Editor {
   arrowWidth(): number { return this.arrowLook.width ?? this.doc.style.lineWidth; }
   /** Tell the person something in the status bar. */
   say: (msg: string) => void = () => {};
-  /** The angle and length beside the pointer while drawing, and the modifier keys' hints (Settings ▸ Drawing). */
+  /** The angle and length beside the pointer while drawing, and the modifier keys' hints (Settings ▸ Preferences). */
   aids: CursorAidPrefs = { ...DEFAULT_CURSOR_AIDS };
   /** The modifier keys held now (for the hints beside the pointer). */
   private mods: Mods = { shift: false, alt: false, ctrl: false };
@@ -551,6 +554,8 @@ export class Editor {
   onFrame: () => void = () => {};
   /** Drawn on the overlay before the marks, in points (the tint outside the drawing). */
   underlay: ((ctx: CanvasRenderingContext2D) => void) | null = null;
+  /** Draws on the overlay above the selection and every other mark (e.g. predicted NMR labels). */
+  overlayTop: ((ctx: CanvasRenderingContext2D) => void) | null = null;
   onToolChange: (name: string) => void = () => {};
   /** Show a hint for the step in hand in the status bar (empty: the tool's own hint again). */
   onHint: (text: string) => void = () => {};
@@ -575,6 +580,8 @@ export class Editor {
   /** The last label typed in an atom's label box (with its raised and lowered marks), for Repeat Label. */
   lastLabel: { text: string; marks?: string } | null = null;
   private labelInput: HTMLElement | null = null;
+  /** The ribbon's Font buttons on the atom label being typed (null when none is). */
+  private labelTyping: { format(f: TextFormat): boolean; look(): rt.RunStyle } | null = null;
   /** The mouse is over the drawing, so keys are for the drawing even if a button has the focus. */
   private pointerInside = false;
   /** Keys don't reach the drawing (while presenting slides). */
@@ -687,8 +694,8 @@ export class Editor {
       if (plates) refitPlates(this.doc, before, this.measure());
       // a diagram resized by hand is drawn again in its new box; words typed into its shapes go into its text
       if (diagrams) refitDiagrams(this.doc, before, this.measure());
-      // structures in a diagram's items: room kept for them (the diagram growing to fit), and centred there
-      if (diagrams) refitDiagramFigures(this.doc, before, this.measure());
+      // then the structures its items hold: space kept for each (growing the diagram if needed), each centered in it
+      if (diagrams) refitDiagramStructures(this.doc, before, this.measure());
       // a Smart Scheme's species moved by hand: its arrows and their conditions follow
       if (smart) { fillHoldersDrawn(this.doc, before, this.measure()); refitSmart(this.doc, before, this.measure()); }
       if (frames) refitFrames(this.doc, before, this.measure());
@@ -1021,10 +1028,7 @@ export class Editor {
 
   /** Put the highlight on an atom or bond from the keyboard (it stays until the mouse points elsewhere). */
   setKeyHot(h: Hit): void {
-    if (h && !this.hotHinted) {
-      this.hotHinted = true;
-      this.say('Press a key to act on the highlighted atom: 1 adds a bond, 2 a C=O, 6 a ring, letters set labels. Arrow keys move the highlight; Space selects the molecule, Enter returns.');
-    }
+    // (what the keys do is in the status bar's hints, not a message over the drawing)
     this.keyHot = h;
     this.keyHotHover = this.hover;
     this.keyHotAt = this.lastClient;
@@ -1884,8 +1888,6 @@ export class Editor {
 
   // ------------------------------------------------------------------ clicks
 
-  /** The keyboard highlight's hint has been shown (once a session). */
-  private hotHinted = false;
 
   /** The last bond-tool click that grew a bond from an atom (a quick second click there is a double-click). */
   private lastSprout: { atom: number; at: number; p: Vec } | null = null;
@@ -4675,8 +4677,8 @@ export class Editor {
       // a table takes the structures in its cells along
       const sh = doc.shapes.get(id);
       if (sh?.kind === 'table') for (const a of tableContents(doc, sh, (t) => this.r.tableLayout(t))) sel.atoms.add(a);
-      // and a diagram the structures in its items (found by where they are, as after opening a file)
-      if (sh?.diagram) for (const a of diagramContents(doc, sh)) sel.atoms.add(a);
+      // a diagram brings the structures its items hold (found by position, as they are after opening a file)
+      if (sh?.diagram) diagramContents(doc, sh).forEach((a) => sel.atoms.add(a));
       const f = doc.shapes.get(id)?.frame;
       if (!f?.fit) continue;
       const m = frameMembers(doc, f);
@@ -4785,12 +4787,20 @@ export class Editor {
    * and bonds lying in a thin strip (a chain drawn straight across or down).
    */
   private boxInsideHighlight(b: Rect): boolean {
-    const s = this.sel;
-    if (s.captions.size || s.arrows.size || s.shapes.size || !s.bonds.size) return false;
+    const s = this.sel, doc = this.doc;
+    // (only bonds, arrows and lines: anything else needs its box)
+    const lines = [...s.shapes].every((id) => doc.shapes.get(id)?.kind === 'line');
+    if (s.captions.size || !lines || (!s.bonds.size && !s.arrows.size && !s.shapes.size)) return false;
     // one bond (with its atoms): the highlight shows it well enough at any angle
-    const one = s.bonds.size === 1 ? this.doc.bonds.get([...s.bonds][0]) : undefined;
+    const one = s.bonds.size === 1 && !s.arrows.size && !s.shapes.size ? doc.bonds.get([...s.bonds][0]) : undefined;
     if (one && [...s.atoms].every((id) => id === one.a1 || id === one.a2)) return true;
-    return Math.min(b.x2 - b.x1, b.y2 - b.y1) < this.doc.style.bondLength * 0.3;
+    // one straight arrow or line on its own: its handles show it, as PowerPoint shows a line
+    if (!s.bonds.size && s.arrows.size + s.shapes.size === 1) {
+      const r = s.arrows.size ? doc.arrows.get([...s.arrows][0]) : undefined;
+      if (!r || arrowPoints(r).length === 2) return true;
+    }
+    // a box only as wide as the highlight (a level arrow, a straight chain) would be drawn along it
+    return Math.min(b.x2 - b.x1, b.y2 - b.y1) < doc.style.bondLength * 0.3;
   }
 
   /** The handle above the selection that turns it (none when turning would do nothing). */
@@ -6166,6 +6176,8 @@ export class Editor {
     let marks = a.label && a.labelMarks ? a.labelMarks.padEnd(text.length, '.').slice(0, text.length) : '.'.repeat(text.length);
     const wasMarks = marks;
     const look = () => labelLook({ label: text, supDigits: a.supDigits, labelMarks: marks });
+    /** The look picked for what is typed next at a caret (Italic pressed with nothing selected). */
+    let pending: { at: number; mark: Mark } | null = null;
     // the first letter's middle on the atom, the baseline where the label's is
     const g = document.createElement('canvas').getContext('2d')!;
     g.font = `${size}px "${font}", Arial, sans-serif`;
@@ -6207,6 +6219,21 @@ export class Editor {
       sel?.removeAllRanges();
       sel?.addRange(r);
     };
+    /** Bold, Italic, Underline, Subscript or Superscript on the selected characters, or on what is typed next. */
+    const toggle = (key: MarkToggle) => {
+      const c = caret();
+      if (!c) return;
+      if (c[1] > c[0]) {
+        marks = toggleMarks(marks, c[0], c[1], key);
+        pending = null;
+        show();
+        place(c[0], c[1]);
+      } else {
+        const now = pending && pending.at === c[0] ? pending.mark : { ...readMark(marks[c[0] - 1]), pos: 'auto' as const };
+        pending = { at: c[0], mark: toggledMark(now, key) };
+      }
+      CaptionEditor.onState?.();
+    };
     // the text drawn as the label will show it: counts lowered, charges and marked characters raised
     const show = () => {
       box.textContent = '';
@@ -6216,6 +6243,8 @@ export class Editor {
         span.textContent = p.text.replace(/−/g, '-');
         if (p.sub || p.sup) { span.className = p.sub ? 'sub' : 'sup'; span.style.fontSize = `${SUB_SCALE * 100}%`; }
         if (p.italic) span.style.fontStyle = 'italic';
+        if (p.bold) span.style.fontWeight = 'bold';
+        if (p.underline) span.style.textDecoration = 'underline';
         box.appendChild(span);
       }
       // what the label shows can differ from what was typed (a minus for a hyphen): keep the typed text
@@ -6248,12 +6277,15 @@ export class Editor {
       if ((ev as InputEvent).isComposing) return;
       const now = [...(box.textContent ?? '')];
       const old = [...text];
-      // keep the marks of the characters that stayed; new ones are unmarked
+      // keep the marks of the characters that stayed; new ones are plain, or in the look picked
+      // for them (Italic pressed with nothing selected, then typed)
       let p = 0;
       while (p < now.length && p < old.length && now[p] === old[p]) p++;
       let q = 0;
       while (q < now.length - p && q < old.length - p && now[now.length - 1 - q] === old[old.length - 1 - q]) q++;
-      marks = marks.slice(0, p) + '.'.repeat(now.length - p - q) + marks.slice(old.length - q);
+      const fresh = pending && pending.at === p ? writeMark(pending.mark) : '.';
+      if (now.length - p - q > 0) pending = null;
+      marks = marks.slice(0, p) + fresh.repeat(now.length - p - q) + marks.slice(old.length - q);
       text = now.join('');
       const c = caret();
       show();
@@ -6262,6 +6294,7 @@ export class Editor {
     const finish = (ok: boolean) => {
       if (this.labelInput !== box) return;
       this.labelInput = null;
+      this.labelTyping = null;
       box.remove();
       hide(false);
       if (ok && doc.atoms.has(id) && (text !== was || marks !== wasMarks)) {
@@ -6273,7 +6306,9 @@ export class Editor {
           this.applyLabel(id, styled.label);
           const now = doc.atoms.get(id)!;
           const sm = styled.marks ?? '';
-          const m = now.label !== null && /[\^_=/]/.test(sm) ? sm : undefined;
+          // a label with a look of its own (an italic N, a bold Br) stays as typed, so it keeps it
+          if (now.label === null && anyMarks(sm) && styled.label) doc.updateAtom(id, { label: styled.label });
+          const m = doc.atoms.get(id)!.label !== null && anyMarks(sm) ? sm : undefined;
           if (now.labelMarks !== m) doc.updateAtom(id, { labelMarks: m });
         });
         // remembered for Repeat Label on the right-click menu (clearing a label is not a label)
@@ -6293,18 +6328,43 @@ export class Editor {
       else if ((e.ctrlKey || e.metaKey) && (e.code === 'Equal' || e.key === '=' || e.key === '+')) {
         // Ctrl+Shift+= raises the selected characters, Ctrl+= lowers them; again puts them back
         e.preventDefault();
-        const c = caret();
-        if (c && c[1] > c[0]) {
-          const want = e.shiftKey ? '^' : '_';
-          const all = [...marks.slice(c[0], c[1])].every((m) => m === want);
-          marks = marks.slice(0, c[0]) + (all ? '.' : want).repeat(c[1] - c[0]) + marks.slice(c[1]);
-          show();
-          place(c[0], c[1]);
-        }
-      } else if ((e.ctrlKey || e.metaKey) && /^[biu]$/i.test(e.key)) e.preventDefault();
+        toggle(e.shiftKey ? 'sup' : 'sub');
+      } else if ((e.ctrlKey || e.metaKey) && !e.altKey && /^[biu]$/i.test(e.key)) {
+        // Ctrl+B, Ctrl+I, Ctrl+U on the selected characters (or what is typed next), as in a text box
+        e.preventDefault();
+        toggle(({ b: 'bold', i: 'italic', u: 'underline' } as const)[e.key.toLowerCase() as 'b' | 'i' | 'u']);
+      }
       e.stopPropagation();
     });
     box.addEventListener('blur', () => finish(true));
+    // the ribbon shows which of Bold, Italic… the selected characters have
+    const selMoved = () => { if (this.labelInput === box) CaptionEditor.onState?.(); else document.removeEventListener('selectionchange', selMoved); };
+    document.addEventListener('selectionchange', selMoved);
+    // the ribbon's and the typing bar's Bold, Italic, Underline, Subscript and Superscript (their
+    // buttons keep the focus here, so the selection is still the one to change)
+    this.labelTyping = {
+      format: (f) => {
+        if (f.kind === 'toggle' && isMarkToggle(f.key)) { toggle(f.key); return true; }
+        if (f.kind === 'clear') {
+          const c = caret();
+          const [s0, e0] = c && c[1] > c[0] ? c : [0, marks.length];
+          marks = marks.slice(0, s0) + '.'.repeat(e0 - s0) + marks.slice(e0);
+          pending = null;
+          show();
+          if (c) place(c[0], c[1]);
+          return true;
+        }
+        return false;
+      },
+      look: () => {
+        const c = caret();
+        if (c && c[0] === c[1] && pending && pending.at === c[0]) return styleOfMark(pending.mark);
+        const span = c && c[1] > c[0] ? [...marks.slice(c[0], c[1])] : [marks[(c?.[0] ?? marks.length) - 1]];
+        const all = span.map(readMark);
+        const every = (k: 'italic' | 'bold' | 'underline') => all.every((m) => m[k]);
+        return { ...(every('bold') ? { bold: true } : {}), ...(every('italic') ? { italic: true } : {}), ...(every('underline') ? { underline: true } : {}), ...(all.every((m) => m.pos === 'up') ? { sup: true } : {}), ...(all.every((m) => m.pos === 'down') ? { sub: true } : {}) };
+      },
+    };
     this.labelInput = box;
   }
 
@@ -6362,6 +6422,8 @@ export class Editor {
    */
   formatText(f: TextFormat): boolean {
     if (this.captionEd) { applyFormat(this.captionEd.ed, f); return true; }
+    // an atom label being typed: Bold, Italic, Underline… on its selected characters
+    if (this.labelTyping?.format(f)) return true;
     const doc = this.doc;
     const st = doc.style;
     const caps = [...this.sel.captions].map((id) => doc.captions.get(id)).filter((c): c is Caption => !!c);
@@ -6471,6 +6533,7 @@ export class Editor {
   textLook(): { style: rt.RunStyle; align: Justify; list?: 'bullet' | 'number'; line: number; before?: number; after?: number; wrap?: number; link?: boolean; defaultSize: number; defaultFont?: string } | null {
     const st = this.doc.style;
     const ed = this.captionEd?.ed;
+    if (this.labelTyping) return { style: this.labelTyping.look(), align: 'left', line: 1, defaultSize: st.labelSize, defaultFont: st.labelFont || 'Arial' };
     if (ed) {
       const p = ed.currentPara();
       return { style: ed.currentStyle(), align: ed.currentAlign(), list: p.list, line: ed.t.lineSpacing ?? 1, before: p.spaceBefore, after: p.spaceAfter, wrap: ed.t.wrap, link: !!ed.linkHere(), defaultSize: ed.defaultSize, defaultFont: ed.defaults.font ?? st.captionFont };
@@ -6591,7 +6654,7 @@ export class Editor {
     const at = add(slot.mid, mul(slot.out, slot.gap + size * (side === 'above' ? 0.25 : 0.8)));
     this.sel = emptySel();
     this.openCaption(null, at, undefined, undefined, {
-      justify: textJustify(this.doc),
+      justify: textJustify(this.doc, side),
       size,
       font: this.doc.style.arrowTextFont,
       // once typed: counted as the arrow's conditions, the arrow fitted to it and the text lined up
@@ -7400,29 +7463,37 @@ export class Editor {
       ctx.fillStyle = mk.selFill;
       ctx.strokeStyle = mk.selLine;
       ctx.lineCap = 'round';
+      ctx.lineJoin = 'round';
       const L = doc.style.bondLength;
-      ctx.lineWidth = L * 0.22;
-      const path = new Path2D();
+      // The bonds' bands and the atoms' discs are one area, filled once, so where they meet (at
+      // the joints, and round each atom) the see-through tint isn't laid on twice and darker.
+      // An atom with none of its bonds selected keeps the lighter tint of its own.
+      const area = new Path2D(), dots = new Path2D(), onBond = new Set<number>();
       for (const id of s.bonds) {
         const b = doc.bonds.get(id);
         if (!b) continue;
         const p = doc.atoms.get(b.a1)!, q = doc.atoms.get(b.a2)!;
-        path.moveTo(p.x, p.y);
-        path.lineTo(q.x, q.y);
+        selBand(area, p, q, L * 0.11);
+        onBond.add(b.a1).add(b.a2);
       }
-      ctx.stroke(path);
-      const dots = new Path2D();
       for (const id of s.atoms) {
         const a = doc.atoms.get(id);
-        if (!a) continue;
-        dots.moveTo(a.x + L * 0.14, a.y);
-        dots.arc(a.x, a.y, L * 0.14, 0, Math.PI * 2);
+        if (a) selDisc(onBond.has(id) ? area : dots, a, L * 0.14);
       }
+      ctx.fillStyle = mk.selLine;
+      ctx.fill(area);
+      ctx.fillStyle = mk.selFill;
       ctx.fill(dots);
       ctx.lineWidth = px;
-      for (const id of s.captions) { const c = doc.captions.get(id); if (c) { ctx.fill(this.captionOutline(c)); } }
+      const boxes = new Path2D();
+      for (const id of s.captions) { const c = doc.captions.get(id); if (c) boxes.addPath(this.captionOutline(c)); }
+      ctx.fill(boxes);
+      // the arrows as one path, stroked once, so two that cross aren't darker where they do
       ctx.lineWidth = L * 0.15;
-      for (const id of s.arrows) { const r = doc.arrows.get(id); if (r) strokeAlong(ctx, arrowPoints(r)); }
+      ctx.beginPath();
+      for (const id of s.arrows) { const r = doc.arrows.get(id); if (r) arrowPoints(r).forEach((p, i) => (i ? ctx.lineTo(p.x, p.y) : ctx.moveTo(p.x, p.y))); }
+      ctx.stroke();
+      ctx.lineJoin = 'miter';
       for (const id of s.shapes) {
         const sh = doc.shapes.get(id);
         // a table being typed into shows only a thin frame, so its text stays easy to read
@@ -7661,7 +7732,7 @@ export class Editor {
       const b = this.selBox()!;
       ctx.lineWidth = px;
       ctx.strokeStyle = mk.box;
-      // no box round a bond or a straight run of bonds: it would sit inside their blue highlight
+      // no box round a bond, a straight run of bonds or a straight arrow: it would sit inside their highlight
       if (!this.boxInsideHighlight(b)) {
         ctx.setLineDash([3 * px, 3 * px]);
         ctx.strokeRect(b.x1 - 2 * px, b.y1 - 2 * px, b.x2 - b.x1 + 4 * px, b.y2 - b.y1 + 4 * px);
@@ -7733,6 +7804,7 @@ export class Editor {
     this.drawArrowHelpers(ctx, px, mk.box);
     this.captionEd?.draw(ctx);
     this.drawAids(ctx, px);
+    this.overlayTop?.(ctx);
   }
 
   /** The pen's ink: the stroke being drawn, and letters waiting to be read. */
@@ -7989,6 +8061,34 @@ export class Editor {
       }
     }
   }
+}
+
+/**
+ * A selected bond's highlight as an area: a band `w` either side of the line from p to q with
+ * round ends. Every piece is traced the same way round (clockwise on screen, as arc() traces a
+ * circle), so filling many at once with the non-zero rule paints where they overlap only once.
+ */
+function selBand(path: Path2D, p: Vec, q: Vec, w: number): void {
+  const d = sub(q, p), l = len(d);
+  if (l > 1e-9) {
+    const n = mul(perp(mul(d, 1 / l)), w);
+    let ring = [add(p, n), add(q, n), sub(q, n), sub(p, n)];
+    let area = 0;
+    ring.forEach((v, i) => { const u = ring[(i + 1) % 4]; area += v.x * u.y - u.x * v.y; });
+    if (area < 0) ring = ring.reverse();
+    path.moveTo(ring[0].x, ring[0].y);
+    for (const v of ring.slice(1)) path.lineTo(v.x, v.y);
+    path.closePath();
+  }
+  selDisc(path, p, w);
+  selDisc(path, q, w);
+}
+
+/** A disc traced clockwise on screen (see selBand). */
+function selDisc(path: Path2D, c: Vec, r: number): void {
+  path.moveTo(c.x + r, c.y);
+  path.arc(c.x, c.y, r, 0, Math.PI * 2);
+  path.closePath();
 }
 
 function strokeAlong(ctx: CanvasRenderingContext2D, pts: Vec[]): void {

@@ -703,11 +703,11 @@ export class SheetMode {
       case 'table-convert': { const t = this.tableHere(); if (t) this.formatting.convertToRange(t); break; }
       case 'table-colours-reset': { const t = this.tableHere(); if (t) this.formatting.setTable(t, { custom: undefined }, 'Table colors'); break; }
       case 'chart-scatter': case 'chart-line': case 'chart-column': case 'chart-bar': case 'chart-area': case 'chart-pie':
-      case 'chart-combo': case 'chart-histogram': case 'chart-box': case 'chart-bubble': case 'chart-radar': case 'chart-sankey':
-      case 'chart-treemap': case 'chart-decomp':
+      case 'chart-combo': case 'chart-histogram': case 'chart-box': case 'chart-bubble': case 'chart-radar':
+      case 'chart-sankey': case 'chart-treemap': case 'chart-decomp':
         if (v.sheet.dashboard) {
           if (DASH_CHART_KINDS.includes(name.slice(6) as ChartKind)) void this.dashUi.addTile('chart', name.slice(6) as ChartKind);
-          else this.host.flash('Dashboard tiles take scatter, line, column, bar, area, pie, Sankey, treemap and decomposition tree charts: make this one on a sheet.', 5000);
+          else this.host.flash('A dashboard tile can be a scatter, line, column, bar, area, pie, Sankey, treemap or decomposition tree chart. Make this kind of chart on a sheet.', 5000);
         } else this.charts.insert(name.slice(6) as ChartKind);
         break;
       case 'chart-gallery': this.chartGallery.toggle(this.ribbon.querySelector<HTMLElement>('[data-sh="chart-gallery"]')); break;

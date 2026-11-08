@@ -96,6 +96,24 @@ export class VecPath {
     this.ellipseArc(x, y, r, r, a0, a1, ccw, true);
   }
 
+  /** A corner rounded with radius r, from the current point towards (x1, y1) and on towards (x2, y2), as the canvas's arcTo draws it. */
+  arcTo(x1: number, y1: number, x2: number, y2: number, r: number): void {
+    if (!this.open) { this.moveTo(x1, y1); return; }
+    const ax = this.cx - x1, ay = this.cy - y1, bx = x2 - x1, by = y2 - y1;
+    const la = Math.hypot(ax, ay), lb = Math.hypot(bx, by);
+    const cross = ax * by - ay * bx;
+    if (r <= 0 || la < 1e-9 || lb < 1e-9 || Math.abs(cross) < 1e-9 * la * lb) { this.lineTo(x1, y1); return; }
+    const ux = ax / la, uy = ay / la, vx = bx / lb, vy = by / lb;
+    const half = Math.acos(Math.max(-1, Math.min(1, ux * vx + uy * vy))) / 2;
+    const d = r / Math.tan(half), c = r / Math.sin(half);
+    const mx = ux + vx, my = uy + vy, ml = Math.hypot(mx, my);
+    const ox = x1 + (mx / ml) * c, oy = y1 + (my / ml) * c;
+    const t1 = { x: x1 + ux * d, y: y1 + uy * d }, t2 = { x: x1 + vx * d, y: y1 + vy * d };
+    const a0 = Math.atan2(t1.y - oy, t1.x - ox), a1 = Math.atan2(t2.y - oy, t2.x - ox);
+    // (the short way round, which is anticlockwise on the screen when the corner turns that way)
+    this.ellipseArc(ox, oy, r, r, a0, a1, cross > 0, true);
+  }
+
   ellipse(x: number, y: number, rx: number, ry: number, rotation: number, a0: number, a1: number, ccw = false): void {
     // the renderer only draws unrotated ellipses
     void rotation;
@@ -202,6 +220,7 @@ export class VectorContext {
   bezierCurveTo(a: number, b: number, c: number, d: number, e: number, f: number): void { this.path.bezierCurveTo(a, b, c, d, e, f); }
   quadraticCurveTo(a: number, b: number, c: number, d: number): void { this.path.quadraticCurveTo(a, b, c, d); }
   arc(x: number, y: number, r: number, a0: number, a1: number, ccw?: boolean): void { this.path.arc(x, y, r, a0, a1, ccw); }
+  arcTo(x1: number, y1: number, x2: number, y2: number, r: number): void { this.path.arcTo(x1, y1, x2, y2, r); }
   ellipse(x: number, y: number, rx: number, ry: number, rot: number, a0: number, a1: number, ccw?: boolean): void { this.path.ellipse(x, y, rx, ry, rot, a0, a1, ccw); }
   rect(x: number, y: number, w: number, h: number): void { this.path.rect(x, y, w, h); }
   roundRect(x: number, y: number, w: number, h: number, r?: number | number[]): void { this.path.roundRect(x, y, w, h, r); }

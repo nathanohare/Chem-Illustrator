@@ -509,7 +509,7 @@ export class ReferencesDialog {
     this.styleSel.addEventListener('change', () => this.setStyle(this.styleSel.value, {}));
     this.styleNote = el('span', { className: 'muted' });
     this.managerSel = el('select', { id: 'refs-manager' });
-    this.managerSel.add(new Option('Chem Illustrator only (numbers Word shows as they are)', ''));
+    this.managerSel.add(new Option('Chemweave only (numbers Word shows as they are)', ''));
     for (const [k, name] of Object.entries(MANAGERS)) this.managerSel.add(new Option(name, k));
     this.managerSel.addEventListener('change', () => {
       const h = this.holder();

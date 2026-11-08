@@ -3,6 +3,7 @@
 // line's level is how far in it is (tabs at its start in the outline's text).
 
 import type { Caption, Doc, ParaStyle } from '../model';
+import { retextRuns, styleOf } from '../richtext';
 
 export interface OutlineLine { text: string; level: number }
 export interface SlideOutline {
@@ -48,7 +49,8 @@ export function applyOutline(doc: Doc, title: string | null, body: OutlineLine[]
   let changed = false;
   const t = titleOf(doc);
   if (t && title !== null && title !== was.title) {
-    doc.updateCaption(t.id, { runs: title ? [{ ...(t.runs[0] ?? {}), text: title }] : [] });
+    // (the characters that stayed keep their own look: an italic word in a title stays italic)
+    doc.updateCaption(t.id, { runs: title ? retextRuns(t.runs, title, t.runs[0] ? styleOf(t.runs[0]) : {}) : [] });
     changed = true;
   }
   const b = bodyOf(doc);
@@ -62,7 +64,7 @@ export function applyOutline(doc: Doc, title: string | null, body: OutlineLine[]
       if (l.level) p.level = l.level; else delete p.level;
       return p;
     });
-    doc.updateCaption(b.id, { runs: text ? [{ ...style, text }] : [], paras: paras.length ? paras : b.ph === 'body' ? [{ list: 'bullet' }] : undefined });
+    doc.updateCaption(b.id, { runs: text ? (b.runs.length ? retextRuns(b.runs, text, style) : [{ ...style, text }]) : [], paras: paras.length ? paras : b.ph === 'body' ? [{ list: 'bullet' }] : undefined });
     changed = true;
   }
   return changed;
