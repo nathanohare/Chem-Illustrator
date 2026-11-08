@@ -2740,6 +2740,9 @@ export class Renderer {
       traceSteps(ctx, body);
     }
     ctx.lineWidth = width;
+    // glassware is drawn with round joins and ends (as PowerPoint gets it), so thick lines stay neat at the lips and tips
+    const glass = def.group === 'Lab equipment', join = ctx.lineJoin, cap = ctx.lineCap;
+    if (glass) { ctx.lineJoin = 'round'; ctx.lineCap = 'round'; }
     // soft edges soften the outline away too
     if (width > 0 && !s.softEdge) ctx.stroke();
     if (out.lines && width > 0) {
@@ -2747,6 +2750,7 @@ export class Renderer {
       traceSteps(ctx, moveSteps(out.lines, x, y));
       ctx.stroke();
     }
+    if (glass) { ctx.lineJoin = join; ctx.lineCap = cap; }
     if (s.text && this.geoEdit !== s.id) {
       const g = this.geoText(s);
       if (g) drawLayout(ctx, g.lay, g.x, g.y);
