@@ -95,7 +95,7 @@ describe('row heights as Excel showed them (X21)', () => {
   it('writes the heights back in the points the file gave', async () => {
     const { book } = await readXlsx(excelBook([['Data', sheet('')]]));
     const xml = part(await writeXlsx(book, pictures), 'xl/worksheets/sheet1.xml');
-    expect(xml).toContain('<row r="2" ht="40">');
+    expect(xml).toContain('<row r="2" ht="40" customHeight="1">');
     expect(xml).toContain('<row r="3" ht="14.4" customHeight="1">');
   });
 
