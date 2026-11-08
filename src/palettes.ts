@@ -24,6 +24,11 @@ export function cleanColour(c: unknown): string | null {
   return HEX.test(t) ? t : null;
 }
 
+/** Rows saved under the names older versions gave them ("My colours", "Colour-blind safe…") take today's. */
+function americanName(name: string): string {
+  return name.replace(/^My colours\b/, 'My colors').replace(/^Colour-blind safe\b/, 'Color-blind safe').replace(/^Greys$/, 'Grays');
+}
+
 /** Palettes read from the settings file, keeping only what makes sense. */
 export function parsePalettes(raw: unknown): Palette[] {
   if (!Array.isArray(raw)) return [];
@@ -31,7 +36,7 @@ export function parsePalettes(raw: unknown): Palette[] {
   for (const p of raw) {
     if (!p || typeof p !== 'object') continue;
     const r = p as Record<string, unknown>;
-    const name = typeof r.name === 'string' && r.name.trim() ? r.name.trim().slice(0, 60) : `Palette ${out.length + 1}`;
+    const name = typeof r.name === 'string' && r.name.trim() ? americanName(r.name.trim().slice(0, 60)) : `Palette ${out.length + 1}`;
     const colors = Array.isArray(r.colors) ? r.colors.map(cleanColour).filter((c): c is string => !!c).slice(0, PALETTE_MAX) : [];
     out.push({ name, colors });
     if (out.length >= PALETTES_MAX) break;

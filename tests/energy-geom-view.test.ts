@@ -55,9 +55,12 @@ describe('a species\' geometry on an energy diagram', () => {
     // space-filling atoms are bigger than balls
     const r = (look: 'ball' | 'fill') => Math.max(...crystalShapes(geomSpec(atoms, bonds, { style: look }), { ...geomSpec(atoms, bonds, { style: look }).view, zoom: 1 }).filter((s) => s.kind === 'ball').map((s) => s.axes![0]));
     expect(r('fill')).toBeGreaterThan(2 * r('ball'));
-    // lines: no balls at all
+    // lines: no balls, but for an atom no line reaches (the F and Cl of a bond being made or broken), a small one
     const wire = geomSpec(atoms, bonds, { style: 'wire' });
-    expect(crystalShapes(wire, { ...wire.view, zoom: 1 }).some((s) => s.kind === 'ball')).toBe(false);
+    const lined = new Set(wire.bonds.flat());
+    const balls = crystalShapes(wire, { ...wire.view, zoom: 1 }).filter((s) => s.kind === 'ball');
+    expect(balls.length).toBeGreaterThan(0);
+    expect(balls.every((s) => !lined.has(s.atom!) && s.axes![0] < r('ball'))).toBe(true);
   });
 
   it('hides hydrogens as asked: all shown, only those of bonds being made or broken, or none', () => {

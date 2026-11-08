@@ -24,6 +24,8 @@ const PT_PER_A = 28;
 const H_RADIUS = 0.14;
 const BOND_WIDTH = 0.085;
 const STICK_RADIUS = 0.1;
+/** Lines: the ball (Å) of an atom with no line to another (a lone ion). */
+export const WIRE_LONE_RADIUS = 0.2;
 
 /** An element's colour as drawn (for the atom list's dots). */
 export const elementColour = (el: string): string => COLOURS[el] ?? '#b0b0b0';
@@ -259,12 +261,20 @@ export function crystalShapes(c: CrystalSpec, v: XView): XShape[] {
   const cc = PROBABILITY_SCALE[v.probability] ?? 1.5382;
   // sticks: the atoms with a stick to another shown atom
   const stuck = new Set<number>();
-  if (v.style === 'stick') { const shownSet = new Set(keep); for (const [p, q] of c.bonds) if (shownSet.has(p) && shownSet.has(q)) { stuck.add(p); stuck.add(q); } }
+  if (v.style === 'stick' || v.style === 'wire') { const shownSet = new Set(keep); for (const [p, q] of c.bonds) if (shownSet.has(p) && shownSet.has(q)) { stuck.add(p); stuck.add(q); } }
   for (const i of keep) {
     const a = c.atoms[i], s = screen.get(i)!;
     const colour = v.colour ? COLOURS[a.el] ?? '#b0b0b0' : '#ffffff';
     const hyd = isH(a.el);
-    if (v.style === 'wire') { radius.set(i, 0); outline.set(i, 0); continue; }
+    // lines: an atom with none (a lone ion, F⁻ coming in) a small ball, or it would not show
+    if (v.style === 'wire' && stuck.has(i)) { radius.set(i, 0); outline.set(i, 0); continue; }
+    if (v.style === 'wire') {
+      const rad = WIRE_LONE_RADIUS;
+      radius.set(i, rad);
+      outline.set(i, rad);
+      out.push({ kind: 'ball', depth: s[2], centre: pt(s), axes: [rad * scale, rad * scale], angle: 0, fill: v.colour ? COLOURS[a.el] ?? '#808080' : '#000000', stroke: v.colour ? COLOURS[a.el] ?? '#808080' : '#000000', width: 0, atom: i });
+      continue;
+    }
     if (v.style !== 'ortep' || hyd) {
       let rad = hyd && v.style !== 'ball' ? H_RADIUS : Math.max(0.15, 0.38 * (COVALENT[a.el] ?? 1) + 0.05);
       if (hyd && v.style === 'ball') rad = 0.17;
