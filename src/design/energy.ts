@@ -564,7 +564,8 @@ export function putEnergy(doc: Doc, m: Measure, d: EnergyData, at: Vec, id?: num
     }
   }
   const parts = drawEnergy(doc, m, d, at);
-  const pad = 0.3 * doc.style.bondLength;
+  // (room round the outermost text and structures, so a border or the picture's edge isn't on them)
+  const pad = 0.5 * doc.style.bondLength;
   const frame: Frame = { atoms: [...kept.atoms, ...(parts.atoms ?? [])], captions: parts.captions, arrows: parts.arrows, shapes: [...parts.shapes, ...kept.shapes], padX: pad, padY: pad, fit: true };
   const b = frameBox(doc, frame, m) ?? { x1: at.x, y1: at.y, x2: at.x + d.w, y2: at.y + d.h };
   const r = (v: number) => Math.round(v * 100) / 100;
@@ -743,6 +744,7 @@ export function drawSkeleton(doc: Doc, m: Measure, atoms: QmAtom[], bonds: QmBon
   const size = Math.max(5, Math.min(doc.style.captionSize, bl * 0.75));
   // labels: everything but a carbon with bonds drawn
   const labelled = new Set<number>();
+  const labelOf = new Map<number, number>();
   for (const i of idx) {
     const el = atoms[i].el;
     // a carbon is a corner unless only partial bonds reach it (a methyl coming in: CH3)
@@ -755,7 +757,10 @@ export function drawSkeleton(doc: Doc, m: Measure, atoms: QmAtom[], bonds: QmBon
     const p = at.get(i)!;
     const nbr = drawn.filter((b) => b.i === i || b.j === i).map((b) => at.get(b.i === i ? b.j : b.i)!);
     const before = !!hs && ((nbr.length === 1 && nbr[0].x > p.x + 0.2 * bl) || (nbr.length === 0 && /^(O|S|Se|F|Cl|Br|I)$/.test(el)));
-    const text = before ? hs + el : el + hs;
+    // an atom on its own (no bond, made, broken or whole) is an ion: F⁻ coming in, Cl⁻ leaving, Na⁺
+    const lone = !nH && !bonds.some((b) => b.i === i || b.j === i);
+    const charge = lone && /^(F|Cl|Br|I)$/.test(el) ? '^−' : lone && /^(Li|Na|K|Rb|Cs)$/.test(el) ? '^+' : '';
+    const text = (before ? hs + el : el + hs) + charge;
     const c = doc.addCaption({ x: 0, y: 0, runs: chemRuns(text).map((run) => ({ ...run, size })), justify: 'left' });
     const b = m.captionBox(c);
     // centred on the atom's symbol
@@ -764,6 +769,7 @@ export function drawSkeleton(doc: Doc, m: Measure, atoms: QmAtom[], bonds: QmBon
     const shift = lead ? lead.x2 - lead.x1 : 0;
     doc.updateCaption(c.id, { x: c.x + p.x - (sym.x1 + sym.x2) / 2 - shift, y: c.y + p.y - (b.y1 + b.y2) / 2 });
     out.captions.push(c.id);
+    labelOf.set(i, c.id);
   }
   const line = (a: Vec, b: Vec, more: Partial<Shape> = {}) => out.shapes.push(doc.addShape({ kind: 'line', x1: a.x, y1: a.y, x2: b.x, y2: b.y, color: '#000000', ...more }).id);
   const centre = { x: (r.x1 + r.x2) / 2, y: (r.y1 + r.y2) / 2 };
@@ -773,9 +779,22 @@ export function drawSkeleton(doc: Doc, m: Measure, atoms: QmAtom[], bonds: QmBon
     const len = Math.hypot(q.x - p.x, q.y - p.y);
     if (len < 1e-6) continue;
     const u = { x: (q.x - p.x) / len, y: (q.y - p.y) / len }, n = { x: -u.y, y: u.x };
-    const trim = 0.42 * size;
-    if (labelled.has(b.i)) p = { x: p.x + u.x * trim, y: p.y + u.y * trim };
-    if (labelled.has(b.j)) q = { x: q.x - u.x * trim, y: q.y - u.y * trim };
+    // a bond stops short of its atoms' labels: at the edge of the whole label (the 3 of CH₃ too)
+    const trimAt = (k: number, from: Vec, dir: Vec) => {
+      const id = labelOf.get(k);
+      if (id === undefined) return 0;
+      const r0 = m.captionBox(doc.captions.get(id)!), g = 0.12 * size;
+      const r1 = { x1: r0.x1 - g, y1: r0.y1 + 0.1 * size, x2: r0.x2 + g, y2: r0.y2 - 0.1 * size };
+      const tx = dir.x > 1e-9 ? (r1.x2 - from.x) / dir.x : dir.x < -1e-9 ? (r1.x1 - from.x) / dir.x : Infinity;
+      const ty = dir.y > 1e-9 ? (r1.y2 - from.y) / dir.y : dir.y < -1e-9 ? (r1.y1 - from.y) / dir.y : Infinity;
+      return Math.max(0.42 * size, Math.min(tx, ty));
+    };
+    let tp = labelled.has(b.i) ? trimAt(b.i, p, u) : 0, tq = labelled.has(b.j) ? trimAt(b.j, q, { x: -u.x, y: -u.y }) : 0;
+    // (some of the bond always shows: a short one between wide labels is shared out)
+    const room = len - 0.3 * size;
+    if (tp + tq > room) { const k = Math.max(0, room) / (tp + tq); tp *= k; tq *= k; }
+    p = { x: p.x + u.x * tp, y: p.y + u.y * tp };
+    q = { x: q.x - u.x * tq, y: q.y - u.y * tq };
     if (b.partial) {
       line(p, q, { dashed: true });
       if (distances) out.captions.push(distanceLabel(doc, m, p, q, centre, b.d, size * 0.85, labelBoxes));
