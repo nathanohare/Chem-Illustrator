@@ -57,6 +57,26 @@ describe('comments on text in table cells', () => {
   });
 });
 
+describe('a comment on a table\'s first cell (laptop bench wd-551)', () => {
+  const body = '<w:tbl><w:tblGrid><w:gridCol w:w="3000"/><w:gridCol w:w="3000"/></w:tblGrid>'
+    + '<w:tr><w:tc><w:p><w:commentRangeStart w:id="0"/><w:r><w:t>Cell with comment</w:t></w:r><w:commentRangeEnd w:id="0"/><w:r><w:commentReference w:id="0"/></w:r></w:p></w:tc>'
+    + '<w:tc><w:p><w:r><w:t>Plain cell</w:t></w:r></w:p></w:tc></w:tr></w:tbl><w:p><w:r><w:t>End.</w:t></w:r></w:p>';
+
+  it('saves one range for it, which Word can read', async () => {
+    const { doc } = await readDocx(wordFile(body));
+    const table = Object.values(doc.objects).find((o) => o.kind === 'table');
+    expect(table?.kind === 'table' && table.table.rows.flat().flatMap((c) => c.runs).some((r) => r.cmt)).toBe(false);
+    const bytes = await writeDocx(doc, deps);
+    const xml = strFromU8(unzipSync(bytes)['word/document.xml']);
+    for (const mark of ['commentRangeStart', 'commentRangeEnd', 'commentReference']) expect(xml.match(new RegExp(`<w:${mark} `, 'g'))).toHaveLength(1);
+    expect(xml.indexOf('commentRangeStart')).toBeLessThan(xml.indexOf('Cell with comment'));
+    expect(xml.indexOf('commentRangeEnd')).toBeGreaterThan(xml.indexOf('Plain cell'));
+    // and again after a second save
+    const again = strFromU8(unzipSync(await writeDocx((await readDocx(bytes)).doc, deps))['word/document.xml']);
+    expect(again.match(/<w:commentRangeStart /g)).toHaveLength(1);
+  });
+});
+
 describe('comments on text in footnotes', () => {
   const body = '<w:p><w:r><w:t>Made as before</w:t></w:r><w:r><w:rPr><w:vertAlign w:val="superscript"/></w:rPr><w:footnoteReference w:id="1"/></w:r><w:r><w:t>.</w:t></w:r></w:p>';
   const notes = '<w:footnote w:id="1"><w:p><w:r><w:footnoteRef/></w:r><w:r><w:t xml:space="preserve"> See </w:t></w:r><w:commentRangeStart w:id="1"/><w:r><w:t>batch 7</w:t></w:r><w:commentRangeEnd w:id="1"/><w:r><w:commentReference w:id="1"/></w:r></w:p></w:footnote>';
