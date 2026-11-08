@@ -13080,6 +13080,11 @@ function buildBox(body: HTMLElement, id: string, vertical: boolean): void {
   }
 }
 
+/** The side panel's ×, found once and kept (while the side panel is hidden it is out of the page, where a lookup can't find it). */
+function sideFold(): HTMLButtonElement {
+  const f = sideFold as typeof sideFold & { el?: HTMLButtonElement };
+  return (f.el ??= $<HTMLButtonElement>('#side-fold'));
+}
 /** The toolboxes laid out by the app itself (the rest show buttons chosen in Customize Toolboxes). */
 const SPECIAL_BOXES: Record<string, (body: HTMLElement, vertical: boolean) => void> = {
   templates: (body, vertical) => {
@@ -13141,7 +13146,7 @@ const SPECIAL_BOXES: Record<string, (body: HTMLElement, vertical: boolean) => vo
   // The side panel (Style, Warnings, Analysis; Format in documents, Cell in sheets) is a toolbox,
   // docked at the right to start with. Its arrow goes with it, so it shows even when the title bar is
   // locked away.
-  details: (body) => { body.before($('#side-fold')); body.append(sideContent); },
+  details: (body) => { body.before(sideFold()); body.append(sideContent); },
   text: (body, vertical) => { textToolbox = buildTextToolbox(body, vertical, textToolboxHooks); },
   guides: (body, vertical) => { guidesToolbox = buildGuidesToolbox(body, vertical, guidesToolboxHooks); },
   // the Smart Scheme species list, docked (it floats beside the scheme otherwise)
@@ -13397,12 +13402,12 @@ function tickToolboxes(): void {
 function placeSidePanel(): void {
   const folded = sideIsFolded();
   $('.toolbox[data-id="details"]')?.classList.toggle('collapsed', folded);
-  const fold = $('#side-fold');
+  const fold = sideFold();
   fold.textContent = '×';
   fold.title = 'Close the side panel (Ctrl+Alt+B, or the panel button at the bottom right, opens it again)';
   fold.setAttribute('aria-label', fold.title);
 }
-$('#side-fold').addEventListener('click', () => command('fold-side'));
+sideFold().addEventListener('click', () => command('fold-side'));
 $('#status-side').addEventListener('click', () => command('fold-side'));
 
 /** Below this window width the side panel folds by itself, so the drawing keeps its room. */
