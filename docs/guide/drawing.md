@@ -519,7 +519,9 @@ With nothing selected, the panel shows the structure you last drew on. Clearing 
 
 **NMR (predicted)** in the Analysis panel lists the predicted shifts for the structure, one nucleus at a time (pick ¹H or ¹³C, and the solvent; ¹⁹F and ³¹P appear too when the structure has fluorine or phosphorus). Each row gives the shift with its expected error (±), the number of hydrogens or carbons, and the atoms (numbered as on the drawing with **Show on Drawing ▸ Atom Numbers**). For ¹H, the **Mult., J (Hz)** column gives the predicted multiplicity and coupling constants, and **Peak Report** and **Copy as SI Text** write them the way an SI does: δ 6.31 (dt, *J* = 15.5, 6.8 Hz, 1H). ¹⁹F and ³¹P shifts come from atoms with the same surroundings in NMRShiftDB2 and published lists (NMRexp); Peak Report and Copy as SI Text add their lines (¹⁹F at 376 MHz and ³¹P at 162 MHz for a 400 MHz instrument), as proton-decoupled shifts without couplings. When the two protons of a CH2 differ (next to a stereocentre, or on a ring), they are listed as two rows, downfield first, on every quality; which proton is which is not predicted. OH, NH and SH protons are not predicted, since their shifts move with concentration, water and temperature; they are left out of the list, the spectrum and the SI text (the **i** by **δ (ppm)** says so). Check Data still matches a measured OH or NH peak to its group.
 
-Above the list is the predicted spectrum. Hover a row to see its peaks, or a peak to find its row and atoms. **⤢** opens it in a window you can move and resize: scroll to zoom, double-click to show everything, and pick the spectrometer frequency (300–800 MHz) and the quality (Settings ▸ Preferences sets it too):
+The NMR section stays closed until you open it, so selecting things stays quick; check **Predict NMR as soon as a structure is selected** in **Settings ▸ NMR Prediction** to have it predict with every selection. The same page sets the default quality, solvent and spectrometer frequency, and the ppm range the spectra are drawn over: ¹H from −0.5 to 10 ppm and ¹³C from −5 to 200 ppm unless you change them. A peak outside the range widens it. NMR prediction is in the desktop app only.
+
+Above the list is the predicted spectrum. Hover a row to see its peaks, or a peak to find its row and atoms. **⤢** opens it in a window you can move and resize: scroll to zoom, double-click to show everything, and pick the spectrometer frequency (300–800 MHz) and the quality (**Settings ▸ NMR Prediction** sets it too):
 
 - **Fast**: first-order multiplets;
 - **Balanced** (default): coupled protons simulated exactly in groups of up to 8, so roofing and second-order patterns such as AA′XX′ look as they would measured;
@@ -536,8 +538,6 @@ In a crowded group (long alkyl chains, cages), the weakest long-range couplings 
 - peaks further from their prediction than the expected error allows;
 - predicted signals with no peak (OH and NH are only noted, since they exchange);
 - multiplicities or coupling constants that differ from the prediction.
-
-**Open Spectrum…** reads the spectrum itself instead: a JCAMP-DX file (.jdx, .dx) or a Bruker experiment folder zipped with its processed data (pdata). The spectrum is referenced to the solvent's residual peak, its peaks are grouped into multiplets with integrals, and the result is checked the same way, with the real trace drawn in the **⤢** window.
 
 Hover a line to see its atoms. The **⤢** window then shows the measured list above the prediction, mirrored, with matched peaks joined and the problem peaks labeled. **Edit** changes the list; **×** clears the check. Coupling constants come from the 2D structure on Fast and Balanced, so protons on rings use averaged values there; Accurate takes them from the 3-D shape.
 

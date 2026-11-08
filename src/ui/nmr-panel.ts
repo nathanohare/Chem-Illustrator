@@ -17,8 +17,8 @@ import { ch2Splits, type Ch2SplitTrees } from '../chem/nmr/proton3d';
 import { withPopulations } from '../chem/conformer-rank';
 import type { Model3d } from '../chem/model3d-build';
 import { checkData, measuredLines, parsePeakLists, type CheckNucleus, type CheckResult, type MeasuredList, type PredictedRow } from '../chem/nmr/check';
-import { knownPeaks, residualPeaks } from '../chem/nmr/known-peaks';
-import { nucleusOfSpectrum, readSpectrumFile, referenceToSolvent, spectrumToList, SpectrumFileError, type MeasuredSpectrum } from '../chem/nmr/spectrum-file';
+import { knownPeaks } from '../chem/nmr/known-peaks';
+import { nmrAutoPredict } from './nmr-settings';
 import { autoRange, rowAt, spectrumSvg, SpectrumWindow, nmrQuality, type MeasuredOverlay, type SpectrumData } from './nmr-spectrum';
 
 export const NMR_SOLVENTS = ['CDCl3', 'DMSO-d6', 'CD3OD', 'C6D6', 'acetone-d6', 'CD2Cl2', 'CD3CN', 'D2O'] as const;
@@ -226,7 +226,7 @@ interface Item { molblock: string; map: number[] }
  * rows can change after the check (CH2 protons split once the accurate gaps arrive, or the quality
  * changes), so the drawing uses `pred`, never the current rows by index (issue #546).
  */
-export interface CheckEntry { list: MeasuredList; res: CheckResult; pred: PredictedRow[]; rowIdx: number[]; basis: readonly unknown[]; note?: string; trace?: MeasuredSpectrum }
+export interface CheckEntry { list: MeasuredList; res: CheckResult; pred: PredictedRow[]; rowIdx: number[]; basis: readonly unknown[]; note?: string }
 
 /** The measured list drawn against the prediction in the Spectrum window. */
 export function measuredOverlay(r: CheckEntry, nuc: CheckNucleus, sf: number): MeasuredOverlay {
@@ -240,7 +240,6 @@ export function measuredOverlay(r: CheckEntry, nuc: CheckNucleus, sf: number): M
     ...res.rows.filter((m) => m.status === 'off' && m.peak !== null).map((m) => ({ ppm: list.peaks[m.peak!].value, text: `Δ ${Math.abs(m.delta).toFixed(nuc === '1H' ? 2 : 1)}`, sev: 'warn' as const })),
     ...res.rows.filter((m) => m.pattern && m.status !== 'off' && m.peak !== null).map((m) => ({ ppm: list.peaks[m.peak!].value, text: `${list.peaks[m.peak!].mult} vs ${pred[m.row]?.mult ?? '?'}`, sev: 'info' as const })),
   ];
-  if (r.trace) return { trace: { ppm: r.trace.ppm, y: r.trace.y }, links, marks };
   return nuc === '1H'
     ? { spec: { sf, lines: measuredLines(list, sf), groups: [] }, links, marks }
     : { sticks: list.peaks.map((p) => ({ shift: p.value, n: p.n ?? 1 })), links, marks };
@@ -250,8 +249,6 @@ interface CheckState {
   text: string;
   editing: boolean;
   results: Map<CheckNucleus, CheckEntry>;
-  /** Spectra opened from files, by nucleus (they take the place of a pasted list of the same nucleus). */
-  spectra: Map<CheckNucleus, { sp: MeasuredSpectrum; name: string }>;
 }
 
 interface Shown {
@@ -403,7 +400,7 @@ export class NmrPanel {
         if (!item || !frag) return;
         const d = document.createElement('details');
         d.className = 'nmr nmr-off';
-        d.open = this.open;
+        d.open = nmrAutoPredict() && this.open;
         d.innerHTML = `<summary>NMR (predicted)</summary><div class="nmr-body"><p class="muted small">${note}</p></div>`;
         d.addEventListener('toggle', () => { this.open = d.open; });
         frag.insertBefore(d, [...frag.querySelectorAll(':scope > .an-buttons')].pop() ?? null);
@@ -416,7 +413,7 @@ export class NmrPanel {
       const d = document.createElement('details');
       d.className = 'nmr';
       d.dataset.item = String(i);
-      d.open = this.open;
+      d.open = nmrAutoPredict() && this.open;
       d.innerHTML = `<summary>NMR (predicted) <span class="info-icon" tabindex="0" role="img" title="Predicted by networks trained on measured shifts, blended with shifts of atoms with the same surroundings (NMRShiftDB2 and CC BY journal data). ± is the expected error. The chip is how many measured atoms share the atom's surroundings; ~ means a less certain prediction; M means this structure's own measured shift. Marker numbers on the drawing match the Atoms column." aria-label="About predicted NMR">i</span>
         <span class="nmr-nuc" role="group" aria-label="Nucleus"${this.report ? ' hidden' : ''}>${(['1H', '13C', '19F', '31P'] as const).map((n) => `<button type="button" data-nuc="${n}" aria-pressed="${n === this.nuc}"${n === '19F' || n === '31P' ? ' hidden' : ''}><sup>${n.slice(0, -1)}</sup>${n.slice(-1)}</button>`).join('')}</span>
         <select class="nmr-solvent" title="Solvent">${NMR_SOLVENTS.map((s) => `<option value="${s}"${s === this.solvent ? ' selected' : ''}>${s}</option>`).join('')}</select></summary>
@@ -493,7 +490,6 @@ export class NmrPanel {
       nb.addEventListener('click', (e) => {
         const t = e.target as HTMLElement;
         if (t.closest('.ck-run')) { void this.runCheck(i, d); return; }
-        if (t.closest('.ck-open')) { this.openSpectrum(i, d); return; }
         if (t.closest('.ck-cancel')) { const st = this.checkState(i, false); if (st) { st.editing = false; if (!st.results.size) this.checks.delete(item.molblock); } this.render(i, d); return; }
         if (t.closest('.ck-edit')) { const st = this.checkState(i, false); if (st) st.editing = true; this.render(i, d); return; }
         if (t.closest('.ck-clear')) { this.checks.delete(item.molblock); this.render(i, d); if (this.win?.visible && this.winItem === i) this.win.refresh(); return; }
@@ -586,7 +582,7 @@ export class NmrPanel {
     const key = this.items[i]?.molblock;
     if (key === undefined) return null;
     let st = this.checks.get(key) ?? null;
-    if (!st && make) this.checks.set(key, (st = { text: '', editing: false, results: new Map(), spectra: new Map() }));
+    if (!st && make) this.checks.set(key, (st = { text: '', editing: false, results: new Map() }));
     return st;
   }
 
@@ -598,7 +594,7 @@ export class NmrPanel {
     if (!st) return '';
     if (st.editing) {
       return `<div class="ck-box"><textarea spellcheck="false" aria-label="Measured peak list" placeholder="Paste a peak list as an SI writes it: 1H NMR (400 MHz, CDCl3) δ 7.30 (d, J = 8.7 Hz, 2H), …">${esc(st.text)}</textarea>`
-        + `<div class="ck-row"><span class="ck-read">${esc(this.readNote(st))}</span><span class="sp"><button type="button" class="ck-open" title="Open a measured spectrum: JCAMP-DX (.jdx, .dx) or a Bruker experiment folder as a .zip (with its processed pdata)">Open Spectrum…</button><button type="button" class="ck-run primary">Check</button><button type="button" class="ck-cancel">Cancel</button></span></div></div>`;
+        + `<div class="ck-row"><span class="ck-read">${esc(this.readNote(st))}</span><span class="sp"><button type="button" class="ck-run primary">Check</button><button type="button" class="ck-cancel">Cancel</button></span></div></div>`;
     }
     const nucs: CheckNucleus[] = this.report ? ['1H', '13C'] : isCheckNuc(this.nuc) ? [this.nuc] : [];
     const sev = { ok: 'ck-ok', warn: 'ck-warn', bad: 'ck-bad', info: 'ck-info' } as const;
@@ -617,35 +613,11 @@ export class NmrPanel {
     return `<ul class="ck-list">${html}</ul>`;
   }
 
-  /** What the paste box has: lists read from the text and spectra opened. */
+  /** What the paste box has: the lists read from the text. */
   private readNote(st: CheckState): string {
-    const files = [...st.spectra].map(([n, f]) => `${n} spectrum · ${f.name}`);
-    const text = parsePeakLists(st.text).filter((l) => !st.spectra.has(l.nuc)).map((l) => `${l.nuc} list · ${l.peaks.length} peak${l.peaks.length === 1 ? '' : 's'}${l.solvent ? ` · ${l.solvent}` : ''}`);
-    const all = [...files, ...text];
-    return all.length ? all.join(', ') : st.text.trim() ? 'No peaks read yet' : 'Paste a 1H or 13C list, or open a spectrum';
-  }
-
-  /** Open Spectrum…: a JCAMP-DX file or a zipped Bruker folder. */
-  private openSpectrum(i: number, d: HTMLElement): void {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.accept = '.jdx,.dx,.jcamp,.zip';
-    input.addEventListener('change', () => {
-      const f = input.files?.[0];
-      if (!f) return;
-      void f.arrayBuffer().then((buf) => {
-        try {
-          const sp = readSpectrumFile(f.name, new Uint8Array(buf));
-          const st = this.checkState(i, true)!;
-          st.spectra.set(nucleusOfSpectrum(sp), { sp, name: f.name });
-          const note = d.querySelector('.ck-read');
-          if (note) note.textContent = this.readNote(st);
-        } catch (e) {
-          this.host.flash(e instanceof SpectrumFileError ? e.message : `The spectrum could not be read: ${e instanceof Error ? e.message : String(e)}`);
-        }
-      });
-    });
-    input.click();
+    const text = parsePeakLists(st.text).map((l) => `${l.nuc} list · ${l.peaks.length} peak${l.peaks.length === 1 ? '' : 's'}${l.solvent ? ` · ${l.solvent}` : ''}`);
+    const all = text;
+    return all.length ? all.join(', ') : st.text.trim() ? 'No peaks read yet' : 'Paste a 1H or 13C peak or multiplet report';
   }
 
   /** Reads the pasted lists and compares each with the prediction. */
@@ -654,20 +626,10 @@ export class NmrPanel {
     const ta = d.querySelector<HTMLTextAreaElement>('.ck-box textarea');
     if (ta) st.text = ta.value;
     if (!s) return;
-    const hTotal = s.rows.reduce((t, r) => t + (r.h1 ? r.hCount : 0), 0);
-    const fromFiles: { list: MeasuredList; sp: MeasuredSpectrum }[] = [];
-    for (const [nuc, f] of st.spectra) {
-      // reference to the residual solvent peak, as the list's solvent says (or the panel's)
-      referenceToSolvent(f.sp, nuc, residualPeaks(f.sp.solvent ?? this.solvent, nuc));
-      const sol = f.sp.solvent ?? this.solvent;
-      const skip = (await knownPeaks(sol, nuc)).filter((k) => k.name === 'Water' || k.name.startsWith('Residual')).map((k) => k.shift);
-      fromFiles.push({ list: spectrumToList(f.sp, nuc, hTotal, skip), sp: f.sp });
-    }
-    const lists = [...fromFiles.map((x) => x.list), ...parsePeakLists(st.text).filter((l) => !st.spectra.has(l.nuc))];
-    if (!lists.length) { this.host.flash('No peaks found: paste a list such as 1H NMR (400 MHz, CDCl3) δ 7.26 (s, 1H), or open a spectrum.'); return; }
+    const lists = parsePeakLists(st.text);
+    if (!lists.length) { this.host.flash('No peaks found: paste a list such as 1H NMR (400 MHz, CDCl3) δ 7.26 (s, 1H).'); return; }
     st.results.clear();
     for (const list of lists) {
-      const trace = fromFiles.find((x) => x.list === list)?.sp;
       if (st.results.has(list.nuc)) continue;
       const rowIdx: number[] = [], rows: PredictedRow[] = [];
       s.rows.forEach((r, k) => {
@@ -678,20 +640,9 @@ export class NmrPanel {
       });
       const solvent = list.solvent ?? this.solvent;
       const known = await knownPeaks(solvent, list.nuc, await this.host.importedTables?.().catch(() => null) ?? null);
-      let res = checkData(list, rows, known);
-      if (trace && list.nuc === '1H') {
-        // integrals from a spectrum: rescale on the matched peaks only (not solvent, impurities or OH/NH), then check again
-        const used = new Set<number>(), pred = new Map<number, number>();
-        res.rows.forEach((m, k) => { if (m.peak !== null && !rows[k].exchangeable && m.status === 'ok') { used.add(m.peak); pred.set(m.peak, (pred.get(m.peak) ?? 0) + rows[k].n); } });
-        const meas = [...used].reduce((t, pi) => t + (list.peaks[pi].n ?? 0), 0), want = [...pred.values()].reduce((t, v) => t + v, 0);
-        if (meas > 0 && want > 0) {
-          const k = want / meas;
-          for (const p of list.peaks) if (p.n !== undefined) p.n = +(p.n * k).toFixed(2);
-          res = checkData(list, rows, known);
-        }
-      }
+      const res = checkData(list, rows, known);
       const note = list.solvent && list.solvent.toLowerCase() !== this.solvent.toLowerCase() ? `The list is in ${list.solvent}; the prediction is for ${this.solvent}. Pick ${list.solvent} above to compare like with like.` : undefined;
-      st.results.set(list.nuc, { list, res, pred: rows, rowIdx, basis: s.rows, note, trace });
+      st.results.set(list.nuc, { list, res, pred: rows, rowIdx, basis: s.rows, note });
     }
     st.editing = false;
     if (!this.report && !st.results.has(this.nuc as CheckNucleus)) { this.nuc = st.results.keys().next().value!; this.restyle(d.closest<HTMLElement>('.frag')?.parentElement ?? document.body); }
@@ -814,6 +765,15 @@ export class NmrPanel {
   private get quality(): NmrQuality { return nmrQuality(); }
 
   /** Shows a quality setting changed elsewhere (Settings ▸ Preferences). */
+  /** Settings ▸ NMR Prediction was saved: draw the open sections and the window again. */
+  settingsChanged(panel: HTMLElement | null): void {
+    if (panel) {
+      for (const sel of panel.querySelectorAll<HTMLSelectElement>('.nmr-solvent')) sel.value = this.solvent;
+      for (const el of panel.querySelectorAll<HTMLDetailsElement>('details.nmr')) if (el.open) void this.fill(Number(el.dataset.item), el, this.seq);
+    }
+    this.win?.refresh();
+  }
+
   qualityChanged(panel: HTMLElement | null): void {
     if (panel) this.restyle(panel); else this.win?.refresh();
   }

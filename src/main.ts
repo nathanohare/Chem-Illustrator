@@ -41,8 +41,9 @@ import { casHtml, casRuns, type CasState } from './ui/cas-panel';
 import { pubchemHtml, pubchemRuns, type PubChemState } from './ui/pubchem-panel';
 import { paragraphPages } from './document/doc-file';
 import { reviewAuthor, setReviewAuthor } from './document/revisions';
-import { NmrPanel } from './ui/nmr-panel';
-import { nmrQuality, setNmrQuality } from './ui/nmr-spectrum';
+import { NMR_SOLVENTS, NmrPanel } from './ui/nmr-panel';
+import { nmrQuality, nmrSpectrumMhz, setNmrQuality, setNmrSpectrumMhz } from './ui/nmr-spectrum';
+import { nmrAutoPredict, nmrRange, setNmrAutoPredict, setNmrRange } from './ui/nmr-settings';
 import { analysisHtml, adductHtml, ionInfo, formulaHtml, electronsHtml, analysisRuns, withRepeats, polymerHtml, descriptorRuns, DEFAULT_DESCRIPTORS, nameHtml, type RepeatUnit, type NameState } from './ui/analysis-panel';
 import { attachedAtoms, attachWhereItIs, defaultGap, nearestStructure, placeAttached, structureSig } from './editor/attached';
 import { repeatGroups, lipDirection } from './chem/polymer';
@@ -10402,6 +10403,40 @@ function setWarnLook(look: Settings['warnLook']): void {
   editor.requestScene?.();
 }
 
+/** Settings ▸ NMR Prediction (desktop app only). */
+async function nmrSettings(): Promise<void> {
+  const r1 = nmrRange('1H'), r13 = nmrRange('13C');
+  const r = await ask('NMR Prediction', [
+    { name: 'auto', label: 'Predict NMR as soon as a structure is selected', type: 'checkbox', value: String(nmrAutoPredict()),
+      help: 'Off: the NMR section of the Analysis panel stays closed until you open it (or click Predict NMR on the Canvas ribbon), so selecting things stays quick. On: it opens and predicts with every selection, as long as you left it open.' },
+    { name: 'quality', label: 'Predict spectra with', value: nmrQuality(), options: [
+      { value: 'fast', label: 'Fast: first-order multiplets' }, { value: 'balanced', label: 'Balanced: exact simulation of up to 8 coupled protons' },
+      { value: 'accurate', label: 'Accurate: 3-D conformers, up to 10 coupled protons' }],
+      help: 'Accurate also predicts both shifts of diastereotopic CH2 protons and couplings from the 3-D shape; it takes a few seconds per structure. The Spectrum window\'s dropdown changes the same setting.' },
+    { name: 'solvent', label: 'Solvent', value: nmrPanel.solvent, options: NMR_SOLVENTS.map((x) => ({ value: x, label: x })) },
+    { name: 'mhz', label: 'Spectrometer frequency', value: String(nmrSpectrumMhz()), options: [300, 400, 500, 600, 800].map((m) => ({ value: String(m), label: `${m} MHz` })) },
+    { name: 'h1lo', label: '1H spectrum from', type: 'number', value: String(r1.lo), unit: 'ppm',
+      help: 'The spectrum is drawn over this range (−0.5 to 10 ppm unless you change it) and widens by itself when a peak falls outside it.' },
+    { name: 'h1hi', label: '1H spectrum to', type: 'number', value: String(r1.hi), unit: 'ppm' },
+    { name: 'c13lo', label: '13C spectrum from', type: 'number', value: String(r13.lo), unit: 'ppm',
+      help: 'The spectrum is drawn over this range (−5 to 200 ppm unless you change it) and widens by itself when a peak falls outside it.' },
+    { name: 'c13hi', label: '13C spectrum to', type: 'number', value: String(r13.hi), unit: 'ppm' },
+  ], { ok: 'Save' });
+  if (!r) return;
+  setNmrAutoPredict(r.auto === 'true');
+  if (r.quality === 'fast' || r.quality === 'balanced' || r.quality === 'accurate') setNmrQuality(r.quality);
+  if ((NMR_SOLVENTS as readonly string[]).includes(r.solvent)) nmrPanel.solvent = r.solvent;
+  if (Number(r.mhz) > 0) setNmrSpectrumMhz(Number(r.mhz));
+  const bad: string[] = [];
+  for (const [nuc, lo, hi] of [['1H', r.h1lo, r.h1hi], ['13C', r.c13lo, r.c13hi]] as const) {
+    const a = Number(lo), b = Number(hi);
+    if (lo.trim() === '' || hi.trim() === '' || !Number.isFinite(a) || !Number.isFinite(b) || a >= b) { bad.push(nuc); continue; }
+    setNmrRange(nuc, a, b);
+  }
+  if (bad.length) flash(`The ${bad.join(' and ')} range was kept as it was: the first number has to be lower than the second.`, 6000);
+  nmrPanel.settingsChanged(document.getElementById('analysis-body'));
+}
+
 async function personalPreferences(): Promise<void> {
   const alt = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent) ? 'Option+Enter' : 'Alt+Enter';
   const r = await ask('Preferences', [
@@ -10414,10 +10449,6 @@ async function personalPreferences(): Promise<void> {
       { value: 'box', label: 'A thin red box' }, { value: 'soft', label: 'A soft red disc' }, { value: 'circle', label: 'A red circle' },
       { value: 'dashed', label: 'A dashed red circle' }, { value: 'corners', label: 'Red corner marks' }],
       help: 'Atoms with too many bonds, labels that can\'t be read and other problems the Warnings box lists. Clear Show on drawing (Warnings) to hide the marks.' },
-    ...nmrHere ? [{ name: 'nmrQuality', label: 'Predict NMR spectra with', value: nmrQuality(), options: [
-      { value: 'fast', label: 'Fast: first-order multiplets' }, { value: 'balanced', label: 'Balanced: exact simulation of up to 8 coupled protons' },
-      { value: 'accurate', label: 'Accurate: 3-D conformers, up to 10 coupled protons' }],
-      help: 'Analysis ▸ NMR and the Spectrum window start with this. Accurate also predicts both shifts of diastereotopic CH2 protons and couplings from the 3-D shape; it takes a few seconds per structure. The Spectrum window\'s dropdown changes the same setting.' }] : [],
     { name: 'offerFigures', label: 'Offer to make structures figures when opening a document', type: 'checkbox', value: String(offerFigures),
       help: 'A bar over the pages offers Make Figures when a document\'s structures aren\'t figures yet (a Word file from ChemDraw, for one). Don\'t Ask for This File on the bar turns it off for one document. Make All Structures Figures… stays on a structure\'s right-click menu either way.' },
   ], { ok: 'Save', preview: { title: 'Alkyl groups', draw: (v) => alkylPreview(parseAlkylLook(v.alkylLook)) } });
@@ -10425,9 +10456,6 @@ async function personalPreferences(): Promise<void> {
   enterFinishesText = r.enterFinishes === 'enter';
   offerFigures = r.offerFigures === 'true';
   setWarnLook(r.warnLook as Settings['warnLook']);
-  if (r.nmrQuality === 'fast' || r.nmrQuality === 'balanced' || r.nmrQuality === 'accurate') {
-    if (r.nmrQuality !== nmrQuality()) { setNmrQuality(r.nmrQuality); nmrPanel.qualityChanged(document.getElementById('analysis-body')); }
-  }
   const look = parseAlkylLook(r.alkylLook);
   const changed = look !== alkylPrefs.look;
   alkylPrefs.look = look;
@@ -13540,6 +13568,7 @@ watchRibbons((on) => { ribbonChosen = on; storeSettings(); });
 addLookToggle(canvasRibbon.el, { simple: () => ribbonLook === 'simple', toggle: () => { setRibbonLook(ribbonLook === 'simple' ? 'classic' : 'simple'); storeSettings(); } });
 const SETTINGS_PAGES: SettingsPage[] = [
   { id: 'general', title: 'General', words: 'backup back up copy move settings file new computer install reinstall export import groups selecting click outline linked text above below ask whole page tracked changes reviewer name start view recent files chemdraw objects ole word powerpoint docx pptx save structures pictures svg png compatibility', open: generalPreferences },
+  ...nmrHere ? [{ id: 'nmr', title: 'NMR Prediction', words: 'nmr prediction predict spectrum spectra proton carbon 1h 13c ppm range width solvent cdcl3 spectrometer frequency mhz quality fast balanced accurate automatic selection', open: nmrSettings }] : [],
   { id: 'preferences', title: 'Preferences', words: 'personal personalize habits enter return key finish text tool box new line alt option escape esc taste alkyl prefix italic dash hyphen tbu t-bu ipr i-pr nbu sbu ibu tert-butyl isopropyl', open: personalPreferences },
   { id: 'drawing', title: 'Drawing', words: 'bond ends round rounded square caps mitre corners methyl me ch3 axial chirality ra sa helicity charges circled ammonium nh4 r groups superscript mechanism arrows reroute wrap around block path gap arrow width arrowhead head size length units pixels px millimeters mm inches angle readout look box plain solid pointer cursor hints modifier shift alt ctrl keys', open: drawingPreferences },
   { id: 'style', perFile: true, title: 'Drawing Style', words: 'bond length line width font journal acs rsc wiley elsevier thieme hash spacing margin arrow text reagents conditions above below size smaller reaction arrows gap fit alignment line up structures plus scheme', open: drawingStyleDialog },

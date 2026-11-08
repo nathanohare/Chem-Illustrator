@@ -2,6 +2,7 @@
 // Spectrum window popped out from it, with zoom, labels, field and quality choices, Copy as Picture
 // and Put on Canvas. 1H is the simulated spectrum; 13C is one line per carbon set.
 
+import { rangeFor } from './nmr-settings';
 import type { ProtonGroup } from '../chem/nmr/coupling';
 import { multipletHalfWidth, sampleSpectrum, type NmrQuality, type PredictedSpectrum } from '../chem/nmr/spectrum';
 
@@ -26,9 +27,10 @@ export interface DrawOpts { w: number; h: number; hi: number; lo: number; labels
 export function autoRange(d: SpectrumData): { hi: number; lo: number } {
   const xs = d.nuc === '1H' ? (d.spec?.groups ?? []).map((g) => g.shift) : (d.sticks ?? []).map((s) => s.shift);
   if (d.measured) xs.push(...d.measured.links.map((l) => l.m), ...d.measured.marks.map((m) => m.ppm));
-  if (!xs.length) return d.nuc === '1H' ? { hi: 10, lo: 0 } : d.nuc === '13C' ? { hi: 220, lo: 0 } : { hi: 50, lo: -250 };
-  const m = d.nuc === '1H' ? 0.5 : 10;
-  const hi = Math.ceil((Math.max(...xs) + m) / m) * m, lo = Math.max(d.nuc === '1H' ? -0.5 : d.nuc === '13C' ? -10 : -1000, Math.floor((Math.min(...xs) - m) / m) * m);
+  if (d.nuc === '1H' || d.nuc === '13C') return rangeFor(d.nuc, xs);
+  if (!xs.length) return { hi: 50, lo: -250 };
+  const m = 10;
+  const hi = Math.ceil((Math.max(...xs) + m) / m) * m, lo = Math.max(-1000, Math.floor((Math.min(...xs) - m) / m) * m);
   return { hi, lo };
 }
 
@@ -48,8 +50,6 @@ export interface MeasuredOverlay {
   spec?: PredictedSpectrum;
   /** 13C: one line per listed peak. */
   sticks?: { shift: number; n: number }[];
-  /** A measured spectrum (ppm high to low) instead of lines drawn from a list. */
-  trace?: { ppm: Float64Array; y: Float64Array };
   /** Matched pairs: measured and predicted shift, how well they agree. */
   links: { m: number; p: number; sev: Severity }[];
   /** Labels over measured peaks that need a look. */
@@ -123,20 +123,7 @@ export function spectrumSvg(d: SpectrumData, o: DrawOpts & { overlay?: boolean }
   }
   if (ov) {
     const mBase = mid - 2, mH = mid - 2 - top;
-    if (ov.trace) {
-      // per pixel column, the highest point; the scale from the third-tallest column, as above
-      const cols = Math.round(o.w), col = new Float64Array(cols);
-      const { ppm, y } = ov.trace;
-      for (let i = 0; i < ppm.length; i++) {
-        const c = Math.floor(((o.hi - ppm[i]) / (o.hi - o.lo)) * cols);
-        if (c < 0 || c >= cols) continue;
-        if (y[i] > col[c] || col[c] === 0) col[c] = y[i];
-      }
-      const base = [...col].filter((v) => v !== 0).sort((a, b) => a - b)[Math.floor(cols * 0.25)] ?? 0;
-      for (let c = 0; c < cols; c++) col[c] = Math.max(0, col[c] - base);
-      const sorted = [...col].sort((a, b) => b - a);
-      s += `<path d="${trace(col, (sorted[2] || sorted[0] || 1) * 1.08, mBase, mH, -1)}" class="sp-meas"/>`;
-    } else if (ov.spec) {
+    if (ov.spec) {
       const { col, ymax } = columns(ov.spec, o);
       s += `<path d="${trace(col, ymax, mBase, mH, -1)}" class="sp-meas"/>`;
     } else if (ov.sticks) {
@@ -216,6 +203,8 @@ export interface SpectrumWindowHost {
  *  dropdown and Settings ▸ Preferences change the same value. */
 export function nmrQuality(): NmrQuality { try { const q = localStorage.getItem('ci-nmr-quality'); return q === 'fast' || q === 'accurate' ? q : 'balanced'; } catch { return 'balanced'; } }
 export function setNmrQuality(v: NmrQuality): void { try { localStorage.setItem('ci-nmr-quality', v); } catch { /* not remembered */ } }
+export function nmrSpectrumMhz(): number { try { return Number(localStorage.getItem('ci-nmr-mhz')) || 400; } catch { return 400; } }
+export function setNmrSpectrumMhz(v: number): void { try { localStorage.setItem('ci-nmr-mhz', String(v)); } catch { /* not remembered */ } }
 
 /** The popped-out Spectrum window: drag by its title, resize from the corner, wheel to zoom, double-click to fit. */
 export class SpectrumWindow {
@@ -225,8 +214,8 @@ export class SpectrumWindow {
   private d: SpectrumData | null = null;
   private ro: ResizeObserver;
 
-  get sf(): number { try { return Number(localStorage.getItem('ci-nmr-mhz')) || 400; } catch { return 400; } }
-  set sf(v: number) { try { localStorage.setItem('ci-nmr-mhz', String(v)); } catch { /* not remembered */ } }
+  get sf(): number { return nmrSpectrumMhz(); }
+  set sf(v: number) { setNmrSpectrumMhz(v); }
   get quality(): NmrQuality { return nmrQuality(); }
   set quality(v: NmrQuality) { setNmrQuality(v); }
 
@@ -236,7 +225,7 @@ export class SpectrumWindow {
     el.setAttribute('role', 'dialog');
     el.setAttribute('aria-label', 'Predicted spectrum');
     el.innerHTML = `<div class="nmr-spec-hd"><span class="nmr-spec-title"></span><span class="info-icon" tabindex="0" role="img" aria-label="About the spectrum" title="Simulated from the predicted shifts and coupling constants. Coupled protons are simulated exactly, so second-order patterns (roofing, AA'XX') show as they would be measured. Couplings come from the 2D structure, so ring protons use averaged values. Scroll to zoom; double-click to show everything; hover a peak to find its atoms.">i</span>
-      <span class="nmr-spec-tools"><select class="nmr-spec-mhz" title="Spectrometer frequency">${[300, 400, 500, 600, 800].map((m) => `<option value="${m}"${m === this.sf ? ' selected' : ''}>${m} MHz</option>`).join('')}</select><select class="nmr-spec-quality" title="Fast: first-order multiplets. Balanced: exact simulation of up to 8 coupled protons. Accurate: up to 12.">${(['fast', 'balanced', 'accurate'] as const).map((q) => `<option value="${q}"${q === this.quality ? ' selected' : ''}>${q[0].toUpperCase() + q.slice(1)}</option>`).join('')}</select><button type="button" class="nmr-spec-copy" title="Copy the spectrum as a picture">Copy as Picture</button><button type="button" class="nmr-spec-put" title="Put the spectrum on the drawing as a picture">Put on Canvas</button><button type="button" class="nmr-spec-close" aria-label="Close" title="Close">×</button></span></div><div class="nmr-spec-plot"></div>`;
+      <span class="nmr-spec-tools"><select class="nmr-spec-mhz" title="Spectrometer frequency">${[300, 400, 500, 600, 800].map((m) => `<option value="${m}"${m === this.sf ? ' selected' : ''}>${m} MHz</option>`).join('')}</select><select class="nmr-spec-quality" title="Fast: first-order multiplets. Balanced: exact simulation of up to 8 coupled protons. Accurate: up to 10.">${(['fast', 'balanced', 'accurate'] as const).map((q) => `<option value="${q}"${q === this.quality ? ' selected' : ''}>${q[0].toUpperCase() + q.slice(1)}</option>`).join('')}</select><button type="button" class="nmr-spec-copy" title="Copy the spectrum as a picture">Copy as Picture</button><button type="button" class="nmr-spec-put" title="Put the spectrum on the drawing as a picture">Put on Canvas</button><button type="button" class="nmr-spec-close" aria-label="Close" title="Close">×</button></span></div><div class="nmr-spec-plot"></div>`;
     this.el = el;
     document.body.appendChild(el);
     const plot = el.querySelector<HTMLElement>('.nmr-spec-plot')!;
