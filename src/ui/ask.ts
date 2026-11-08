@@ -1,6 +1,7 @@
 // Small windows that ask for a value or two (Rotate…, Scale…). The desktop app can't rely on
 // the browser's own prompt boxes, so these are drawn by the page.
 
+import { keepInRange } from './num-range';
 import { previewSlot, showDialog } from './dialog-host';
 import { addInfo } from './info-tip';
 export interface Field {
@@ -13,6 +14,9 @@ export interface Field {
   type?: 'number' | 'text' | 'textarea' | 'checkbox' | 'color' | 'password' | 'heading';
   /** Grey example text shown in an empty box. */
   placeholder?: string;
+  /** A number box's range: what is typed outside it is brought back to the nearest end. */
+  min?: number;
+  max?: number;
   /** Pick one of these instead of typing. */
   options?: { value: string; label: string }[];
   /** Offered in a list under a text box, which can still be typed in. */
@@ -111,7 +115,10 @@ export function ask(title: string, fields: Field[], opts: { ok?: string; note?: 
       } else {
         const inp = document.createElement('input');
         inp.type = f.type ?? 'text';
-        if (inp.type === 'number') inp.step = 'any';
+        if (inp.type === 'number') {
+          inp.step = 'any';
+          if (f.min !== undefined || f.max !== undefined) keepInRange(inp, f.min ?? -Infinity, f.max ?? Infinity, f.unit);
+        }
         inp.value = f.value;
         if (f.placeholder) inp.placeholder = f.placeholder;
         if (f.suggestions) {

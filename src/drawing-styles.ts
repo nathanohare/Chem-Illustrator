@@ -6,7 +6,7 @@
 // from ACS 1996 in proportion to the bond length, and the note says so.
 
 import { Doc, type Contents } from './model';
-import { ACS_1996, DocStyle, type StyleScheme } from './style';
+import { ACS_1996, clampSchemeDistance, DocStyle, SCHEME_LIMITS, type SchemeDistance, type StyleScheme } from './style';
 
 export interface StylePreset {
   style: DocStyle;
@@ -89,15 +89,15 @@ export function sameLook(a: DocStyle, b: DocStyle): boolean {
     && JSON.stringify(cleanScheme(a.scheme) ?? null) === JSON.stringify(cleanScheme(b.scheme) ?? null);
 }
 
-const SCHEME_DISTANCES = ['structGap', 'plusGap', 'textGap', 'lead', 'headGap'] as const;
+const SCHEME_DISTANCES = Object.keys(SCHEME_LIMITS) as SchemeDistance[];
 
 /** A style's own scheme settings, keeping only what makes sense (in a fixed order), or undefined when it has none. */
 export function cleanScheme(raw: unknown): StyleScheme | undefined {
   if (!raw || typeof raw !== 'object') return undefined;
   const r = raw as Record<string, unknown>;
   const out: StyleScheme = {};
-  for (const k of SCHEME_DISTANCES) { const v = r[k]; if (typeof v === 'number' && Number.isFinite(v) && v >= 0) out[k] = Math.min(500, v); }
-  if (r.textAlign === 'left' || r.textAlign === 'center' || r.textAlign === 'right') out.textAlign = r.textAlign;
+  for (const k of SCHEME_DISTANCES) { const raw = r[k]; const v = typeof raw === 'number' && raw >= 0 ? clampSchemeDistance(k, raw) : undefined; if (v !== undefined) out[k] = v; }
+  for (const k of ['textAlign', 'textAlignBelow'] as const) { const v = r[k]; if (v === 'left' || v === 'center' || v === 'right') out[k] = v; }
   if (typeof r.fit === 'boolean') out.fit = r.fit;
   return Object.keys(out).length ? out : undefined;
 }

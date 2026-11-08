@@ -10,6 +10,9 @@ import { add, mul } from '../geom';
 import type { Measure } from '../editor/arrange';
 import { arrowFrame, inFrame, interpretArrow, isReactionArrow, isStep, itemFinder, linkRows, schemeItems, type Frame, type Item } from './reaction';
 import { plainText } from '../richtext';
+import { clampSchemeDistance, SCHEME_LIMITS, type SchemeDistance } from '../style';
+
+export { clampSchemeDistance, SCHEME_LIMITS, type SchemeDistance };
 
 /** Spacing, as fractions of the bond length (ChemDraw-like: an arrow starts about half a bond from a structure). */
 export const SPACING = {
@@ -37,11 +40,15 @@ export interface SchemePrefs {
   structGap: number | null;
   /** Either side of a + sign. */
   plusGap: number | null;
-  /** Between an arrow and the text above or below it. */
+  /** Between an arrow and the text above it (and below it, unless textGapBelow says otherwise). */
   textGap: number | null;
+  /** Between an arrow and the text below it: null for the same as above. */
+  textGapBelow?: number | null;
   /** Text above and below arrows: its size (null: the drawing's caption size) and how its lines line up. */
   textSize: number | null;
   textAlign: 'left' | 'center' | 'right';
+  /** How the lines of text below an arrow line up: null for the same as above. */
+  textAlignBelow?: 'left' | 'center' | 'right' | null;
   /** The "+" boxes above and below new reaction arrows. */
   helpers: boolean;
   /** Arrows grow or shrink to fit their text (moving the products along), when it is typed and on Clean Up. */
@@ -55,9 +62,12 @@ export interface SchemePrefs {
   arrowLength?: number | null;
 }
 
-export const DEFAULT_SCHEME_PREFS: SchemePrefs = { structGap: null, plusGap: null, textGap: null, textSize: null, textAlign: 'center', helpers: true, fit: true, lead: null, headGap: null, sameLength: true };
+export const DEFAULT_SCHEME_PREFS: SchemePrefs = { structGap: null, plusGap: null, textGap: null, textGapBelow: null, textSize: null, textAlign: 'center', textAlignBelow: null, helpers: true, fit: true, lead: null, headGap: null, sameLength: true };
 
 export const schemePrefs: SchemePrefs = { ...DEFAULT_SCHEME_PREFS };
+
+const ALIGNS = ['left', 'center', 'right'] as const;
+const isAlign = (v: unknown): v is 'left' | 'center' | 'right' => (ALIGNS as readonly unknown[]).includes(v);
 
 /** Change the scheme settings (from the saved settings or the dialog). */
 export function setSchemePrefs(p: Partial<SchemePrefs>): void {
@@ -89,9 +99,11 @@ export function parseSchemePrefs(raw: unknown): SchemePrefs {
   if (!raw || typeof raw !== 'object') return out;
   const r = raw as Record<string, unknown>;
   const len = (v: unknown) => (typeof v === 'number' && isFinite(v) && v >= 0 && v <= 500 ? v : null);
-  for (const k of ['structGap', 'plusGap', 'textGap', 'lead', 'headGap'] as const) out[k] = len(r[k]);
+  // (nonsense dropped; a sensible number kept in its range)
+  for (const k of Object.keys(SCHEME_LIMITS) as SchemeDistance[]) out[k] = len(r[k]) === null ? null : clampSchemeDistance(k, r[k]) ?? null;
   out.textSize = len(r.textSize) || null;
-  if (r.textAlign === 'left' || r.textAlign === 'center' || r.textAlign === 'right') out.textAlign = r.textAlign;
+  if (isAlign(r.textAlign)) out.textAlign = r.textAlign;
+  if (isAlign(r.textAlignBelow)) out.textAlignBelow = r.textAlignBelow;
   if (typeof r.helpers === 'boolean') out.helpers = r.helpers;
   if (typeof r.fit === 'boolean') out.fit = r.fit;
   if (typeof r.sameLength === 'boolean') out.sameLength = r.sameLength;
@@ -101,10 +113,13 @@ export function parseSchemePrefs(raw: unknown): SchemePrefs {
 /** The spacings for a drawing with this bond length, in points. */
 export function spacing(bond: number, p: SchemePrefs = schemePrefs) {
   const over = SPACING.overhang * bond;
+  const conditions = p.textGap ?? SPACING.conditions * bond;
   return {
     gap: p.structGap ?? SPACING.gap * bond,
     plus: p.plusGap ?? SPACING.plus * bond,
-    conditions: p.textGap ?? SPACING.conditions * bond,
+    conditions,
+    /** Between the arrow and the text below it. */
+    conditionsBelow: p.textGapBelow ?? conditions,
     stack: SPACING.stack * bond,
     minArrow: p.arrowLength ?? SPACING.minArrow * bond,
     lead: p.lead ?? over,
@@ -118,13 +133,20 @@ export function fittedLength(widest: number, headLength: number, bond: number, p
   return Math.max(sp.minArrow, sp.lead + widest + sp.headGap + headLength);
 }
 
-/** Where along an arrow (from its tail) a line of text this wide starts, in a block `widest` wide. */
-export function lineStart(width: number, widest: number, length: number, headLength: number, bond: number, p: SchemePrefs = schemePrefs): number {
+/** How the lines of text on one side of an arrow line up. */
+export const alignOn = (p: SchemePrefs, side: 'above' | 'below'): 'left' | 'center' | 'right' => (side === 'below' ? p.textAlignBelow ?? p.textAlign : p.textAlign);
+
+/** The gap between an arrow and its text on one side. */
+export const textGapOn = (sp: ReturnType<typeof spacing>, side: 'above' | 'below'): number => (side === 'below' ? sp.conditionsBelow : sp.conditions);
+
+/** Where along an arrow (from its tail) a line of text this wide starts, in a block `widest` wide, on one side of it. */
+export function lineStart(width: number, widest: number, length: number, headLength: number, bond: number, p: SchemePrefs = schemePrefs, side: 'above' | 'below' = 'above'): number {
   const sp = spacing(bond, p);
   // with fitting the block starts after the lead; otherwise it is centred on the arrow's shaft
   const start = p.fit ? sp.lead : (length - headLength - widest) / 2;
   const block = Math.max(0, start);
-  return p.textAlign === 'left' ? block : p.textAlign === 'right' ? block + widest - width : block + (widest - width) / 2;
+  const align = alignOn(p, side);
+  return align === 'left' ? block : align === 'right' ? block + widest - width : block + (widest - width) / 2;
 }
 
 export interface SchemePlan {
@@ -329,11 +351,12 @@ function planIn(doc: Doc, m: Measure, arrowIds?: Iterable<number>): SchemePlan |
 
     // conditions: stacked from the arrow outwards, each centred along it
     const stackUp = (its: Item[], sign: 1 | -1) => {
-      let cursor = sp.conditions;
+      const side = sign > 0 ? 'above' : 'below';
+      let cursor = textGapOn(sp, side);
       const near = (it: Item) => { const q = span([it]); return sign > 0 ? q.s1 : -q.s2; };
       for (const it of its.sort((a, b) => near(a) - near(b))) {
         const q = span([it]);
-        const dt = lineStart(q.t2 - q.t1, widest, L, headLen, bond) + slack - q.t1;
+        const dt = lineStart(q.t2 - q.t1, widest, L, headLen, bond, schemePrefs, side) + slack - q.t1;
         const ds = sign > 0 ? cursor - q.s1 : -cursor - q.s2;
         moveIn(it, dt, ds);
         cursor += q.s2 - q.s1 + sp.stack;
