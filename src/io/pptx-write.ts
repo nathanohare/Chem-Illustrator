@@ -139,6 +139,72 @@ export const TAG = {
   picPrint: 'CHEMILLUSTRATOR_PIC_PRINT',
 };
 
+/**
+ * PowerPoint (365 for Windows) cuts a tag's value at this many characters when it saves, without
+ * a word: an 8 MB value comes back as its first 5 MB.
+ */
+export const TAG_CUT = 5_242_879;
+/** The most characters written in one tag: a longer value is written in pieces (see tagPieces). */
+export const TAG_PIECE = 4_000_000;
+
+/**
+ * A tag as written: a value up to TAG_PIECE characters under its own name; a longer one in pieces
+ * of up to that many, the first under the tag's name, the next ones under the name with __2, __3…
+ * after it, and the number of pieces under the name with __PARTS, all in the same tag list (so
+ * PowerPoint keeps them together on the same shape or slide).
+ */
+export function tagPieces(name: string, value: string): [string, string][] {
+  if (value.length <= TAG_PIECE) return [[name, value]];
+  const out: [string, string][] = [];
+  for (let at = 0; at < value.length;) {
+    let end = Math.min(value.length, at + TAG_PIECE);
+    // (never between the two halves of a character written as a surrogate pair)
+    if (end < value.length && /[\uD800-\uDBFF]/.test(value[end - 1])) end--;
+    out.push([out.length ? `${name}__${out.length + 1}` : name, value.slice(at, end)]);
+    at = end;
+  }
+  out.push([`${name}__PARTS`, String(out.length)]);
+  return out;
+}
+
+/**
+ * A tag list's tags with values written in pieces joined again (see tagPieces). `missing` hears of
+ * each tag with a piece missing (left with the pieces that are there).
+ */
+export function joinTagPieces(raw: Record<string, string>, missing: (name: string) => void = () => {}): Record<string, string> {
+  const out = { ...raw };
+  for (const key of Object.keys(raw)) {
+    const name = key.endsWith('__PARTS') ? key.slice(0, -7) : null;
+    if (!name || raw[name] === undefined) continue;
+    const n = Number(raw[key]);
+    delete out[key];
+    if (!Number.isInteger(n) || n < 2) continue;
+    let value = raw[name];
+    for (let i = 2; i <= n; i++) {
+      const piece = raw[`${name}__${i}`];
+      if (piece === undefined) { missing(name); continue; }
+      value += piece;
+      delete out[`${name}__${i}`];
+    }
+    out[name] = value;
+  }
+  return out;
+}
+
+/**
+ * Whether a tag's value looks cut short by PowerPoint: exactly TAG_CUT characters long and, for
+ * JSON or XML (CDXML), not a whole one.
+ */
+export function tagLooksCut(value: string): boolean {
+  if (value.length !== TAG_CUT) return false;
+  const v = value.trimStart();
+  if (v.startsWith('{') || v.startsWith('[')) {
+    try { JSON.parse(v); return false; } catch { return true; }
+  }
+  if (v.startsWith('<')) return !/>\s*$/.test(v);
+  return true;
+}
+
 /** The group a structure or scheme picture's things are all in, if they are all in one. */
 function selGroup(doc: Doc, sel: Selection): number | undefined {
   const gs = new Set<number | undefined>();
@@ -535,7 +601,8 @@ class Writer {
   /** A set of tags in ppt/tags; returns its relationship id from `from`. */
   private addTags(from: string, tags: Record<string, string>): string {
     const path = `ppt/tags/tag${++this.tags}.xml`;
-    const list = Object.entries(tags).map(([k, v]) => `<p:tag name="${xml(k)}" val="${xmlAttr(v)}"/>`).join('');
+    // (long values in pieces PowerPoint keeps whole)
+    const list = Object.entries(tags).flatMap(([k, v]) => tagPieces(k, v)).map(([k, v]) => `<p:tag name="${xml(k)}" val="${xmlAttr(v)}"/>`).join('');
     this.pkg.add(path, `${HEAD}<p:tagLst ${XMLNS}>${list}</p:tagLst>`, CT.tags);
     return this.pkg.relate(from, REL.tags, fromPpt(from, path));
   }

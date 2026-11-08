@@ -41,7 +41,7 @@ import { layoutText, caretPos, ASCENT } from '../text/layout';
 import { Master, SlideSize, LayoutId, type TemplateArt, type ArtLayer, type KeptRel, type KeptXmlPart, type NotesKept, defaultMaster, textStyles, slideDrawingStyle, slideBackground, slideColours, hasLayout, newLayoutId, deckLayouts, type LayoutDef, type PlaceholderBox, type SectionCount, type DeckSettings, type SlideHF, type DateFormat, showsNumber, showsFooter, showsDate } from '../deck/deck';
 import { backgroundColour, isPlain, sameBackground, type Background } from '../deck/background';
 import { readFill, readOneFill, type FillContext } from './pptx-background';
-import { TAG, PPT_ASCENT, MIME_EXT, arialMeasure, NS_A14, NS_M, swapBox, tableLookKey, savedTableLook } from './pptx-write';
+import { TAG, PPT_ASCENT, MIME_EXT, arialMeasure, NS_A14, NS_M, swapBox, tableLookKey, savedTableLook, joinTagPieces, tagLooksCut } from './pptx-write';
 import { ommlToTex, toOmml } from '../document/math';
 import { shapeMathPicture, shapeMathSize } from '../deck/equation';
 import { GEOS } from '../design/geo';
@@ -240,6 +240,9 @@ function inheritEl(own: Element | null, chain: Chain, lvl: number, names: string
 
 // ---------------------------------------------------------------- the reader
 
+/** Said when some of Chemweave's data kept in the file's tags was cut short by PowerPoint, or a piece of it is missing. */
+const CUT_TAG_WARNING = 'Some Chemweave data kept in this file (structures, text or picture settings saved with the slides) was cut short when PowerPoint saved it, as PowerPoint keeps at most about 5 million characters in each tag. What it belonged to came in as PowerPoint shows it.';
+
 const SKIP_PH = new Set(['dt', 'ftr', 'sldNum', 'hdr', 'sldImg']);
 
 interface PhInfo { type: string; idx: string | null }
@@ -321,8 +324,13 @@ class Reader {
       const rel = this.r.rels(from).get(rAttr(t, 'id') ?? '');
       const doc = rel ? this.r.xml(rel.target) : null;
       if (!doc) continue;
-      for (const tag of Array.from(doc.getElementsByTagNameNS(NS.p, 'tag'))) out[tag.getAttribute('name') ?? ''] = tag.getAttribute('val') ?? '';
+      const raw: Record<string, string> = {};
+      for (const tag of Array.from(doc.getElementsByTagNameNS(NS.p, 'tag'))) raw[tag.getAttribute('name') ?? ''] = tag.getAttribute('val') ?? '';
+      // long values written in pieces, joined again
+      Object.assign(out, joinTagPieces(raw, () => this.warnings.add(CUT_TAG_WARNING)));
     }
+    // a value PowerPoint cut short (one written whole by an older version, before long ones were written in pieces)
+    if (Object.values(out).some(tagLooksCut)) this.warnings.add(CUT_TAG_WARNING);
     return out;
   }
 
@@ -1482,7 +1490,8 @@ class Reader {
     // drops it when it saves, and gives its id to some other part)
     let bytes: Uint8Array | null = null, mime: string | undefined;
     if (layer === 'tag') {
-      try { if (origTag) ({ bytes, mime } = fromDataUrl(origTag)); } catch { /* lost */ }
+      // (not one PowerPoint cut short: the picture then stays as PowerPoint shows it)
+      try { if (origTag && !tagLooksCut(origTag)) ({ bytes, mime } = fromDataUrl(origTag)); } catch { /* lost */ }
     } else if (layer) {
       const rel = this.r.rels(from).get(layer);
       const target = rel && /\/image$/.test(rel.type ?? '') ? rel.target : undefined;
