@@ -1,7 +1,7 @@
 {
   "name": "chem-illustrator",
   "version": "0.1.0",
-  "description": "Fast chemical structure drawing for the lab, in the style of ChemDraw",
+  "description": "Fast chemical structure drawing for the lab that opens and saves ChemDraw files",
   "scripts": {
     "postinstall": "node scripts/copy-rdkit.mjs && node scripts/build-icons.mjs",
     "predev": "node scripts/copy-rdkit.mjs && node scripts/build-icons.mjs",

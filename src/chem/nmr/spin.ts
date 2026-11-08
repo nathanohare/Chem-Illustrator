@@ -3,7 +3,7 @@
 //
 // Copyright (c) 2026, Open-NMR contributors (Lauren Rodriguez). BSD 3-Clause License, full text in
 // THIRD-PARTY-NOTICES.md. Ported from github.com/laurennicrodriguez/Open-NMR at commit 2149d6a.
-// Port and changes: Chem Illustrator contributors, same licence for this file.
+// Port and changes: Chemweave contributors, same licence for this file.
 //
 // H = sum_i nu_i Iz_i + sum_{i<j} J_ij (Ix Ix + Iy Iy + Iz Iz) between observed spins,
 // J Iz Iz only to heteronuclei. H commutes with Fz of the observed spins and with Iz of every

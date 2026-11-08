@@ -47,10 +47,23 @@ export interface StyleScheme {
   structGap?: number;
   plusGap?: number;
   textGap?: number;
+  /** Between the arrow and the text below it (absent: as above). */
+  textGapBelow?: number;
   textAlign?: 'left' | 'center' | 'right';
+  /** How the lines of text below the arrow line up (absent: as above). */
+  textAlignBelow?: 'left' | 'center' | 'right';
   fit?: boolean;
   lead?: number;
   headGap?: number;
+}
+
+/** The scheme distances a person can set, in points, and the most each may be (none less than 0). */
+export const SCHEME_LIMITS = { structGap: 50, plusGap: 30, textGap: 30, textGapBelow: 30, lead: 50, headGap: 50 } as const;
+export type SchemeDistance = keyof typeof SCHEME_LIMITS;
+
+/** A scheme distance kept in its range (from 0 to its limit), or undefined when it isn't a number. */
+export function clampSchemeDistance(k: SchemeDistance, v: unknown): number | undefined {
+  return typeof v === 'number' && Number.isFinite(v) ? Math.min(SCHEME_LIMITS[k], Math.max(0, v)) : undefined;
 }
 
 export const ACS_1996: DocStyle = {

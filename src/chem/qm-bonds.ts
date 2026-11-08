@@ -131,7 +131,7 @@ export function skeletonMolfile(atoms: QmAtom[], bonds: QmBond[]): { molblock: s
   const at = new Map(index.map((k, n) => [k, n + 1]));
   const kept = bonds.filter((b) => at.has(b.i) && at.has(b.j));
   const f = (v: number, w: number) => v.toFixed(4).padStart(w);
-  const lines = ['', '  ChemIllustrator', '',
+  const lines = ['', '  Chemweave', '',
     `${String(index.length).padStart(3)}${String(kept.length).padStart(3)}  0  0  0  0  0  0  0  0999 V2000`,
     ...index.map((k) => `${f(atoms[k].x, 10)}${f(atoms[k].y, 10)}${f(atoms[k].z, 10)} ${atoms[k].el.padEnd(3)} 0  0  0  0  0  0  0  0  0  0  0  0`),
     ...kept.map((b) => `${String(at.get(b.i)).padStart(3)}${String(at.get(b.j)).padStart(3)}${String(b.order).padStart(3)}  0`),

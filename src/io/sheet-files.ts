@@ -233,7 +233,7 @@ export function sdfText(s: Sheet, style: DocStyle): string {
     const data = names.map(([c, h]) => [h, cellText(s, r, c)] as const).filter(([, v]) => v !== '');
     if (!st && !data.length) continue;
     let mb = st ? structureMolfile(st.contents, style).molblock : null;
-    if (!mb) mb = '\n  Chem Illustrator\n\n  0  0  0  0  0  0  0  0  0  0999 V2000\nM  END';
+    if (!mb) mb = '\n  Chemweave\n\n  0  0  0  0  0  0  0  0  0  0999 V2000\nM  END';
     const lines = mb.replace(/\r\n?/g, '\n').split('\n');
     lines[0] = titleCol !== undefined ? cellText(s, r, titleCol).replace(/\n/g, ' ').slice(0, 80) : '';
     out.push(lines.join('\n'));

@@ -60,8 +60,8 @@ export const CML: FileType = { description: 'Chemical Markup Language', extensio
 export const CDJSON: FileType = { description: 'ChemDoodle JSON', extension: 'json', mime: 'application/json' };
 /** Other programs' chemistry files a drawing can be saved as: structures, arrows and text only. */
 export const CHEM_EXCHANGE: FileType[] = [MOL, SDF, RXN, MRV, KET, CML, CDJSON];
-export const KEYMAP_FILE: FileType = { description: 'Chem Illustrator hotkeys', extension: 'json', mime: 'application/json' };
-export const SETTINGS_FILE: FileType = { description: 'Chem Illustrator settings', extension: 'json', mime: 'application/json' };
+export const KEYMAP_FILE: FileType = { description: 'Chemweave hotkeys', extension: 'json', mime: 'application/json' };
+export const SETTINGS_FILE: FileType = { description: 'Chemweave settings', extension: 'json', mime: 'application/json' };
 
 // The parts of the File System Access API used here (Chrome and Edge only).
 export interface FileHandle {
@@ -330,7 +330,7 @@ export async function askSaveChanges(name: string): Promise<'save' | 'discard' |
   if (desktop) {
     const { message } = await import('@tauri-apps/plugin-dialog');
     const r = await message(`Save changes to ${name} before closing it?`, {
-      title: 'Chem Illustrator',
+      title: 'Chemweave',
       kind: 'warning',
       buttons: { yes: 'Save', no: "Don't Save", cancel: 'Cancel' },
     });
@@ -343,6 +343,6 @@ export async function askSaveChanges(name: string): Promise<'save' | 'discard' |
 export async function showError(message: string): Promise<void> {
   if (desktop) {
     const { message: show } = await import('@tauri-apps/plugin-dialog');
-    await show(message, { title: 'Chem Illustrator', kind: 'error' });
+    await show(message, { title: 'Chemweave', kind: 'error' });
   } else window.alert(message);
 }

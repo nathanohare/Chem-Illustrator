@@ -50,7 +50,7 @@ describe('tiers', () => {
     expect(rate(base({ idlh: { value: 10, unit: 'mg/m3', source: 'NIOSH' }, vp: vp('0 mm Hg') })).tier).toBe(3);
     expect(rate(base({ ghs: { codes: ['H310'], classes: '' } })).tier).toBe(1);
     expect(rate(base({ ghs: { codes: ['H301+H311+H331'], classes: '' } })).tier).toBe(3);
-    expect(rate(base({ cas: '7664-39-3' })).tier).toBe(1);
+    expect(rate(base({ cid: 14917 /* HF */ })).tier).toBe(1);
   });
 
   it('puts IDLH up to 100 ppm, potent oral poisons, pyrophorics and volatile carcinogens in Tier 2', () => {
@@ -67,13 +67,13 @@ describe('tiers', () => {
 
   it('keeps a suspected carcinogen solvent in Tier 3 and salts in Tier 4', () => {
     expect(rate(base({ idlh: { value: 2300, unit: 'ppm', source: 'NIOSH' }, ghs: { codes: ['H351'], classes: '' } })).tier).toBe(3);
-    expect(rate(base({ cas: '7647-14-5' })).tier).toBe(4);
+    expect(rate(base({ cid: 5234 /* NaCl */ })).tier).toBe(4);
   });
 
   it('adds bench badges and what to have ready', () => {
-    expect(badges(base({ cas: '109-99-9', skin: false }))).toContain('Peroxide former');
-    expect(badges(base({ skin: true, cas: '77-78-1' }))).toEqual(expect.arrayContaining(['Skin', 'No warning']));
-    expect(haveReady(base({ cas: '7664-39-3' }))?.what).toMatch(/calcium gluconate/i);
+    expect(badges(base({ cid: 8028 /* THF */, skin: false }))).toContain('Peroxide former');
+    expect(badges(base({ skin: true, cid: 6497 /* dimethyl sulfate */ }))).toEqual(expect.arrayContaining(['Skin', 'No warning']));
+    expect(haveReady(base({ cid: 14917 }))?.what).toMatch(/calcium gluconate/i);
   });
 });
 
@@ -93,9 +93,10 @@ describe('the shipped data', () => {
     expect(tier('Sodium chloride')).toBe(4);
   });
 
-  it('has a valid CAS number and a source for every value', () => {
+  it('ships no CAS numbers (they need a licence from CAS), and has a source for every value', () => {
     for (const r of SAFETY_RECORDS) {
-      if (r.cas) expect(isCas(r.cas), `${r.name} ${r.cas}`).toBe(true);
+      expect(r.cas ?? null, r.name).toBeNull();
+      expect(JSON.stringify(r).match(/\b\d{2,7}-\d{2}-\d\b/g)?.filter(isCas) ?? [], r.name).toEqual([]);
       for (const v of [r.vp, r.bp, r.mp, r.density, r.flash]) if (v) expect(['HSDB', 'NIOSH', 'CAMEO', 'OSHA', 'DOE PAC']).toContain(v.source);
     }
   });
@@ -103,7 +104,7 @@ describe('the shipped data', () => {
   it('builds searchable tables with links', () => {
     expect(REAGENT_SAFETY.rows.length).toBe(SAFETY_RECORDS.length);
     expect(PHYSICAL_CONSTANTS.rows.length).toBe(SAFETY_RECORDS.length);
-    const [os] = findRows(REAGENT_SAFETY, '20816-12-0');
+    const [os] = findRows(REAGENT_SAFETY, 'Osmium tetroxide');
     expect(os.row.tier).toBe(1);
     expect(REAGENT_SAFETY.links!(os.row).map((l) => l.label)).toContain('PubChem');
     expect(findRows(REAGENT_SAFETY, '', { incident: PRESENT }).length).toBeGreaterThanOrEqual(3);

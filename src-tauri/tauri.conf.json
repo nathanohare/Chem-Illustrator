@@ -1,6 +1,6 @@
 {
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
-  "productName": "Chem Illustrator",
+  "productName": "Chemweave",
   "version": "0.1.0",
   "identifier": "io.github.nathanohare.chemillustrator",
   "build": {
@@ -12,7 +12,7 @@
   "app": {
     "windows": [
       {
-        "title": "Chem Illustrator",
+        "title": "Chemweave",
         "width": 1400,
         "height": 900,
         "minWidth": 800,

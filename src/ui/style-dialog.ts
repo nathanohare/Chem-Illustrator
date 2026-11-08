@@ -3,8 +3,9 @@
 // structures already drawn (redrawn in the new style, or left as they look now).
 
 import { previewSlot, showDialog } from './dialog-host';
-import type { DocStyle, StyleScheme } from '../style';
+import { clampSchemeDistance, SCHEME_LIMITS, type DocStyle, type SchemeDistance, type StyleScheme } from '../style';
 import { schemePrefs, spacing } from '../chem/scheme-layout';
+import { keepInRange } from './num-range';
 import { FONT_GROUPS } from '../fonts';
 import { STYLE_PRESETS, presetNamed, sameLook, scaleStyle, type RestyleHow } from '../drawing-styles';
 
@@ -35,6 +36,15 @@ export interface StyleDialogOptions {
 
 
 type NumKey = 'bondLength' | 'lineWidth' | 'boldWidth' | 'marginWidth' | 'hashSpacing' | 'bondSpacing' | 'chainAngle' | 'labelSize' | 'captionSize';
+/** The range each number may take (what is typed outside it is brought back to the nearest end). */
+const LIMITS: Record<NumKey, [number, number]> = {
+  bondLength: [4, 72], lineWidth: [0.1, 5], boldWidth: [0.5, 10], marginWidth: [0, 10], hashSpacing: [0.5, 10],
+  bondSpacing: [5, 50], chainAngle: [90, 180], labelSize: [4, 72], captionSize: [4, 72],
+};
+/** And the reaction arrows' own sizes. */
+const ARROW_LIMITS = { arrowWidth: [0.1, 5], arrowHeadLength: [0.5, 30], arrowHeadWidth: [0.25, 15] } as const;
+const within = ([lo, hi]: readonly [number, number], v: number) => Math.min(hi, Math.max(lo, v));
+
 const NUMS: [NumKey, string, string][] = [
   ['bondLength', 'Bond length', 'pt'],
   ['lineWidth', 'Line width', 'pt'],
@@ -81,7 +91,10 @@ export function editDrawingStyle(o: StyleDialogOptions): Promise<StyleChoice | n
     let keepWhole!: HTMLInputElement;
     const cmNote = new Map<NumKey, HTMLSpanElement>();
     for (const [k, label, unit] of NUMS) {
-      const i = el('input', { type: 'number', className: 'md-num', step: 'any', min: '0' });
+      const i = el('input', { type: 'number', className: 'md-num', step: 'any' });
+      keepInRange(i, ...LIMITS[k], unit === 'pt' ? 'pt' : unit === '°' ? '°' : '%');
+      // (which drawn distance it sets, for the preview's magnifier)
+      i.dataset.span = k;
       const u = el('span', { className: 'muted', textContent: unit });
       inputs.set(k, i);
       cmNote.set(k, u);
@@ -92,16 +105,19 @@ export function editDrawingStyle(o: StyleDialogOptions): Promise<StyleChoice | n
         row('', keep, el('span', { className: 'muted', textContent: 'Change widths and font sizes with it' }));
       }
     }
-    const labelFont = fontSelect(), labelSize = el('input', { type: 'number', className: 'md-num', step: 'any', min: '0' });
+    const labelFont = fontSelect(), labelSize = el('input', { type: 'number', className: 'md-num', step: 'any' });
+    keepInRange(labelSize, ...LIMITS.labelSize, 'pt');
     row('Atom labels', labelFont, labelSize, el('span', { className: 'muted', textContent: 'pt' }));
-    const captionFont = fontSelect(), captionSize = el('input', { type: 'number', className: 'md-num', step: 'any', min: '0' });
+    const captionFont = fontSelect(), captionSize = el('input', { type: 'number', className: 'md-num', step: 'any' });
+    keepInRange(captionSize, ...LIMITS.captionSize, 'pt');
     row('Captions', captionFont, captionSize, el('span', { className: 'muted', textContent: 'pt' }));
     inputs.set('labelSize', labelSize);
     inputs.set('captionSize', captionSize);
     // reagents and conditions over and under reaction arrows: often a point smaller than captions
-    const arrowFont = fontSelect(), arrowSize = el('input', { type: 'number', className: 'md-num', step: 'any', min: '0' });
+    const arrowFont = fontSelect(), arrowSize = el('input', { type: 'number', className: 'md-num', step: 'any' });
     arrowFont.prepend(new Option('Same as captions', ''));
     arrowSize.title = 'Leave blank for the captions\' size';
+    keepInRange(arrowSize, ...LIMITS.captionSize, 'pt');
     const smaller = el('button', { type: 'button', textContent: '1 pt smaller', title: 'One point smaller than the captions' });
     smaller.addEventListener('click', () => { const c = parseFloat(captionSize.value); if (c > 1) { arrowSize.value = String(+(c - 1).toFixed(3)); arrowSize.dispatchEvent(new Event('input', { bubbles: true })); } });
     grid.append(el('h3', { textContent: 'Reaction arrows' }));
@@ -109,27 +125,35 @@ export function editDrawingStyle(o: StyleDialogOptions): Promise<StyleChoice | n
     const showArrowSize = () => { arrowSize.placeholder = captionSize.value; };
     captionSize.addEventListener('input', showArrowSize);
     // reaction arrows: their own line width and head, apart from the bonds' (blank: the usual)
-    const arrowNum = (title: string) => { const i = el('input', { type: 'number', className: 'md-num', step: 'any', min: '0' }); i.title = title; return i; };
-    const arrowWidth = arrowNum('Leave blank for the bonds\' line width');
-    const headLength = arrowNum('Leave blank for ten line widths');
-    const headWidth = arrowNum('Leave blank for 2.5 line widths each side');
+    const arrowNum = (title: string, range: readonly [number, number]) => { const i = el('input', { type: 'number', className: 'md-num', step: 'any' }); i.title = title; keepInRange(i, range[0], range[1], 'pt'); return i; };
+    const schemeNum = (k: SchemeDistance) => arrowNum('Leave blank to scale with the bond length', [0, SCHEME_LIMITS[k]]);
+    const arrowWidth = arrowNum('Leave blank for the bonds\' line width', ARROW_LIMITS.arrowWidth);
+    const headLength = arrowNum('Leave blank for ten line widths', ARROW_LIMITS.arrowHeadLength);
+    const headWidth = arrowNum('Leave blank for 2.5 line widths each side', ARROW_LIMITS.arrowHeadWidth);
     // (each box names the distance it sets, for the preview's magnifier)
     arrowWidth.dataset.span = 'arrowWidth'; headLength.dataset.span = 'headLength'; headWidth.dataset.span = 'headWidth';
     row('Line width', arrowWidth, el('span', { className: 'muted', textContent: 'pt' }));
     row('Arrowhead length, width', headLength, headWidth, el('span', { className: 'muted', textContent: 'pt' }));
     // how arrows sit in a scheme: as Clean Up Reaction and typing text by an arrow lay them out
-    const align = el('select');
-    for (const [v, t] of [['center', 'Centered'], ['left', 'Left'], ['right', 'Right']]) align.append(new Option(t, v));
-    row('Lines of text line up', align);
-    const textGap = arrowNum('Leave blank to scale with the bond length');
+    // the text above the arrow, then the text below it (as above, unless set apart)
+    const align = el('select'), alignBelow = el('select');
+    alignBelow.append(new Option('Same as above', ''));
+    for (const [v, t] of [['center', 'Centered'], ['left', 'Left'], ['right', 'Right']]) { align.append(new Option(t, v)); alignBelow.append(new Option(t, v)); }
+    row('Lines of text above line up', align);
+    const textGap = schemeNum('textGap');
     textGap.dataset.span = 'textGap';
-    row('Gap between arrow and text', textGap, el('span', { className: 'muted', textContent: 'pt' }));
+    row('Gap between arrow and text above', textGap, el('span', { className: 'muted', textContent: 'pt' }));
+    row('Lines of text below line up', alignBelow);
+    const textGapBelow = schemeNum('textGapBelow');
+    textGapBelow.title = 'Leave blank for the same gap as above. From 0 to 30 pt';
+    textGapBelow.dataset.span = 'textGapBelow';
+    row('Gap between arrow and text below', textGapBelow, el('span', { className: 'muted', textContent: 'pt' }));
     const fit = el('input', { type: 'checkbox' });
     row('', fit, el('span', { className: 'muted', textContent: 'Fit the arrow to its text (moves the products)' }));
-    const lead = arrowNum('Leave blank to scale with the bond length'), headGap = arrowNum('Leave blank to scale with the bond length');
+    const lead = schemeNum('lead'), headGap = schemeNum('headGap');
     lead.dataset.span = 'lead'; headGap.dataset.span = 'headGap';
     const beyond = row('Arrow before and after the text', lead, headGap, el('span', { className: 'muted', textContent: 'pt' }));
-    const structGap = arrowNum('Leave blank to scale with the bond length'), plusGap = arrowNum('Leave blank to scale with the bond length');
+    const structGap = schemeNum('structGap'), plusGap = schemeNum('plusGap');
     structGap.dataset.span = 'structGap'; plusGap.dataset.span = 'plusGap';
     row('Gap to the structures', structGap, el('span', { className: 'muted', textContent: 'pt' }));
     row('Space either side of +', plusGap, el('span', { className: 'muted', textContent: 'pt' }));
@@ -137,11 +161,12 @@ export function editDrawingStyle(o: StyleDialogOptions): Promise<StyleChoice | n
       // blank: the app's scheme settings, most of them growing with the bond length
       const sp = spacing(parseFloat(inputs.get('bondLength')!.value) || shown.bondLength);
       const auto = (v: number) => String(Math.round(v * 10) / 10);
-      textGap.placeholder = auto(sp.conditions); lead.placeholder = auto(sp.lead); headGap.placeholder = auto(sp.headGap);
+      textGap.placeholder = auto(sp.conditions); textGapBelow.placeholder = textGap.value || auto(sp.conditions); lead.placeholder = auto(sp.lead); headGap.placeholder = auto(sp.headGap);
       structGap.placeholder = auto(sp.gap); plusGap.placeholder = auto(sp.plus);
       beyond.style.opacity = fit.checked ? '' : '0.5';
     };
     fit.addEventListener('change', showScheme);
+    textGap.addEventListener('input', showScheme);
     inputs.get('bondLength')!.addEventListener('input', showScheme);
     const showArrowLook = () => {
       const lw = parseFloat(arrowWidth.value) > 0 ? parseFloat(arrowWidth.value) : parseFloat(inputs.get('lineWidth')!.value);
@@ -195,7 +220,8 @@ export function editDrawingStyle(o: StyleDialogOptions): Promise<StyleChoice | n
       showArrowLook();
       const sc = st.scheme ?? {};
       align.value = sc.textAlign ?? schemePrefs.textAlign;
-      textGap.value = pt(sc.textGap); lead.value = pt(sc.lead); headGap.value = pt(sc.headGap);
+      alignBelow.value = sc.textAlignBelow ?? schemePrefs.textAlignBelow ?? '';
+      textGap.value = pt(sc.textGap); textGapBelow.value = pt(sc.textGapBelow); lead.value = pt(sc.lead); headGap.value = pt(sc.headGap);
       structGap.value = pt(sc.structGap); plusGap.value = pt(sc.plusGap);
       fit.checked = sc.fit ?? schemePrefs.fit;
       showScheme();
@@ -213,21 +239,25 @@ export function editDrawingStyle(o: StyleDialogOptions): Promise<StyleChoice | n
       const st: DocStyle = { ...shown, name: name.value.trim() || shown.name };
       for (const [k, i] of inputs) {
         const v = parseFloat(i.value);
-        if (Number.isFinite(v) && v > 0) st[k] = v;
+        if (Number.isFinite(v) && v > 0) st[k] = within(LIMITS[k], v);
       }
       st.labelFont = labelFont.value.trim() || shown.labelFont;
       st.captionFont = captionFont.value.trim() || shown.captionFont;
       const af = arrowFont.value.trim(), as = parseFloat(arrowSize.value);
       if (af && af !== st.captionFont) st.arrowTextFont = af; else delete st.arrowTextFont;
       if (Number.isFinite(as) && as > 0 && Math.abs(as - st.captionSize) > 1e-6) st.arrowTextSize = as; else delete st.arrowTextSize;
-      const own = (i: HTMLInputElement, k: 'arrowWidth' | 'arrowHeadLength' | 'arrowHeadWidth') => { const v = parseFloat(i.value); if (Number.isFinite(v) && v >= 0.05) st[k] = Math.min(30, v); else delete st[k]; };
+      const own = (i: HTMLInputElement, k: 'arrowWidth' | 'arrowHeadLength' | 'arrowHeadWidth') => { const v = parseFloat(i.value); if (Number.isFinite(v) && v > 0) st[k] = within(ARROW_LIMITS[k], v); else delete st[k]; };
       own(arrowWidth, 'arrowWidth');
       own(headLength, 'arrowHeadLength');
       own(headWidth, 'arrowHeadWidth');
       const sc: StyleScheme = {};
-      const dist = (i: HTMLInputElement) => { const v = parseFloat(i.value); return Number.isFinite(v) && v >= 0 ? Math.min(500, v) : undefined; };
-      for (const [k, i] of [['textGap', textGap], ['lead', lead], ['headGap', headGap], ['structGap', structGap], ['plusGap', plusGap]] as const) { const v = dist(i); if (v !== undefined) sc[k] = v; }
+      for (const [k, i] of [['textGap', textGap], ['textGapBelow', textGapBelow], ['lead', lead], ['headGap', headGap], ['structGap', structGap], ['plusGap', plusGap]] as const) {
+        const v = i.value.trim() === '' ? undefined : clampSchemeDistance(k, parseFloat(i.value));
+        if (v !== undefined) sc[k] = v;
+      }
       if (align.value !== schemePrefs.textAlign && (align.value === 'left' || align.value === 'center' || align.value === 'right')) sc.textAlign = align.value;
+      const below = alignBelow.value;
+      if (below !== (schemePrefs.textAlignBelow ?? '') && (below === 'left' || below === 'center' || below === 'right')) sc.textAlignBelow = below;
       if (fit.checked !== schemePrefs.fit) sc.fit = fit.checked;
       if (Object.keys(sc).length) st.scheme = sc; else delete st.scheme;
       return st;

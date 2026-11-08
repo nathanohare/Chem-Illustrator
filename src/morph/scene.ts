@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: MIT
 // Reaction animation, ported to TypeScript from cdxmorph 1.47.0 by Ryan Shenvi (Shenvi Lab),
 // https://github.com/rshenvi/cdxmorph, used with his permission. Copyright (c) 2026 Ryan Shenvi;
-// the MIT licence text is in THIRD-PARTY-NOTICES.md. Changes for Chem Illustrator: structures
+// the MIT licence text is in THIRD-PARTY-NOTICES.md. Changes for Chemweave: structures
 // come from the app's own drawing (not a CDXML reader) and are drawn in its own style.
 //
 // One structure as the animation sees it: atoms (with the label each one shows, laid out as the

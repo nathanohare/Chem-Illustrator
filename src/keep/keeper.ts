@@ -299,7 +299,7 @@ export class Keeper {
       return;
     }
     if (!t.dirty && this.prefs.changedOnDisk === 'reload') {
-      if (await this.reload(t)) this.host.flash(`${t.name} was changed outside Chem Illustrator, so it has been reloaded.`, 6000);
+      if (await this.reload(t)) this.host.flash(`${t.name} was changed outside Chemweave, so it has been reloaded.`, 6000);
       return;
     }
     await this.changedOnDisk(t, disk);
@@ -313,7 +313,7 @@ export class Keeper {
     this.paused.add(t.id);
     const keepMine = () => { t.stamp = disk; this.paused.delete(t.id); this.told.delete(t.id); };
     notice(`disk-${t.id}`, `${t.name} changed on disk`,
-      `It was changed ${when(disk.modified)} outside Chem Illustrator: by another program, someone else in a shared folder, or OneDrive bringing in changes.` +
+      `It was changed ${when(disk.modified)} outside Chemweave: by another program, someone else in a shared folder, or OneDrive bringing in changes.` +
       (t.dirty ? 'You also have unsaved changes. Reload discards them, Keep My Version overwrites theirs on the next save, and Open Their Version opens theirs in a new tab to compare.' : ' Reload shows their version; Keep My Version leaves the tab as it is.'), [
         { label: t.dirty ? 'Reload and Discard Mine' : 'Reload', run: () => void this.reload(t), main: !t.dirty },
         { label: 'Keep My Version', run: keepMine, main: t.dirty },
@@ -464,7 +464,7 @@ export class Keeper {
     try { left = await this.recovery.leftOver(this.prefs.recoveryDays); } catch { /* none */ }
     if (!left.length) {
       const m = this.prefs.recoveryMinutes;
-      await choose('Recover Unsaved Work', `There is nothing to recover. ${m ? `While you work, each tab with unsaved changes is copied every ${m === 1 ? 'minute' : `${m} minutes`}; the copies are offered here if Chem Illustrator closes before they are saved.` : 'Recovery copies are switched off (File ▸ Versions and Recovery ▸ AutoSave and Recovery Options).'}`, ['OK']);
+      await choose('Recover Unsaved Work', `There is nothing to recover. ${m ? `While you work, each tab with unsaved changes is copied every ${m === 1 ? 'minute' : `${m} minutes`}; the copies are offered here if Chemweave closes before they are saved.` : 'Recovery copies are switched off (File ▸ Versions and Recovery ▸ AutoSave and Recovery Options).'}`, ['OK']);
       return;
     }
     await this.offer(left, false);

@@ -63,7 +63,7 @@ export class UpdateUI {
     box.className = 'update-box';
     box.setAttribute('role', 'status');
     const h = document.createElement('strong');
-    h.textContent = `Chem Illustrator ${r.version}${this.host.channel() === 'stable' ? ' (stable)' : ''} is ready`;
+    h.textContent = `Chemweave ${r.version}${this.host.channel() === 'stable' ? ' (stable)' : ''} is ready`;
     const p = document.createElement('p');
     p.className = 'muted';
     p.textContent = r.notes ? shortNotes(r.notes) : 'A newer version is available.';
@@ -101,7 +101,7 @@ export class UpdateUI {
     box.className = 'update-box whats-new';
     box.setAttribute('role', 'status');
     const h = document.createElement('strong');
-    h.textContent = `What’s new in Chem Illustrator ${now}`;
+    h.textContent = `What’s new in Chemweave ${now}`;
     const list = document.createElement('div');
     list.className = 'whats-new-list';
     for (const r of found.slice(0, 5)) {

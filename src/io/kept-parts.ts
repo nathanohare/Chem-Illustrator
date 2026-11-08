@@ -242,7 +242,7 @@ export function appPropsXml(kept: KeptProps | undefined, counts = '', set: Recor
   const v: Record<string, string | null | undefined> = { ...kept?.app, ...defined(set) };
   const tag = (k: string) => (v[k] ? `<${k}>${xml(v[k]!)}</${k}>` : '');
   return `${PROPS_HEAD}<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">` +
-    `${tag('Template')}<Application>Chem Illustrator</Application>${counts}${APP_KEPT.slice(1).map(tag).join('')}</Properties>`;
+    `${tag('Template')}<Application>Chemweave</Application>${counts}${APP_KEPT.slice(1).map(tag).join('')}</Properties>`;
 }
 
 /** A part and the XML parts it leads to, with their relationships; null when the part isn't there. */

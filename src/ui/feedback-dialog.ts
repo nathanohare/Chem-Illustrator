@@ -44,7 +44,7 @@ export class FeedbackDialog {
     h.textContent = 'Send Feedback';
     const note = document.createElement('p');
     note.className = 'muted';
-    note.textContent = 'Ideas, problems and questions are all welcome. Open on GitHub fills in a new issue on the project\'s page for you to check and submit (a free GitHub account is needed). No account? Copy Text, and send it to whoever looks after Chem Illustrator in your lab.';
+    note.textContent = 'Ideas, problems and questions are all welcome. Open on GitHub fills in a new issue on the project\'s page for you to check and submit (a free GitHub account is needed). No account? Copy Text, and send it to whoever looks after Chemweave in your lab.';
 
     const kinds = document.createElement('div');
     kinds.className = 'feedback-kinds';

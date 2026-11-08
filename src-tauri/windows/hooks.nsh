@@ -9,7 +9,7 @@
 !macro NSIS_HOOK_POSTUNINSTALL
   ${If} $UpdateMode <> 1
     DeleteRegValue HKCU "Software\RegisteredApplications" "Chem Illustrator"
-    DeleteRegKey HKCU "Software\Chem Illustrator"
+    DeleteRegKey HKCU "Software\Chemweave"
     !insertmacro CI_FORGET_TYPE "cdxml"
     !insertmacro CI_FORGET_TYPE "cdx"
     !insertmacro CI_FORGET_TYPE "mol"
@@ -26,7 +26,7 @@
 
 ; An update is started by the app, which then closes itself. Windows can take a moment to finish
 ; closing it, and the installer's own check would find it still there, fail to stop it and give
-; up ("Failed to kill Chem Illustrator", issue #213). So an update first waits (up to 15 seconds)
+; up ("Failed to kill Chemweave", issue #213). So an update first waits (up to 15 seconds)
 ; for the app to be gone.
 !macro NSIS_HOOK_PREINSTALL
   ${If} $UpdateMode = 1
@@ -51,6 +51,7 @@
 ; installer's own restart sometimes leaves it closed, so it is started here too; if both get
 ; through, the second just hands over to the first (one copy of the app runs at a time).
 !macro NSIS_HOOK_POSTINSTALL
+  Call CiRemoveOldName
   ${If} $UpdateMode = 1
     ClearErrors
     ${GetOptions} $CMDLINE "/R" $R8
@@ -59,3 +60,36 @@
     ${EndIf}
   ${EndIf}
 !macroend
+
+; The app was called Chem Illustrator before it became Chemweave. The installer keeps its folder,
+; Start menu entry and Apps list entry under the app's name, so a copy installed under the old name
+; would stay beside the new one. The first Chemweave install removes it, the way an update does
+; (/UPDATE): settings, file types and Word objects stay (settings are kept under the app's id, which
+; did not change, and Chemweave points file types and objects at itself when it starts).
+!define CI_OLD_NAME "Chem Illustrator"
+!define CI_OLD_UNINSTKEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\${CI_OLD_NAME}"
+Function CiRemoveOldName
+  ReadRegStr $R6 SHCTX "${CI_OLD_UNINSTKEY}" "InstallLocation"
+  ${If} $R6 == ""
+    Return
+  ${EndIf}
+  ; InstallLocation is written in quotes
+  StrCpy $R5 $R6 1
+  ${If} $R5 == '"'
+    StrCpy $R6 $R6 -1 1
+  ${EndIf}
+  ; never remove the folder Chemweave was just installed to
+  ${If} $R6 == $INSTDIR
+    DeleteRegKey SHCTX "${CI_OLD_UNINSTKEY}"
+    Return
+  ${EndIf}
+  ${If} ${FileExists} "$R6\uninstall.exe"
+    ExecWait '"$R6\uninstall.exe" /S /UPDATE _?=$R6'
+    Delete "$R6\uninstall.exe"
+    RMDir "$R6"
+  ${EndIf}
+  DeleteRegKey SHCTX "${CI_OLD_UNINSTKEY}"
+  ; an update leaves shortcuts in place, so the old ones are removed here
+  Delete "$SMPROGRAMS\${CI_OLD_NAME}.lnk"
+  Delete "$DESKTOP\${CI_OLD_NAME}.lnk"
+FunctionEnd

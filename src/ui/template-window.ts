@@ -82,7 +82,7 @@ export function showTemplateWindow(o: TemplateWindowOptions): TemplateWindow {
   const x = document.createElement('button');
   x.type = 'button';
   x.className = 'tw-close';
-  x.title = 'Close (Esc): keep the blank file';
+  x.title = o.modal ? 'Close (Esc)' : 'Close (Esc): keep the blank file';
   x.setAttribute('aria-label', 'Close');
   x.textContent = '×';
   head.append(x);

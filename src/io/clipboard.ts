@@ -2,7 +2,7 @@
 //
 // A copy puts the selection on the clipboard in several forms, the most detailed first, so
 // each program takes the best one it understands:
-//   - our own CDXML text, so pasting back into Chem Illustrator keeps everything;
+//   - our own CDXML text, so pasting back into Chemweave keeps everything;
 //   - the same drawing as CDX, ChemDraw's format, for pasting into ChemDraw;
 //   - an EMF picture, which Word and PowerPoint paste as a sharp, scalable picture; the drawing
 //     rides inside it, so copying the picture back out of Word brings back the structure;

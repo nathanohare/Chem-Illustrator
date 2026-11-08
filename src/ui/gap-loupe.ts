@@ -27,9 +27,11 @@ const TEAL = '#0e7c93';
 const dpr = () => (typeof window !== 'undefined' ? Math.min(3, window.devicePixelRatio || 1) : 1);
 
 export interface LoupeOptions {
-  /** Where room is added for the inset when no corner is free: under the drawing, or beside it (for a preview in a wide box, so its height stays put). */
-  band?: 'below' | 'right';
-  /** Part of the drawing to show (in its points), a close-up; all of it when not given. */
+  /** Where room is added for the inset when no corner is free: under the drawing, beside it (for a preview in a wide box, so its height stays put), or none (it goes in the corner with least under it). */
+  band?: 'below' | 'right' | 'none';
+  /** Draw the dimension on the drawing itself, with no inset (for a `view` already close up on it). */
+  inline?: boolean;
+  /** Part of the drawing to show (in its points), as a close-up; all of it when not given. */
   view?: { x1: number; y1: number; x2: number; y2: number };
 }
 
@@ -68,9 +70,15 @@ export function canvasWithLoupe(doc: Doc, w: number, h: number, pad: number, max
   const by1 = Math.min(...pts.map((p) => p.y)), by2 = Math.max(...pts.map((p) => p.y));
   const mid = { x: (bx1 + bx2) / 2, y: (by1 + by2) / 2 };
   const m = at(mid);
+  if (opts.inline) {
+    // the view is itself the close-up: the dimension straight on it
+    const side = span.side ?? { x: mid.x - (pic.box.x1 + pic.box.x2) / 2, y: mid.y - (pic.box.y1 + pic.box.y2) / 2 };
+    dimension(ctx, at(span.from), at(span.to), side, 12, span.label, 10, span.anchors && [at(span.anchors[0]), at(span.anchors[1])]);
+    return canvas;
+  }
   // the inset in a corner with nothing drawn there, or else in a band added under or beside the drawing
   const fits = R * 2 + 6 <= h;
-  let spot = fits ? emptyCorner(ctx, k, w, h, R, m) : null;
+  let spot = fits ? emptyCorner(ctx, k, w, h, R, m, band === 'none') : null;
   if (!spot && band === 'right' && fits) {
     ({ canvas, ctx } = paint(2 * R + 8, 0));
     if (!ctx) return canvas;
@@ -131,26 +139,28 @@ export function canvasWithLoupe(doc: Doc, w: number, h: number, pad: number, max
 }
 
 /** Of the four corners, the centre of a round inset there with nothing drawn under it and off the spot itself, or null when there is none. */
-function emptyCorner(ctx: CanvasRenderingContext2D, k: number, w: number, h: number, R: number, spot: Vec): Vec | null {
+function emptyCorner(ctx: CanvasRenderingContext2D, k: number, w: number, h: number, R: number, spot: Vec, /** Else the corner with least drawn under it. */ leastInk = false): Vec | null {
   const m = 3;
   const corners = [{ x: m + R, y: m + R }, { x: w - m - R, y: m + R }, { x: m + R, y: h - m - R }, { x: w - m - R, y: h - m - R }];
   let img: ImageData;
   try { img = ctx.getImageData(0, 0, ctx.canvas.width, ctx.canvas.height); } catch { return null; }
   // nearest the spot first, so the leader is short
   corners.sort((a, b) => Math.hypot(a.x - spot.x, a.y - spot.y) - Math.hypot(b.x - spot.x, b.y - spot.y));
+  let fewest: { c: Vec; ink: number } | null = null;
   for (const c of corners) {
     if (Math.hypot(c.x - spot.x, c.y - spot.y) < R + 8) continue;
-    let ink = false;
-    for (let y = -R; y <= R && !ink; y += 2) for (let x = -R; x <= R; x += 2) {
+    let ink = 0;
+    for (let y = -R; y <= R; y += 2) for (let x = -R; x <= R; x += 2) {
       if (x * x + y * y > R * R) continue;
       const px = Math.round((c.x + x) * k), py = Math.round((c.y + y) * k);
       if (px < 0 || py < 0 || px >= img.width || py >= img.height) continue;
       const i = (py * img.width + px) * 4;
-      if (img.data[i] + img.data[i + 1] + img.data[i + 2] < 700) { ink = true; break; }
+      if (img.data[i] + img.data[i + 1] + img.data[i + 2] < 700) ink++;
     }
     if (!ink) return c;
+    if (!fewest || ink < fewest.ink) fewest = { c, ink };
   }
-  return null;
+  return leastInk ? fewest?.c ?? null : null;
 }
 
 function head(ctx: CanvasRenderingContext2D, tip: Vec, dir: Vec, len = 5, wid = 2): void {

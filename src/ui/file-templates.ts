@@ -8,6 +8,7 @@ import { SLIDE_TEMPLATES, applyTemplate, type SlideTemplate } from '../deck/temp
 import { STARTER_DECKS, type StarterDeck } from '../deck/starters';
 import type { Master, SlideSize } from '../deck/deck';
 import { keyOf } from '../sheet/refs';
+import { forgetTextWidths } from '../render/renderer';
 import type { TemplateCategory, TemplateCard } from './template-window';
 
 /** A small page showing a document template's title and headings. */
@@ -92,10 +93,11 @@ export function slideCategories(o: SlideChoices): TemplateCategory[] {
       const c = document.createElement('canvas');
       o.paint(c, applyTemplate(o.master, t), o.size, 96, 54, true);
       host.replaceChildren(c);
-      // the fonts that come with the app load when first used: draw again once they have
+      // the fonts that come with the app load when first used: draw again once they have, with the
+      // widths measured in the stand-in font forgotten (else a centered title sits off center)
       if (typeof document.fonts?.load === 'function') {
         void Promise.allSettled([t.titleFont, t.bodyFont].flatMap((f) => [document.fonts.load(`12px "${f}"`), document.fonts.load(`bold 12px "${f}"`)]))
-          .then(() => { if (c.isConnected) o.paint(c, applyTemplate(o.master, t), o.size, 96, 54, true); });
+          .then(() => { if (!c.isConnected) return; forgetTextWidths(); o.paint(c, applyTemplate(o.master, t), o.size, 96, 54, true); });
       }
     },
     pick: () => o.useTheme(t),

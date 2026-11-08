@@ -253,12 +253,12 @@ describe('Analysis panel ion list and name', () => {
 
   it('writes the name after the formula, not bold, with no SMILES or Calculator button', async () => {
     const { analysisHtml, nameHtml } = await import('../src/ui/analysis-panel');
-    const name = nameHtml({ kind: 'found', name: 'pyridine' }, 0);
+    const name = nameHtml({ kind: 'found', name: 'pyridine' });
     const html = analysisHtml({ formula: 'C5H5N', exact: 79.0422, mw: 79.1, charge: 0, smiles: 'c1ccncc1' }, 0, '[M+H]+', { name, ions: ['[M+H]+'] });
     expect(html).toMatch(/<div class="formula"><b>C<sub>5<\/sub>H<sub>5<\/sub>N<\/b><span class="an-iupac"> – <span class="iupac"[^>]*>pyridine<\/span>/);
     expect(html).not.toContain('c1ccncc1');
     expect(html).not.toContain('Calculator');
     expect(html).toContain('select data-adduct');
-    expect(nameHtml({ kind: 'idle' }, 0)).toBe('');
+    expect(nameHtml({ kind: 'idle' })).toBe('');
   });
 });

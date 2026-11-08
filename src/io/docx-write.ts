@@ -136,7 +136,7 @@ export function wordTheme(d: DocDesign | undefined): WorkbookTheme | null {
   const colors = c
     ? [c.text ?? '#000000', '#ffffff', c.heading, '#e7e6e6', ...c.accents.slice(0, 6), '#0563c1', '#954f72']
     : office.colors;
-  return { name: d.theme ?? f?.name ?? c?.name ?? 'Chem Illustrator', major: f?.heading ?? office.major, minor: f?.body ?? office.minor, colors };
+  return { name: d.theme ?? f?.name ?? c?.name ?? 'Chemweave', major: f?.heading ?? office.major, minor: f?.body ?? office.minor, colors };
 }
 
 export async function writeDocx(t: DocText, deps: DocxDeps, title = ''): Promise<Uint8Array> {

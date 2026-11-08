@@ -1,8 +1,8 @@
 # Getting started
 
-This page covers installing Chem Illustrator, finding your way around the window, opening your first ChemDraw file, saving, and the Settings window.
+This page covers installing Chemweave, finding your way around the window, opening your first ChemDraw file, saving, and the Settings window.
 
-Chem Illustrator is free. It draws structures the way ChemDraw does (the same hotkeys, the same ACS Document 1996 look) and opens and saves ChemDraw's `.cdxml` and `.cdx` files. Besides the chemistry **Canvas**, it has four more modes, each in its own tab: **Presentation** (Slideshow), **Spreadsheet** (Tables, Charts, and Dashboards), **Document** (Text document) and **Design** (Posters, Graphical abstracts, Figures).
+Chemweave is free. It draws structures the way ChemDraw does (the same hotkeys, the same ACS Document 1996 look) and opens and saves ChemDraw's `.cdxml` and `.cdx` files. Besides the chemistry **Canvas**, it has four more modes, each in its own tab: **Presentation** (Slideshow), **Spreadsheet** (Tables, Charts, and Dashboards), **Document** (Text document) and **Design** (Posters, Graphical abstracts, Figures).
 
 A note on keys: this guide writes Ctrl, as on Windows and Linux. On a Mac, use Cmd wherever it says Ctrl, and Option wherever it says Alt.
 
@@ -23,22 +23,22 @@ The installer puts the app in your own user folder, so it doesn't need administr
 A portable copy runs from a flash drive or any folder, with nothing installed, and keeps its settings with it.
 
 1. Download the file ending in `x64-portable.zip`.
-2. Right-click it, choose **Extract All…**, and put the **Chem Illustrator** folder wherever you want it: a flash drive, Documents, the desktop.
-3. Open the folder and double-click **Chem Illustrator.exe**. The first time, SmartScreen may warn as described above.
+2. Right-click it, choose **Extract All…**, and put the **Chemweave** folder wherever you want it: a flash drive, Documents, the desktop.
+3. Open the folder and double-click **Chemweave.exe**. The first time, SmartScreen may warn as described above.
 
-The **Chem Illustrator Data** folder next to the app is what makes it portable: your hotkeys, preferences, styles, templates and recent files are saved there instead of on the computer, so the copy behaves the same on every computer you plug it into. Keep the two together, and copy both to move your copy. **Help ▸ Hotkeys and Tips** shows "(portable)" after the version number.
+The **Chemweave Data** folder next to the app is what makes it portable: your hotkeys, preferences, styles, templates and recent files are saved there instead of on the computer, so the copy behaves the same on every computer you plug it into. Keep the two together, and copy both to move your copy. **Help ▸ Hotkeys and Tips** shows "(portable)" after the version number.
 
-Updates work as in an installed copy, except that **Install and Restart** replaces Chem Illustrator.exe in its folder rather than installing anything. If the drive can't be written to (locked, or read-only), the app says so and keeps its settings on the computer for that session.
+Updates work as in an installed copy, except that **Install and Restart** replaces Chemweave.exe in its folder rather than installing anything. If the drive can't be written to (locked, or read-only), the app says so and keeps its settings on the computer for that session.
 
 The app needs the Microsoft Edge WebView2 Runtime, which Windows 10 and 11 already have. The only thing a portable copy leaves on the computer is WebView2's cache in `%LOCALAPPDATA%\io.github.nathanohare.chemillustrator`, which holds none of your work or settings.
 
-On macOS and Linux, a folder named **Chem Illustrator Data** next to the app (or the AppImage) has the same effect.
+On macOS and Linux, a folder named **Chemweave Data** next to the app (or the AppImage) has the same effect.
 
 ### macOS
 
 Works on Apple silicon and Intel Macs, macOS 11 or newer.
 
-1. Download the file ending in `universal.dmg`, open it, and drag **Chem Illustrator** into **Applications**.
+1. Download the file ending in `universal.dmg`, open it, and drag **Chemweave** into **Applications**.
 2. Open it from **Applications**. The app is signed with an Apple Developer ID and notarised by Apple, so macOS opens it straight away, with no warning.
 
 ### iPad
@@ -47,7 +47,7 @@ The iPad app is in testing through Apple's TestFlight.
 
 1. Install the free **TestFlight** app from the App Store.
 2. On the iPad, open the invitation link, [testflight.apple.com/join/hMdcFJBH](https://testflight.apple.com/join/hMdcFJBH), and tap **Accept**, then **Install**.
-3. Open **Chem Illustrator** from the Home Screen. TestFlight offers each new test version as it comes out, and test versions stop working after 90 days unless you update.
+3. Open **Chemweave** from the Home Screen. TestFlight offers each new test version as it comes out, and test versions stop working after 90 days unless you update.
 
 Draw with an Apple Pencil or your finger: see [Pen and touch](keyboard-and-mouse.md#pen-and-touch-tablets).
 
@@ -77,11 +77,11 @@ Switching from Latest to Stable never installs an older version: you keep the on
 
 ### Beta
 
-Chem Illustrator is in **beta**: it is still being built, new features arrive often, and some things may not work as they should yet. The **Beta** mark beside the program's name in the menu bar says so; click it for more. Save your work often, and please tell us about anything that goes wrong with **Help ▸ Report a Problem**.
+Chemweave is in **beta**: it is still being built, new features arrive often, and some things may not work as they should yet. The **Beta** mark beside the program's name in the menu bar says so; click it for more. Save your work often, and please tell us about anything that goes wrong with **Help ▸ Report a Problem**.
 
 ## A tour of the window
 
-![The Chem Illustrator window with a canvas open](../images/drawing.png)
+![The Chemweave window with a canvas open](../images/drawing.png)
 
 ### The menu bar
 
@@ -246,7 +246,7 @@ Presentations, spreadsheets, documents and designs save in their own formats; se
 | **Color Palettes**, **Mode Colors**, **Reading Mode** | Your rows of colors, the color of each kind of tab, and Reading Mode's colors. |
 | **Schemes** | Gaps around arrows and + signs, text size above and below arrows, and the + boxes on new arrows. |
 | **AutoSave and Recovery** | AutoSave, how often unsaved work is copied for recovery, and how many versions are kept. |
-| **Apps and System** | Which kinds of file Chem Illustrator is offered for under **Open with** in Explorer, and a button to Windows' Default apps page (see [Files and sharing](files-and-sharing.md#opening-files-from-explorer-or-finder-desktop-app)); drawings in Word, PowerPoint and Excel opening here; and the offer to make structures figures when a document is opened. |
+| **Apps and System** | Which kinds of file Chemweave is offered for under **Open with** in Explorer, and a button to Windows' Default apps page (see [Files and sharing](files-and-sharing.md#opening-files-from-explorer-or-finder-desktop-app)); drawings in Word, PowerPoint and Excel opening here; and the offer to make structures figures when a document is opened. |
 | **Online** | Looking up names on PubChem (sends the name typed to PubChem; clear it to keep everything on your computer) and the update check and whether to get Stable or Latest updates (desktop app only). |
 
 Your preferences, hotkeys, own templates, abbreviations, palettes and toolbox layout are kept in a small settings file, `settings.json`. **Edit ▸ Keyboard Shortcuts…** shows where it is on your computer.

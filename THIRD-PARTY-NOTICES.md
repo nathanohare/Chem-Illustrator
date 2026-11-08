@@ -1,6 +1,6 @@
 # Third-party notices
 
-Chem Illustrator is licensed under the GNU General Public License, version 3 or later (see `LICENSE`). It ships the following open-source software, each part under its own licence, all of which allow it to be shipped with a GPL-3.0 program. (Apache-2.0 parts need GPL version 3, which is why the app uses version 3 or later rather than version 2.)
+Chemweave is licensed under the GNU General Public License, version 3 or later (see `LICENSE`). It ships the following open-source software, each part under its own licence, all of which allow it to be shipped with a GPL-3.0 program. (Apache-2.0 parts need GPL version 3, which is why the app uses version 3 or later rather than version 2.)
 
 | Package | Used for | Licence |
 |---|---|---|
@@ -17,8 +17,11 @@ Chem Illustrator is licensed under the GNU General Public License, version 3 or 
 | [polygon-clipping](https://github.com/mfogel/polygon-clipping) 0.15.7 by Mike Fogel (forked from martinez by Alexander Milevski), with [splaytree](https://github.com/w8r/splay-tree) 3.2.3 by Alexander Milevski | Highlight effects (soft edges, shadows, glow, textures) and ring fill shadows in saved files and copied pictures: the exact shape of each step of a fade | MIT (full text below) |
 | [robust-predicates](https://github.com/mourner/robust-predicates) 3.0.3 by Vladimir Agafonkin (part of polygon-clipping) | Exact geometry tests for polygon-clipping | Unlicense (public domain; text below) |
 | [fflate](https://github.com/101arrowz/fflate) 0.8.2 | Packing and unpacking PowerPoint, Excel and Word files (.pptx, .xlsx, .docx), and compressing PDF pages | MIT (full text below) |
-| Free fonts from [Google Fonts](https://fonts.google.com), packaged by [Fontsource](https://fontsource.org) 5.3 (`@fontsource/*`): Inter, Source Sans 3, IBM Plex Sans, Lato, Source Serif 4, Merriweather, Libre Baskerville, Montserrat, Oswald, Bebas Neue, Archivo Black, Barlow Condensed, JetBrains Mono, IBM Plex Mono (Latin, Latin-extended and Greek letters, regular and bold) | The font boxes in every mode; put inside saved Word and PowerPoint files that use them | SIL Open Font License 1.1 (copyright lines and full text below) |
+| Free fonts from [Google Fonts](https://fonts.google.com), packaged by [Fontsource](https://fontsource.org) 5.3 (`@fontsource/*`): Inter, Source Sans 3, IBM Plex Sans, Lato, Source Serif 4, Merriweather, Libre Baskerville, Montserrat, Oswald, Bebas Neue, Archivo Black, Barlow Condensed, JetBrains Mono, IBM Plex Mono (Latin, Latin-extended and Greek letters, regular and bold); and Arimo, Tinos and Cousine | The font boxes in every mode; put inside saved Word and PowerPoint files that use them. Arimo, Tinos and Cousine are put inside saved PDFs in place of Arial, Times and Courier | SIL Open Font License 1.1 (copyright lines and full text below) |
 | [Material Design Icons](https://pictogrammers.com/library/mdi/) 7.4.47 by Pictogrammers (`@mdi/svg`; the icons' outlines are copied into the app by `scripts/build-icons.mjs`, company and product logos left out) | Insert ▸ Icons in Design, Slides and Document modes | Apache-2.0 (the Pictogrammers Free License: icons under Apache-2.0, code under MIT). Some icons were contributed by other authors under Apache-2.0, as listed in the package's `meta.json`. |
+| [marked](https://marked.js.org) 18.1 by Christopher Jeffrey and the MarkedJS team | Help ▸ User Guide: showing the guide's pages | MIT. Copyright (c) 2018+, MarkedJS; Copyright (c) 2011-2018, Christopher Jeffrey. Includes code under the original Markdown licence (BSD-style, Copyright (c) 2004, John Gruber). |
+| [ONNX Runtime Web](https://onnxruntime.ai) 1.22.0 by Microsoft (`onnxruntime-web`, its WebAssembly build) | File ▸ Import Structures from a picture or PDF: runs the structure-reading model on this computer | MIT. Copyright (c) Microsoft Corporation. |
+| [MolScribe](https://github.com/thomas0809/MolScribe) by Yujie Qian and colleagues (Qian et al., *J. Chem. Inf. Model.* 2023, 63, 1925), converted to ONNX by `scripts/recognition/export.py`; the model pack is downloaded from this project's releases the first time it is used, not bundled | File ▸ Import Structures from a picture or PDF: reading structures | MIT (code and trained model) |
 | [PDF.js](https://mozilla.github.io/pdf.js/) 5.7 by Mozilla (`pdfjs-dist`, its "legacy" build) | Document ▸ Insert ▸ Object: the first page of an embedded PDF as its picture | Apache-2.0 |
 | [Tauri](https://tauri.app) (`tauri` crate, `@tauri-apps/api`) | Desktop app shell | MIT or Apache-2.0 |
 | Tauri dialog plugin (`tauri-plugin-dialog` crate, `@tauri-apps/plugin-dialog`) | The desktop app's Open and Save dialogs | MIT or Apache-2.0 |
@@ -65,6 +68,9 @@ The bundled fonts are used unchanged (only the Latin, Latin-extended and Greek p
 - Barlow Condensed: Copyright 2017 The Barlow Project Authors (https://github.com/jpt/barlow)
 - JetBrains Mono: Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono)
 - IBM Plex Mono: Copyright 2017 IBM Corp. All rights reserved.
+- Arimo: Copyright 2020 The Arimo Project Authors (https://github.com/googlefonts/arimo)
+- Tinos: Copyright 2026 The Tinos Project Authors (https://github.com/googlefonts/tinos)
+- Cousine: Copyright 2026 The Cousine Project Authors (https://github.com/googlefonts/cousine)
 
 ```
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
@@ -271,7 +277,7 @@ THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLI
 
 The Apache License 2.0, which covers TeaVM, the StAX API and PDF.js, is in `opsin-js/licences/Apache-2.0.txt`.
 
-Chem Illustrator replaces two of OPSIN's classes (`ResourceGetter` and `AutomatonInitialiser`, which load OPSIN's data files) and stands in for the Log4j logging calls; see `opsin-js/README.md`. The rest of OPSIN is unchanged.
+Chemweave replaces two of OPSIN's classes (`ResourceGetter` and `AutomatonInitialiser`, which load OPSIN's data files) and stands in for the Log4j logging calls; see `opsin-js/README.md`. The rest of OPSIN is unchanged.
 
 ## dk.brics.automaton licence
 
@@ -342,7 +348,7 @@ The above copyright notice and this permission notice shall be included in all c
 THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 ```
 
-The files in `src/morph/` keep this notice (they carry `SPDX-License-Identifier: MIT`); the rest of Chem Illustrator is GPL-3.0-or-later.
+The files in `src/morph/` keep this notice (they carry `SPDX-License-Identifier: MIT`); the rest of Chemweave is GPL-3.0-or-later.
 
 ## fflate licence
 

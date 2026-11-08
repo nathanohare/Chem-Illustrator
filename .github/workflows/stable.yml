@@ -62,4 +62,4 @@ jobs:
       - name: Note it on the version's release
         env:
           TAG: ${{ steps.pick.outputs.tag }}
-        run: gh release edit "$TAG" --title "Chem Illustrator ${TAG#v} (beta, stable)"
+        run: gh release edit "$TAG" --title "Chemweave ${TAG#v} (beta, stable)"

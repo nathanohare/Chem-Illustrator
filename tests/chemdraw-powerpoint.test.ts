@@ -23,8 +23,9 @@ import { insetWalls, crossesWalls, clampMove } from '../src/page-grid';
 import { boxOf } from '../src/objects';
 import { defaultMaster } from '../src/deck/deck';
 import { zipSync, unzipSync, strToU8, strFromU8 } from 'fflate';
+import { CHEMDRAW_DIR, noChemDraw } from './chemdraw-private';
 
-const DIR = join(__dirname, 'fixtures', 'chemdraw-clipboard');
+const DIR = CHEMDRAW_DIR;
 const fixture = (name: string) => new Uint8Array(readFileSync(join(DIR, name)));
 const fromPowerPoint = () => fixture('from-powerpoint/embedded-object.bin');
 
@@ -45,7 +46,7 @@ function chemdrawsOwn(): Doc {
 }
 
 describe('pasting a ChemDraw object copied in PowerPoint', () => {
-  it('finds the CDX in the object PowerPoint puts on the clipboard', () => {
+  it.skipIf(noChemDraw)('finds the CDX in the object PowerPoint puts on the clipboard', () => {
     const obj = fromPowerPoint();
     expect(progIdOf(obj)).toBe('ChemDraw_x64.Document.6.0');
     expect(cfbClass(obj)).toBe(CHEMDRAW_CLASS);
@@ -53,7 +54,7 @@ describe('pasting a ChemDraw object copied in PowerPoint', () => {
     expect(cdx && isCdx(cdx)).toBe(true);
   });
 
-  it('pastes the structures, not a picture', () => {
+  it.skipIf(noChemDraw)('pastes the structures, not a picture', () => {
     const doc = chemdrawObjectDrawing(fromPowerPoint());
     expect(doc).not.toBeNull();
     const own = chemdrawsOwn();
@@ -74,7 +75,7 @@ describe('pasting a ChemDraw object copied in PowerPoint', () => {
     expect(chemdrawObjectDrawing(new Uint8Array(600))).toBeNull();
   });
 
-  it('can still show the picture PowerPoint copied with it', () => {
+  it.skipIf(noChemDraw)('can still show the picture PowerPoint copied with it', () => {
     const svg = emfToSvg(fixture('from-powerpoint/picture.emf'));
     expect(svg).not.toBeNull();
     expect(svg!.vectors).toBeGreaterThan(20);
@@ -83,7 +84,7 @@ describe('pasting a ChemDraw object copied in PowerPoint', () => {
 });
 
 describe('ChemDraw objects in PowerPoint files', () => {
-  it('opens one as structures where PowerPoint shows it', () => {
+  it.skipIf(noChemDraw)('opens one as structures where PowerPoint shows it', () => {
     const got = readPptx(fixture('chemdraw-object.pptx'));
     expect(got.warnings.join(' ')).not.toMatch(/ChemDraw/);
     const c = got.slides[0].contents;
@@ -105,7 +106,7 @@ describe('ChemDraw objects in PowerPoint files', () => {
     expect(b.y2 - b.y1).toBeCloseTo(ob.y2 - ob.y1, 0);
   });
 
-  it('sizes a shrunken object\'s drawing as PowerPoint shows it', () => {
+  it.skipIf(noChemDraw)('sizes a shrunken object\'s drawing as PowerPoint shows it', () => {
     const src = unzipSync(fixture('chemdraw-object.pptx'));
     const slide = strFromU8(src['ppt/slides/slide1.xml']).replace(/<a:ext cx="5156200" cy="2560638"\/>/, '<a:ext cx="2578100" cy="1280319"/>');
     src['ppt/slides/slide1.xml'] = strToU8(slide);
@@ -115,7 +116,7 @@ describe('ChemDraw objects in PowerPoint files', () => {
     expect(w(half.atoms) / w(full.atoms)).toBeCloseTo(0.5, 2);
   });
 
-  it('saves it back as a ChemDraw object PowerPoint opens in ChemDraw, and reads that back', async () => {
+  it.skipIf(noChemDraw)('saves it back as a ChemDraw object PowerPoint opens in ChemDraw, and reads that back', async () => {
     const got = readPptx(fixture('chemdraw-object.pptx'));
     const doc = new Doc();
     doc.restoreContents(got.slides[0].contents);
@@ -152,7 +153,7 @@ describe('ChemDraw objects in PowerPoint files', () => {
     expect(new Set(back.atoms.filter((x) => x.ole).map((x) => x.ole!.prog))).toEqual(new Set(['ChemDraw_x64.Document.6.0']));
   });
 
-  it('reads the ChemDraw data, not the drawing kept beside it, once the object was changed in ChemDraw', async () => {
+  it.skipIf(noChemDraw)('reads the ChemDraw data, not the drawing kept beside it, once the object was changed in ChemDraw', async () => {
     const got = readPptx(fixture('chemdraw-object.pptx'));
     const doc = new Doc();
     doc.restoreContents(got.slides[0].contents);
@@ -173,7 +174,7 @@ describe('ChemDraw objects in PowerPoint files', () => {
   });
 });
 
-describe('saving a ChemDraw object not changed here', () => {
+describe.skipIf(noChemDraw)('saving a ChemDraw object not changed here', () => {
   const SLIDE = 'ppt/slides/slide1.xml';
   const open = () => {
     const got = readPptx(fixture('chemdraw-object.pptx'));
@@ -194,7 +195,7 @@ describe('saving a ChemDraw object not changed here', () => {
     return { bin: r.bytes(rels.find((x) => /oleObject$/.test(x.type))!.target)!, picture: r.bytes(pic.target)!, ext: pic.target.split('.').pop()! };
   };
 
-  it('keeps the object and the picture PowerPoint shows, byte for byte', async () => {
+  it.skipIf(noChemDraw)('keeps the object and the picture PowerPoint shows, byte for byte', async () => {
     const { got, doc } = open();
     expect(got.oleKept?.size).toBe(1);
     const bytes = await save(got, doc);

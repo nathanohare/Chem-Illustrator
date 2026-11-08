@@ -1,4 +1,4 @@
-// Prints of what Office shows. Chem Illustrator keeps its own copy of many things it writes to
+// Prints of what Office shows. Chemweave keeps its own copy of many things it writes to
 // an Office file (a PowerPoint tag, the model in a Word file's custom XML part), so they come back
 // exactly as made here. Office never updates those copies (ECMA-376 Part 1, 19.3.3.1 and 15.2.5),
 // so a print of the native markup the copy stands in for is kept with it: taken from the markup as

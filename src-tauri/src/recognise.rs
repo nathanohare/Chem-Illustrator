@@ -64,7 +64,7 @@ fn client(read: Duration) -> Result<reqwest::Client, String> {
         let _ = rustls::crypto::ring::default_provider().install_default();
     }
     reqwest::Client::builder()
-        .user_agent(concat!("ChemIllustrator/", env!("CARGO_PKG_VERSION")))
+        .user_agent(concat!("Chemweave/", env!("CARGO_PKG_VERSION")))
         .connect_timeout(Duration::from_secs(30))
         .read_timeout(read)
         .build()
