@@ -57,6 +57,7 @@ export const COMMAND_ICONS: Record<string, string> = {
   'find-cas': svg('<text x="12" y="16" text-anchor="middle" font-size="9" font-weight="700" fill="currentColor" font-family="system-ui">CAS</text>'),
   'pubchem-lookup': svg('<circle cx="10" cy="10" r="6"/><path d="M14.5 14.5l6 6" stroke-linecap="round"/><polygon points="10,7 12.6,8.5 12.6,11.5 10,13 7.4,11.5 7.4,8.5" stroke-width="1.1"/>'),
   'knowledge-base': svg('<path d="M12 6C9 4 5 4 3 5v14c2-1 6-1 9 1 3-2 7-2 9-1V5c-2-1-6-1-9 1z"/><path d="M12 6v14"/>'),
+  'lab-calculator': svg('<rect x="5" y="2.5" width="14" height="19" rx="1.5"/><rect x="7.5" y="5" width="9" height="4" stroke-width="1.2"/><path d="M8.5 12.5h.01M12 12.5h.01M15.5 12.5h.01M8.5 15.5h.01M12 15.5h.01M15.5 15.5h.01M8.5 18.5h.01M12 18.5h.01M15.5 18.5h.01" stroke-width="2.2"/>'),
   'compound-library': svg('<rect x="3" y="4" width="4" height="16"/><rect x="8.5" y="4" width="4" height="16"/><path d="M14.5 5.5l3.8-1 3.2 14.6-3.8 1z"/>'),
   'torsion-chart': svg('<path d="M3 20h18M3 4v16" stroke-width="1.2"/><path d="M4 9c2 9 4 9 6 0s4-9 6 0 3 6 5 4"/>'),
   'newman-projection': svg('<circle cx="12" cy="12" r="6"/><path d="M12 12V3M12 12l-7.8 4.5M12 12l7.8 4.5"/><path d="M12 6l0 0M6.8 9l-4.3-2.5M17.2 9l4.3-2.5M12 18v3.5" />'),

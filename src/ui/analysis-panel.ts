@@ -77,7 +77,7 @@ function patternSvg(p: IsotopePeak[]): string {
 }
 
 function deg(k: number | null): string {
-  return k === null ? '' : `${Math.round(k - 273.15)} °C`;
+  return k === null ? '' : `${Math.round(k - 273.15)} °C`.replace('-', '−');
 }
 
 /**
@@ -165,18 +165,34 @@ export type NameState =
   | { kind: 'found'; name: string }
   | { kind: 'none'; message: string };
 
-/** The structure's systematic name, or the button that asks for it (the namer loads only when first asked). */
-export function nameHtml(state: NameState, i: number): string {
-  const ask = `<button type="button" data-name="${i}" title="Generate the IUPAC name offline. Shown only if it converts back to exactly this structure. The namer (about 14 MB) downloads on first use.">IUPAC name</button>`;
-  if (state.kind === 'idle') return `<div class="an-name an-buttons">${ask}</div>`;
-  if (state.kind === 'busy') return `<p class="an-name muted small">${state.loading ? 'Loading the namer (first time only)…' : 'Naming…'}</p>`;
-  if (state.kind === 'none') return `<p class="an-name muted small">${esc(state.message)}</p>`;
-  const html = nameRuns(state.name).map((r) => (r.italic ? `<i>${esc(r.text)}</i>` : esc(r.text))).join('');
-  return `<div class="an-name"><span class="iupac" title="Systematic name (OpenClatura), checked by reading it back with OPSIN">${html}</span>
-    <button type="button" data-insert="name:${i}" title="Put the name under the structure; it follows the structure and can be edited like any text">Name caption</button></div>`;
+/** An ion's label as plain text with its charge raised in Unicode ([M+H]⁺, [M+2H]²⁺, [M−H]⁻), for the ion list. */
+export function adductText(label: string): string {
+  const up: Record<string, string> = { '0': '⁰', '1': '¹', '2': '²', '3': '³', '4': '⁴', '5': '⁵', '6': '⁶', '7': '⁷', '8': '⁸', '9': '⁹', '+': '⁺', '-': '⁻' };
+  return label.replace(/\](\d*[+-])$/, (_, c: string) => ']' + [...c].map((ch) => up[ch]).join('')).replace(/(?<=\[[^\]]*)-/g, '−');
 }
 
-export function analysisHtml(r: FragmentResult, i: number, adductText: string, extras: { stereo?: string; unknown?: string[]; pubchem?: string; electrons?: string; rGroups?: string[]; name?: string; cas?: { row: string; button: string } }): string {
+/** The ion list that stands in for the m/z row's label: "m/z" and a short drop-down of the common ions. */
+export function ionSelectHtml(chosen: string, ions: readonly string[]): string {
+  const list = ions.includes(chosen) ? ions : [chosen, ...ions];
+  return `<span class="an-ion">m/z <select data-adduct title="The ion for m/z, the isotope pattern and the HRMS text" aria-label="Ion">${list.map((a) => `<option value="${esc(a)}"${a === chosen ? ' selected' : ''}>${esc(adductText(a))}</option>`).join('')}</select></span>`;
+}
+
+/**
+ * The structure's systematic name, written after its formula (C5H5N – pyridine). The namer starts
+ * by itself a few seconds after the first structure is analysed; until it has a name the place is
+ * empty, or says it is naming.
+ */
+export function nameHtml(state: NameState, i: number): string {
+  if (state.kind === 'idle') return '';
+  if (state.kind === 'busy') return `<span class="an-iupac muted" title="${state.loading ? 'Loading the offline namer (first time this session)' : 'Working out the systematic name'}"> – naming…</span>`;
+  if (state.kind === 'none') return `<span class="an-iupac muted" title="${esc(state.message)}"> – no name</span>`;
+  const html = nameRuns(state.name).map((r) => (r.italic ? `<i>${esc(r.text)}</i>` : esc(r.text))).join('');
+  return `<span class="an-iupac"> – <span class="iupac" title="Systematic name (OpenClatura), checked by reading it back with OPSIN">${html}</span><button type="button" class="an-icon-btn" data-insert="name:${i}" title="Name caption: put the name under the structure; it follows the structure and can be edited like any text" aria-label="Name caption">${CAPTION_ICON}</button></span>`;
+}
+
+const CAPTION_ICON = '<svg viewBox="0 0 16 16" width="13" height="13" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><path d="M3 3.5h10M3 7h10"/><path d="M4.5 10.5h7M8 13.5v-6" stroke-width="1.2"/><path d="M6.3 12l1.7 1.7 1.7-1.7"/></svg>';
+
+export function analysisHtml(r: FragmentResult, i: number, adductText: string, extras: { ions?: readonly string[]; stereo?: string; unknown?: string[]; pubchem?: string; electrons?: string; rGroups?: string[]; name?: string; cas?: { row: string; button: string } }): string {
   if (r.error) return `<div class="frag"><p class="warn">${esc(r.error)}</p></div>`;
   // with R groups only the core is known: no ion or elemental analysis for a compound not drawn
   const core = !!extras.rGroups?.length;
@@ -187,7 +203,9 @@ export function analysisHtml(r: FragmentResult, i: number, adductText: string, e
     `<tr><th>Exact mass</th><td>${r.exact.toFixed(4)}</td></tr>`,
     `<tr><th>Mol. wt.</th><td>${r.mw.toFixed(2)}</td></tr>`,
   ];
-  if (ion) rows.push(`<tr><th>m/z ${adductHtml(ion.adduct.label)}</th><td>${ion.mz.toFixed(4)}</td></tr>`);
+  // the ion list stands in for the row's label; a charged structure is its own ion, so it has none
+  if (!core && r.charge === 0) rows.push(`<tr class="an-ion-row"><th>${ionSelectHtml(adductText, extras.ions ?? [adductText])}</th><td>${ion ? ion.mz.toFixed(4) : '<span class="muted" title="This ion can\'t be made from this structure">—</span>'}</td></tr>`);
+  else if (ion) rows.push(`<tr><th>m/z ${adductHtml(ion.adduct.label)}</th><td>${ion.mz.toFixed(4)}</td></tr>`);
   if (ea) rows.push(`<tr><th>Elemental</th><td>${reported(ea).map((x) => `${x.el}, ${x.pct.toFixed(2)}`).join('; ')}</td></tr>`);
   if (extras.stereo) rows.push(`<tr><th>Stereo</th><td>${esc(extras.stereo)}</td></tr>`);
   if (extras.cas && !core) rows.push(extras.cas.row);
@@ -226,16 +244,13 @@ export function analysisHtml(r: FragmentResult, i: number, adductText: string, e
       ${core ? '' : `<button type="button" data-insert="formula:${i}" title="Attach the formula and masses under the structure: they follow it and update when it changes (choose what is shown in the Style panel)">Attach descriptors</button>`}
       ${ion ? `<button type="button" data-insert="hrms:${i}" title="Put an HRMS line under the structure (ACS style); type the found value into it">HRMS text</button>` : ''}
       ${ea ? `<button type="button" data-insert="ea:${i}" title="Put an elemental analysis line under the structure (ACS style)">Anal. text</button>` : ''}
-      ${core ? '' : `<button type="button" data-calc="${i}" title="Mass, mmol and volume of this compound (neat or as a solution), the mass for a solution, and dilutions, with its molecular weight filled in">Calculator</button>`}
       ${core ? '' : extras.cas?.button ?? ''}
     </div>`;
   return `<div class="frag">
-    <div class="formula">${formulaHtml(r.formula)}${core ? `·${extras.rGroups!.map(esc).join('·')} <span class="muted">(core only)</span>` : ''}</div>
+    <div class="formula"><b>${formulaHtml(r.formula)}</b>${core ? `·${extras.rGroups!.map(esc).join('·')} <span class="muted">(core only)</span>` : extras.name ?? ''}</div>
     ${core ? `<p class="muted small">${extras.rGroups!.map(esc).join(', ')} could be anything, so there are no masses. Chemistry ▸ R-Group Table works out each compound.</p>` : ''}
-    ${extras.name ?? ''}
     <table>${rows.join('')}</table>
     ${extras.electrons ?? ''}${iso}${props}
-    <div class="smiles" title="SMILES">${esc(r.smiles)}</div>
     ${extras.unknown?.length ? `<p class="warn">Not recognized (skipped): ${extras.unknown.map(esc).join(', ')}</p>` : ''}
     ${buttons}${extras.pubchem ?? ''}
   </div>`;
@@ -353,13 +368,12 @@ export function polymerFormulaHtml(ends: string, units: { text: string; formula:
 }
 
 /** The panel for a structure holding a polymer's repeat unit: its formula and the masses of the parts. */
-export function polymerHtml(r: FragmentResult, p: NonNullable<ReturnType<typeof withRepeats>['polymer']>): string {
+export function polymerHtml(p: NonNullable<ReturnType<typeof withRepeats>['polymer']>): string {
   const rows = p.units.map((u) => `<tr><th>Unit (${formulaHtml(u.formula)})<sub><i>${esc(u.text)}</i></sub></th><td>${u.exact.toFixed(4)}<br>${u.mw.toFixed(2)} g/mol</td></tr>`);
   if (p.ends) rows.push(`<tr><th>End groups ${formulaHtml(p.ends)}</th><td>${p.endExact.toFixed(4)}<br>${p.endMw.toFixed(2)} g/mol</td></tr>`);
   return `<div class="frag">
-    <div class="formula">${polymerFormulaHtml(p.ends, p.units)}</div>
+    <div class="formula"><b>${polymerFormulaHtml(p.ends, p.units)}</b></div>
     <table>${rows.join('')}</table>
     <p class="muted small">A polymer: exact mass and molecular weight per repeat unit (and of the end groups). Type a number in place of ${esc(p.units[0].text)} for a molecule of that length.</p>
-    <div class="smiles" title="SMILES (one repeat unit)">${esc(r.smiles)}</div>
   </div>`;
 }
