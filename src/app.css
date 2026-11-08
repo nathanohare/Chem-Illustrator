@@ -111,10 +111,6 @@ header {
 header h1.app-name { font-size: var(--fs-sm); margin: 0 4px 0 auto; font-weight: 600; letter-spacing: 0.01em; color: var(--muted); white-space: nowrap; }
 /* the name takes only the room left over (never wrapping the menu bar to a second row) */
 header h1.app-name { flex: 1 1 0; min-width: 0; overflow: hidden; text-overflow: ellipsis; text-align: right; }
-/* the Beta mark beside the program's name (src/updates.ts STAGE) */
-header .stage-badge { height: 18px; padding: 0 7px; margin: 0 2px 0 -2px; border: 1px solid var(--accent); border-radius: 9px; background: transparent; color: var(--accent); font-size: var(--fs-xs); font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; line-height: 16px; cursor: pointer; }
-header .stage-badge:hover { background: var(--accent); color: var(--on-accent); }
-body.mode-window header > .stage-badge { color: #fff; border-color: rgba(255, 255, 255, 0.7); }
 header .sep { width: 1px; background: var(--line); }
 /* View > Mode Colours > The whole window: the menu bar in the mode's colour with white text */
 body.mode-window header { background: var(--bar); border-bottom-color: var(--bar); color: #fff; }
@@ -182,7 +178,7 @@ header, .ribbon, .toolbox, .menu, .context-menu, #tabs, footer#status { -webkit-
 /* the menu names keep one height in every mode, so the bar never jumps */
 header > .menu-wrap > button { height: 26px; padding: 0 8px; border-color: transparent; background: transparent; }
 header > .menu-wrap > button:hover, header > .menu-wrap > button[aria-expanded='true'] { border-color: var(--line); background: var(--accent-soft); }
-header > button:not(.stage-badge) { height: 26px; padding: 0 8px; }
+header > button:not([hidden]) { height: 26px; padding: 0 8px; }
 header > select { height: 26px; padding: 0 6px; }
 header .sep { height: 18px; margin: 0 3px; }
 /* the desktop app's own title bar: the window's buttons at the right of the menu bar (src/ui/title-bar.ts) */
@@ -252,9 +248,25 @@ label.check { display: inline-flex; align-items: center; gap: 4px; color: var(--
 /* a locked docked toolbox shows no title (floating ones keep theirs, without the grab hand) */
 .toolbox.locked:not(.floating):not(.collapsed) > .tb-head, .toolbox[data-id='details'].locked:not(.floating) > .tb-head { display: none; }
 /* ...but a folded one keeps its title, with the arrow to open it out again; open, a slim arrow folds it */
-.tb-tab { display: none; width: 100%; height: 10px; padding: 0; border: 0; background: none; color: var(--muted); font-size: 9px; line-height: 10px; }
-.tb-tab:hover { color: var(--text); background: var(--accent-soft); }
-.toolbox.locked:not(.floating):not(.collapsed):not([data-id='details']) > .tb-tab { display: block; }
+.tb-tab { display: none; }
+.tb-tab-fold { width: 16px; height: 14px; padding: 0; border: 0; background: none; color: var(--muted); font-size: 9px; line-height: 14px; }
+.tb-tab-fold:hover { color: var(--text); background: var(--accent-soft); }
+.tb-tab > .tb-lock { width: 16px; height: 16px; }
+/* down a side: one slim row over the buttons, the arrow in the middle and the padlock at the end */
+.toolbox.vertical.locked:not(.floating):not(.collapsed) > .tb-tab { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; height: 14px; }
+.toolbox.vertical.locked:not(.floating):not(.collapsed) > .tb-tab > .tb-tab-fold { grid-column: 2; grid-row: 1; }
+.toolbox.vertical.locked:not(.floating):not(.collapsed) > .tb-tab > .tb-lock { grid-column: 3; grid-row: 1; justify-self: end; height: 14px; }
+/* along the top or bottom: a rail down the left end, so nothing sits over the buttons */
+.toolbox:not(.vertical).locked:not(.floating):not(.collapsed) { flex-direction: row; align-items: stretch; }
+.toolbox:not(.vertical).locked:not(.floating):not(.collapsed) > .tb-tab { display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 2px; flex: none; width: 16px; padding-top: 2px; border-right: 1px solid var(--line); }
+.toolbox:not(.vertical).locked:not(.floating):not(.collapsed) > .tb-body { flex: 1 1 auto; min-width: 0; }
+/* the side panel's own × (#side-fold) keeps the top right corner, so its padlock goes to the left there */
+/* (down a side, the side panel's padlock sits beside that ×, taking no row of its own) */
+.toolbox[data-id='details'].vertical.locked:not(.floating):not(.collapsed) > .tb-tab { position: absolute; top: 2px; right: 28px; z-index: 2; display: block; height: auto; }
+.toolbox[data-id='details'].vertical.locked:not(.floating):not(.collapsed) > .tb-tab > .tb-lock { height: 22px; }
+.dock-v > .toolbox[data-id='details'].locked #side-content > section:first-child > h2 { padding-right: 48px; }
+.dock-h > .toolbox[data-id='details'] > #side-fold { position: absolute; top: 2px; right: 6px; z-index: 2; margin: 0; font-size: var(--fs-md, 15px); }
+.dock-h > .toolbox[data-id='details']:not(.locked) > .tb-head { padding-right: 24px; }
 /* folded down a side, a box is a slim strip of its buttons, the open arrow first */
 .toolbox.vertical.collapsed:not(.floating):not([data-id='details']) > .tb-head { contain: none; flex-direction: column; flex-wrap: nowrap; width: 22px; align-items: center; }
 .toolbox.vertical.collapsed:not(.floating) > .tb-head > .tb-title { display: none; }
@@ -1637,7 +1649,14 @@ body.doc-reading #doc-pane.nav-open > :not(#doc-nav) { margin-left: 0; }
 .rb-tabs button { padding: 3px 14px 4px; border: 0; border-radius: var(--r-control) var(--r-control) 0 0; background: transparent; color: rgba(255, 255, 255, 0.86); font-size: var(--fs-sm); }
 .rb-tabs button:hover { background: rgba(255, 255, 255, 0.14); color: #fff; }
 .rb-tabs button[aria-selected='true'] { background: var(--panel); color: var(--accent); font-weight: 600; }
-.rb-panel { display: flex; align-items: stretch; min-width: 0; padding: 3px 4px 1px; overflow-x: auto; }
+.rb-panel { display: flex; align-items: stretch; min-width: 0; padding: 3px 4px 1px; overflow-x: auto; scrollbar-width: none; }
+/* (no scroll bar: fitRow folds groups and takes their words off until the row fits; a row narrower
+   than its pictures alone still scrolls, by the wheel) */
+.rb-panel::-webkit-scrollbar { display: none; }
+.rb-group.rb-bare .rb-fold-text, .rb-group.rb-bare button.cr-major .cr-line { display: none; }
+.rb-squeeze > .cr-body-end { flex: 0 1 auto; min-width: 96px; padding-left: 4px; }
+.rb-squeeze .cr-an-group, .rb-squeeze button.cr-analysis { min-width: 0; max-width: 100%; }
+.canvas-ribbon.cr-simple .rb-squeeze button.cr-analysis { width: auto; overflow: hidden; }
 .rb-panel[hidden] { display: none; }
 /* one height for every ribbon, the Spreadsheet's: three rows of buttons and the group names under
    them (bigger buttons, bigger ribbon). A tab that needed more would still get it, from its ribbon's
@@ -1651,7 +1670,7 @@ html[data-density='large'] { --rb-body-h: 128px; }
 .ribbon.rb-measuring { overflow: hidden; }
 .ribbon.rb-measuring > .rb-panel { flex-shrink: 0; }
 /* the ˄ at the end of the tabs: collapse the ribbon to its tabs (Ctrl+F1) */
-.rb-tabs .rb-collapse { margin: 0 0 0 auto; align-self: center; width: 22px; height: 20px; padding: 0; border: 0; border-radius: var(--r-control); background: transparent; color: rgba(255, 255, 255, 0.86); font-size: var(--fs-md); line-height: 1; }
+.rb-tabs .rb-collapse { margin: 0 0 0 auto; align-self: center; width: 22px; height: 20px; padding: 0; border: 0; border-radius: var(--r-control); background: transparent; color: rgba(255, 255, 255, 0.86); font-size: var(--fs-sm); line-height: 1; }
 .rb-tabs .rb-collapse:hover { background: rgba(255, 255, 255, 0.14); color: #fff; }
 body.ribbon-collapsed .ribbon { position: relative; overflow: visible; border-bottom: 0; }
 body.ribbon-collapsed .ribbon > .rb-panel { display: none; }
@@ -1778,11 +1797,23 @@ body.slides-mode #canvas-ribbon, body.design-mode #canvas-ribbon, body.sheet-mod
 /* the warnings at the right of the tabs; Analysis at the right of the buttons */
 .canvas-ribbon .cr-tab-end { margin-left: auto; display: flex; align-items: center; padding: 0 2px 1px; }
 .canvas-ribbon .rb-tabs .rb-collapse { margin-left: 4px; }
-.canvas-ribbon .rb-tabs button.cr-warnings { display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 7px; border: 1px solid color-mix(in srgb, currentColor 30%, transparent); border-radius: var(--r-control); background: transparent; box-shadow: none; font-size: var(--fs-sm); }
-.canvas-ribbon .rb-tabs button.cr-warnings.has { border-color: #e2b23c; background: rgb(242 176 30 / 0.18); color: var(--text); font-weight: 600; }
-body.mode-window .canvas-ribbon .rb-tabs button.cr-warnings.has { color: #fff; }
+.rb-tabs button.cr-warnings { display: inline-flex; align-items: center; gap: 5px; height: 20px; padding: 0 7px; border: 1px solid color-mix(in srgb, currentColor 30%, transparent); border-radius: var(--r-control); background: transparent; box-shadow: none; font-size: var(--fs-sm); }
+.rb-tabs button.cr-warnings.has { border-color: #e2b23c; background: rgb(242 176 30 / 0.18); color: var(--text); font-weight: 600; }
+body.mode-window .rb-tabs button.cr-warnings.has { color: #fff; }
 .cr-warnings .cr-ok { color: #2e9e5b; font-weight: 700; }
 body.mode-window .cr-warnings .cr-ok { color: #7ddc9a; }
+/* the same box on the other modes' ribbons, before their gear; grayed out while the file has no structures */
+.rb-tabs > button.cr-warnings { align-self: center; margin-left: auto; }
+.rb-tabs > button.cr-warnings + .rb-gear { margin-left: 4px; }
+.rb-tabs button.cr-warnings.none, .rb-tabs button.cr-warnings:disabled { opacity: 0.45; cursor: default; }
+.rb-tabs button.cr-warnings:disabled .cr-ok { color: inherit; }
+.cr-warnings .cr-chev { font-size: var(--fs-sm); line-height: 1; }
+.cr-file-warnings { padding: 6px 10px 8px; max-width: 380px; }
+.cr-file-warnings h2 { margin: 0 0 6px; font-size: var(--fs-sm); text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+.cr-file-warnings .warn-list { margin: 0; padding: 0; list-style: none; display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 4px 10px; }
+.cr-file-warnings .warn-list > li { display: contents; }
+.cr-file-warnings .w-where { color: var(--muted); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.cr-file-warnings p { margin: 8px 0 0; }
 .cr-body-end { margin-left: auto; display: flex; align-items: center; padding: 0 4px 0 12px; flex: none; }
 .cr-an-group { display: flex; flex-direction: column; align-self: stretch; }
 .ribbon button.cr-analysis { display: inline-flex; align-items: center; gap: 8px; width: 210px; height: 28px; padding: 0 6px 0 8px; border: 1px solid var(--line); border-radius: var(--r-control); background: var(--bg); text-align: left; }
@@ -2652,8 +2683,7 @@ dialog.command-search .cs-foot { margin: 8px 2px 0; }
    the bar stays one row down to the narrowest window (800 px, with the window's own buttons) */
 header { flex-wrap: nowrap; }
 @media (max-width: 1060px) { .search-box > span { display: none; } }
-@media (max-width: 900px) { header .stage-badge { display: none; } }
-@media (max-width: 880px) { header > .menu-wrap > button, header > button:not(.stage-badge) { padding: 0 5px; } }
+@media (max-width: 880px) { header > .menu-wrap > button, header > button:not([hidden]) { padding: 0 5px; } }
 
 /* the equation window */
 dialog.equation-dialog { width: min(92vw, 620px); }
@@ -2897,6 +2927,16 @@ dialog.settings-window { max-width: none; }
 .rb-group.rb-compact .rb-col > button:is([data-cmd], [data-sh], [data-doc]):is([data-cmd='cut'], [data-cmd='copy'], [data-cmd='format-painter'], [data-sh='cut'], [data-sh='copy'], [data-sh='format-painter'], [data-doc='cut'], [data-doc='copy'], [data-doc='format-painter']) { font-size: 0; }
 /* (only the buttons that lose their words when compact; the others keep a gap before their words) */
 .rb-group.rb-compact .rb-col > button:is([data-cmd='cut'], [data-cmd='copy'], [data-cmd='format-painter'], [data-sh='cut'], [data-sh='copy'], [data-sh='format-painter'], [data-doc='cut'], [data-doc='copy'], [data-doc='format-painter']) :is(.rb-lead svg, .rb-lead .ci-ic, .fp-icon) { margin-right: 0; }
+/* icons sit on the middle of their buttons in every ribbon, whatever the button's line height: a
+   button that is only a picture (Bullets, Align Left), one whose words are off (Cut, Copy, Format
+   Painter with no words), and a folded group's picture beside its name (the Simplified ribbon) */
+.ribbon .cb-btn > svg:only-child { display: block; margin: auto; }
+/* (only Cut, Copy and Format Painter, which drop their words: a button that keeps its words keeps
+   the ribbon's usual line-up with the buttons above and below it) */
+:is(.rb-group.rb-compact, .canvas-ribbon.cr-simple .cr-clipboard) .rb-col > button:is([data-cmd='cut'], [data-cmd='copy'], [data-cmd='format-painter'], [data-sh='cut'], [data-sh='copy'], [data-sh='format-painter'], [data-doc='cut'], [data-doc='copy'], [data-doc='format-painter']):has(> .rb-lead) { display: inline-flex; align-items: center; justify-content: center; }
+:is(.rb-group.rb-compact, .canvas-ribbon.cr-simple .cr-clipboard) .rb-col > button:is([data-cmd='cut'], [data-cmd='copy'], [data-cmd='format-painter'], [data-sh='cut'], [data-sh='copy'], [data-sh='format-painter'], [data-doc='cut'], [data-doc='copy'], [data-doc='format-painter']) > .rb-lead { display: inline-flex; }
+:is(.rb-group.rb-compact, .canvas-ribbon.cr-simple .cr-clipboard) .rb-col > button:is([data-cmd='cut'], [data-cmd='copy'], [data-cmd='format-painter'], [data-sh='cut'], [data-sh='copy'], [data-sh='format-painter'], [data-doc='cut'], [data-doc='copy'], [data-doc='format-painter']) > .rb-lead :is(svg, .ci-ic) { vertical-align: 0; }
+.canvas-ribbon.cr-simple .rb-fold-btn > .rb-icon { display: inline-flex; align-items: center; line-height: 1; }
 .rb-fold-btn { display: none; }
 .rb-group.rb-folded > .rb-fold-btn { display: inline-flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 2px; align-self: stretch; padding: 3px 8px; font-size: var(--fs-sm); line-height: 1.15; white-space: nowrap; }
 .rb-fold-btn .rb-icon svg { width: 22px; height: 22px; vertical-align: middle; }
@@ -3408,7 +3448,7 @@ dialog.show-setup { width: min(94vw, 600px); }
 /* tablets: room for a fingertip on every button, and no page zoom, text selection or callout from a press */
 html.touch-ui body { touch-action: pan-x pan-y; -webkit-touch-callout: none; }
 html.touch-ui header, html.touch-ui .ribbon, html.touch-ui .dock, html.touch-ui .toolbox, html.touch-ui .menu, html.touch-ui #tabs, html.touch-ui .atom-pad { -webkit-user-select: none; user-select: none; }
-html.touch-ui header > .menu-wrap > button, html.touch-ui header > button:not(.stage-badge), html.touch-ui header > select { height: 36px; padding: 0 12px; }
+html.touch-ui header > .menu-wrap > button, html.touch-ui header > button:not([hidden]), html.touch-ui header > select { height: 36px; padding: 0 12px; }
 html.touch-ui .menu button { padding: 10px 12px; font-size: var(--fs-lg); }
 html.touch-ui .menu { min-width: 280px; }
 html.touch-ui .tool { width: 44px; height: 42px; }
@@ -3498,8 +3538,8 @@ body:is(.sheet-mode, .doc-mode):not(.floating-drawing):not(.split-view) #structu
 :root[data-gray]:not([data-shadows='off']) #dock-left > #structure-start { --text: #eceef2; --line: #474b53; --accent-soft: #41464f; }
 
 /* the quick bar beside the menus (Quick Access Toolbar, src/ui/quick-bar.ts): plain icon buttons, a frame only on hover */
-.quick-bar { display: flex; align-items: center; gap: 1px; flex-shrink: 0; margin-right: 6px; }
-.quick-bar > button { height: 26px; min-width: 26px; padding: 0 4px; display: inline-flex; align-items: center; justify-content: center; border-color: transparent; background: transparent; color: var(--text); }
+.quick-bar { display: flex; align-items: center; gap: 0; flex-shrink: 0; }
+.quick-bar > button { height: 26px; min-width: 22px; padding: 0 2px; display: inline-flex; align-items: center; justify-content: center; border-color: transparent; background: transparent; color: var(--text); }
 .quick-bar > button svg { width: 17px; height: 17px; }
 .quick-bar > button:hover:not(:disabled) { border-color: var(--line); background: var(--accent-soft); }
 .quick-bar > button:disabled { color: var(--muted); opacity: 0.45; }
@@ -3508,7 +3548,7 @@ body:is(.sheet-mode, .doc-mode):not(.floating-drawing):not(.split-view) #structu
 .quick-bar > button[data-qa='lock-toolboxes'][aria-pressed='false'] { color: var(--accent); border-color: var(--accent); background: var(--accent-soft); }
 .quick-bar > button[data-qa='lock-toolboxes'][aria-pressed='true'] { color: var(--text); background: transparent; }
 .quick-bar .qa-text { font-size: var(--fs-sm); white-space: nowrap; }
-.quick-bar > .qa-more { min-width: 16px; padding: 0 2px; color: var(--muted); }
+.quick-bar > .qa-more { min-width: 14px; padding: 0 1px; color: var(--muted); }
 body.mode-window .quick-bar > button { color: #fff; }
 body.mode-window .quick-bar > button:hover:not(:disabled) { background: rgba(255, 255, 255, 0.16); border-color: rgba(255, 255, 255, 0.6); }
 body.mode-window .quick-bar > button[aria-pressed='true'] { background: rgba(255, 255, 255, 0.22); }
@@ -3534,7 +3574,6 @@ header .tab { flex: 0 1 180px; min-width: 0; height: 26px; margin: 0; border: 1p
 header .tab.active { background: var(--bg); border-color: var(--line); box-shadow: inset 0 -2px 0 var(--accent); }
 header .tab-ctl { margin: 0; }
 body.tabs-in-menu header > h1.app-name { display: none; }
-body.tabs-in-menu header > .stage-badge { margin-left: 4px; }
 #tabs.tabs-narrow .tab { flex: none; min-width: 0; gap: 2px; padding: 0 3px 0 5px; }
 #tabs.tabs-narrow .tab:not(.active) .tab-name { display: none; }
 #tabs.tabs-narrow .tab.active .tab-name { max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

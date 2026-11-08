@@ -441,7 +441,7 @@ With an arrow selected, the **Reaction** section of the Style panel also has **A
 
 ## Warnings
 
-A thin red box marks atoms with too many or too few bonds, labels that can't be read, and atoms sitting on top of each other. Point at one to see why. The **Warnings** box at the right end of the ribbon's tabs counts them; click it for the list, with **Ignore** to hide one. **Show on drawing** turns the marks off. They are never printed, saved or copied. **Settings ▸ Preferences** offers a soft red disc, a circle, a dashed circle or corner marks instead of the box.
+A thin red box marks atoms with too many or too few bonds, labels that can't be read, and atoms sitting on top of each other. Point at one to see why. The **Warnings** box at the right end of the ribbon's tabs counts them; click it for the list, with **Ignore** to hide one. The same box sits at the right end of the tabs in Presentation, Spreadsheet, Document and Design, where it checks every structure in the file and lists each problem with the slide, cell or drawing it is in; it is grayed out while the file has no structures. **Show on drawing** turns the marks off. They are never printed, saved or copied. **Settings ▸ Preferences** offers a soft red disc, a circle, a dashed circle or corner marks instead of the box.
 
 Rest the mouse on an abbreviation or condensed label (OTBS, NHBoc, CO2Me, CH2OH) to see the group written out, with its name and formula. **View ▸ Chemical Abbreviation Tooltips** turns this off.
 
@@ -640,7 +640,7 @@ Five more toolboxes stay hidden until you open them, and come out on their own w
 
 The Templates, Colors and side panel toolboxes are laid out by the app; they can be renamed, hidden, moved in the list and (except the side panel) deleted.
 
-To move a toolbox, unlock it first: click the padlock on its title bar (or right-click the toolbox and choose **Unlock**). Each toolbox locks on its own. The padlock in the top bar (or **View ▸ Toolboxes ▸ Lock Toolboxes**) locks or unlocks them all at once. Then drag a toolbox by its title to the left, right, top or bottom edge of the drawing to dock it there, or anywhere else to float it. Right-click a toolbox's title for **Dock Left**, **Dock Right**, **Dock at the Top**, **Dock at the Bottom**, **Float** and more. The side panel (Style, and in the other modes Warnings and Analysis) is a toolbox too: it starts docked at the right, and moves, floats and locks like the others. Its arrow (or **View ▸ Collapse Side Panel**) folds it to a strip, separately in each mode. The app remembers where you left them.
+To move a toolbox, unlock it first: click the padlock on its title bar (or right-click the toolbox and choose **Unlock**). Each toolbox locks on its own, and its padlock stays in view when locked: down the left end of a toolbox docked at the top or bottom, or in the slim row over one docked at a side. The padlock in the top bar (or **View ▸ Toolboxes ▸ Lock Toolboxes**) locks or unlocks them all at once. Then drag a toolbox by its title to the left, right, top or bottom edge of the drawing to dock it there, or anywhere else to float it. Right-click a toolbox's title for **Dock Left**, **Dock Right**, **Dock at the Top**, **Dock at the Bottom**, **Float** and more. The side panel (Style, and in the other modes Warnings and Analysis) is a toolbox too: it starts docked at the right, and moves, floats and locks like the others. Its arrow (or **View ▸ Collapse Side Panel**) folds it to a strip, separately in each mode. The app remembers where you left them.
 
 ## The right-click menu
 
